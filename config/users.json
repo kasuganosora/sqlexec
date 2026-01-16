@@ -1,0 +1,18 @@
+{
+    "users": [
+        {
+            "username": "admin",
+            "password": "admin123",
+            "permissions": ["SELECT", "SHOW", "DESCRIBE"],
+            "allowed_databases": ["*"],
+            "allowed_tables": ["*"]
+        },
+        {
+            "username": "readonly",
+            "password": "readonly123",
+            "permissions": ["SELECT", "SHOW", "DESCRIBE"],
+            "allowed_databases": ["*"],
+            "allowed_tables": ["*"]
+        }
+    ]
+} 
