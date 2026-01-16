@@ -3,14 +3,18 @@ package protocol
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 )
 
 type Packet struct {
 	PayloadLength uint32 `mysql:"int<3>"`
 	SequenceID    uint8  `mysql:"int<1>"`
+	rawData      []byte // 保存原始数据
+	Payload      []byte // 保存载荷数据
 }
 
 func (p *Packet) Unmarshal(r io.Reader) (err error) {
@@ -22,7 +26,42 @@ func (p *Packet) Unmarshal(r io.Reader) (err error) {
 	// MySQL协议使用小端序
 	p.PayloadLength = uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16
 	p.SequenceID = buf[3]
+
+	// 读取载荷数据（如果长度大于0）
+	p.Payload = nil
+	if p.PayloadLength > 0 && p.PayloadLength < 0xffffff {
+		p.Payload = make([]byte, p.PayloadLength)
+		_, err = io.ReadFull(r, p.Payload)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// RawBytes 返回完整的原始字节数据（包括包头）
+func (p *Packet) RawBytes() []byte {
+	buf := new(bytes.Buffer)
+	// 写入包头
+	buf.Write([]byte{
+		byte(p.PayloadLength),
+		byte(p.PayloadLength >> 8),
+		byte(p.PayloadLength >> 16),
+		p.SequenceID,
+	})
+	// 写入载荷
+	if p.Payload != nil {
+		buf.Write(p.Payload)
+	}
+	return buf.Bytes()
+}
+
+// GetCommandType 获取包的命令类型（第一个字节）
+func (p *Packet) GetCommandType() uint8 {
+	if len(p.Payload) > 0 {
+		return p.Payload[0]
+	}
+	return 0
 }
 
 // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_handshake_v10.html
@@ -987,9 +1026,14 @@ func (p *ComStmtPreparePacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
-	p.Command, _ = reader.ReadByte()
-	p.Query, _ = ReadStringByNullEndFromReader(reader)
+	// 从Payload中读取Command和Query
+	if len(p.Payload) >= 1 {
+		p.Command = p.Payload[0]
+		// Query是从第二个字节开始到包结尾
+		if len(p.Payload) > 1 {
+			p.Query = string(p.Payload[1:])
+		}
+	}
 	return nil
 }
 
@@ -1033,41 +1077,139 @@ type StmtParamType struct {
 }
 
 func (p *ComStmtExecutePacket) Unmarshal(r io.Reader) error {
+	// 先调用父类的 Unmarshal 来读取包结构和 payload
 	if err := p.Packet.Unmarshal(r); err != nil {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Payload 中解析 COM_STMT_EXECUTE 的具体内容
+	// Payload 格式: Command(1) + StatementID(4) + Flags(1) + IterationCount(4) + NullBitmap + NewParamsBindFlag(1) + [ParamTypes] + ParamValues
+	if len(p.Payload) < 11 {
+		return nil // 至少需要 11 字节
+	}
+
+	reader := bytes.NewReader(p.Payload)
 	p.Command, _ = reader.ReadByte()
 	p.StatementID, _ = ReadNumber[uint32](reader, 4)
 	p.Flags, _ = ReadNumber[uint8](reader, 1)
 	p.IterationCount, _ = ReadNumber[uint32](reader, 4)
 
-	// 读取NULL位图
-	nullBitmapLen := (len(p.ParamTypes) + 7) / 8
-	if nullBitmapLen > 0 {
-		p.NullBitmap = make([]byte, nullBitmapLen)
-		io.ReadFull(reader, p.NullBitmap)
-	}
+	// 读取剩余的所有数据（包含 NULL Bitmap, NewParamsBindFlag, ParamTypes, ParamValues）
+	remainingData, _ := io.ReadAll(reader)
+	dataReader := bytes.NewReader(remainingData)
 
-	p.NewParamsBindFlag, _ = ReadNumber[uint8](reader, 1)
+	// 我们需要猜测参数数量，这里假设最多256个参数
+	maxParamCount := 256
+	p.NullBitmap, _ = io.ReadAll(io.LimitReader(dataReader, int64((maxParamCount+7)/8)))
+	p.NewParamsBindFlag, _ = dataReader.ReadByte()
 
-	// 如果有新参数绑定标志，读取参数类型和值
+	// 如果 NewParamsBindFlag = 1，读取参数类型
 	if p.NewParamsBindFlag == 1 {
-		// 读取参数类型
-		for i := 0; i < len(p.ParamTypes); i++ {
+		p.ParamTypes = make([]StmtParamType, 0)
+		for dataReader.Len() >= 2 {
 			paramType := StmtParamType{}
-			paramType.Type, _ = ReadNumber[uint8](reader, 1)
-			paramType.Flag, _ = ReadNumber[uint8](reader, 1)
+			paramType.Type, _ = dataReader.ReadByte()
+			paramType.Flag, _ = dataReader.ReadByte()
 			p.ParamTypes = append(p.ParamTypes, paramType)
 		}
+	}
 
-		// 读取参数值
-		for i := 0; i < len(p.ParamTypes); i++ {
-			// 这里需要根据参数类型读取相应的值
-			// 简化实现，实际需要根据类型处理
-			value, _ := ReadStringByLenencFromReader[uint8](reader)
-			p.ParamValues = append(p.ParamValues, value)
+	// 根据 ParamTypes 的数量重新确定 NULL Bitmap 的长度
+	paramCount := len(p.ParamTypes)
+	if paramCount > 0 {
+		nullBitmapLen := (paramCount + 7) / 8
+		if len(p.NullBitmap) >= nullBitmapLen {
+			p.NullBitmap = p.NullBitmap[:nullBitmapLen]
+		}
+	}
+
+	// 读取参数值
+	if len(p.ParamTypes) > 0 {
+		p.ParamValues = make([]any, 0, len(p.ParamTypes))
+		for i, paramType := range p.ParamTypes {
+			// 检查是否为NULL
+			byteIdx := i / 8
+			bitIdx := uint(i % 8)
+			isNull := (len(p.NullBitmap) > byteIdx) && (p.NullBitmap[byteIdx] & (1 << bitIdx)) != 0
+
+			if isNull {
+				p.ParamValues = append(p.ParamValues, nil)
+				continue
+			}
+
+			// 根据参数类型读取值
+			switch paramType.Type {
+			case 0x01: // TINYINT
+				val, _ := dataReader.ReadByte()
+				p.ParamValues = append(p.ParamValues, int8(val))
+			case 0x02: // SMALLINT
+				val, _ := ReadNumber[uint16](dataReader, 2)
+				p.ParamValues = append(p.ParamValues, int16(val))
+			case 0x03: // INT
+				val, _ := ReadNumber[uint32](dataReader, 4)
+				p.ParamValues = append(p.ParamValues, int32(val))
+			case 0x08: // BIGINT
+				val, _ := ReadNumber[uint64](dataReader, 8)
+				p.ParamValues = append(p.ParamValues, int64(val))
+			case 0x0a: // FLOAT
+				var val float32
+				binary.Read(dataReader, binary.LittleEndian, &val)
+				p.ParamValues = append(p.ParamValues, val)
+			case 0x0b: // DOUBLE
+				var val float64
+				binary.Read(dataReader, binary.LittleEndian, &val)
+				p.ParamValues = append(p.ParamValues, val)
+			case 0x0f, 0xfd: // VARCHAR, VAR_STRING
+				val, _ := ReadStringByLenencFromReader[uint8](dataReader)
+				p.ParamValues = append(p.ParamValues, val)
+			case 0x0c: // DATE
+				val, _ := ReadNumber[uint8](dataReader, 1)
+				if val == 0 {
+					p.ParamValues = append(p.ParamValues, nil)
+				} else {
+					year, _ := ReadNumber[uint16](dataReader, 2)
+					month, _ := dataReader.ReadByte()
+					day, _ := dataReader.ReadByte()
+					p.ParamValues = append(p.ParamValues, fmt.Sprintf("%04d-%02d-%02d", year, month, day))
+				}
+			case 0x0d: // TIME
+				val, _ := ReadNumber[uint8](dataReader, 1)
+				if val == 0 {
+					p.ParamValues = append(p.ParamValues, "00:00:00")
+				} else {
+					// 读取时间值
+					neg, _ := dataReader.ReadByte()
+					_, _ = ReadNumber[uint32](dataReader, 4) // days
+					hours, _ := dataReader.ReadByte()
+					minutes, _ := dataReader.ReadByte()
+					seconds, _ := dataReader.ReadByte()
+					microseconds, _ := ReadNumber[uint32](dataReader, 4)
+					p.ParamValues = append(p.ParamValues, fmt.Sprintf("%d%02d:%02d:%02d.%06d", neg, hours, minutes, seconds, microseconds))
+				}
+			case 0x0e: // DATETIME
+				val, _ := ReadNumber[uint8](dataReader, 1)
+				if val == 0 {
+					p.ParamValues = append(p.ParamValues, nil)
+				} else {
+					year, _ := ReadNumber[uint16](dataReader, 2)
+					month, _ := dataReader.ReadByte()
+					day, _ := dataReader.ReadByte()
+					hours, _ := dataReader.ReadByte()
+					minutes, _ := dataReader.ReadByte()
+					seconds, _ := dataReader.ReadByte()
+					microseconds := uint32(0)
+					if val >= 7 {
+						microseconds, _ = ReadNumber[uint32](dataReader, 4)
+					}
+					p.ParamValues = append(p.ParamValues, fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d.%06d", year, month, day, hours, minutes, seconds, microseconds))
+				}
+			case 0xfb: // NULL
+				p.ParamValues = append(p.ParamValues, nil)
+			default:
+				// 默认作为字符串读取
+				val, _ := ReadStringByLenencFromReader[uint8](dataReader)
+				p.ParamValues = append(p.ParamValues, val)
+			}
 		}
 	}
 
@@ -1085,8 +1227,30 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 	WriteNumber(buf, p.Flags, 1)
 	// 写入迭代计数
 	WriteNumber(buf, p.IterationCount, 4)
+
+	// 计算参数数量
+	paramCount := len(p.ParamTypes)
+	if paramCount == 0 && len(p.ParamValues) > 0 {
+		paramCount = len(p.ParamValues)
+	}
+
+	// 根据参数数量计算 NULL Bitmap 长度
+	nullBitmapLen := (paramCount + 7) / 8
+
+	// 确保 NullBitmap 长度正确
+	if len(p.NullBitmap) < nullBitmapLen {
+		// 扩展 NullBitmap
+		newBitmap := make([]byte, nullBitmapLen)
+		copy(newBitmap, p.NullBitmap)
+		p.NullBitmap = newBitmap
+	} else if len(p.NullBitmap) > nullBitmapLen {
+		// 截断 NullBitmap
+		p.NullBitmap = p.NullBitmap[:nullBitmapLen]
+	}
+
 	// 写入NULL位图
 	WriteBinary(buf, p.NullBitmap)
+
 	// 写入新参数绑定标志
 	WriteNumber(buf, p.NewParamsBindFlag, 1)
 
@@ -1098,12 +1262,64 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 			WriteNumber(buf, paramType.Flag, 1)
 		}
 
-		// 写入参数值
-		for _, value := range p.ParamValues {
-			// 这里需要根据参数类型写入相应的值
-			// 简化实现，实际需要根据类型处理
-			if strValue, ok := value.(string); ok {
-				WriteStringByLenenc(buf, strValue)
+		// 写入参数值（根据类型）
+		for i, value := range p.ParamValues {
+			// 跳过已标记为NULL的参数
+			byteIdx := i / 8
+			bitIdx := uint(i % 8)
+			if len(p.NullBitmap) > byteIdx && (p.NullBitmap[byteIdx] & (1 << bitIdx)) != 0 {
+				continue
+			}
+
+			if i < len(p.ParamTypes) {
+				switch p.ParamTypes[i].Type {
+				case 0x01: // TINYINT
+					if val, ok := value.(int8); ok {
+						buf.WriteByte(byte(val))
+					} else if val, ok := value.(int); ok {
+						buf.WriteByte(byte(val))
+					}
+				case 0x02: // SMALLINT
+					if val, ok := value.(int16); ok {
+						binary.Write(buf, binary.LittleEndian, val)
+					} else if val, ok := value.(int); ok {
+						binary.Write(buf, binary.LittleEndian, int16(val))
+					}
+				case 0x03: // INT
+					if val, ok := value.(int32); ok {
+						binary.Write(buf, binary.LittleEndian, val)
+					} else if val, ok := value.(int); ok {
+						binary.Write(buf, binary.LittleEndian, int32(val))
+					}
+				case 0x08: // BIGINT
+					if val, ok := value.(int64); ok {
+						binary.Write(buf, binary.LittleEndian, val)
+					} else if val, ok := value.(int); ok {
+						binary.Write(buf, binary.LittleEndian, int64(val))
+					}
+				case 0x0a: // FLOAT
+					if val, ok := value.(float32); ok {
+						binary.Write(buf, binary.LittleEndian, val)
+					}
+				case 0x0b: // DOUBLE
+					if val, ok := value.(float64); ok {
+						binary.Write(buf, binary.LittleEndian, val)
+					}
+				case 0x0f, 0xfd: // VARCHAR, VAR_STRING
+					if val, ok := value.(string); ok {
+						WriteStringByLenenc(buf, val)
+					}
+				default:
+					// 默认作为字符串
+					if val, ok := value.(string); ok {
+						WriteStringByLenenc(buf, val)
+					}
+				}
+			} else {
+				// 没有类型信息，默认作为字符串
+				if val, ok := value.(string); ok {
+					WriteStringByLenenc(buf, val)
+				}
 			}
 		}
 	}
@@ -1119,6 +1335,196 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 	packetBuf.Write(payload)
 
 	return packetBuf.Bytes(), nil
+}
+
+// COM_STMT_PREPARE 响应包 - 预处理语句响应
+// https://mariadb.com/docs/server/reference/clientserver-protocol/3-binary-protocol-prepared-statements/com_stmt_prepare
+type StmtPrepareResponsePacket struct {
+	Packet
+	StatementID   uint32    `mysql:"int<4>"`
+	ColumnCount   uint16    `mysql:"int<2>"`
+	ParamCount    uint16    `mysql:"int<2>"`
+	Reserved      uint8     `mysql:"int<1>"`
+	WarningCount  uint16    `mysql:"int<2>"`
+	Params        []FieldMeta `mysql:"array,omitempty"` // 参数元数据
+	Columns       []FieldMeta `mysql:"array,omitempty"` // 列元数据
+}
+
+func (p *StmtPrepareResponsePacket) Unmarshal(r io.Reader) error {
+	if err := p.Packet.Unmarshal(r); err != nil {
+		return err
+	}
+
+	reader := bufio.NewReader(r)
+	p.StatementID, _ = ReadNumber[uint32](reader, 4)
+	p.ColumnCount, _ = ReadNumber[uint16](reader, 2)
+	p.ParamCount, _ = ReadNumber[uint16](reader, 2)
+	p.Reserved, _ = ReadNumber[uint8](reader, 1)
+	p.WarningCount, _ = ReadNumber[uint16](reader, 2)
+
+	// 读取参数元数据（如果有）
+	p.Params = make([]FieldMeta, p.ParamCount)
+	for i := uint16(0); i < p.ParamCount; i++ {
+		paramMeta := FieldMeta{}
+		paramMeta.Catalog, _ = ReadStringByLenencFromReader[uint8](reader)
+		paramMeta.Schema, _ = ReadStringByLenencFromReader[uint8](reader)
+		paramMeta.Table, _ = ReadStringByLenencFromReader[uint8](reader)
+		paramMeta.OrgTable, _ = ReadStringByLenencFromReader[uint8](reader)
+		paramMeta.Name, _ = ReadStringByLenencFromReader[uint8](reader)
+		paramMeta.OrgName, _ = ReadStringByLenencFromReader[uint8](reader)
+		paramMeta.LengthOfFixedLengthFields, _ = ReadLenencNumber[uint32](reader)
+		paramMeta.CharacterSet, _ = ReadNumber[uint16](reader, 2)
+		paramMeta.ColumnLength, _ = ReadNumber[uint32](reader, 4)
+		paramMeta.Type, _ = ReadNumber[uint8](reader, 1)
+		paramMeta.Flags, _ = ReadNumber[uint16](reader, 2)
+		paramMeta.Decimals, _ = ReadNumber[uint8](reader, 1)
+		// 读取保留字段（2字节）
+		reserved := make([]byte, 2)
+		io.ReadFull(reader, reserved)
+		p.Params[i] = paramMeta
+	}
+
+	// 读取参数元数据结束包（EOF 或 OK）
+	if p.ParamCount > 0 {
+		// 读取并丢弃 EOF/OK 包
+		peekByte, err := reader.Peek(1)
+		if err == nil && len(peekByte) > 0 {
+			if peekByte[0] == 0xfe || peekByte[0] == 0x00 {
+				// EOF 或 OK 包
+				eofPacket := &EofInPacket{}
+				eofPacket.Header, _ = reader.ReadByte()
+				if eofPacket.Header == 0xfe {
+					eofPacket.Warnings, _ = ReadNumber[uint16](reader, 2)
+					eofPacket.StatusFlags, _ = ReadNumber[uint16](reader, 2)
+				} else if eofPacket.Header == 0x00 {
+					// OK 包 - 读取受影响行数和插入ID
+					io.ReadFull(reader, make([]byte, 2)) // 跳过
+					eofPacket.Warnings, _ = ReadNumber[uint16](reader, 2)
+					eofPacket.StatusFlags, _ = ReadNumber[uint16](reader, 2)
+				}
+			}
+		}
+	}
+
+	// 读取列元数据（如果有）
+	p.Columns = make([]FieldMeta, p.ColumnCount)
+	for i := uint16(0); i < p.ColumnCount; i++ {
+		colMeta := FieldMeta{}
+		colMeta.Catalog, _ = ReadStringByLenencFromReader[uint8](reader)
+		colMeta.Schema, _ = ReadStringByLenencFromReader[uint8](reader)
+		colMeta.Table, _ = ReadStringByLenencFromReader[uint8](reader)
+		colMeta.OrgTable, _ = ReadStringByLenencFromReader[uint8](reader)
+		colMeta.Name, _ = ReadStringByLenencFromReader[uint8](reader)
+		colMeta.OrgName, _ = ReadStringByLenencFromReader[uint8](reader)
+		colMeta.LengthOfFixedLengthFields, _ = ReadLenencNumber[uint32](reader)
+		colMeta.CharacterSet, _ = ReadNumber[uint16](reader, 2)
+		colMeta.ColumnLength, _ = ReadNumber[uint32](reader, 4)
+		colMeta.Type, _ = ReadNumber[uint8](reader, 1)
+		colMeta.Flags, _ = ReadNumber[uint16](reader, 2)
+		colMeta.Decimals, _ = ReadNumber[uint8](reader, 1)
+		// 读取保留字段（2字节）
+		reserved := make([]byte, 2)
+		io.ReadFull(reader, reserved)
+		p.Columns[i] = colMeta
+	}
+
+	return nil
+}
+
+func (p *StmtPrepareResponsePacket) Marshal() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	// 写入语句ID
+	WriteNumber(buf, p.StatementID, 4)
+	// 写入列数
+	WriteNumber(buf, p.ColumnCount, 2)
+	// 写入参数数
+	WriteNumber(buf, p.ParamCount, 2)
+	// 写入保留字段
+	WriteNumber(buf, p.Reserved, 1)
+	// 写入警告数
+	WriteNumber(buf, p.WarningCount, 2)
+
+	// 写入参数元数据
+	for _, param := range p.Params {
+		WriteStringByLenenc(buf, param.Catalog)
+		WriteStringByLenenc(buf, param.Schema)
+		WriteStringByLenenc(buf, param.Table)
+		WriteStringByLenenc(buf, param.OrgTable)
+		WriteStringByLenenc(buf, param.Name)
+		WriteStringByLenenc(buf, param.OrgName)
+		WriteLenencNumber(buf, 0x0c)
+		WriteNumber(buf, param.CharacterSet, 2)
+		WriteNumber(buf, param.ColumnLength, 4)
+		WriteNumber(buf, param.Type, 1)
+		WriteNumber(buf, param.Flags, 2)
+		WriteNumber(buf, param.Decimals, 1)
+		WriteBinary(buf, []byte{0x00, 0x00})
+	}
+
+	// 写入参数结束包（如果存在参数）
+	if p.ParamCount > 0 {
+		eofBuf := new(bytes.Buffer)
+		eofBuf.WriteByte(0x00) // OK header
+		WriteLenencNumber(eofBuf, 0) // affected rows
+		WriteLenencNumber(eofBuf, 0) // last insert id
+		WriteNumber(eofBuf, 0, 2)    // status flags
+		WriteNumber(eofBuf, 0, 2)    // warnings
+		WriteBinary(buf, eofBuf.Bytes())
+	}
+
+	// 写入列元数据
+	for _, col := range p.Columns {
+		WriteStringByLenenc(buf, col.Catalog)
+		WriteStringByLenenc(buf, col.Schema)
+		WriteStringByLenenc(buf, col.Table)
+		WriteStringByLenenc(buf, col.OrgTable)
+		WriteStringByLenenc(buf, col.Name)
+		WriteStringByLenenc(buf, col.OrgName)
+		WriteLenencNumber(buf, 0x0c)
+		WriteNumber(buf, col.CharacterSet, 2)
+		WriteNumber(buf, col.ColumnLength, 4)
+		WriteNumber(buf, col.Type, 1)
+		WriteNumber(buf, col.Flags, 2)
+		WriteNumber(buf, col.Decimals, 1)
+		WriteBinary(buf, []byte{0x00, 0x00})
+	}
+
+	// 写入列结束包（如果存在列）
+	if p.ColumnCount > 0 {
+		eofBuf := new(bytes.Buffer)
+		eofBuf.WriteByte(0x00) // OK header
+		WriteLenencNumber(eofBuf, 0) // affected rows
+		WriteLenencNumber(eofBuf, 0) // last insert id
+		WriteNumber(eofBuf, 0, 2)    // status flags
+		WriteNumber(eofBuf, 0, 2)    // warnings
+		WriteBinary(buf, eofBuf.Bytes())
+	}
+
+	// 组装Packet头部
+	payload := buf.Bytes()
+	packetBuf := new(bytes.Buffer)
+	// PayloadLength 3字节小端
+	packetBuf.Write([]byte{byte(len(payload)), byte(len(payload) >> 8), byte(len(payload) >> 16)})
+	// SequenceID
+	packetBuf.WriteByte(p.SequenceID)
+	// Payload
+	packetBuf.Write(payload)
+
+	return packetBuf.Bytes(), nil
+}
+
+// COM_STMT_EXECUTE 服务器响应 - 二进制结果集包
+// https://mariadb.com/docs/server/reference/clientserver-protocol/3-binary-protocol-prepared-statements/com_stmt_execute
+type BinaryResultSetPacket struct {
+	Packet
+	ColumnCount     uint64      `mysql:"int<lenenc>,omitempty"`
+	FieldsMeta      []FieldMeta `mysql:"array,omitempty"`
+	EofFieldsMeta   EofInPacket `mysql:"object,omitempty"`
+	RowData         [][]any     `mysql:"array:binary<var>,omitempty"`
+	Error           *ErrorInPacket `mysql:"object,omitempty"`
+	Ok              *OkInPacket    `mysql:"object,omitempty"`
+	Eof             *EofInPacket   `mysql:"object,omitempty"`
 }
 
 // COM_STMT_CLOSE 包 - 关闭预处理语句
