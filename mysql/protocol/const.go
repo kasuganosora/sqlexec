@@ -38,6 +38,62 @@ const (
 	CLIENT_REMEMBER_OPTIONS       // Don't reset the options after an unsuccessful connect.
 )
 
+// MariaDB特定能力标志
+const (
+	MARIADB_CLIENT_CACHE_METADATA    = 1 << 0 // 客户端可以处理元数据缓存
+	MARIADB_CLIENT_EXTENDED_METADATA = 1 << 1 // 客户端可以处理扩展元数据（如'point', 'json'）
+)
+
+// MySQL字段类型常量
+const (
+	MYSQL_TYPE_DECIMAL     = 0x00
+	MYSQL_TYPE_TINY        = 0x01
+	MYSQL_TYPE_SHORT       = 0x02
+	MYSQL_TYPE_LONG        = 0x03
+	MYSQL_TYPE_FLOAT       = 0x04
+	MYSQL_TYPE_DOUBLE      = 0x05
+	MYSQL_TYPE_NULL        = 0x06
+	MYSQL_TYPE_TIMESTAMP   = 0x07
+	MYSQL_TYPE_LONGLONG    = 0x08
+	MYSQL_TYPE_INT24       = 0x09
+	MYSQL_TYPE_DATE        = 0x0a
+	MYSQL_TYPE_TIME        = 0x0b
+	MYSQL_TYPE_DATETIME    = 0x0c
+	MYSQL_TYPE_YEAR        = 0x0d
+	MYSQL_TYPE_NEWDATE     = 0x0e
+	MYSQL_TYPE_VARCHAR     = 0x0f
+	MYSQL_TYPE_BIT         = 0x10
+	MYSQL_TYPE_NEWDECIMAL  = 0xf6
+	MYSQL_TYPE_ENUM        = 0xf7
+	MYSQL_TYPE_SET         = 0xf8
+	MYSQL_TYPE_TINY_BLOB   = 0xfc
+	MYSQL_TYPE_MEDIUM_BLOB = 0xfd
+	MYSQL_TYPE_LONG_BLOB   = 0xfe
+	MYSQL_TYPE_BLOB        = 0xfc
+	MYSQL_TYPE_VAR_STRING  = 0xfd
+	MYSQL_TYPE_STRING      = 0xfe
+	MYSQL_TYPE_GEOMETRY    = 0xff
+)
+
+// 字段标志常量
+const (
+	NOT_NULL_FLAG        = 1 << 0
+	PRI_KEY_FLAG         = 1 << 1
+	UNIQUE_KEY_FLAG      = 1 << 2
+	MULTIPLE_KEY_FLAG    = 1 << 3
+	BLOB_FLAG            = 1 << 4
+	UNSIGNED_FLAG        = 1 << 5
+	ZEROFILL_FLAG        = 1 << 6
+	BINARY_COLLATION_FLAG = 1 << 7
+	ENUM_FLAG            = 1 << 8
+	AUTO_INCREMENT_FLAG  = 1 << 9
+	TIMESTAMP_FLAG       = 1 << 10
+	SET_FLAG             = 1 << 11
+	NO_DEFAULT_VALUE_FLAG = 1 << 12
+	ON_UPDATE_NOW_FLAG   = 1 << 13
+	NUM_FLAG             = 1 << 15
+)
+
 const (
 	SERVER_STATUS_IN_TRANS             = 1 << iota // 1
 	SERVER_STATUS_AUTOCOMMIT                       // 2

@@ -423,11 +423,11 @@ func (s *Server) handComQuery(ctx context.Context, sess *session.Session, conn n
 		sendBuffer := bytes.NewBuffer(nil)
 		// 构造结果
 		var packNum uint8 = 1
-		//  column count 包
-		columnCountPacket := &protocol.ColumnCountPacket{}
-		columnCountPacket.ColumnCount = 1
-		columnCountPacket.Packet.SequenceID = packNum
-		packBytes, err := columnCountPacket.Marshal()
+	//  column count 包
+	columnCountPacket := &protocol.ColumnCountPacket{}
+	columnCountPacket.ColumnCount = 1
+	columnCountPacket.Packet.SequenceID = packNum
+	packBytes, err := columnCountPacket.MarshalDefault()
 		if err != nil {
 			return err
 		}
@@ -437,17 +437,17 @@ func (s *Server) handComQuery(ctx context.Context, sess *session.Session, conn n
 		}
 		packNum++
 
-		//  field 包
-		fieldPacket := &protocol.FieldMetaPacket{}
-		fieldPacket.Packet.SequenceID = packNum
-		fieldPacket.Catalog = "def"
-		fieldPacket.Name = "@@version_comment"
-		fieldPacket.CharacterSet = 28
-		fieldPacket.ColumnLength = 62
-		fieldPacket.Decimals = 39
-		fieldPacket.Type = 253
-		fieldPacket.Flags = 0
-		packBytes, err = fieldPacket.Marshal()
+	//  field 包
+	fieldPacket := &protocol.FieldMetaPacket{}
+	fieldPacket.Packet.SequenceID = packNum
+	fieldPacket.Catalog = "def"
+	fieldPacket.Name = "@@version_comment"
+	fieldPacket.CharacterSet = 28
+	fieldPacket.ColumnLength = 62
+	fieldPacket.Decimals = 39
+	fieldPacket.Type = 253
+	fieldPacket.Flags = 0
+	packBytes, err = fieldPacket.MarshalDefault()
 		if err != nil {
 			return err
 		}

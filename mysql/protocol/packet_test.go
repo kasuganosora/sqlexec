@@ -257,7 +257,7 @@ func TestQueryResponsePackets(t *testing.T) {
 		length := int(header[0]) | int(header[1])<<8 | int(header[2])<<16
 		packet := packetData[offset : offset+4+length]
 		columnCountPacket := &ColumnCountPacket{}
-		err := columnCountPacket.Unmarshal(bytes.NewReader(packet))
+		err := columnCountPacket.UnmarshalDefault(bytes.NewReader(packet))
 		assert.NoError(t, err)
 		assert.Equal(t, uint32(1), columnCountPacket.PayloadLength)
 		assert.Equal(t, uint8(1), columnCountPacket.SequenceID)
@@ -271,7 +271,7 @@ func TestQueryResponsePackets(t *testing.T) {
 		length := int(header[0]) | int(header[1])<<8 | int(header[2])<<16
 		packet := packetData[offset : offset+4+length]
 		fieldMetaPacket := &FieldMetaPacket{}
-		err := fieldMetaPacket.Unmarshal(bytes.NewReader(packet))
+		err := fieldMetaPacket.UnmarshalDefault(bytes.NewReader(packet))
 		assert.NoError(t, err)
 		assert.Equal(t, uint32(39), fieldMetaPacket.PayloadLength)
 		assert.Equal(t, uint8(2), fieldMetaPacket.SequenceID)
