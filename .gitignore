@@ -39,3 +39,13 @@ Thumbs.db
 
 # Test data
 testdata/*.log
+
+# Test output
+test_output.txt
+
+# External dependencies
+mariadb-server/
+
+# Temporary files
+*.tmp
+temp*

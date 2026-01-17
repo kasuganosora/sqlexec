@@ -48,6 +48,18 @@ func ReadStringByNullEndFromReader(r io.Reader) (string, error) {
 	return string(buf), nil
 }
 
+func ReadStringFixedFromReader(r io.Reader, length int) (string, error) {
+	if length <= 0 {
+		return "", nil
+	}
+	buf := make([]byte, length)
+	_, err := io.ReadFull(r, buf)
+	if err != nil {
+		return "", err
+	}
+	return string(buf), nil
+}
+
 func ReadStringByLenencFromReader[LengthType uint8 | uint16 | uint32 | uint64](r io.Reader) (string, error) {
 	length, err := ReadLenencNumber[LengthType](r)
 	if err != nil {
