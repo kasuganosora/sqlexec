@@ -158,21 +158,74 @@ type Session struct {
 	SequenceID uint8     `json:"sequence_id"` // 添加序列号字段
 }
 
+// Get 获取会话值
 func (s *Session) Get(key string) (val any, err error) {
 	val, err = s.driver.GetKey(context.Background(), s.ID, key)
 	return
 }
 
+// Set 设置会话值
 func (s *Session) Set(key string, val any) error {
 	return s.driver.SetKey(context.Background(), s.ID, key, val)
 }
 
+// Delete 删除会话值
 func (s *Session) Delete(key string) error {
 	return s.driver.DeleteKey(context.Background(), s.ID, key)
 }
 
+// SetUser 设置用户名
 func (s *Session) SetUser(user string) {
 	s.User = user
+}
+
+// SetVariable 设置会话变量（用于 SET 命令）
+func (s *Session) SetVariable(name string, value interface{}) error {
+	// 使用 "@@" 或 "@" 前缀标识变量
+	key := "var:" + name
+	log.Printf("设置会话变量: %s = %v", name, value)
+	return s.Set(key, value)
+}
+
+// GetVariable 获取会话变量
+func (s *Session) GetVariable(name string) (interface{}, error) {
+	key := "var:" + name
+	val, err := s.Get(key)
+	if err != nil {
+		return nil, err
+	}
+	return val, nil
+}
+
+// DeleteVariable 删除会话变量
+func (s *Session) DeleteVariable(name string) error {
+	key := "var:" + name
+	return s.Delete(key)
+}
+
+// GetAllVariables 获取所有会话变量
+func (s *Session) GetAllVariables() (map[string]interface{}, error) {
+	vars := make(map[string]interface{})
+	
+	// 获取所有键
+	keys, err := s.driver.GetAllKeys(context.Background(), s.ID)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 过滤出以 "var:" 开头的键
+	for _, key := range keys {
+		if strings.HasPrefix(key, "var:") {
+			// 移除 "var:" 前缀
+			varName := key[4:]
+			val, err := s.Get(key)
+			if err == nil {
+				vars[varName] = val
+			}
+		}
+	}
+	
+	return vars, nil
 }
 
 // GetNextSequenceID 获取下一个序列号并递增
@@ -194,6 +247,7 @@ type SessionDriver interface {
 	GetKey(ctx context.Context, sessionID string, key string) (any, error)
 	SetKey(ctx context.Context, sessionID string, key string, value any) error
 	DeleteKey(ctx context.Context, sessionID string, key string) error
+	GetAllKeys(ctx context.Context, sessionID string) ([]string, error)
 	Touch(ctx context.Context, sessionID string) error
 	GetThreadId(ctx context.Context, threadID uint32) (uint32, error)
 	SetThreadId(ctx context.Context, threadID uint32, sess *Session) error

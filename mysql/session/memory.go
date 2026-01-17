@@ -150,3 +150,28 @@ func (d *MemoryDriver) DeleteThreadId(ctx context.Context, threadID uint32) erro
 	delete(threadIdMap, strconv.FormatUint(uint64(threadID), 10))
 	return nil
 }
+
+// GetAllKeys 获取会话的所有键
+func (d *MemoryDriver) GetAllKeys(ctx context.Context, sessionID string) ([]string, error) {
+	d.Mutex.RLock()
+	defer d.Mutex.RUnlock()
+	
+	_, ok := d.SessionMap[sessionID]
+	if !ok {
+		return nil, errors.New("session not found")
+	}
+	
+	values, ok := d.Values[sessionID]
+	if !ok {
+		return []string{}, nil
+	}
+	
+	keys := make([]string, 0, len(values))
+	for k := range values {
+		keys = append(keys, k)
+	}
+	
+	d.Touch(ctx, sessionID)
+	
+	return keys, nil
+}
