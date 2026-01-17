@@ -1,115 +1,179 @@
-# MySQL协议代理服务器
+# MySQL 协议服务器
 
-这是一个基于Golang实现的MySQL协议代理服务器，支持从多种数据源读取数据并提供MySQL协议访问。
+基于 Golang 实现的 MySQL 协议服务器，集成 TiDB SQL 解析器，提供完整的 MySQL 协议处理能力。
 
 ## 功能特性
 
-- 支持MySQL协议连接和认证
-- 支持会话管理
-- 支持基本查询操作：
+- ✅ **完整 MySQL 协议支持** - 实现标准的 MySQL 协议交互
+- ✅ **TiDB SQL 解析器集成** - 使用 TiDB 的 SQL 解析器进行语句解析
+- ✅ **会话管理** - 支持多客户端连接和会话状态管理
+- ✅ **权限控制** - 用户认证和权限验证
+- ✅ **多种 SQL 语句支持**：
   - SELECT 查询
-  - SHOW 命令
+  - SHOW 命令（DATABASES, TABLES）
   - DESCRIBE/DESC 命令
-- 支持用户权限管理
-- 配置化管理
+  - SET 语句（会话变量设置）
+  - USE 语句（切换数据库）
 
 ## 快速开始
 
-1. 安装依赖：
+### 1. 安装依赖
+
 ```bash
 go mod download
 ```
 
-2. 配置环境变量：
-程序首次运行时会自动创建 `.env` 文件，包含默认配置。您可以根据需要修改这些配置项。
+### 2. 编译项目
 
-3. 配置用户权限：
-编辑 `config/users.json` 文件
+```bash
+go build -o mysql-server.exe .
+```
 
-4. 运行服务器：
+### 3. 运行服务器
+
 ```bash
 go run main.go
 ```
 
-5. 连接服务器：
-使用 MySQL 客户端连接时，需要禁用 SSL：
+或者直接运行编译后的可执行文件：
+
 ```bash
-# 使用默认配置连接
-mysql -h 127.0.0.1 -P 3306 -u admin -p --ssl-mode=DISABLED
-
-# 或者使用更详细的连接参数
-mysql --protocol=TCP -h 127.0.0.1 -P 3306 -u admin -p --ssl-mode=DISABLED
+./mysql-server.exe
 ```
 
-注意：必须使用 `--ssl-mode=DISABLED` 参数，因为服务器目前不支持 SSL 连接。
+服务器默认监听 `0.0.0.0:3306`。
 
-## 配置说明
+### 4. 连接服务器
 
-### 环境变量配置 (.env)
+使用 MySQL 客户端连接（需要禁用 SSL）：
 
-程序首次运行时会自动创建 `.env` 文件，包含以下默认配置：
-
-```env
-# MySQL服务器配置
-MYSQL_HOST=0.0.0.0
-MYSQL_PORT=3306
-
-# 日志配置
-LOG_LEVEL=info
-LOG_FILE=logs/mysql-proxy.log
-
-# 数据源配置
-DATA_SOURCE_DIR=./data_sources
+```bash
+mysql -h 127.0.0.1 -P 3306 -u root -p --ssl-mode=DISABLED
 ```
 
-### 用户权限配置 (config/users.json)
+### 5. 测试查询
 
-```json
-{
-    "users": [
-        {
-            "username": "admin",
-            "password": "admin123",
-            "permissions": ["SELECT", "SHOW", "DESCRIBE"],
-            "allowed_databases": ["*"],
-            "allowed_tables": ["*"]
-        }
-    ]
-}
+```sql
+-- 测试基本查询
+SELECT * FROM test;
+
+-- 查看版本
+SELECT @@version_comment LIMIT 1;
+
+-- 显示数据库
+SHOW DATABASES;
+
+-- 切换数据库
+USE testdb;
 ```
-
-## 支持的查询类型
-
-1. SELECT 查询
-   - 支持基本的 SELECT 语句
-   - 自动进行表权限检查
-   - 返回标准的结果集格式
-
-2. SHOW 命令
-   - 支持 SHOW DATABASES
-   - 支持 SHOW TABLES
-   - 返回标准的结果集格式
-
-3. DESCRIBE/DESC 命令
-   - 支持表结构查询
-   - 返回标准的结果集格式
 
 ## 项目结构
 
 ```
-.
-├── auth/           # 用户认证和权限管理
-├── config/         # 配置文件
-├── datasource/     # 数据源管理
-├── mysql/          # MySQL协议实现
-├── session/        # 会话管理
-├── main.go         # 主程序入口
-└── README.md       # 项目文档
+db/
+├── main.go                    # 主程序入口
+├── go.mod                     # Go 模块依赖
+├── go.sum                     # 依赖校验文件
+├── server/                    # 服务端模块
+│   └── server.go             # 服务器实现
+└── mysql/                     # MySQL 协议实现
+    ├── service.go            # 服务层
+    ├── parser/               # TiDB SQL 解析器
+    │   ├── parser.go        # 解析器封装
+    │   ├── visitor.go       # AST 访问者
+    │   └── handler.go       # 语句处理器
+    ├── protocol/             # 协议实现
+    │   ├── packet.go        # 数据包定义
+    │   ├── const.go         # 协议常量
+    │   ├── type.go          # 数据类型
+    │   ├── charset.go       # 字符集处理
+    │   ├── replication.go    # 复制协议
+    │   └── helper.go        # 辅助函数
+    └── session/             # 会话管理
+        ├── session.go       # 会话定义
+        └── memory.go       # 内存存储驱动
 ```
 
-## 注意事项
+## 技术栈
 
-- 目前仅支持读取操作，不支持写入操作
-- 建议定期清理会话数据
-- 确保配置文件中的用户权限设置正确
-- 服务器默认使用 UTF-8 字符集
+- **语言**: Go 1.24.2
+- **SQL 解析器**: PingCAP TiDB Parser
+- **协议**: MySQL Protocol
+- **测试框架**: testify
+
+## 核心组件
+
+### SQL 解析器
+
+集成 TiDB SQL 解析器，提供强大的 SQL 解析能力：
+
+```go
+import "mysql-proxy/mysql/parser"
+
+p := parser.NewParser()
+stmt, err := p.ParseOneStmtText("SELECT * FROM users WHERE id > 10")
+info := parser.ExtractSQLInfo(stmt)
+```
+
+### 协议处理
+
+完整的 MySQL 协议包处理：
+
+- 握手协议
+- 命令协议（COM_QUERY, COM_STMT_PREPARE 等）
+- 结果集协议
+- 错误处理
+
+### 会话管理
+
+支持多客户端连接和会话状态管理：
+
+- 会话创建和销毁
+- 会话变量存储
+- 内存存储驱动
+
+## 运行测试
+
+```bash
+# 运行所有测试
+go test ./...
+
+# 运行特定包的测试
+go test ./mysql/protocol/...
+go test ./server/...
+
+# 运行测试并查看覆盖率
+go test -cover ./...
+```
+
+## 编译检查
+
+```bash
+# 代码静态检查
+go vet ./...
+
+# 格式化代码
+go fmt ./...
+
+# 代码整理
+go mod tidy
+```
+
+## 当前限制
+
+- 仅支持基本的查询操作
+- 不支持事务
+- 不支持预编译语句
+- 不支持 SSL/TLS 加密连接
+
+## 开发计划
+
+- [ ] 支持更多 SQL 语句类型
+- [ ] 实现数据源管理
+- [ ] 添加性能监控
+- [ ] 支持 SSL/TLS
+- [ ] 完善错误处理
+
+## 许可证
+
+MIT License
