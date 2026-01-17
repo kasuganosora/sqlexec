@@ -45,6 +45,7 @@ test_output.txt
 
 # External dependencies
 mariadb-server/
+tidb-repo/
 
 # Temporary files
 *.tmp
