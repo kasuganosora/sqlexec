@@ -262,6 +262,7 @@ type FormatDescriptionEvent struct {
 // Unmarshal 解析 FORMAT_DESCRIPTION_EVENT
 // 注意：这个方法假设 r 已经被读取过事件头，现在指向事件体
 func (e *FormatDescriptionEvent) Unmarshal(r io.Reader) error {
+	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
 	// 读取固定字段
@@ -360,6 +361,7 @@ type GtidEvent struct {
 // Unmarshal 解析 GTID_EVENT
 // 注意：这个方法假设 r 已经被读取过事件头，现在指向事件体
 func (e *GtidEvent) Unmarshal(r io.Reader) error {
+	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
 	// 读取固定字段
@@ -456,6 +458,7 @@ type RotateEvent struct {
 // Unmarshal 解析 ROTATE_EVENT
 // 注意：这个方法假设 r 已经被读取过事件头，现在指向事件体
 func (e *RotateEvent) Unmarshal(r io.Reader) error {
+	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
 	// 读取下一个位置
@@ -498,6 +501,7 @@ type HeartbeatLogEvent struct {
 // Unmarshal 解析 HEARTBEAT_LOG_EVENT
 // 注意：这个方法假设 r 已经被读取过事件头，现在指向事件体
 func (e *HeartbeatLogEvent) Unmarshal(r io.Reader) error {
+	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
 	// 读取心跳时间戳字符串
@@ -544,6 +548,7 @@ type QueryEvent struct {
 // Unmarshal 解析 QUERY_EVENT
 // 注意：这个方法假设 r 已经被读取过事件头，现在指向事件体
 func (e *QueryEvent) Unmarshal(r io.Reader) error {
+	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
 	// 读取固定字段
@@ -628,10 +633,17 @@ type TableMapEvent struct {
 // Unmarshal 解析 TABLE_MAP_EVENT
 // 注意：这个方法假设 r 已经被读取过事件头，现在指向事件体
 func (e *TableMapEvent) Unmarshal(r io.Reader) error {
+	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
 	// 读取固定字段
-	e.TableID, _ = ReadNumber[uint64](reader, 6) // 注意：这里是6字节
+	tableIDBytes := make([]byte, 6)
+	_, err := io.ReadFull(reader, tableIDBytes)
+	if err != nil {
+		return err
+	}
+	e.TableID = uint64(tableIDBytes[0]) | uint64(tableIDBytes[1])<<8 | uint64(tableIDBytes[2])<<16 |
+		uint64(tableIDBytes[3])<<24 | uint64(tableIDBytes[4])<<32 | uint64(tableIDBytes[5])<<40
 	e.Reserved, _ = ReadNumber[uint16](reader, 2)
 
 	// 读取可变数据部分
@@ -732,6 +744,7 @@ type XidEvent struct {
 // Unmarshal 解析 XID_EVENT
 // 注意：这个方法假设 r 已经被读取过事件头，现在指向事件体
 func (e *XidEvent) Unmarshal(r io.Reader) error {
+	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
 	// 读取 XID

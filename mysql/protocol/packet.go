@@ -86,14 +86,12 @@ type HandshakeV10Packet struct {
 }
 
 func (p *HandshakeV10Packet) Unmarshal(r io.Reader) (err error) {
-	p.Packet.Unmarshal(r)
-	buf := make([]byte, p.PayloadLength)
-	_, err = io.ReadFull(r, buf)
-	if err != nil {
+	if err = p.Packet.Unmarshal(r); err != nil {
 		return err
 	}
 
-	nb := bytes.NewBuffer(buf)
+	// 从 Packet.Payload 中读取 Handshake 数据
+	nb := bytes.NewBuffer(p.Packet.Payload)
 	p.ProtocolVersion, _ = nb.ReadByte()
 	p.ServerVersion, _ = ReadStringByNullEnd(nb)
 	p.ThreadID, _ = ReadNumber[uint32](nb, 4)
@@ -377,9 +375,16 @@ type OkPacket struct {
 }
 
 func (p *OkPacket) Unmarshal(r io.Reader, conditional uint32) (err error) {
-	p.Packet.Unmarshal(r)
-	p.OkInPacket.Unmarshal(r, conditional)
-	return
+	if err = p.Packet.Unmarshal(r); err != nil {
+		return err
+	}
+
+	// 从 Packet.Payload 中读取 OkInPacket 数据
+	payloadReader := bytes.NewReader(p.Packet.Payload)
+	if err = p.OkInPacket.Unmarshal(payloadReader, conditional); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *OkPacket) Marshal() ([]byte, error) {
@@ -612,7 +617,9 @@ func (p *EofPacket) Unmarshal(r io.Reader, conditional uint32) (err error) {
 		return err
 	}
 
-	if err = p.EofInPacket.Unmarshal(r, conditional); err != nil {
+	// 从 Packet.Payload 中读取 EofInPacket 数据
+	payloadReader := bytes.NewReader(p.Packet.Payload)
+	if err = p.EofInPacket.Unmarshal(payloadReader, conditional); err != nil {
 		return err
 	}
 	return nil
@@ -845,7 +852,8 @@ func (p *ComSetOptionPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.OptionOperation, _ = ReadNumber[uint16](reader, 2)
 	return nil
@@ -1072,7 +1080,8 @@ func (p *RowDataPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取行数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 
 	// 读取行数据（长度编码字符串数组）
 	p.RowData = make([]string, 0)
@@ -1142,8 +1151,8 @@ func (p *ComStmtPreparePacket) Marshal() ([]byte, error) {
 
 	// 写入命令类型
 	WriteNumber(buf, p.Command, 1)
-	// 写入查询字符串
-	WriteStringByNullEnd(buf, p.Query)
+	// 写入查询字符串（直接写入字节数组，不添加null结束符）
+	buf.WriteString(p.Query)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -1198,15 +1207,29 @@ func (p *ComStmtExecutePacket) Unmarshal(r io.Reader) error {
 	remainingData, _ := io.ReadAll(reader)
 	dataReader := bytes.NewReader(remainingData)
 
-	// 我们需要猜测参数数量，这里假设最多256个参数
-	maxParamCount := 256
-	p.NullBitmap, _ = io.ReadAll(io.LimitReader(dataReader, int64((maxParamCount+7)/8)))
-	p.NewParamsBindFlag, _ = dataReader.ReadByte()
+	// 读取NULL bitmap
+	p.NullBitmap, _ = io.ReadAll(io.LimitReader(dataReader, 1))
 
-	// 如果 NewParamsBindFlag = 1，读取参数类型
+	// 读取NewParamsBindFlag
+	if dataReader.Len() > 0 {
+		p.NewParamsBindFlag, _ = dataReader.ReadByte()
+	}
+
+	// 读取参数类型（如果NewParamsBindFlag = 1）
 	if p.NewParamsBindFlag == 1 {
+		// 读取参数类型，每2字节一个
 		p.ParamTypes = make([]StmtParamType, 0)
-		for dataReader.Len() >= 2 {
+		
+		// 简单策略：根据剩余数据量推断参数数量
+		// NULL bitmap = 1字节，最多6个参数（位2-7）
+		// 计算可读的最大参数类型数量：剩余数据 / 2
+		maxParamCount := dataReader.Len() / 2
+		if maxParamCount > 6 {
+			maxParamCount = 6
+		}
+		
+		// 读取参数类型
+		for i := 0; i < maxParamCount && dataReader.Len() >= 2; i++ {
 			paramType := StmtParamType{}
 			paramType.Type, _ = dataReader.ReadByte()
 			paramType.Flag, _ = dataReader.ReadByte()
@@ -1214,14 +1237,23 @@ func (p *ComStmtExecutePacket) Unmarshal(r io.Reader) error {
 		}
 	}
 
+	// 读取参数值
+
 	// 根据 ParamTypes 的数量重新确定 NULL Bitmap 的长度
 	paramCount := len(p.ParamTypes)
 	if paramCount > 0 {
-		nullBitmapLen := (paramCount + 7) / 8
-		if len(p.NullBitmap) >= nullBitmapLen {
-			p.NullBitmap = p.NullBitmap[:nullBitmapLen]
+		// MariaDB协议：NULL bitmap的第0,1位不使用，从第2位开始存储第1个参数的NULL标志
+		// 所以对于n个参数，需要的字节数为 ceil((n + 2) / 8)
+		requiredNullBitmapLen := (paramCount + 2 + 7) / 8
+		if len(p.NullBitmap) < requiredNullBitmapLen {
+			// 扩展NULL bitmap
+			newBitmap := make([]byte, requiredNullBitmapLen)
+			copy(newBitmap, p.NullBitmap)
+			p.NullBitmap = newBitmap
 		}
 	}
+
+	// 读取参数值
 
 	// 读取参数值
 	if len(p.ParamTypes) > 0 {
@@ -1336,7 +1368,9 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 	}
 
 	// 根据参数数量计算 NULL Bitmap 长度
-	nullBitmapLen := (paramCount + 7) / 8
+	// MariaDB协议：NULL bitmap的第0,1位不使用，从第2位开始存储第1个参数的NULL标志
+	// 所以对于n个参数，需要的字节数为 ceil((n + 2) / 8)
+	nullBitmapLen := (paramCount + 2 + 7) / 8
 
 	// 确保 NullBitmap 长度正确
 	if len(p.NullBitmap) < nullBitmapLen {
@@ -1365,9 +1399,10 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 
 		// 写入参数值（根据类型）
 		for i, value := range p.ParamValues {
-			// 跳过已标记为NULL的参数
-			byteIdx := i / 8
-			bitIdx := uint(i % 8)
+			// 根据MariaDB协议规范,NULL位图从第3位开始
+			// 第n列对应位位置为 (n + 2)
+			byteIdx := (i + 2) / 8
+			bitIdx := uint((i + 2) % 8)
 			if len(p.NullBitmap) > byteIdx && (p.NullBitmap[byteIdx] & (1 << bitIdx)) != 0 {
 				continue
 			}
@@ -1456,7 +1491,8 @@ func (p *StmtPrepareResponsePacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.StatementID, _ = ReadNumber[uint32](reader, 4)
 	p.ColumnCount, _ = ReadNumber[uint16](reader, 2)
 	p.ParamCount, _ = ReadNumber[uint16](reader, 2)
@@ -1644,8 +1680,9 @@ func (p *BinaryRowDataPacket) Unmarshal(r io.Reader, columnCount uint64, columnT
 		return err
 	}
 
-	reader := bufio.NewReader(r)
-	
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
+
 	// 1. 读取包头（固定为0x00）
 	header, err := reader.ReadByte()
 	if err != nil {
@@ -1654,7 +1691,7 @@ func (p *BinaryRowDataPacket) Unmarshal(r io.Reader, columnCount uint64, columnT
 	if header != 0x00 {
 		return fmt.Errorf("invalid binary row header: expected 0x00, got 0x%02x", header)
 	}
-	
+
 	// 2. 读取NULL位图
 	nullBitmapSize := (columnCount + 7) / 8
 	p.NullBitmap = make([]byte, nullBitmapSize)
@@ -1662,7 +1699,7 @@ func (p *BinaryRowDataPacket) Unmarshal(r io.Reader, columnCount uint64, columnT
 	if err != nil {
 		return err
 	}
-	
+
 	// 3. 读取列值
 	p.Values = make([]any, 0, columnCount)
 	for i := uint64(0); i < columnCount; i++ {
@@ -2127,7 +2164,8 @@ func (p *ComStmtClosePacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.StatementID, _ = ReadNumber[uint32](reader, 4)
 	return nil
@@ -2165,7 +2203,8 @@ func (p *ComPingPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	return nil
 }
@@ -2200,7 +2239,8 @@ func (p *ComQuitPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	return nil
 }
@@ -2531,7 +2571,8 @@ func (p *ComChangeUserPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.User, _ = ReadStringByNullEndFromReader(reader)
 	p.AuthResponse, _ = ReadStringByLenencFromReader[uint8](reader)
@@ -2582,7 +2623,8 @@ func (p *ComBinlogDumpPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.BinlogPos, _ = ReadNumber[uint32](reader, 4)
 	p.Flags, _ = ReadNumber[uint16](reader, 2)
@@ -2781,7 +2823,8 @@ func (p *ComStmtSendLongDataPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.StatementID, _ = ReadNumber[uint32](reader, 4)
 	p.ParamID, _ = ReadNumber[uint16](reader, 2)
@@ -2829,7 +2872,8 @@ func (p *ComStmtResetPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.StatementID, _ = ReadNumber[uint32](reader, 4)
 	return nil
@@ -2869,7 +2913,8 @@ func (p *ComFetchPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.StatementID, _ = ReadNumber[uint32](reader, 4)
 	p.RowCount, _ = ReadNumber[uint32](reader, 4)
@@ -2982,7 +3027,8 @@ func (p *LocalInfilePacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Header, _ = reader.ReadByte()
 	p.Filename, _ = ReadStringByNullEndFromReader(reader)
 	return nil
@@ -3026,15 +3072,16 @@ func (p *ProgressReportPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Header, _ = reader.ReadByte()
 	p.ErrorCode, _ = ReadNumber[uint16](reader, 2)
-	
+
 	// 检查是否为进度报告（Error Code == 0xFFFF）
 	if p.ErrorCode != 0xFFFF {
 		return errors.New("not a progress report packet (error code != 0xFFFF)")
 	}
-	
+
 	p.Stage, _ = ReadNumber[uint8](reader, 1)
 	p.MaxStage, _ = ReadNumber[uint8](reader, 1)
 	p.Progress, _ = ReadNumber[uint32](reader, 3)
@@ -3078,15 +3125,14 @@ func (p *ComQueryPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
-	p.Command, _ = reader.ReadByte()
-
-	// 读取剩余的查询字符串（到包末尾）
-	remainingBytes, err := io.ReadAll(reader)
-	if err != nil {
-		return err
+	// 从 Packet.Payload 中读取 ComQuery 数据
+	if len(p.Payload) >= 1 {
+		p.Command = p.Payload[0]
+		// Query是从第二个字节开始到包结尾
+		if len(p.Payload) > 1 {
+			p.Query = string(p.Payload[1:])
+		}
 	}
-	p.Query = string(remainingBytes)
 	return nil
 }
 
@@ -3095,8 +3141,8 @@ func (p *ComQueryPacket) Marshal() ([]byte, error) {
 
 	// 写入命令类型
 	WriteNumber(buf, p.Command, 1)
-	// 写入查询字符串
-	WriteStringByNullEnd(buf, p.Query)
+	// 写入查询字符串（不添加null终止符）
+	buf.WriteString(p.Query)
 
 	// 组装Packet头部
 	payload := buf.Bytes()

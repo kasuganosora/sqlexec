@@ -291,6 +291,7 @@ func TestQueryResponsePackets(t *testing.T) {
 		length := int(header[0]) | int(header[1])<<8 | int(header[2])<<16
 		packet := packetData[offset : offset+4+length]
 		eofPacket1 := &EofPacket{}
+		// 使用CLIENT_PROTOCOL_41标志解析完整的EOF包（5字节）
 		err := eofPacket1.Unmarshal(bytes.NewReader(packet), CLIENT_PROTOCOL_41)
 		assert.NoError(t, err)
 		assert.Equal(t, uint32(5), eofPacket1.PayloadLength)
@@ -322,6 +323,7 @@ func TestQueryResponsePackets(t *testing.T) {
 		length := int(header[0]) | int(header[1])<<8 | int(header[2])<<16
 		packet := packetData[offset : offset+4+length]
 		eofPacket2 := &EofPacket{}
+		// 使用CLIENT_PROTOCOL_41标志解析完整的EOF包（5字节）
 		err := eofPacket2.Unmarshal(bytes.NewReader(packet), CLIENT_PROTOCOL_41)
 		assert.NoError(t, err)
 		assert.Equal(t, uint32(5), eofPacket2.PayloadLength)
@@ -823,12 +825,13 @@ func TestEofPacketFunctions(t *testing.T) {
 
 func TestComQueryPacketUnmarshal(t *testing.T) {
 	// 测试数据：select @@version_comment limit 1
-	// 根据实际包内容：21 00 00 00 03 03 73 65 6c 65 63 74 20 40 40 76 65 72 73 69 6f 6e 5f 63 6f 6d 6d 65 6e 74 20 6c 69 6d 69 74 20 31
+	// 包格式：PayloadLength(3字节) + SequenceID(1字节) + Payload(33字节)
+	// Payload: Command(1字节) + Query(32字节)
 	testData := []byte{
-		0x21, 0x00, 0x00, 0x00, // 包长度 33
-		0x03, // 序列ID
-		0x03, // 命令类型 COM_QUERY
-		// 查询字符串: "select @@version_comment limit 1"
+		0x21, 0x00, 0x00, // PayloadLength = 33 (小端序)
+		0x03,             // SequenceID = 3
+		0x03,             // Command = COM_QUERY
+		// 查询字符串: "select @@version_comment limit 1" (32字节)
 		0x73, 0x65, 0x6c, 0x65, 0x63, 0x74, 0x20, 0x40, 0x40, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x63, 0x6f, 0x6d, 0x6d, 0x65, 0x6e, 0x74, 0x20, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x20, 0x31,
 	}
 
@@ -865,28 +868,31 @@ func TestComQueryPacketUnmarshal(t *testing.T) {
 }
 
 func TestComQueryPacketDebug(t *testing.T) {
-	// 根据您提供的实际包内容
-	// 0000   21 00 00 00 03 73 65 6c 65 63 74 20 40 40 76 65   !....select @@ve
+	// 根据实际包内容
+	// 0000   21 00 00 03 73 65 6c 65 63 74 20 40 40 76 65   !...select @@ve
 	// 0010   72 73 69 6f 6e 5f 63 6f 6d 6d 65 6e 74 20 6c 69   rsion_comment li
 	// 0020   6d 69 74 20 31                                    mit 1
-	
-	// 解析：21 00 00 00 = 33 (包长度), 03 = 序列ID, 03 = 命令类型
+	//
+	// 解析：
+	// 21 00 00 = 33 (PayloadLength, 小端序)
+	// 03 = SequenceID = 3
+	// 03 = Command = COM_QUERY
 	testData := []byte{
-		0x21, 0x00, 0x00, 0x00, // 包长度 33
-		0x03,                     // 序列ID
-		0x03,                     // 命令类型 COM_QUERY
-		// 查询字符串: "select @@version_comment limit 1"
+		0x21, 0x00, 0x00, // PayloadLength = 33 (小端序)
+		0x03,             // SequenceID = 3
+		0x03,             // Command = COM_QUERY
+		// 查询字符串: "select @@version_comment limit 1" (32字节)
 		0x73, 0x65, 0x6c, 0x65, 0x63, 0x74, 0x20, 0x40, 0x40, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x63, 0x6f, 0x6d, 0x6d, 0x65, 0x6e, 0x74, 0x20, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x20, 0x31,
 	}
 
 	t.Logf("Test data length: %d", len(testData))
 	t.Logf("Test data hex: %x", testData)
-	
+
 	// 详细检查前几个字节
-	t.Logf("First 8 bytes: %x", testData[:8])
-	t.Logf("Byte 0-3 (length): %x", testData[0:4])
-	t.Logf("Byte 4 (sequence): %x", testData[4])
-	t.Logf("Byte 5 (command): %x", testData[5])
+	t.Logf("First 7 bytes: %x", testData[:7])
+	t.Logf("Byte 0-2 (PayloadLength): %x", testData[0:3])
+	t.Logf("Byte 3 (SequenceID): %x", testData[3])
+	t.Logf("Byte 4 (Command): %x", testData[4])
 
 	// 先测试包头部解析
 	packet := &Packet{}
@@ -904,7 +910,7 @@ func TestComQueryPacketDebug(t *testing.T) {
 		t.Fatalf("ComQueryPacket.Unmarshal failed: %v", err)
 	}
 
-	t.Logf("ComQueryPacket - PayloadLength: %d, SequenceID: %d, Command: 0x%02x, Query: '%s'", 
+	t.Logf("ComQueryPacket - PayloadLength: %d, SequenceID: %d, Command: 0x%02x, Query: '%s'",
 		queryPacket.PayloadLength, queryPacket.SequenceID, queryPacket.Command, queryPacket.Query)
 
 	// 验证结果

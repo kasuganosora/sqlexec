@@ -299,7 +299,7 @@ func handleStmtExecute(ctx context.Context, conn net.Conn, packet *protocol.Pack
 			Reserved:                  "\x00\x00",
 		},
 	}
-	fieldMetaData, err := fieldMeta.Marshal()
+	fieldMetaData, err := fieldMeta.MarshalDefault()
 	if err != nil {
 		log.Printf("序列化列元数据失败: %v", err)
 		protocol.SendError(conn, err)
