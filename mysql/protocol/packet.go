@@ -2721,7 +2721,7 @@ func (p *ComBinlogDumpPacket) Marshal() ([]byte, error) {
 	WriteNumber(buf, p.Flags, 2)
 	// 写入服务器ID
 	WriteNumber(buf, p.ServerID, 4)
-	// 写入二进制日志文件名
+	// 写入二进制日志文件名（以 NULL 结尾）
 	WriteStringByNullEnd(buf, p.BinlogFilename)
 
 	// 组装Packet头部
@@ -2841,7 +2841,8 @@ func (p *ComRegisterSlavePacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	// 从 Packet.Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.ServerID, _ = ReadNumber[uint32](reader, 4)
 	p.Host, _ = ReadStringByNullEndFromReader(reader)

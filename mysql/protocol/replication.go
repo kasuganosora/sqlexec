@@ -57,190 +57,6 @@ func (h *BinlogEventHeader) Marshal() ([]byte, error) {
 }
 
 // ============================================
-// COM_REGISTER_SLAVE - 从服务器注册命令
-// ============================================
-
-type ComRegisterSlave struct {
-	Packet
-	ServerID         uint32 // 从服务器 ID
-	HostnameLen      uint8  // 主机名长度
-	Hostname         string  // 主机名
-	UsernameLen      uint8  // 用户名长度
-	Username         string  // 用户名
-	PasswordLen      uint8  // 密码长度
-	Password         string  // 密码
-	Port             uint16  // 复制端口
-	ReplicationRank uint32 // 复制等级
-	MasterServerID   uint32 // 主服务器 ID
-}
-
-// Unmarshal 解析 COM_REGISTER_SLAVE
-func (p *ComRegisterSlave) Unmarshal(r io.Reader) error {
-	if err := p.Packet.Unmarshal(r); err != nil {
-		return err
-	}
-
-	reader := bufio.NewReader(bytes.NewReader(p.Payload))
-
-	// 跳过命令字节
-	_, _ = reader.ReadByte()
-
-	// 读取字段
-	p.ServerID, _ = ReadNumber[uint32](reader, 4)
-	p.HostnameLen, _ = ReadNumber[uint8](reader, 1)
-	if p.HostnameLen > 0 {
-		hostnameBytes := make([]byte, p.HostnameLen)
-		_, _ = io.ReadFull(reader, hostnameBytes)
-		p.Hostname = string(hostnameBytes)
-	}
-	p.UsernameLen, _ = ReadNumber[uint8](reader, 1)
-	if p.UsernameLen > 0 {
-		usernameBytes := make([]byte, p.UsernameLen)
-		_, _ = io.ReadFull(reader, usernameBytes)
-		p.Username = string(usernameBytes)
-	}
-	p.PasswordLen, _ = ReadNumber[uint8](reader, 1)
-	if p.PasswordLen > 0 {
-		passwordBytes := make([]byte, p.PasswordLen)
-		_, _ = io.ReadFull(reader, passwordBytes)
-		p.Password = string(passwordBytes)
-	}
-	p.Port, _ = ReadNumber[uint16](reader, 2)
-	p.ReplicationRank, _ = ReadNumber[uint32](reader, 4)
-	p.MasterServerID, _ = ReadNumber[uint32](reader, 4)
-
-	return nil
-}
-
-// Marshal 序列化 COM_REGISTER_SLAVE
-func (p *ComRegisterSlave) Marshal() ([]byte, error) {
-	buf := new(bytes.Buffer)
-
-	// 写入命令字节
-	buf.WriteByte(COM_REGISTER_SLAVE)
-
-	// 写入服务器ID
-	binary.Write(buf, binary.LittleEndian, p.ServerID)
-
-	// 写入主机名
-	buf.WriteByte(p.HostnameLen)
-	if p.HostnameLen > 0 {
-		buf.WriteString(p.Hostname)
-	}
-
-	// 写入用户名
-	buf.WriteByte(p.UsernameLen)
-	if p.UsernameLen > 0 {
-		buf.WriteString(p.Username)
-	}
-
-	// 写入密码
-	buf.WriteByte(p.PasswordLen)
-	if p.PasswordLen > 0 {
-		buf.WriteString(p.Password)
-	}
-
-	// 写入端口
-	binary.Write(buf, binary.LittleEndian, p.Port)
-
-	// 写入复制等级
-	binary.Write(buf, binary.LittleEndian, p.ReplicationRank)
-
-	// 写入主服务器ID
-	binary.Write(buf, binary.LittleEndian, p.MasterServerID)
-
-	// 构建完整包（包头 + 载荷）
-	payload := buf.Bytes()
-	packetBuf := new(bytes.Buffer)
-
-	// 写入包头
-	packetBuf.WriteByte(byte(len(payload)))
-	packetBuf.WriteByte(byte(len(payload) >> 8))
-	packetBuf.WriteByte(byte(len(payload) >> 16))
-	packetBuf.WriteByte(p.SequenceID)
-
-	// 写入载荷
-	packetBuf.Write(payload)
-
-	return packetBuf.Bytes(), nil
-}
-
-// ============================================
-// COM_BINLOG_DUMP - 请求二进制日志命令
-// ============================================
-
-type ComBinlogDump struct {
-	Packet
-	Command        uint8  // 命令（固定 0x12）
-	BinlogPos      uint32 // 请求的二进制日志位置（字节偏移量）
-	Flags          uint16  // 标志位
-	ServerID       uint32 // 从服务器的 ID
-	BinlogFilename string  // 请求的二进制日志文件名
-}
-
-// Unmarshal 解析 COM_BINLOG_DUMP
-func (p *ComBinlogDump) Unmarshal(r io.Reader) error {
-	if err := p.Packet.Unmarshal(r); err != nil {
-		return err
-	}
-
-	reader := bufio.NewReader(bytes.NewReader(p.Payload))
-
-	// 读取命令字节（应该总是 0x12）
-	p.Command, _ = reader.ReadByte()
-
-	// 读取日志位置
-	p.BinlogPos, _ = ReadNumber[uint32](reader, 4)
-
-	// 读取标志位
-	p.Flags, _ = ReadNumber[uint16](reader, 2)
-
-	// 读取服务器ID
-	p.ServerID, _ = ReadNumber[uint32](reader, 4)
-
-	// 读取日志文件名
-	p.BinlogFilename, _ = ReadStringByNullEndFromReader(reader)
-
-	return nil
-}
-
-// Marshal 序列化 COM_BINLOG_DUMP
-func (p *ComBinlogDump) Marshal() ([]byte, error) {
-	buf := new(bytes.Buffer)
-
-	// 写入命令字节（固定 0x12）
-	buf.WriteByte(COM_BINLOG_DUMP)
-
-	// 写入日志位置
-	binary.Write(buf, binary.LittleEndian, p.BinlogPos)
-
-	// 写入标志位
-	binary.Write(buf, binary.LittleEndian, p.Flags)
-
-	// 写入服务器ID
-	binary.Write(buf, binary.LittleEndian, p.ServerID)
-
-	// 写入日志文件名（以 NULL 结尾）
-	buf.WriteString(p.BinlogFilename)
-	buf.WriteByte(0x00)
-
-	// 构建完整包（包头 + 载荷）
-	payload := buf.Bytes()
-	packetBuf := new(bytes.Buffer)
-
-	// 写入包头
-	packetBuf.WriteByte(byte(len(payload)))
-	packetBuf.WriteByte(byte(len(payload) >> 8))
-	packetBuf.WriteByte(byte(len(payload) >> 16))
-	packetBuf.WriteByte(p.SequenceID)
-
-	// 写入载荷
-	packetBuf.Write(payload)
-
-	return packetBuf.Bytes(), nil
-}
-
-// ============================================
 // FORMAT_DESCRIPTION_EVENT - 格式描述事件
 // ============================================
 
@@ -461,11 +277,27 @@ func (e *RotateEvent) Unmarshal(r io.Reader) error {
 	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
-	// 读取下一个位置
-	e.NextPosition, _ = ReadNumber[uint64](reader, 8)
+	// 读取下一个位置（8字节）
+	nextPosBuf := make([]byte, 8)
+	io.ReadFull(reader, nextPosBuf)
+	e.NextPosition = uint64(nextPosBuf[0]) | uint64(nextPosBuf[1])<<8 |
+		uint64(nextPosBuf[2])<<16 | uint64(nextPosBuf[3])<<24 |
+		uint64(nextPosBuf[4])<<32 | uint64(nextPosBuf[5])<<40 |
+		uint64(nextPosBuf[6])<<48 | uint64(nextPosBuf[7])<<56
 
-	// 读取日志文件名
-	e.BinlogFile, _ = ReadStringByNullEndFromReader(reader)
+	// 读取日志文件名（以 NULL 结尾）
+	var buf []byte
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			break
+		}
+		if b == 0 {
+			break
+		}
+		buf = append(buf, b)
+	}
+	e.BinlogFile = string(buf)
 
 	return nil
 }
@@ -551,7 +383,7 @@ func (e *QueryEvent) Unmarshal(r io.Reader) error {
 	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
-	// 读取固定字段
+	// 读取固定字段（使用 ReadNumber 来避免读取偏移问题）
 	e.ThreadID, _ = ReadNumber[uint32](reader, 4)
 	e.ExecutionTime, _ = ReadNumber[uint32](reader, 4)
 	e.DatabaseNameLen, _ = ReadNumber[uint8](reader, 1)
@@ -571,8 +403,19 @@ func (e *QueryEvent) Unmarshal(r io.Reader) error {
 		reader.ReadByte()
 	}
 
-	// 读取 SQL 语句
-	e.Query, _ = ReadStringByNullEndFromReader(reader)
+	// 读取 SQL 语句（使用单一 reader，避免创建新的 bufio.Reader）
+	var buf []byte
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			break
+		}
+		if b == 0 {
+			break
+		}
+		buf = append(buf, b)
+	}
+	e.Query = string(buf)
 
 	return nil
 }
@@ -823,13 +666,30 @@ func (s *ReplicationNetworkStream) ReadEvent() (BinlogEventHeader, []byte, uint8
 		return header, nil, status, err
 	}
 
-	// 4. 解析事件头（前19字节）
+	// 4. Binlog 事件包的第一个字节是 OK 标记 (0x00)，需要跳过
+	// MariaDB 可能返回两种格式：
+	// a) 标准 MySQL 格式：[0x00][event_header][event_body]
+	// b) MariaDB 原始格式：直接返回 binlog 文件内容（不含 OK 标记）
+	if len(payload) > 0 && payload[0] == 0x00 {
+		// 标准 MySQL 格式，跳过 OK 标记
+		payload = payload[1:]
+	} else if len(payload) >= 4 {
+		// MariaDB 原始格式，检查是否是 binlog 文件内容
+		// 可能是 Rotate Event 或其他 binlog 事件
+		// 不跳过任何字节，直接解析
+	}
+
+	// 5. 解析事件头（前19字节）
+	if len(payload) < 19 {
+		return header, eventData, status, fmt.Errorf("payload too short for event header: %d bytes", len(payload))
+	}
+
 	headerReader := bytes.NewReader(payload)
 	if err := header.Unmarshal(headerReader); err != nil {
 		return header, nil, status, err
 	}
 
-	// 5. 事件数据 = payload[19:]
+	// 6. 事件数据 = payload[19:]
 	eventData = payload[19:]
 
 	// 保存最后一个包信息

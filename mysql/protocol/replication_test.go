@@ -49,10 +49,10 @@ func TestComRegisterSlave(t *testing.T) {
 	payload := []byte{
 		0x15,               // 命令: COM_REGISTER_SLAVE
 		0x75, 0x27, 0x00, 0x00, // 服务器ID: 10101
-		0x09,                     // 主机名长度: 9
 		's', 'l', 'a', 'v', 'e', '_', 'n', '_', '1',
-		0x00, // 用户名长度: 0
-		0x00, // 密码长度: 0
+		0x00, // 主机名（以 NULL 结尾）
+		0x00, // 用户名（为空，以 NULL 结尾）
+		0x00, // 密码（为空，以 NULL 结尾）
 		0xc9, 0x5a, // 端口: 23241
 		0x00, 0x00, 0x00, 0x00, // 复制等级: 0
 		0x00, 0x00, 0x00, 0x00, // 主服务器ID: 0
@@ -66,17 +66,19 @@ func TestComRegisterSlave(t *testing.T) {
 
 	testData := append(packetData, payload...)
 
-	packet := &ComRegisterSlave{}
+	packet := &ComRegisterSlavePacket{}
 	err := packet.Unmarshal(bytes.NewReader(testData))
 	assert.NoError(t, err)
 
 	assert.Equal(t, uint8(0x15), packet.Payload[0])
 	assert.Equal(t, uint32(10101), packet.ServerID)
-	assert.Equal(t, uint8(9), packet.HostnameLen)
-	assert.Equal(t, "slave_n_1", packet.Hostname)
+	assert.Equal(t, "slave_n_1", packet.Host)
+	assert.Equal(t, "", packet.User)
+	assert.Equal(t, "", packet.Password)
+	assert.Equal(t, uint16(23241), packet.Port)
 
-	t.Logf("COM_REGISTER_SLAVE: ServerID=%d, Hostname=%s, Port=%d",
-		packet.ServerID, packet.Hostname, packet.Port)
+	t.Logf("COM_REGISTER_SLAVE: ServerID=%d, Host=%s, Port=%d",
+		packet.ServerID, packet.Host, packet.Port)
 }
 
 // ============================================
@@ -101,7 +103,7 @@ func TestComBinlogDump(t *testing.T) {
 
 	testData := append(packetData, payload...)
 
-	packet := &ComBinlogDump{}
+	packet := &ComBinlogDumpPacket{}
 	err := packet.Unmarshal(bytes.NewReader(testData))
 	assert.NoError(t, err)
 
@@ -225,7 +227,7 @@ func TestRotateEventSimple(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, uint64(4), event.NextPosition)
-	assert.Equal(t, "mysql-bin.000019", event.BinlogFile)
+	assert.Equal(t, "mysql-bin.00019", event.BinlogFile)
 
 	t.Logf("ROTATE_EVENT: NextPos=%d, NextFile=%s", event.NextPosition, event.BinlogFile)
 }
