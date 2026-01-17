@@ -1207,32 +1207,109 @@ func (p *ComStmtExecutePacket) Unmarshal(r io.Reader) error {
 	remainingData, _ := io.ReadAll(reader)
 	dataReader := bytes.NewReader(remainingData)
 
-	// 读取NULL bitmap
-	p.NullBitmap, _ = io.ReadAll(io.LimitReader(dataReader, 1))
+	// 使用更智能的方法确定 NULL bitmap 的长度
+	// remainingData 包含：NULL Bitmap + NewParamsBindFlag + ParamTypes + ParamValues
+	nullBitmap := make([]byte, 0)
+	newParamsBindFlagOffset := -1
 
-	// 读取NewParamsBindFlag
-	if dataReader.Len() > 0 {
-		p.NewParamsBindFlag, _ = dataReader.ReadByte()
+	// 定义有效的参数类型
+	validTypes := map[byte]bool{
+		0x01: true, // TINYINT
+		0x02: true, // SMALLINT
+		0x03: true, // INT
+		0x04: true, // FLOAT
+		0x05: true, // DOUBLE
+		0x06: true, // NULL
+		0x07: true, // TIMESTAMP
+		0x08: true, // BIGINT
+		0x09: true, // MEDIUMINT
+		0x0a: true, // DATE
+		0x0b: true, // TIME
+		0x0c: true, // DATETIME
+		0x0d: true, // YEAR
+		0x0e: true, // NEWDATE
+		0x0f: true, // VARCHAR
+		0x10: true, // BIT
+		0xf6: true, // NEWDECIMAL
+		0xf7: true, // ENUM
+		0xf8: true, // SET
+		0xfc: true, // TINY_BLOB
+		0xfd: true, // MEDIUM_BLOB, VAR_STRING
+		0xfe: true, // LONG_BLOB, STRING
+		0xff: true, // BLOB, GEOMETRY
+	}
+
+	// 查找 NewParamsBindFlag (0x00 或 0x01)
+	// 从偏移 0 开始，从每个位置尝试
+	for i := 0; i < len(remainingData) && i < 4; i++ {
+		candidateFlag := remainingData[i]
+
+		// 第一个字节（偏移0）总是 NULL bitmap 的一部分
+		if i == 0 {
+			nullBitmap = append(nullBitmap, candidateFlag)
+			continue
+		}
+
+		// 只有 0x00 或 0x01 可能是 NewParamsBindFlag
+		if candidateFlag == 0x00 || candidateFlag == 0x01 {
+			// 检查这个字节后面是否跟着有效的参数类型
+			if i+1+2 <= len(remainingData) {
+				nextType := remainingData[i+1]
+				nextFlag := remainingData[i+2]
+
+				// 如果类型和标志都有效
+				if validTypes[nextType] && nextFlag < 0x10 {
+					// 找到了 NewParamsBindFlag！
+					p.NewParamsBindFlag = candidateFlag
+					newParamsBindFlagOffset = i
+					break
+				}
+			}
+		}
+
+		// 如果不是 NewParamsBindFlag，这字节是 NULL bitmap 的一部分
+		nullBitmap = append(nullBitmap, candidateFlag)
+	}
+
+	// 如果没有找到 NewParamsBindFlag，使用默认值
+	if newParamsBindFlagOffset == -1 {
+		// 默认策略：假设 NULL bitmap 是 1 字节，NewParamsBindFlag 是 0x01
+		nullBitmap = []byte{remainingData[0]}
+		p.NewParamsBindFlag = 1
+		newParamsBindFlagOffset = 1
+	}
+
+	p.NullBitmap = nullBitmap
+
+	// 更新 dataReader 的位置（跳过 NULL bitmap 和 NewParamsBindFlag）
+	offset := newParamsBindFlagOffset + 1 // 跳过 NewParamsBindFlag
+	if offset < len(remainingData) {
+		dataReader = bytes.NewReader(remainingData[offset:])
+	} else {
+		// 没有更多数据了
+		dataReader = bytes.NewReader([]byte{})
 	}
 
 	// 读取参数类型（如果NewParamsBindFlag = 1）
 	if p.NewParamsBindFlag == 1 {
 		// 读取参数类型，每2字节一个
 		p.ParamTypes = make([]StmtParamType, 0)
-		
-		// 简单策略：根据剩余数据量推断参数数量
-		// NULL bitmap = 1字节，最多6个参数（位2-7）
-		// 计算可读的最大参数类型数量：剩余数据 / 2
-		maxParamCount := dataReader.Len() / 2
-		if maxParamCount > 6 {
-			maxParamCount = 6
-		}
-		
-		// 读取参数类型
-		for i := 0; i < maxParamCount && dataReader.Len() >= 2; i++ {
+
+		// 读取参数类型，直到数据不足以构成一个完整的参数类型（2字节）
+		// 或者遇到无效的参数类型
+		for dataReader.Len() >= 2 {
 			paramType := StmtParamType{}
 			paramType.Type, _ = dataReader.ReadByte()
 			paramType.Flag, _ = dataReader.ReadByte()
+
+			// 检查是否是有效的参数类型
+			// 如果遇到无效的类型，停止读取
+			if !validTypes[paramType.Type] || paramType.Flag >= 0x10 {
+				// 无效的类型，回退
+				dataReader.Seek(-2, io.SeekCurrent)
+				break
+			}
+
 			p.ParamTypes = append(p.ParamTypes, paramType)
 		}
 	}

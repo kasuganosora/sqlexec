@@ -186,7 +186,7 @@ func TestComStmtExecutePacketWithNullParam(t *testing.T) {
 		StatementID:       1,
 		Flags:             0,
 		IterationCount:    1,
-		NullBitmap:        []byte{0x01}, // 第一个参数为NULL
+		NullBitmap:        []byte{0x04}, // MariaDB协议：第一个参数为NULL，位2=0x04
 		NewParamsBindFlag: 1,
 		ParamTypes: []StmtParamType{
 			{Type: 0xfd, Flag: 0}, // VAR_STRING
