@@ -3,7 +3,7 @@ package optimizer
 import (
 	"context"
 	"fmt"
-	"mysql/parser"
+	"mysql-proxy/mysql/parser"
 )
 
 // ProcedureExecutor 存储过程执行器
