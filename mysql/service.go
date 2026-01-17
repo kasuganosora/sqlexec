@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mysql-proxy/mysql/parser"
 	"mysql-proxy/mysql/protocol"
 	"mysql-proxy/mysql/session"
 	"net"
@@ -49,12 +50,37 @@ func getSession(ctx context.Context) *session.Session {
 type Server struct {
 	sessionMgr *session.SessionMgr
 	mu         sync.RWMutex
+	parser     *parser.Parser
+	handler    *parser.HandlerChain
 }
 
 // NewServer 创建新的服务器实例
 func NewServer() *Server {
+	// 创建解析器
+	p := parser.NewParser()
+	
+	// 创建处理器链
+	chain := parser.NewHandlerChain()
+	chain.RegisterHandler("SELECT", parser.NewQueryHandler())
+	chain.RegisterHandler("INSERT", parser.NewDMLHandler())
+	chain.RegisterHandler("UPDATE", parser.NewDMLHandler())
+	chain.RegisterHandler("DELETE", parser.NewDMLHandler())
+	chain.RegisterHandler("REPLACE", parser.NewDMLHandler())
+	chain.RegisterHandler("CREATE_TABLE", parser.NewDDLHandler())
+	chain.RegisterHandler("DROP_TABLE", parser.NewDDLHandler())
+	chain.RegisterHandler("CREATE_DATABASE", parser.NewDDLHandler())
+	chain.RegisterHandler("DROP_DATABASE", parser.NewDDLHandler())
+	chain.RegisterHandler("ALTER_TABLE", parser.NewDDLHandler())
+	chain.RegisterHandler("TRUNCATE_TABLE", parser.NewDDLHandler())
+	chain.RegisterHandler("SET", parser.NewSetHandler())
+	chain.RegisterHandler("SHOW", parser.NewShowHandler())
+	chain.RegisterHandler("USE", parser.NewUseHandler())
+	chain.SetDefaultHandler(parser.NewDefaultHandler())
+	
 	return &Server{
 		sessionMgr: session.NewSessionMgr(context.Background(), session.NewMemoryDriver()),
+		parser:     p,
+		handler:    chain,
 	}
 }
 
@@ -226,43 +252,63 @@ func (s *Server) handleQuery(ctx context.Context, conn net.Conn, packet *protoco
 	query := string(packet.Payload[1:])
 	log.Printf("处理查询: %s", query)
 
-	// 解析SQL语句
-	stmt := &protocol.ComQueryPacket{}
-	if err := stmt.Unmarshal(bytes.NewReader(packet.RawBytes())); err != nil {
-		log.Printf("解析查询包失败: %v", err)
-		return err
-	}
-
 	sess := getSession(ctx)
 
-	// 简化实现：根据查询类型返回不同的结果
-	queryUpper := strings.ToUpper(strings.TrimSpace(stmt.Query))
-	
-	switch {
-	case strings.HasPrefix(queryUpper, "SELECT"):
-		// 返回结果集
+	// 使用 TiDB parser 解析 SQL 语句
+	stmtNode, err := s.parser.ParseOneStmtText(query)
+	if err != nil {
+		log.Printf("解析 SQL 失败: %v", err)
+		return protocol.SendError(conn, fmt.Errorf("SQL 解析错误: %w", err))
+	}
+
+	// 使用处理器链处理 SQL 语句
+	result, err := s.handler.Handle(stmtNode)
+	if err != nil {
+		log.Printf("处理 SQL 失败: %v", err)
+		return protocol.SendError(conn, fmt.Errorf("SQL 处理错误: %w", err))
+	}
+
+	// 根据结果类型返回不同的响应
+	switch r := result.(type) {
+	case *parser.QueryResult:
+		// SELECT 查询
+		log.Printf("SELECT 查询结果，涉及表: %v, 列: %v", r.Tables, r.Columns)
 		return s.sendResultSet(ctx, conn, sess)
-	case strings.HasPrefix(queryUpper, "SHOW VARIABLES"):
-		// 返回会话变量
-		return s.sendVariablesResultSet(ctx, conn, sess)
-	case strings.HasPrefix(queryUpper, "SHOW"):
-		// 返回结果集
+	case *parser.DMLResult:
+		// INSERT/UPDATE/DELETE
+		log.Printf("DML 操作完成: %s, 影响行数: %d", r.Type, r.Affected)
+		return protocol.SendOK(conn, sess.GetNextSequenceID())
+	case *parser.DDLResult:
+		// CREATE/DROP/ALTER
+		log.Printf("DDL 操作完成: %s, 涉及表: %v", r.Type, r.Tables)
+		return protocol.SendOK(conn, sess.GetNextSequenceID())
+	case *parser.SetResult:
+		// SET 命令
+		log.Printf("设置变量完成: %d 个变量", r.Count)
+		// 保存变量到 session
+		for name, value := range r.Vars {
+			sess.SetVariable(name, value)
+		}
+		return protocol.SendOK(conn, sess.GetNextSequenceID())
+	case *parser.ShowResult:
+		// SHOW 命令
+		if r.ShowTp == "SHOW_VARIABLES" {
+			return s.sendVariablesResultSet(ctx, conn, sess)
+		}
+		log.Printf("SHOW 命令完成: %s", r.ShowTp)
 		return s.sendResultSet(ctx, conn, sess)
-	case strings.HasPrefix(queryUpper, "INSERT"), strings.HasPrefix(queryUpper, "UPDATE"),
-	     strings.HasPrefix(queryUpper, "DELETE"), strings.HasPrefix(queryUpper, "REPLACE"):
-		// 返回OK包
+	case *parser.UseResult:
+		// USE 命令
+		sess.Set("current_database", r.Database)
+		log.Printf("切换到数据库: %s", r.Database)
 		return protocol.SendOK(conn, sess.GetNextSequenceID())
-	case strings.HasPrefix(queryUpper, "USE"):
-		// 切换数据库
-		dbName := strings.TrimSpace(stmt.Query[3:])
-		sess.Set("current_database", dbName)
-		log.Printf("切换到数据库: %s", dbName)
+	case *parser.DefaultResult:
+		// 默认处理
+		log.Printf("默认处理完成: %s", r.Type)
 		return protocol.SendOK(conn, sess.GetNextSequenceID())
-	case strings.HasPrefix(queryUpper, "SET"):
-		// 处理 SET 命令
-		return s.handleSetCommand(ctx, conn, sess, stmt.Query)
 	default:
-		// 默认返回OK包
+		// 未知结果
+		log.Printf("未知结果类型: %T", result)
 		return protocol.SendOK(conn, sess.GetNextSequenceID())
 	}
 }
