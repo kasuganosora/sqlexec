@@ -402,3 +402,85 @@ func WithTags(tags []string) FunctionOption {
 
 // FunctionRegisterFunc 函数注册函数类型
 type FunctionRegisterFunc func() (*FunctionMetadata, error)
+
+// ============ UDF 管理 API ============
+
+// RegisterUDF 注册用户自定义函数
+func (api *FunctionAPI) RegisterUDF(udf *UDFFunction) error {
+	manager := GetGlobalUDFManager()
+	if err := manager.Register(udf); err != nil {
+		return err
+	}
+	
+	// 同时注册到函数注册表，以便在SQL中使用
+	// 类型转换：UDFHandler -> FunctionHandle
+	wrappedHandler := func(args []interface{}) (interface{}, error) {
+		return udf.Handler(args)
+	}
+	
+	return api.RegisterScalarFunction(
+		udf.Metadata.Name,
+		udf.Metadata.Name,
+		udf.Metadata.Description,
+		wrappedHandler,
+		WithCategory(CategoryUser),
+		WithReturnType(udf.Metadata.ReturnType),
+		WithTags([]string{"udf"}),
+	)
+}
+
+// RegisterUDFFromBuilder 通过构建器注册UDF
+func (api *FunctionAPI) RegisterUDFFromBuilder(builder *UDFBuilder) error {
+	udf := builder.Build()
+	return api.RegisterUDF(udf)
+}
+
+// UnregisterUDF 注销用户自定义函数
+func (api *FunctionAPI) UnregisterUDF(name string) error {
+	// 从UDF管理器中移除
+	manager := GetGlobalUDFManager()
+	if err := manager.Unregister(name); err != nil {
+		return err
+	}
+	
+	// 从函数注册表中移除
+	return api.UnregisterFunction(name)
+}
+
+// GetUDF 获取用户自定义函数
+func (api *FunctionAPI) GetUDF(name string) (*UDFFunction, error) {
+	manager := GetGlobalUDFManager()
+	udf, exists := manager.Get(name)
+	if !exists {
+		return nil, fmt.Errorf("UDF %s not found", name)
+	}
+	return udf, nil
+}
+
+// ListUDFs 列出所有用户自定义函数
+func (api *FunctionAPI) ListUDFs() []*UDFFunction {
+	manager := GetGlobalUDFManager()
+	return manager.List()
+}
+
+// CountUDFs 统计UDF数量
+func (api *FunctionAPI) CountUDFs() int {
+	manager := GetGlobalUDFManager()
+	return manager.Count()
+}
+
+// UDFExists 检查UDF是否存在
+func (api *FunctionAPI) UDFExists(name string) bool {
+	manager := GetGlobalUDFManager()
+	return manager.Exists(name)
+}
+
+// ClearUDFs 清除所有UDF
+func (api *FunctionAPI) ClearUDFs() {
+	// 从函数注册表中清除
+	api.ClearUserFunctions()
+	
+	// 从UDF管理器中清除
+	manager := GetGlobalUDFManager()
+	manager.Clear()
+}
