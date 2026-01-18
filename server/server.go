@@ -7,23 +7,29 @@ import (
 	"io"
 	"log"
 	"math/rand"
-	"github.com/kasuganosora/sqlexec/mysql/protocol"
-	"github.com/kasuganosora/sqlexec/mysql/session"
 	"net"
 	"strings"
+
+	"github.com/kasuganosora/sqlexec/server/protocol"
+	"github.com/kasuganosora/sqlexec/pkg/session"
 )
 
 type Server struct {
 	ctx        context.Context
 	listener   net.Listener
 	sessionMgr *session.SessionMgr
+	config     *config.Config
 }
 
-func NewServer(ctx context.Context, listener net.Listener) *Server {
+func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *Server {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
 	s := &Server{
 		listener:   listener,
 		ctx:        ctx,
 		sessionMgr: session.NewSessionMgr(ctx, session.NewMemoryDriver()),
+		config:     cfg,
 	}
 	return s
 }
@@ -50,7 +56,7 @@ func (s *Server) Start() (err error) {
 func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
 	remoteAddr := conn.RemoteAddr().String()
 	addr, port := parseRemoteAddr(remoteAddr)
-	
+
 	sess, err := s.sessionMgr.GetOrCreateSession(ctx, addr, port)
 	if err != nil {
 		return err
@@ -152,7 +158,7 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
 func (s *Server) handleHandshake(ctx context.Context, conn net.Conn, sess *session.Session) error {
 	handshakePacket := &protocol.HandshakeV10Packet{}
 	handshakePacket.ProtocolVersion = 10
-	handshakePacket.ServerVersion = "5.5.5-10.3.12-MariaDB"
+	handshakePacket.ServerVersion = s.config.Server.ServerVersion
 	handshakePacket.ThreadID = sess.ThreadID
 	handshakePacket.AuthPluginDataPart = []byte(RandomString(8))
 	handshakePacket.AuthPluginDataPart2 = []byte(RandomString(12))
@@ -162,13 +168,13 @@ func (s *Server) handleHandshake(ctx context.Context, conn net.Conn, sess *sessi
 	handshakePacket.CapabilityFlags2 = 0x81bf
 	handshakePacket.MariaDBCaps = 0x00000007
 	handshakePacket.AuthPluginName = "mysql_native_password"
-	
+
 	packetBytes, err := handshakePacket.Marshal()
 	if err != nil {
 		log.Printf("序列化握手包失败: %v", err)
 		return err
 	}
-	
+
 	_, err = io.Copy(conn, bytes.NewReader(packetBytes))
 	if err != nil {
 		log.Printf("发送握手包失败: %v", err)
@@ -205,13 +211,13 @@ func (s *Server) handleHandshake(ctx context.Context, conn net.Conn, sess *sessi
 	okPacket.OkInPacket.LastInsertId = 0
 	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
 	okPacket.OkInPacket.Warnings = 0
-	
+
 	okPacketBytes, err := okPacket.Marshal()
 	if err != nil {
 		log.Printf("序列化OK包失败: %v", err)
 		return err
 	}
-	
+
 	_, err = io.Copy(conn, bytes.NewReader(okPacketBytes))
 	if err != nil {
 		log.Printf("发送OK包失败: %v", err)
@@ -340,7 +346,7 @@ func (s *Server) sendError(conn net.Conn, err error, sequenceID uint8) {
 	errPacket.ErrorInPacket.SqlStateMarker = "#"
 	errPacket.ErrorInPacket.SqlState = "42000"
 	errPacket.ErrorInPacket.ErrorMessage = err.Error()
-	
+
 	packetBytes, _ := errPacket.Marshal()
 	conn.Write(packetBytes)
 }
@@ -353,7 +359,7 @@ func (s *Server) sendOK(conn net.Conn, sequenceID uint8) error {
 	okPacket.OkInPacket.LastInsertId = 0
 	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
 	okPacket.OkInPacket.Warnings = 0
-	
+
 	packetBytes, err := okPacket.Marshal()
 	if err != nil {
 		return err
@@ -374,10 +380,10 @@ func (s *Server) handleComPing(ctx context.Context, sess *session.Session, conn 
 
 func (s *Server) handleComQuery(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComQueryPacket) error {
 	log.Printf("处理 COM_QUERY: %s", commandPack.Query)
-	
+
 	query := strings.TrimSpace(commandPack.Query)
 	queryUpper := strings.ToUpper(query)
-	
+
 	switch {
 	case strings.HasPrefix(queryUpper, "SELECT") || strings.HasPrefix(queryUpper, "SHOW"):
 		return s.handleSelect(sess, conn, query)
@@ -386,9 +392,9 @@ func (s *Server) handleComQuery(ctx context.Context, sess *session.Session, conn
 	case strings.HasPrefix(queryUpper, "USE"):
 		return s.handleUse(sess, conn, query)
 	case strings.HasPrefix(queryUpper, "INSERT"), strings.HasPrefix(queryUpper, "UPDATE"),
-	     strings.HasPrefix(queryUpper, "DELETE"), strings.HasPrefix(queryUpper, "REPLACE"),
-	     strings.HasPrefix(queryUpper, "CREATE"), strings.HasPrefix(queryUpper, "DROP"),
-	     strings.HasPrefix(queryUpper, "ALTER"), strings.HasPrefix(queryUpper, "TRUNCATE"):
+		strings.HasPrefix(queryUpper, "DELETE"), strings.HasPrefix(queryUpper, "REPLACE"),
+		strings.HasPrefix(queryUpper, "CREATE"), strings.HasPrefix(queryUpper, "DROP"),
+		strings.HasPrefix(queryUpper, "ALTER"), strings.HasPrefix(queryUpper, "TRUNCATE"):
 		return s.handleDML(sess, conn, query)
 	default:
 		return s.sendOK(conn, sess.GetNextSequenceID())
@@ -399,7 +405,7 @@ func (s *Server) handleSelect(sess *session.Session, conn net.Conn, query string
 	if strings.Contains(query, "@@") {
 		return s.handleVariableSelect(sess, conn, query)
 	}
-	
+
 	return s.sendResultSet(conn, sess, []protocol.FieldMeta{
 		{
 			Catalog:                   "def",
@@ -408,7 +414,7 @@ func (s *Server) handleSelect(sess *session.Session, conn net.Conn, query string
 			OrgTable:                  "test_table",
 			Name:                      "id",
 			OrgName:                   "id",
-			LengthOfFixedLengthFields:  12,
+			LengthOfFixedLengthFields: 12,
 			CharacterSet:              33,
 			ColumnLength:              11,
 			Type:                      protocol.MYSQL_TYPE_LONG,
@@ -428,9 +434,9 @@ func (s *Server) handleVariableSelect(sess *session.Session, conn net.Conn, quer
 		}
 		varName = strings.ToLower(strings.TrimSpace(varName))
 	}
-	
+
 	log.Printf("查询系统变量: %s", varName)
-	
+
 	varValue := ""
 	switch varName {
 	case "version_comment":
@@ -446,7 +452,7 @@ func (s *Server) handleVariableSelect(sess *session.Session, conn net.Conn, quer
 			varValue = ""
 		}
 	}
-	
+
 	return s.sendResultSet(conn, sess, []protocol.FieldMeta{
 		{
 			Catalog:                   "def",
@@ -455,7 +461,7 @@ func (s *Server) handleVariableSelect(sess *session.Session, conn net.Conn, quer
 			OrgTable:                  "",
 			Name:                      "@@" + varName,
 			OrgName:                   "@@" + varName,
-			LengthOfFixedLengthFields:  12,
+			LengthOfFixedLengthFields: 12,
 			CharacterSet:              33,
 			ColumnLength:              255,
 			Type:                      protocol.MYSQL_TYPE_VAR_STRING,
@@ -468,9 +474,9 @@ func (s *Server) handleVariableSelect(sess *session.Session, conn net.Conn, quer
 
 func (s *Server) handleSet(sess *session.Session, conn net.Conn, query string) error {
 	log.Printf("处理 SET 查询: %s", query)
-	
+
 	cmd := strings.TrimSpace(query[3:])
-	
+
 	if strings.HasPrefix(strings.ToUpper(cmd), "NAMES") {
 		charset := strings.TrimSpace(cmd[5:])
 		if idx := strings.Index(charset, "COLLATE"); idx > 0 {
@@ -485,30 +491,30 @@ func (s *Server) handleSet(sess *session.Session, conn net.Conn, query string) e
 	}
 
 	assignments := strings.Split(cmd, ",")
-	
+
 	for _, assign := range assignments {
 		assign = strings.TrimSpace(assign)
-		
+
 		var varName, varValue string
-		
+
 		eqIdx := strings.Index(assign, "=")
 		if eqIdx == -1 {
 			eqIdx = strings.Index(assign, ":=")
 		}
-		
+
 		if eqIdx == -1 {
 			log.Printf("无法解析 SET 命令: %s", assign)
 			continue
 		}
-		
+
 		varName = strings.TrimSpace(assign[:eqIdx])
 		varValue = strings.TrimSpace(assign[eqIdx+1:])
-		
+
 		if (strings.HasPrefix(varValue, "'") && strings.HasSuffix(varValue, "'")) ||
-		   (strings.HasPrefix(varValue, "\"") && strings.HasSuffix(varValue, "\"")) {
+			(strings.HasPrefix(varValue, "\"") && strings.HasSuffix(varValue, "\"")) {
 			varValue = varValue[1 : len(varValue)-1]
 		}
-		
+
 		varName = strings.TrimSpace(varName)
 		varName = strings.TrimPrefix(varName, "@@global.")
 		varName = strings.TrimPrefix(varName, "@@session.")
@@ -516,15 +522,15 @@ func (s *Server) handleSet(sess *session.Session, conn net.Conn, query string) e
 		varName = strings.TrimPrefix(varName, "@@")
 		varName = strings.TrimPrefix(varName, "@")
 		varName = strings.ToLower(varName)
-		
+
 		if err := sess.SetVariable(varName, varValue); err != nil {
 			log.Printf("设置变量 %s 失败: %v", varName, err)
 			continue
 		}
-		
+
 		log.Printf("设置会话变量: %s = %s", varName, varValue)
 	}
-	
+
 	return s.sendOK(conn, sess.GetNextSequenceID())
 }
 
@@ -553,25 +559,25 @@ func (s *Server) handleComSetOption(ctx context.Context, sess *session.Session, 
 
 func (s *Server) handleComStmtPrepare(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStmtPreparePacket) error {
 	log.Printf("处理 COM_STMT_PREPARE: %s", commandPack.Query)
-	
+
 	stmtID := sess.ThreadID
-	
+
 	paramCount := s.countParams(commandPack.Query)
 	columnCount := s.analyzeColumns(commandPack.Query)
-	
+
 	response := &protocol.StmtPrepareResponsePacket{
 		Packet: protocol.Packet{
 			SequenceID: sess.GetNextSequenceID(),
 		},
-		StatementID: stmtID,
-		ColumnCount: columnCount,
+		StatementID:  stmtID,
+		ColumnCount:  columnCount,
 		ParamCount:   paramCount,
 		Reserved:     0,
 		WarningCount: 0,
 		Params:       make([]protocol.FieldMeta, paramCount),
 		Columns:      make([]protocol.FieldMeta, columnCount),
 	}
-	
+
 	for i := uint16(0); i < paramCount; i++ {
 		response.Params[i] = protocol.FieldMeta{
 			Catalog:                   "def",
@@ -580,7 +586,7 @@ func (s *Server) handleComStmtPrepare(ctx context.Context, sess *session.Session
 			OrgTable:                  "",
 			Name:                      "?",
 			OrgName:                   "",
-			LengthOfFixedLengthFields:  12,
+			LengthOfFixedLengthFields: 12,
 			CharacterSet:              33,
 			ColumnLength:              255,
 			Type:                      protocol.MYSQL_TYPE_VAR_STRING,
@@ -589,7 +595,7 @@ func (s *Server) handleComStmtPrepare(ctx context.Context, sess *session.Session
 			Reserved:                  "\x00\x00",
 		}
 	}
-	
+
 	columnNames := s.getColumns(commandPack.Query)
 	for i := uint16(0); i < columnCount && i < uint16(len(columnNames)); i++ {
 		response.Columns[i] = protocol.FieldMeta{
@@ -599,7 +605,7 @@ func (s *Server) handleComStmtPrepare(ctx context.Context, sess *session.Session
 			OrgTable:                  "table",
 			Name:                      columnNames[i],
 			OrgName:                   columnNames[i],
-			LengthOfFixedLengthFields:  12,
+			LengthOfFixedLengthFields: 12,
 			CharacterSet:              33,
 			ColumnLength:              255,
 			Type:                      protocol.MYSQL_TYPE_VAR_STRING,
@@ -608,30 +614,30 @@ func (s *Server) handleComStmtPrepare(ctx context.Context, sess *session.Session
 			Reserved:                  "\x00\x00",
 		}
 	}
-	
+
 	packetBytes, err := response.Marshal()
 	if err != nil {
 		log.Printf("序列化 COM_STMT_PREPARE 响应失败: %v", err)
 		return err
 	}
-	
+
 	_, err = conn.Write(packetBytes)
 	if err != nil {
 		log.Printf("发送 COM_STMT_PREPARE 响应失败: %v", err)
 		return err
 	}
-	
+
 	log.Printf("已发送 COM_STMT_PREPARE 响应: statement_id=%d, params=%d, columns=%d",
 		response.StatementID, response.ParamCount, response.ColumnCount)
-	
+
 	sess.Set(fmt.Sprintf("stmt_%d", stmtID), commandPack.Query)
-	
+
 	return nil
 }
 
 func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStmtExecutePacket) error {
 	log.Printf("处理 COM_STMT_EXECUTE: statement_id=%d", commandPack.StatementID)
-	
+
 	queryKey := fmt.Sprintf("stmt_%d", commandPack.StatementID)
 	query, _ := sess.Get(queryKey)
 	if query == nil {
@@ -639,15 +645,15 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 		s.sendError(conn, fmt.Errorf("预处理语句不存在"), sess.GetNextSequenceID())
 		return fmt.Errorf("预处理语句不存在")
 	}
-	
+
 	columnCount := s.analyzeColumns(query.(string))
-	
+
 	columnCountData := []byte{0x01, 0x00, 0x00, sess.GetNextSequenceID()}
 	_, err := conn.Write(columnCountData)
 	if err != nil {
 		return err
 	}
-	
+
 	columnNames := s.getColumns(query.(string))
 	for i := 0; i < int(columnCount) && i < len(columnNames); i++ {
 		fieldMeta := protocol.FieldMetaPacket{
@@ -661,7 +667,7 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 				OrgTable:                  "table",
 				Name:                      columnNames[i],
 				OrgName:                   columnNames[i],
-				LengthOfFixedLengthFields:  12,
+				LengthOfFixedLengthFields: 12,
 				CharacterSet:              33,
 				ColumnLength:              255,
 				Type:                      protocol.MYSQL_TYPE_VAR_STRING,
@@ -678,7 +684,7 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 			return err
 		}
 	}
-	
+
 	eofPacket := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
 	eofData, err := eofPacket.Marshal()
 	if err != nil {
@@ -687,7 +693,7 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 	if _, err := conn.Write(eofData); err != nil {
 		return err
 	}
-	
+
 	rowData := protocol.RowDataPacket{
 		Packet: protocol.Packet{
 			SequenceID: sess.GetNextSequenceID(),
@@ -701,7 +707,7 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 	if _, err := conn.Write(rowDataBytes); err != nil {
 		return err
 	}
-	
+
 	finalEof := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
 	finalEofData, err := finalEof.Marshal()
 	if err != nil {
@@ -716,10 +722,10 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 
 func (s *Server) handleComStmtClose(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStmtClosePacket) error {
 	log.Printf("处理 COM_STMT_CLOSE: statement_id=%d", commandPack.StatementID)
-	
+
 	queryKey := fmt.Sprintf("stmt_%d", commandPack.StatementID)
 	sess.Delete(queryKey)
-	
+
 	return nil
 }
 
@@ -853,29 +859,29 @@ func (s *Server) countParams(query string) uint16 {
 
 func (s *Server) analyzeColumns(query string) uint16 {
 	queryUpper := strings.ToUpper(query)
-	
+
 	if strings.Contains(queryUpper, "SELECT") {
 		return 1
 	}
-	
+
 	if strings.Contains(queryUpper, "SHOW") {
 		return 2
 	}
-	
+
 	return 0
 }
 
 func (s *Server) getColumns(query string) []string {
 	queryUpper := strings.ToUpper(query)
-	
+
 	if strings.Contains(queryUpper, "SELECT") {
 		return []string{"id"}
 	}
-	
+
 	if strings.Contains(queryUpper, "SHOW") {
 		return []string{"Variable_name", "Value"}
 	}
-	
+
 	return []string{}
 }
 

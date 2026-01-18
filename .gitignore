@@ -8,6 +8,7 @@
 *.out
 tidb
 duckdb
+backups
 
 # Environment files
 .env

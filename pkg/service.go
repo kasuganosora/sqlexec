@@ -17,7 +17,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/optimizer"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/pool"
-	"github.com/kasuganosora/sqlexec/pkg/protocol"
+	"github.com/kasuganosora/sqlexec/server/protocol"
 	"github.com/kasuganosora/sqlexec/pkg/resource"
 	"github.com/kasuganosora/sqlexec/pkg/session"
 )
