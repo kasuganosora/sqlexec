@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/kasuganosora/sqlexec/mysql/mvcc"
+	"github.com/kasuganosora/pkg/mvcc"
 )
 
 // TestBasicTransaction 测试基本事务操作

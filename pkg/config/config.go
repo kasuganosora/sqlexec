@@ -32,8 +32,9 @@ type ServerConfig struct {
 
 // DatabaseConfig 数据库配置
 type DatabaseConfig struct {
-	MaxConnections int `json:"max_connections"`
-	IdleTimeout   int `json:"idle_timeout"` // seconds
+	MaxConnections int      `json:"max_connections"`
+	IdleTimeout   int      `json:"idle_timeout"` // seconds
+	EnabledSources []string `json:"enabled_sources"` // 启用的数据源类型，核心版本可以只启用部分
 }
 
 // LogConfig 日志配置
@@ -126,6 +127,15 @@ func DefaultConfig() *Config {
 		Database: DatabaseConfig{
 			MaxConnections: 100,
 			IdleTimeout:    3600,
+			EnabledSources: []string{
+				"memory",
+				"csv",
+				"excel",
+				"json",
+				"mysql",
+				"sqlite",
+				"parquet",
+			},
 		},
 		Log: LogConfig{
 			Level:  "info",

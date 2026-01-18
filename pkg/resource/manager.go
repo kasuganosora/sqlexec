@@ -3,21 +3,52 @@ package resource
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 )
 
 // DataSourceManager 数据源管理器
 type DataSourceManager struct {
-	sources    map[string]DataSource
-	defaultDS  string
-	mu         sync.RWMutex
+	sources          map[string]DataSource
+	factories        map[string]DataSourceFactory
+	defaultDS         string
+	mu               sync.RWMutex
+	enabledTypes      map[string]bool // 启用的数据源类型（使用字符串）
 }
 
 // NewDataSourceManager 创建数据源管理器
 func NewDataSourceManager() *DataSourceManager {
 	return &DataSourceManager{
-		sources: make(map[string]DataSource),
+		sources:       make(map[string]DataSource),
+		factories:     make(map[string]DataSourceFactory),
+		enabledTypes:  make(map[string]bool),
 	}
+}
+
+// SetEnabledTypes 设置启用的数据源类型（核心版本可以只启用部分数据源）
+func (m *DataSourceManager) SetEnabledTypes(types []DataSourceType) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.enabledTypes = make(map[string]bool)
+	for _, t := range types {
+		m.enabledTypes[t.String()] = true
+	}
+}
+
+// RegisterFactory 注册数据源工厂
+func (m *DataSourceManager) RegisterFactory(factory DataSourceFactory) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	factoryType := factory.GetType()
+	typeStr := factoryType.String()
+	if _, exists := m.factories[typeStr]; exists {
+		return fmt.Errorf("factory %s already registered", factoryType)
+	}
+
+	m.factories[typeStr] = factory
+	return nil
 }
 
 // Register 注册数据源
@@ -84,6 +115,39 @@ func (m *DataSourceManager) GetDefault() (DataSource, error) {
 		return nil, fmt.Errorf("no default data source set")
 	}
 	return m.Get(m.defaultDS)
+}
+
+// CreateFromConfig 从配置创建数据源
+func (m *DataSourceManager) CreateFromConfig(config *DataSourceConfig) (DataSource, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// 检查数据源类型是否启用
+	if !m.enabledTypes[config.Type.String()] {
+		return nil, fmt.Errorf("data source type %s is not enabled", config.Type)
+	}
+
+	// 查找工厂
+	factory, ok := m.factories[config.Type.String()]
+	if !ok {
+		return nil, fmt.Errorf("no factory registered for type %s", config.Type)
+	}
+
+	// 使用工厂创建数据源
+	return factory.Create(config)
+}
+
+// IsTypeEnabled 检查数据源类型是否启用
+func (m *DataSourceManager) IsTypeEnabled(t DataSourceType) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if len(m.enabledTypes) == 0 {
+		// 如果没有设置启用的类型，默认全部启用（核心版本）
+		return true
+	}
+
+	return m.enabledTypes[t.String()]
 }
 
 // SetDefault 设置默认数据源

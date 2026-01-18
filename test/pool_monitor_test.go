@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kasuganosora/sqlexec/mysql"
+	"github.com/kasuganosora/pkg/pool"
+	"github.com/kasuganosora/pkg/resource"
 	"github.com/kasuganosora/sqlexec/mysql/monitor"
-	"github.com/kasuganosora/sqlexec/mysql/pool"
-	"github.com/kasuganosora/sqlexec/mysql/resource"
+	"github.com/kasuganosora/sqlexec/pkg"
 )
 
 // TestGoroutinePool 测试GoroutinePool
@@ -143,14 +143,14 @@ func TestSlowQueryLogger(t *testing.T) {
 	}
 
 	// 验证慢查询记录
-	if logger.IsSlowQuery(120*time.Millisecond) {
+	if logger.IsSlowQuery(120 * time.Millisecond) {
 		t.Log("120ms的查询被正确识别为慢查询")
 	}
 }
 
 // TestServerCreation 测试Server创建
 func TestServerCreation(t *testing.T) {
-	server := mysql.NewServer()
+	server := pkg.NewServer()
 
 	stats := server.GetGoroutinePoolStats()
 	if stats.MaxSize <= 0 {

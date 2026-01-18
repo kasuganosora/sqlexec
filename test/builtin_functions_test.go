@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kasuganosora/sqlexec/mysql/builtin"
-	"github.com/kasuganosora/sqlexec/mysql/optimizer"
-	"github.com/kasuganosora/sqlexec/mysql/parser"
+	"github.com/kasuganosora/pkg/builtin"
+	"github.com/kasuganosora/pkg/optimizer"
+	"github.com/kasuganosora/pkg/parser"
 )
 
 // TestBuiltinFunctions 测试内置函数功能
@@ -259,9 +259,9 @@ func TestExpressionEvaluator(t *testing.T) {
 		{
 			"ABS(-5)",
 			&parser.Expression{
-			Type:     parser.ExprTypeFunction,
-			Function: "abs",
-			Args: []parser.Expression{
+				Type:     parser.ExprTypeFunction,
+				Function: "abs",
+				Args: []parser.Expression{
 					{
 						Type:  parser.ExprTypeValue,
 						Value: -5.0,
@@ -274,9 +274,9 @@ func TestExpressionEvaluator(t *testing.T) {
 		{
 			"UPPER('hello')",
 			&parser.Expression{
-			Type:     parser.ExprTypeFunction,
-			Function: "upper",
-			Args: []parser.Expression{
+				Type:     parser.ExprTypeFunction,
+				Function: "upper",
+				Args: []parser.Expression{
 					{
 						Type:  parser.ExprTypeValue,
 						Value: "hello",
@@ -289,9 +289,9 @@ func TestExpressionEvaluator(t *testing.T) {
 		{
 			"CONCAT('Hello', ' ', 'World')",
 			&parser.Expression{
-			Type:     parser.ExprTypeFunction,
-			Function: "concat",
-			Args: []parser.Expression{
+				Type:     parser.ExprTypeFunction,
+				Function: "concat",
+				Args: []parser.Expression{
 					{
 						Type:  parser.ExprTypeValue,
 						Value: "Hello",

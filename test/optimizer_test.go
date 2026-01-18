@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kasuganosora/sqlexec/mysql/optimizer"
-	"github.com/kasuganosora/sqlexec/mysql/parser"
-	"github.com/kasuganosora/sqlexec/mysql/resource"
+	"github.com/kasuganosora/pkg/optimizer"
+	"github.com/kasuganosora/pkg/parser"
+	"github.com/kasuganosora/pkg/resource"
 )
 
 // TestOptimizerSimple 测试简单优化器
@@ -228,9 +228,9 @@ func TestIndexManager(t *testing.T) {
 	indexManager := optimizer.NewIndexManager()
 
 	index := &optimizer.Index{
-		Name:       "idx_age",
-		TableName:  "users",
-		Columns:    []string{"age"},
+		Name:        "idx_age",
+		TableName:   "users",
+		Columns:     []string{"age"},
 		Unique:      false,
 		Cardinality: 50,
 	}
@@ -259,8 +259,8 @@ func TestPerformanceOptimizer(t *testing.T) {
 	// 测试优化建议
 	ctx := &optimizer.OptimizationContext{
 		DataSource: nil,
-		TableInfo: make(map[string]*resource.TableInfo),
-		Stats: make(map[string]*optimizer.Statistics),
+		TableInfo:  make(map[string]*resource.TableInfo),
+		Stats:      make(map[string]*optimizer.Statistics),
 	}
 
 	optimization := perfOptimizer.OptimizeScan("users", nil, ctx)

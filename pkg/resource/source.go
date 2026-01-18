@@ -8,6 +8,11 @@ import (
 // DataSourceType 数据源类型
 type DataSourceType string
 
+// String 返回数据源类型的字符串表示
+func (t DataSourceType) String() string {
+	return string(t)
+}
+
 const (
 	// DataSourceTypeMemory 内存数据源
 	DataSourceTypeMemory DataSourceType = "memory"
@@ -19,6 +24,8 @@ const (
 	DataSourceTypeSQLite DataSourceType = "sqlite"
 	// DataSourceTypeCSV CSV文件数据源
 	DataSourceTypeCSV DataSourceType = "csv"
+	// DataSourceTypeExcel Excel文件数据源
+	DataSourceTypeExcel DataSourceType = "excel"
 	// DataSourceTypeJSON JSON文件数据源
 	DataSourceTypeJSON DataSourceType = "json"
 	// DataSourceTypeParquet Parquet文件数据源
