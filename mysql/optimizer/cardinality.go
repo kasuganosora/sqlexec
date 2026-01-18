@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"mysql-proxy/mysql/resource"
+	"mysql-proxy/mysql/parser"
 )
 
 // TableStatistics 表统计信息
@@ -284,20 +285,20 @@ func (e *SimpleCardinalityEstimator) EstimateJoin(left, right LogicalPlan, joinT
 
 	// 根据JOIN类型估算
 	switch joinType {
-	case JoinTypeInner:
+	case InnerJoin:
 		// INNER JOIN: 假设每个左表行匹配右表的1/N个行
 		// 简化估计: min(left, right)
 		return min(leftCount, rightCount)
 
-	case JoinTypeLeft:
+	case LeftOuterJoin:
 		// LEFT JOIN: 输出 = 左表行数
 		return leftCount
 
-	case JoinTypeRight:
+	case RightOuterJoin:
 		// RIGHT JOIN: 输出 = 右表行数
 		return rightCount
 
-	case JoinTypeFull:
+	case FullOuterJoin:
 		// FULL JOIN: 输出 ≈ left + right - matches
 		return leftCount + rightCount/2
 

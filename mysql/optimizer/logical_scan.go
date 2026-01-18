@@ -71,15 +71,15 @@ func (p *LogicalDataSource) Explain() string {
 
 // LogicalSelection 逻辑过滤（选择）
 type LogicalSelection struct {
-	Conditions []*parser.Expression
-	children   []LogicalPlan
+	filterConditions []*parser.Expression
+	children       []LogicalPlan
 }
 
 // NewLogicalSelection 创建逻辑过滤
 func NewLogicalSelection(conditions []*parser.Expression, child LogicalPlan) *LogicalSelection {
 	return &LogicalSelection{
-		Conditions: conditions,
-		children:   []LogicalPlan{child},
+		filterConditions: conditions,
+		children:       []LogicalPlan{child},
 	}
 }
 
@@ -103,7 +103,7 @@ func (p *LogicalSelection) Schema() []ColumnInfo {
 
 // Conditions 返回过滤条件
 func (p *LogicalSelection) Conditions() []*parser.Expression {
-	return p.Conditions
+	return p.filterConditions
 }
 
 // Selectivity 返回选择率
@@ -123,10 +123,10 @@ func (p *LogicalSelection) Explain() string {
 
 // LogicalProjection 逻辑投影
 type LogicalProjection struct {
-	Exprs     []*parser.Expression
-	Aliases    []string
-	Columns    []ColumnInfo
-	children   []LogicalPlan
+	Exprs        []*parser.Expression
+	columnAliases []string
+	Columns      []ColumnInfo
+	children     []LogicalPlan
 }
 
 // NewLogicalProjection 创建逻辑投影
@@ -149,10 +149,10 @@ func NewLogicalProjection(exprs []*parser.Expression, aliases []string, child Lo
 	}
 
 	return &LogicalProjection{
-		Exprs:   exprs,
-		Aliases:  aliases,
-		Columns:  columns,
-		children: []LogicalPlan{child},
+		Exprs:        exprs,
+		columnAliases:  aliases,
+		Columns:       columns,
+		children:      []LogicalPlan{child},
 	}
 }
 
@@ -178,7 +178,7 @@ func (p *LogicalProjection) Expressions() []*parser.Expression {
 
 // Aliases 返回别名列表
 func (p *LogicalProjection) Aliases() []string {
-	return p.Aliases
+	return p.columnAliases
 }
 
 // Explain 返回计划说明
@@ -199,16 +199,16 @@ func (p *LogicalProjection) Explain() string {
 
 // LogicalLimit 逻辑限制
 type LogicalLimit struct {
-	Limit     int64
-	Offset    int64
+	limitVal  int64
+	offsetVal int64
 	children  []LogicalPlan
 }
 
 // NewLogicalLimit 创建逻辑限制
 func NewLogicalLimit(limit, offset int64, child LogicalPlan) *LogicalLimit {
 	return &LogicalLimit{
-		Limit:    limit,
-		Offset:   offset,
+		limitVal:  limit,
+		offsetVal: offset,
 		children:  []LogicalPlan{child},
 	}
 }
@@ -233,12 +233,12 @@ func (p *LogicalLimit) Schema() []ColumnInfo {
 
 // Limit 返回LIMIT值
 func (p *LogicalLimit) Limit() int64 {
-	return p.Limit
+	return p.limitVal
 }
 
 // Offset 返回OFFSET值
 func (p *LogicalLimit) Offset() int64 {
-	return p.Offset
+	return p.offsetVal
 }
 
 // Explain 返回计划说明
@@ -303,11 +303,11 @@ func (p *LogicalSort) Explain() string {
 
 // LogicalJoin 逻辑连接
 type LogicalJoin struct {
-	JoinType    JoinType
-	LeftTable   string
-	RightTable  string
-	Conditions  []*JoinCondition
-	children    []LogicalPlan
+	joinType       JoinType
+	LeftTable      string
+	RightTable     string
+	joinConditions []*JoinCondition
+	children       []LogicalPlan
 }
 
 // NewLogicalJoin 创建逻辑连接
@@ -327,11 +327,11 @@ func NewLogicalJoin(joinType JoinType, left, right LogicalPlan, conditions []*Jo
 	}
 
 	return &LogicalJoin{
-		JoinType:   joinType,
-		LeftTable:  leftTable,
-		RightTable: rightTable,
-		Conditions: conditions,
-		children:   []LogicalPlan{left, right},
+		joinType:       joinType,
+		LeftTable:      leftTable,
+		RightTable:     rightTable,
+		joinConditions: conditions,
+		children:       []LogicalPlan{left, right},
 	}
 }
 
@@ -359,12 +359,12 @@ func (p *LogicalJoin) Schema() []ColumnInfo {
 
 // JoinType 返回连接类型
 func (p *LogicalJoin) JoinType() JoinType {
-	return p.JoinType
+	return p.joinType
 }
 
 // Conditions 返回连接条件
 func (p *LogicalJoin) Conditions() []*JoinCondition {
-	return p.Conditions
+	return p.joinConditions
 }
 
 // Explain 返回计划说明
@@ -374,17 +374,17 @@ func (p *LogicalJoin) Explain() string {
 
 // LogicalAggregate 逻辑聚合
 type LogicalAggregate struct {
-	AggFuncs   []*AggregationItem
-	GroupByCols []string
-	children    []LogicalPlan
+	aggFuncs      []*AggregationItem
+	groupByFields []string
+	children      []LogicalPlan
 }
 
 // NewLogicalAggregate 创建逻辑聚合
 func NewLogicalAggregate(aggFuncs []*AggregationItem, groupByCols []string, child LogicalPlan) *LogicalAggregate {
 	return &LogicalAggregate{
-		AggFuncs:   aggFuncs,
-		GroupByCols: groupByCols,
-		children:    []LogicalPlan{child},
+		aggFuncs:      aggFuncs,
+		groupByFields: groupByCols,
+		children:      []LogicalPlan{child},
 	}
 }
 
@@ -403,7 +403,7 @@ func (p *LogicalAggregate) Schema() []ColumnInfo {
 	columns := []ColumnInfo{}
 
 	// 添加 GROUP BY 列
-	for _, col := range p.GroupByCols {
+	for _, col := range p.groupByFields {
 		columns = append(columns, ColumnInfo{
 			Name:     col,
 			Type:     "unknown",
@@ -412,7 +412,7 @@ func (p *LogicalAggregate) Schema() []ColumnInfo {
 	}
 
 	// 添加聚合函数列
-	for _, agg := range p.AggFuncs {
+	for _, agg := range p.aggFuncs {
 		name := agg.Alias
 		if name == "" {
 			name = fmt.Sprintf("%s(%v)", agg.Type, agg.Expr)
@@ -429,12 +429,12 @@ func (p *LogicalAggregate) Schema() []ColumnInfo {
 
 // AggFuncs 返回聚合函数列表
 func (p *LogicalAggregate) AggFuncs() []*AggregationItem {
-	return p.AggFuncs
+	return p.aggFuncs
 }
 
 // GroupByCols 返回分组列列表
 func (p *LogicalAggregate) GroupByCols() []string {
-	return p.GroupByCols
+	return p.groupByFields
 }
 
 // Explain 返回计划说明

@@ -6,6 +6,8 @@
 *.dylib
 *.test
 *.out
+tidb
+duckdb
 
 # Environment files
 .env

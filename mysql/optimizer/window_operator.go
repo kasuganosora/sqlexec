@@ -26,7 +26,7 @@ type WindowFunctionDef struct {
 }
 
 // NewWindowOperator 创建窗口函数算子
-func NewWindowOperator(child PhysicalOperator, windowFuncs []*parser.WindowExpression) *WindowOperator {
+func NewWindowOperator(child PhysicalPlan, windowFuncs []*parser.WindowExpression) *WindowOperator {
 	funcDefs := make([]*WindowFunctionDef, len(windowFuncs))
 	for i, wf := range windowFuncs {
 		funcDefs[i] = &WindowFunctionDef{
