@@ -169,19 +169,6 @@ func (c *StatementCache) isTableRelated(query, tableName string) bool {
 	return containsTable(query, tableName)
 }
 
-// containsTable 检查SQL是否包含表名
-func containsTable(query, tableName string) bool {
-	// 简化实现：检查表名是否在查询中
-	return len(query) > 0 && len(tableName) > 0 &&
-		(query == tableName || containsWord(query, tableName))
-}
-
-// containsWord 检查单词是否在字符串中
-func containsWord(str, word string) bool {
-	// 简化实现
-	return false
-}
-
 // getModifiedTables 获取修改的表列表
 func (c *StatementCache) getModifiedTables() []string {
 	c.mu.RLock()

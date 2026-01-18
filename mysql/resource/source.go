@@ -52,6 +52,18 @@ type ColumnInfo struct {
 	Nullable bool   `json:"nullable"`
 	Primary  bool   `json:"primary"`
 	Default  string `json:"default,omitempty"`
+	// 约束支持
+	Unique   bool     `json:"unique,omitempty"`     // 唯一约束
+	AutoIncrement bool   `json:"auto_increment,omitempty"` // 自动递增
+	ForeignKey *ForeignKeyInfo `json:"foreign_key,omitempty"` // 外键约束
+}
+
+// ForeignKeyInfo 外键信息
+type ForeignKeyInfo struct {
+	Table      string `json:"table"`      // 引用的表
+	Column     string `json:"column"`     // 引用的列
+	OnDelete   string `json:"on_delete,omitempty"`   // 删除策略：CASCADE, SET NULL, NO ACTION
+	OnUpdate   string `json:"on_update,omitempty"`   // 更新策略
 }
 
 // Row 行数据

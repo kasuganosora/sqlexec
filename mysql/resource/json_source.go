@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"sync"
 )
 
@@ -245,7 +244,7 @@ func (s *JSONSource) inferSchema(ctx context.Context) error {
 		}
 	} else {
 		// 行分隔格式: 每行一个JSON对象
-		lines := s.splitLines(data)
+		lines := splitLines(data)
 		for _, line := range lines {
 			var record map[string]interface{}
 			if err := json.Unmarshal([]byte(line), &record); err != nil {
@@ -386,33 +385,6 @@ func (s *JSONSource) readAll(ctx context.Context) ([]Row, error) {
 	return rows, nil
 }
 
-// splitLines 分割行
-func (s *JSONSource) splitLines(data []byte) []string {
-	str := string(data)
-	lines := make([]string, 0)
-	
-	start := 0
-	for i := 0; i < len(str); i++ {
-		if str[i] == '\n' {
-			line := strings.TrimSpace(str[start:i])
-			if line != "" {
-				lines = append(lines, line)
-			}
-			start = i + 1
-		}
-	}
-	
-	// 添加最后一行
-	if start < len(str) {
-		line := strings.TrimSpace(str[start:])
-		if line != "" {
-			lines = append(lines, line)
-		}
-	}
-	
-	return lines
-}
-
 // applyFilters 应用过滤器
 func (s *JSONSource) applyFilters(rows []Row, options *QueryOptions) []Row {
 	if options == nil || len(options.Filters) == 0 {
@@ -522,24 +494,10 @@ func (s *JSONSource) applyOrder(rows []Row, options *QueryOptions) []Row {
 
 // applyPagination 应用分页
 func (s *JSONSource) applyPagination(rows []Row, options *QueryOptions) []Row {
-	if options == nil || options.Limit <= 0 {
+	if options == nil {
 		return rows
 	}
-	
-	start := options.Offset
-	if start < 0 {
-		start = 0
-	}
-	if start >= len(rows) {
-		return []Row{}
-	}
-	
-	end := start + options.Limit
-	if end > len(rows) {
-		end = len(rows)
-	}
-	
-	return rows[start:end]
+	return ApplyPagination(rows, options.Offset, options.Limit)
 }
 
 // 初始化

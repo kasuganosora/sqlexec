@@ -729,24 +729,10 @@ func (s *CSVSource) applyOrder(rows []Row, options *QueryOptions) []Row {
 
 // applyPagination 应用分页
 func (s *CSVSource) applyPagination(rows []Row, options *QueryOptions) []Row {
-	if options == nil || options.Limit <= 0 {
+	if options == nil {
 		return rows
 	}
-	
-	start := options.Offset
-	if start < 0 {
-		start = 0
-	}
-	if start >= len(rows) {
-		return []Row{}
-	}
-	
-	end := start + options.Limit
-	if end > len(rows) {
-		end = len(rows)
-	}
-	
-	return rows[start:end]
+	return ApplyPagination(rows, options.Offset, options.Limit)
 }
 
 // 初始化

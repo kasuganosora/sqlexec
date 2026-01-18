@@ -584,18 +584,6 @@ func (s *MySQLSource) joinConditions(conditions []string, logicalOp string) stri
 	return joinWith(conditions, " AND ")
 }
 
-// joinWith 用指定连接符连接字符串
-func joinWith(strs []string, sep string) string {
-	result := ""
-	for i, s := range strs {
-		if i > 0 {
-			result += sep
-		}
-		result += s
-	}
-	return result
-}
-
 // buildInsertQuery 构建INSERT查询
 func (s *MySQLSource) buildInsertQuery(tableName string, columns []ColumnInfo, rows []Row) (string, string, []interface{}) {
 	// 获取列名
