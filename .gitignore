@@ -45,8 +45,10 @@ testdata/*.log
 # Test output
 test_output.txt
 
-# External dependencies
+# External dependencies (原版参考代码，不纳入版本控制)
 mariadb-server/
+tidb/
+duckdb/
 tidb-repo/
 
 # Temporary files
