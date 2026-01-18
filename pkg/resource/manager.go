@@ -3,25 +3,24 @@ package resource
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 )
 
 // DataSourceManager 数据源管理器
 type DataSourceManager struct {
-	sources          map[string]DataSource
-	factories        map[string]DataSourceFactory
-	defaultDS         string
-	mu               sync.RWMutex
-	enabledTypes      map[string]bool // 启用的数据源类型（使用字符串）
+	sources      map[string]DataSource
+	factories    map[string]DataSourceFactory
+	defaultDS    string
+	mu           sync.RWMutex
+	enabledTypes map[string]bool // 启用的数据源类型（使用字符串）
 }
 
 // NewDataSourceManager 创建数据源管理器
 func NewDataSourceManager() *DataSourceManager {
 	return &DataSourceManager{
-		sources:       make(map[string]DataSource),
-		factories:     make(map[string]DataSourceFactory),
-		enabledTypes:  make(map[string]bool),
+		sources:      make(map[string]DataSource),
+		factories:    make(map[string]DataSourceFactory),
+		enabledTypes: make(map[string]bool),
 	}
 }
 
@@ -55,15 +54,15 @@ func (m *DataSourceManager) RegisterFactory(factory DataSourceFactory) error {
 func (m *DataSourceManager) Register(name string, ds DataSource) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if _, exists := m.sources[name]; exists {
 		return fmt.Errorf("data source %s already registered", name)
 	}
-	
+
 	if m.defaultDS == "" {
 		m.defaultDS = name
 	}
-	
+
 	m.sources[name] = ds
 	return nil
 }
@@ -72,19 +71,19 @@ func (m *DataSourceManager) Register(name string, ds DataSource) error {
 func (m *DataSourceManager) Unregister(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if _, exists := m.sources[name]; !exists {
 		return fmt.Errorf("data source %s not found", name)
 	}
-	
+
 	// 关闭数据源
 	ds := m.sources[name]
 	if err := ds.Close(context.Background()); err != nil {
 		return fmt.Errorf("failed to close data source: %w", err)
 	}
-	
+
 	delete(m.sources, name)
-	
+
 	// 如果删除的是默认数据源，重新设置默认值
 	if m.defaultDS == name {
 		m.defaultDS = ""
@@ -93,7 +92,7 @@ func (m *DataSourceManager) Unregister(name string) error {
 			break
 		}
 	}
-	
+
 	return nil
 }
 
@@ -101,7 +100,7 @@ func (m *DataSourceManager) Unregister(name string) error {
 func (m *DataSourceManager) Get(name string) (DataSource, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	ds, ok := m.sources[name]
 	if !ok {
 		return nil, fmt.Errorf("data source %s not found", name)
@@ -154,11 +153,11 @@ func (m *DataSourceManager) IsTypeEnabled(t DataSourceType) bool {
 func (m *DataSourceManager) SetDefault(name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if _, ok := m.sources[name]; !ok {
 		return fmt.Errorf("data source %s not found", name)
 	}
-	
+
 	m.defaultDS = name
 	return nil
 }
@@ -167,7 +166,7 @@ func (m *DataSourceManager) SetDefault(name string) error {
 func (m *DataSourceManager) List() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	names := make([]string, 0, len(m.sources))
 	for name := range m.sources {
 		names = append(names, name)
@@ -179,7 +178,7 @@ func (m *DataSourceManager) List() []string {
 func (m *DataSourceManager) ConnectAll(ctx context.Context) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	for name, ds := range m.sources {
 		if !ds.IsConnected() {
 			if err := ds.Connect(ctx); err != nil {
@@ -194,7 +193,7 @@ func (m *DataSourceManager) ConnectAll(ctx context.Context) error {
 func (m *DataSourceManager) CloseAll(ctx context.Context) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	var lastErr error
 	for name, ds := range m.sources {
 		if err := ds.Close(ctx); err != nil {
@@ -211,18 +210,18 @@ func (m *DataSourceManager) CreateAndRegister(ctx context.Context, name string, 
 	if err != nil {
 		return fmt.Errorf("failed to create data source: %w", err)
 	}
-	
+
 	// 连接数据源
 	if err := ds.Connect(ctx); err != nil {
 		return fmt.Errorf("failed to connect data source: %w", err)
 	}
-	
+
 	// 注册数据源
 	if err := m.Register(name, ds); err != nil {
 		ds.Close(ctx)
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -320,7 +319,7 @@ func (m *DataSourceManager) Execute(ctx context.Context, dsName, sql string) (*Q
 func (m *DataSourceManager) GetStatus() map[string]bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	status := make(map[string]bool)
 	for name, ds := range m.sources {
 		status[name] = ds.IsConnected()
