@@ -16,6 +16,9 @@ const (
 	SQLTypeDrop      SQLType = "DROP"
 	SQLTypeAlter     SQLType = "ALTER"
 	SQLTypeTruncate  SQLType = "TRUNCATE"
+	SQLTypeBegin    SQLType = "BEGIN"
+	SQLTypeCommit   SQLType = "COMMIT"
+	SQLTypeRollback SQLType = "ROLLBACK"
 	SQLTypeUnknown   SQLType = "UNKNOWN"
 	
 	// 排序方向
@@ -34,6 +37,9 @@ type SQLStatement struct {
 	Create    *CreateStatement    `json:"create,omitempty"`
 	Drop      *DropStatement      `json:"drop,omitempty"`
 	Alter     *AlterStatement     `json:"alter,omitempty"`
+	Begin     *TransactionStatement `json:"begin,omitempty"`
+	Commit    *TransactionStatement `json:"commit,omitempty"`
+	Rollback  *TransactionStatement `json:"rollback,omitempty"`
 }
 
 // SelectStatement SELECT 语句
@@ -132,6 +138,11 @@ const (
 	JoinTypeFull   JoinType = "FULL"
 	JoinTypeCross  JoinType = "CROSS"
 )
+
+// TransactionStatement 事务语句
+type TransactionStatement struct {
+	Level string `json:"level,omitempty"` // 隔离级别：READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE
+}
 
 // Expression 表达式
 type Expression struct {
