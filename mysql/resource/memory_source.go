@@ -42,11 +42,14 @@ func (f *MemoryFactory) Create(config *DataSourceConfig) (DataSource, error) {
 		writable = config.Writable
 	}
 	return &MemorySource{
-		config:   config,
-		writable: writable,
-		tables:   make(map[string]*TableInfo),
-		data:     make(map[string][]Row),
-		autoID:   make(map[string]int64),
+		config:    config,
+		writable:  writable,
+		tables:    make(map[string]*TableInfo),
+		data:      make(map[string][]Row),
+		autoID:    make(map[string]int64),
+		foreignKeys: make(map[string]map[string]*ForeignKeyInfo),
+		uniqueConstraints: make(map[string]map[string]bool),
+		uniqueValues: make(map[string]map[string]map[interface{}]bool),
 	}, nil
 }
 
@@ -303,6 +306,11 @@ func (s *MemorySource) Delete(ctx context.Context, tableName string, filters []F
 	queryOpts := &QueryOptions{Filters: filters}
 	matchedIndices := s.findMatchedRows(rows, queryOpts)
 
+	// 检查外键RESTRICT约束
+	if err := s.checkRestrictConstraints(tableName, rows, matchedIndices); err != nil {
+		return 0, err
+	}
+
 	// 从后往前删除，避免索引错位
 	deleted := int64(0)
 	for i := len(matchedIndices) - 1; i >= 0; i-- {
@@ -313,6 +321,61 @@ func (s *MemorySource) Delete(ctx context.Context, tableName string, filters []F
 
 	s.data[tableName] = rows
 	return deleted, nil
+}
+
+// checkRestrictConstraints 检查删除操作是否违反RESTRICT外键约束
+func (s *MemorySource) checkRestrictConstraints(tableName string, rows []Row, indices []int) error {
+	// 获取表的主键列
+	table, ok := s.tables[tableName]
+	if !ok {
+		return nil
+	}
+
+	// 查找主键列
+	var pkColumn string
+	for _, col := range table.Columns {
+		if col.Primary {
+			pkColumn = col.Name
+			break
+		}
+	}
+
+	// 如果没有主键，无法检查外键约束
+	if pkColumn == "" {
+		return nil
+	}
+
+	// 检查所有引用该表的外键
+	for refTableName, fks := range s.foreignKeys {
+		for colName, fk := range fks {
+			if fk.Table == tableName && fk.Column == pkColumn {
+				// 找到引用此表的外键，检查是否有数据引用
+				refRows, ok := s.data[refTableName]
+				if !ok {
+					continue
+				}
+
+				for _, row := range refRows {
+					if refValue, exists := row[colName]; exists {
+						// 检查是否引用了要删除的记录
+						for _, idx := range indices {
+							delRow := rows[idx]
+							if pkValue, pkExists := delRow[pkColumn]; pkExists {
+								if compareEqual(pkValue, refValue) {
+									// 检查外键的删除策略
+									if fk.OnDelete == "RESTRICT" || fk.OnDelete == "" {
+										return fmt.Errorf("cannot delete row: foreign key constraint restrict: referenced by %s.%s", refTableName, colName)
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // CreateTable 创建表
