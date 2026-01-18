@@ -5,82 +5,67 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
-// MySQLSource MySQL数据源实现
+// ==================== MySQL 数据源 ====================
+
+// MySQLSource MySQL 数据源
 type MySQLSource struct {
-	config    *DataSourceConfig
-	db        *sql.DB
-	connected bool
-	writable  bool // 是否可写
-	mu        sync.RWMutex
+	config         *DataSourceConfig
+	connected      bool
+	conn           *sql.DB
+	statementCache *StatementCache
+	connPool       *ConnectionPool
+	slowQueryLog  *SlowQueryLogger
+	queryCache     *QueryCache
+	mu             sync.RWMutex
 }
 
-// MySQLFactory MySQL数据源工厂
-type MySQLFactory struct{}
-
-// NewMySQLFactory 创建MySQL数据源工厂
-func NewMySQLFactory() *MySQLFactory {
-	return &MySQLFactory{}
-}
-
-// GetType 实现DataSourceFactory接口
-func (f *MySQLFactory) GetType() DataSourceType {
-	return DataSourceTypeMySQL
-}
-
-// Create 实现DataSourceFactory接口
-func (f *MySQLFactory) Create(config *DataSourceConfig) (DataSource, error) {
-	if config.Host == "" {
-		config.Host = "localhost"
-	}
-	if config.Port == 0 {
-		config.Port = 3306
-	}
-	if config.Database == "" {
-		config.Database = "test"
-	}
-	// MySQL默认可写
-	writable := true
-	if config != nil {
-		writable = config.Writable
-	}
+// NewMySQLSource 创建 MySQL 数据源
+func NewMySQLSource(config *DataSourceConfig) *MySQLSource {
 	return &MySQLSource{
-		config:   config,
-		writable: writable,
-	}, nil
+		config:         config,
+		statementCache: NewStatementCache(),
+		connPool:       NewConnectionPool(),
+		slowQueryLog:  NewSlowQueryLogger(),
+		queryCache:     NewQueryCache(),
+	}
 }
 
 // Connect 连接数据源
 func (s *MySQLSource) Connect(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
-	if s.db != nil {
+
+	if s.connected {
 		return nil
 	}
-	
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true",
-		s.config.Username,
-		s.config.Password,
-		s.config.Host,
-		s.config.Port,
-		s.config.Database,
-	)
-	
-	db, err := sql.Open("mysql", dsn)
+
+	// 构建连接字符串
+	dsn := s.buildDSN()
+
+	// 打开数据库连接
+	conn, err := sql.Open("mysql", dsn)
 	if err != nil {
-		return fmt.Errorf("failed to open mysql connection: %w", err)
+		return fmt.Errorf("failed to connect to MySQL: %w", err)
 	}
-	
-	if err := db.PingContext(ctx); err != nil {
-		return fmt.Errorf("failed to ping mysql: %w", err)
+
+	// 测试连接
+	if err := conn.PingContext(ctx); err != nil {
+		return fmt.Errorf("failed to ping MySQL: %w", err)
 	}
-	
-	s.db = db
+
+	// 设置连接池参数（使用默认值）
+	conn.SetMaxOpenConns(10)
+	conn.SetMaxIdleConns(5)
+	conn.SetConnMaxLifetime(30 * time.Minute)
+
+	s.conn = conn
 	s.connected = true
+
 	return nil
 }
 
@@ -88,15 +73,25 @@ func (s *MySQLSource) Connect(ctx context.Context) error {
 func (s *MySQLSource) Close(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
-	if s.db == nil {
+
+	if !s.connected {
 		return nil
 	}
-	
-	err := s.db.Close()
-	s.db = nil
+
+	// 关闭数据库连接
+	if s.conn != nil {
+		if err := s.conn.Close(); err != nil {
+			return err
+		}
+	}
+
+	// 清理缓存
+	s.statementCache.Clear()
+	s.queryCache.Clear()
+	s.connPool.Close()
+
 	s.connected = false
-	return err
+	return nil
 }
 
 // IsConnected 检查是否已连接
@@ -115,613 +110,668 @@ func (s *MySQLSource) GetConfig() *DataSourceConfig {
 func (s *MySQLSource) IsWritable() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.writable
+	return s.config.Writable
 }
 
 // GetTables 获取所有表
 func (s *MySQLSource) GetTables(ctx context.Context) ([]string, error) {
-	if err := s.ensureConnected(ctx); err != nil {
+	if !s.connected {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	rows, err := s.conn.QueryContext(ctx, "SHOW TABLES")
+	if err != nil {
 		return nil, err
 	}
-	
-	rows, err := s.db.QueryContext(ctx, "SHOW TABLES")
-	if err != nil {
-		return nil, fmt.Errorf("failed to query tables: %w", err)
-	}
 	defer rows.Close()
-	
-	var tables []string
+
+	tables := make([]string, 0)
 	for rows.Next() {
 		var table string
 		if err := rows.Scan(&table); err != nil {
-			return nil, fmt.Errorf("failed to scan table name: %w", err)
+			return nil, err
 		}
 		tables = append(tables, table)
 	}
-	
+
 	return tables, nil
 }
 
 // GetTableInfo 获取表信息
 func (s *MySQLSource) GetTableInfo(ctx context.Context, tableName string) (*TableInfo, error) {
-	if err := s.ensureConnected(ctx); err != nil {
+	if !s.connected {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	// 查询表结构
+	query := fmt.Sprintf("DESCRIBE %s", tableName)
+	rows, err := s.conn.QueryContext(ctx, query)
+	if err != nil {
 		return nil, err
 	}
-	
-	// 查询列信息
-	query := `
-		SELECT 
-			COLUMN_NAME,
-			DATA_TYPE,
-			IS_NULLABLE,
-			COLUMN_KEY,
-			COLUMN_DEFAULT
-		FROM INFORMATION_SCHEMA.COLUMNS
-		WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-		ORDER BY ORDINAL_POSITION
-	`
-	
-	rows, err := s.db.QueryContext(ctx, query, s.config.Database, tableName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query table info: %w", err)
-	}
 	defer rows.Close()
-	
-	tableInfo := &TableInfo{
-		Name:   tableName,
-		Schema: s.config.Database,
-	}
-	
+
+	columns := make([]ColumnInfo, 0)
 	for rows.Next() {
-		var columnName, dataType, isNullable, columnKey sql.NullString
-		var columnDefault sql.NullString
-		
-		if err := rows.Scan(&columnName, &dataType, &isNullable, &columnKey, &columnDefault); err != nil {
-			return nil, fmt.Errorf("failed to scan column info: %w", err)
+		var (
+			colName    string
+			fieldType string
+			null       string
+			key        string
+			defaultVal sql.NullString
+			extra      string
+		)
+		if err := rows.Scan(&colName, &fieldType, &null, &key, &defaultVal, &extra); err != nil {
+			return nil, err
 		}
-		
-		col := ColumnInfo{
-			Name:     columnName.String,
-			Type:     dataType.String,
-			Nullable: isNullable.String == "YES",
-			Primary:  columnKey.String == "PRI",
+
+		column := ColumnInfo{
+			Name:    colName,
+			Type:    fieldType,
+			Primary:  key == "PRI",
+			Default: nil,
 		}
-		
-		if columnDefault.Valid {
-			col.Default = columnDefault.String
+
+		if defaultVal.Valid {
+			column.Default = defaultVal.String
 		}
-		
-		tableInfo.Columns = append(tableInfo.Columns, col)
+
+		columns = append(columns, column)
 	}
-	
-	return tableInfo, nil
+
+	return &TableInfo{
+		Name:    tableName,
+		Schema:  s.config.Database,
+		Columns: columns,
+	}, nil
 }
 
 // Query 查询数据
 func (s *MySQLSource) Query(ctx context.Context, tableName string, options *QueryOptions) (*QueryResult, error) {
-	if err := s.ensureConnected(ctx); err != nil {
+	if !s.connected {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	// 构建SQL查询
+	query := s.buildSelectQuery(tableName, options)
+
+	// 检查查询缓存
+	if options != nil && options.SelectAll {
+		if cached, exists := s.queryCache.Get(query); exists {
+			return cached, nil
+		}
+	}
+
+	// 记录慢查询
+	start := time.Now()
+	defer func() {
+		elapsed := time.Since(start)
+		if s.slowQueryLog != nil && elapsed > 100*time.Millisecond {
+			s.slowQueryLog.Log(query, elapsed)
+		}
+	}()
+
+	// 执行查询
+	rows, err := s.conn.QueryContext(ctx, query)
+	if err != nil {
 		return nil, err
 	}
-	
+	defer rows.Close()
+
 	// 获取表信息
 	tableInfo, err := s.GetTableInfo(ctx, tableName)
 	if err != nil {
 		return nil, err
 	}
-	
-	// 构建SQL
-	query, args := s.buildSelectSQL(tableName, options)
-	
-	// 查询总数
-	var total int64
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s %s", 
-		s.quoteIdentifier(tableName), 
-		s.buildWhereClause(options))
-	if err := s.db.QueryRowContext(ctx, countSQL, args...).Scan(&total); err != nil {
-		return nil, fmt.Errorf("failed to query count: %w", err)
-	}
-	
-	// 查询数据
-	rows, err := s.db.QueryContext(ctx, query, args...)
+
+	// 转换结果
+	result, err := s.convertRows(rows, tableInfo.Columns)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query data: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-	
-	// 读取列
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get columns: %w", err)
-	}
-	
-	// 读取数据
-	result := &QueryResult{
-		Columns: tableInfo.Columns,
-		Total:   total,
-	}
-	
-	for rows.Next() {
-		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
+
+	// 应用分页限制
+	if options != nil && options.Limit > 0 {
+		total := len(result.Rows)
+		if options.Offset < len(result.Rows) {
+			end := options.Offset + options.Limit
+			if end > len(result.Rows) {
+				end = len(result.Rows)
+			}
+			result.Rows = result.Rows[options.Offset:end]
 		}
-		
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
-		}
-		
-		row := make(Row)
-		for i, col := range columns {
-			row[col] = values[i]
-		}
-		result.Rows = append(result.Rows, row)
+		result.Total = int64(total)
 	}
-	
+
+	// 缓存结果
+	if options != nil && options.SelectAll {
+		s.queryCache.Set(query, result)
+	}
+
 	return result, nil
 }
 
 // Insert 插入数据
 func (s *MySQLSource) Insert(ctx context.Context, tableName string, rows []Row, options *InsertOptions) (int64, error) {
-	if err := s.ensureConnected(ctx); err != nil {
+	if !s.connected {
+		return 0, fmt.Errorf("not connected")
+	}
+
+	if !s.config.Writable {
+		return 0, fmt.Errorf("data source is read-only")
+	}
+
+	// 获取表信息
+	tableInfo, err := s.GetTableInfo(ctx, tableName)
+	if err != nil {
 		return 0, err
 	}
 
-	// 检查是否可写
-	if !s.writable {
-		return 0, fmt.Errorf("data source is read-only, INSERT operation not allowed")
-	}
-
-	if len(rows) == 0 {
-		return 0, nil
-	}
-
 	// 构建插入SQL
-	query, args := s.buildInsertSQL(tableName, rows, options)
+	columns, values, args := s.buildInsertQuery(tableName, tableInfo.Columns, rows)
 
-	result, err := s.db.ExecContext(ctx, query, args...)
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s", tableName, columns, values)
+
+	// 使用预编译语句
+	stmt, err := s.statementCache.Get(s.conn, query)
 	if err != nil {
-		return 0, fmt.Errorf("failed to insert data: %w", err)
+		return 0, err
 	}
-	
-	affected, err := result.RowsAffected()
+	defer stmt.Close()
+
+	// 执行插入
+	result, err := stmt.ExecContext(ctx, args...)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get affected rows: %w", err)
+		return 0, err
 	}
-	
-	return affected, nil
+
+	// 清除相关缓存
+	s.queryCache.Invalidate(tableName)
+
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected, nil
 }
 
 // Update 更新数据
 func (s *MySQLSource) Update(ctx context.Context, tableName string, filters []Filter, updates Row, options *UpdateOptions) (int64, error) {
-	if err := s.ensureConnected(ctx); err != nil {
-		return 0, err
+	if !s.connected {
+		return 0, fmt.Errorf("not connected")
 	}
 
-	// 检查是否可写
-	if !s.writable {
-		return 0, fmt.Errorf("data source is read-only, UPDATE operation not allowed")
-	}
-
-	if len(updates) == 0 {
-		return 0, nil
+	if !s.config.Writable {
+		return 0, fmt.Errorf("data source is read-only")
 	}
 
 	// 构建更新SQL
-	query, args := s.buildUpdateSQL(tableName, filters, updates, options)
+	setClause := s.buildSetClause(updates)
+	whereClause := s.buildWhereClause(filters)
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", tableName, setClause, whereClause)
 
-	result, err := s.db.ExecContext(ctx, query, args...)
+	// 收集参数
+	args := make([]interface{}, 0)
+	args = append(args, s.buildUpdateArgs(updates, filters)...)
+
+	// 执行更新
+	result, err := s.conn.ExecContext(ctx, query, args...)
 	if err != nil {
-		return 0, fmt.Errorf("failed to update data: %w", err)
+		return 0, err
 	}
 
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get affected rows: %w", err)
-	}
+	// 清除相关缓存
+	s.queryCache.Invalidate(tableName)
 
-	return affected, nil
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected, nil
 }
 
 // Delete 删除数据
 func (s *MySQLSource) Delete(ctx context.Context, tableName string, filters []Filter, options *DeleteOptions) (int64, error) {
-	if err := s.ensureConnected(ctx); err != nil {
-		return 0, err
+	if !s.connected {
+		return 0, fmt.Errorf("not connected")
 	}
 
-	// 检查是否可写
-	if !s.writable {
-		return 0, fmt.Errorf("data source is read-only, DELETE operation not allowed")
-	}
-
-	if len(filters) == 0 && (options == nil || !options.Force) {
-		return 0, fmt.Errorf("delete operation requires filters or force option")
+	if !s.config.Writable {
+		return 0, fmt.Errorf("data source is read-only")
 	}
 
 	// 构建删除SQL
-	query, args := s.buildDeleteSQL(tableName, filters, options)
-	
-	result, err := s.db.ExecContext(ctx, query, args...)
+	whereClause := s.buildWhereClause(filters)
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s", tableName, whereClause)
+
+	// 收集参数
+	args := s.buildFilterArgs(filters)
+
+	// 执行删除
+	result, err := s.conn.ExecContext(ctx, query, args...)
 	if err != nil {
-		return 0, fmt.Errorf("failed to delete data: %w", err)
+		return 0, err
 	}
-	
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get affected rows: %w", err)
-	}
-	
-	return affected, nil
+
+	// 清除相关缓存
+	s.queryCache.Invalidate(tableName)
+
+	rowsAffected, _ := result.RowsAffected()
+	return rowsAffected, nil
 }
 
 // CreateTable 创建表
 func (s *MySQLSource) CreateTable(ctx context.Context, tableInfo *TableInfo) error {
-	if err := s.ensureConnected(ctx); err != nil {
+	if !s.connected {
+		return fmt.Errorf("not connected")
+	}
+
+	if !s.config.Writable {
+		return fmt.Errorf("data source is read-only")
+	}
+
+	// 构建创建表SQL
+	query := s.buildCreateTableSQL(tableInfo)
+
+	// 执行创建
+	_, err := s.conn.ExecContext(ctx, query)
+	if err != nil {
 		return err
 	}
-	
-	query, args := s.buildCreateTableSQL(tableInfo)
-	
-	_, err := s.db.ExecContext(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to create table: %w", err)
-	}
-	
+
 	return nil
 }
 
 // DropTable 删除表
 func (s *MySQLSource) DropTable(ctx context.Context, tableName string) error {
-	if err := s.ensureConnected(ctx); err != nil {
+	if !s.connected {
+		return fmt.Errorf("not connected")
+	}
+
+	if !s.config.Writable {
+		return fmt.Errorf("data source is read-only")
+	}
+
+	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)
+
+	_, err := s.conn.ExecContext(ctx, query)
+	if err != nil {
 		return err
 	}
-	
-	query := fmt.Sprintf("DROP TABLE IF EXISTS %s", s.quoteIdentifier(tableName))
-	
-	_, err := s.db.ExecContext(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to drop table: %w", err)
-	}
-	
+
+	// 清除相关缓存
+	s.queryCache.Invalidate(tableName)
+	s.statementCache.InvalidateTable(tableName)
+
 	return nil
 }
 
 // TruncateTable 清空表
 func (s *MySQLSource) TruncateTable(ctx context.Context, tableName string) error {
-	if err := s.ensureConnected(ctx); err != nil {
+	if !s.connected {
+		return fmt.Errorf("not connected")
+	}
+
+	if !s.config.Writable {
+		return fmt.Errorf("data source is read-only")
+	}
+
+	query := fmt.Sprintf("TRUNCATE TABLE %s", tableName)
+
+	_, err := s.conn.ExecContext(ctx, query)
+	if err != nil {
 		return err
 	}
-	
-	query := fmt.Sprintf("TRUNCATE TABLE %s", s.quoteIdentifier(tableName))
-	
-	_, err := s.db.ExecContext(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to truncate table: %w", err)
-	}
-	
+
+	// 清除相关缓存
+	s.queryCache.Invalidate(tableName)
+
 	return nil
 }
 
 // Execute 执行自定义SQL语句
 func (s *MySQLSource) Execute(ctx context.Context, sql string) (*QueryResult, error) {
-	if err := s.ensureConnected(ctx); err != nil {
+	if !s.connected {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	// 记录慢查询
+	start := time.Now()
+	defer func() {
+		elapsed := time.Since(start)
+		if s.slowQueryLog != nil && elapsed > 100*time.Millisecond {
+			s.slowQueryLog.Log(sql, elapsed)
+		}
+	}()
+
+	// 执行SQL
+	rows, err := s.conn.QueryContext(ctx, sql)
+	if err != nil {
 		return nil, err
 	}
-	
-	// 判断是否是查询语句
-	if len(sql) > 5 {
-		prefix := sql[:6]
-		if containsIgnoreCase(prefix, "SELECT") || 
-		   containsIgnoreCase(prefix, "SHOW") || 
-		   containsIgnoreCase(prefix, "DESCRIBE") {
-			return s.executeQuery(ctx, sql)
-		}
+	defer rows.Close()
+
+	// 获取列信息
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
 	}
-	
-	// 执行非查询语句
-	_, execErr := s.db.ExecContext(ctx, sql)
-	if execErr != nil {
-		return nil, fmt.Errorf("failed to execute SQL: %w", execErr)
+
+	columnInfos := make([]ColumnInfo, 0)
+	for _, col := range columns {
+		columnInfos = append(columnInfos, ColumnInfo{
+			Name: col.Name(),
+			Type: col.DatabaseTypeName(),
+		})
 	}
-	
-	return &QueryResult{
-		Total: 0,
-	}, nil
+
+	// 转换结果
+	result, err := s.convertRows(rows, columnInfos)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
-// ensureConnected 确保已连接
-func (s *MySQLSource) ensureConnected(ctx context.Context) error {
-	if !s.IsConnected() {
-		return fmt.Errorf("data source is not connected")
+// ==================== 事务支持 ====================
+
+// BeginTransaction 开始事务
+func (s *MySQLSource) BeginTransaction(ctx context.Context, isolationLevel string) (interface{}, error) {
+	if !s.connected {
+		return nil, fmt.Errorf("not connected")
 	}
+
+	if !s.config.Writable {
+		return nil, fmt.Errorf("data source is read-only")
+	}
+
+	// 开始事务
+	tx, err := s.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
+}
+
+// CommitTransaction 提交事务
+func (s *MySQLSource) CommitTransaction(ctx context.Context, txn interface{}) error {
+	tx, ok := txn.(*sql.Tx)
+	if !ok {
+		return fmt.Errorf("invalid transaction")
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-// buildSelectSQL 构建SELECT SQL
-func (s *MySQLSource) buildSelectSQL(tableName string, options *QueryOptions) (string, []interface{}) {
-	args := []interface{}{}
-	
-	query := "SELECT * FROM " + s.quoteIdentifier(tableName)
-	
-	// WHERE子句
-	where := s.buildWhereClause(options)
-	if where != "" {
-		query += " " + where
+// RollbackTransaction 回滚事务
+func (s *MySQLSource) RollbackTransaction(ctx context.Context, txn interface{}) error {
+	tx, ok := txn.(*sql.Tx)
+	if !ok {
+		return fmt.Errorf("invalid transaction")
 	}
-	
-	// ORDER BY子句
+
+	if err := tx.Rollback(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ==================== SQL构建 ====================
+
+// buildDSN 构建连接字符串
+func (s *MySQLSource) buildDSN() string {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
+		s.config.Username,
+		s.config.Password,
+		s.config.Host,
+		s.config.Port,
+		s.config.Database,
+	)
+
+	// 添加参数
+	dsn += "?charset=utf8mb4"
+
+	return dsn
+}
+
+// buildSelectQuery 构建SELECT查询
+func (s *MySQLSource) buildSelectQuery(tableName string, options *QueryOptions) string {
+	query := fmt.Sprintf("SELECT * FROM %s", tableName)
+
+	// 添加WHERE子句
+	if options != nil && len(options.Filters) > 0 {
+		query += " WHERE " + s.buildWhereClause(options.Filters)
+	}
+
+	// 添加ORDER BY
 	if options != nil && options.OrderBy != "" {
 		order := options.Order
 		if order == "" {
 			order = "ASC"
 		}
-		query += fmt.Sprintf(" ORDER BY %s %s", s.quoteIdentifier(options.OrderBy), order)
+		query += fmt.Sprintf(" ORDER BY %s %s", options.OrderBy, order)
 	}
-	
-	// LIMIT和OFFSET子句
-	if options != nil {
-		if options.Limit > 0 {
-			query += fmt.Sprintf(" LIMIT %d", options.Limit)
-			if options.Offset > 0 {
-				query += fmt.Sprintf(" OFFSET %d", options.Offset)
-			}
+
+	// 添加LIMIT
+	if options != nil && options.Limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", options.Limit)
+		if options.Offset > 0 {
+			query += fmt.Sprintf(" OFFSET %d", options.Offset)
 		}
 	}
-	
-	return query, args
+
+	return query
 }
 
 // buildWhereClause 构建WHERE子句
-func (s *MySQLSource) buildWhereClause(options *QueryOptions) string {
-	if options == nil || len(options.Filters) == 0 {
-		return ""
+func (s *MySQLSource) buildWhereClause(filters []Filter) string {
+	if len(filters) == 0 {
+		return "1=1"
 	}
-	
-	where := "WHERE "
-	conditions := []string{}
-	
-	for _, filter := range options.Filters {
-		condition := fmt.Sprintf("%s %s ?", s.quoteIdentifier(filter.Field), filter.Operator)
-		conditions = append(conditions, condition)
+
+	conditions := make([]string, 0)
+	for _, f := range filters {
+		conditions = append(conditions, s.buildFilterCondition(f))
 	}
-	
-	where += joinConditions(conditions, " AND ")
-	return where
+
+	return "(" + s.joinConditions(conditions, filters[0].LogicOp) + ")"
 }
 
-// buildInsertSQL 构建INSERT SQL
-func (s *MySQLSource) buildInsertSQL(tableName string, rows []Row, options *InsertOptions) (string, []interface{}) {
-	if len(rows) == 0 {
-		return "", nil
-	}
-	
-	// 获取所有列名
-	columns := []string{}
-	for col := range rows[0] {
-		columns = append(columns, col)
-	}
-	
-	// 构建列名列表
-	colNames := ""
-	for i, col := range columns {
-		if i > 0 {
-			colNames += ", "
-		}
-		colNames += s.quoteIdentifier(col)
-	}
-	
-	// 构建值占位符
-	valuePlaceholders := ""
-	for i := range columns {
-		if i > 0 {
-			valuePlaceholders += ", "
-		}
-		valuePlaceholders += "?"
-	}
-	
-	// 构建完整SQL
-	keyword := "INSERT"
-	if options != nil && options.Replace {
-		keyword = "REPLACE"
-	}
-	
-	query := fmt.Sprintf("%s INTO %s (%s) VALUES (%s)", 
-		keyword, s.quoteIdentifier(tableName), colNames, valuePlaceholders)
-	
-	// 构建参数
-	args := []interface{}{}
-	for _, row := range rows {
-		for _, col := range columns {
-			args = append(args, row[col])
-		}
-	}
-	
-	return query, args
-}
-
-// buildUpdateSQL 构建UPDATE SQL
-func (s *MySQLSource) buildUpdateSQL(tableName string, filters []Filter, updates Row, options *UpdateOptions) (string, []interface{}) {
-	args := []interface{}{}
-	
-	// 构建SET子句
-	setClause := "SET "
-	setParts := []string{}
-	for col, val := range updates {
-		setParts = append(setParts, fmt.Sprintf("%s = ?", s.quoteIdentifier(col)))
-		args = append(args, val)
-	}
-	setClause += joinConditions(setParts, ", ")
-	
-	// 构建WHERE子句
-	whereClause := ""
-	queryOpts := &QueryOptions{Filters: filters}
-	where := s.buildWhereClause(queryOpts)
-	if where != "" {
-		whereClause = " " + where
-	}
-	
-	// 构建参数
-	for _, filter := range filters {
-		args = append(args, filter.Value)
-	}
-	
-	query := fmt.Sprintf("UPDATE %s %s%s", s.quoteIdentifier(tableName), setClause, whereClause)
-	return query, args
-}
-
-// buildDeleteSQL 构建DELETE SQL
-func (s *MySQLSource) buildDeleteSQL(tableName string, filters []Filter, options *DeleteOptions) (string, []interface{}) {
-	args := []interface{}{}
-	
-	query := fmt.Sprintf("DELETE FROM %s", s.quoteIdentifier(tableName))
-	
-	// WHERE子句
-	if len(filters) > 0 {
-		queryOpts := &QueryOptions{Filters: filters}
-		where := s.buildWhereClause(queryOpts)
-		if where != "" {
-			query += " " + where
-			for _, filter := range filters {
-				args = append(args, filter.Value)
-			}
-		}
-	}
-	
-	return query, args
-}
-
-// buildCreateTableSQL 构建CREATE TABLE SQL
-func (s *MySQLSource) buildCreateTableSQL(tableInfo *TableInfo) (string, []interface{}) {
-	args := []interface{}{}
-	
-	query := fmt.Sprintf("CREATE TABLE %s (\n", s.quoteIdentifier(tableInfo.Name))
-	
-	columnDefs := []string{}
-	for _, col := range tableInfo.Columns {
-		colDef := fmt.Sprintf("  %s %s", s.quoteIdentifier(col.Name), s.mapMySQLType(col.Type))
-		
-		if !col.Nullable {
-			colDef += " NOT NULL"
-		}
-		
-		if col.Primary {
-			colDef += " PRIMARY KEY"
-		}
-		
-		if col.Default != "" {
-			colDef += fmt.Sprintf(" DEFAULT '%s'", col.Default)
-		}
-		
-		columnDefs = append(columnDefs, colDef)
-	}
-	
-	query += joinConditions(columnDefs, ",\n")
-	query += "\n)"
-	
-	return query, args
-}
-
-// mapMySQLType 映射MySQL类型
-func (s *MySQLSource) mapMySQLType(typ string) string {
-	switch typ {
-	case "int", "integer":
-		return "INT"
-	case "varchar", "string":
-		return "VARCHAR(255)"
-	case "text":
-		return "TEXT"
-	case "datetime", "timestamp":
-		return "DATETIME"
-	case "date":
-		return "DATE"
-	case "time":
-		return "TIME"
-	case "decimal":
-		return "DECIMAL(10,2)"
-	case "float", "double":
-		return "DOUBLE"
-	case "boolean", "bool":
-		return "BOOLEAN"
-	default:
-		return typ
-	}
-}
-
-// quoteIdentifier 引用标识符
-func (s *MySQLSource) quoteIdentifier(name string) string {
-	return fmt.Sprintf("`%s`", name)
-}
-
-// executeQuery 执行查询
-func (s *MySQLSource) executeQuery(ctx context.Context, sql string) (*QueryResult, error) {
-	rows, err := s.db.QueryContext(ctx, sql)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute query: %w", err)
-	}
-	defer rows.Close()
-	
-	// 读取列
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get columns: %w", err)
-	}
-	
-	// 构建列信息
-	colInfo := make([]ColumnInfo, len(columns))
-	for i, col := range columns {
-		colInfo[i] = ColumnInfo{
-			Name: col,
-			Type: "TEXT", // 简化处理
-		}
-	}
-	
-	// 读取数据
-	result := &QueryResult{
-		Columns: colInfo,
-	}
-	
-	for rows.Next() {
-		values := make([]interface{}, len(columns))
-		valuePtrs := make([]interface{}, len(columns))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-		
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, fmt.Errorf("failed to scan row: %w", err)
-		}
-		
-		row := make(Row)
-		for i, col := range columns {
-			row[col] = values[i]
-		}
-		result.Rows = append(result.Rows, row)
-	}
-	
-	result.Total = int64(len(result.Rows))
-	return result, nil
-}
-
-// containsIgnoreCase 忽略大小写包含检查
-func containsIgnoreCase(s, substr string) bool {
-	if len(s) < len(substr) {
-		return false
-	}
-	return s[:len(substr)] == substr
+// buildFilterCondition 构建过滤条件
+func (s *MySQLSource) buildFilterCondition(filter Filter) string {
+	return fmt.Sprintf("%s %s ?", filter.Field, filter.Operator)
 }
 
 // joinConditions 连接条件
-func joinConditions(conditions []string, sep string) string {
+func (s *MySQLSource) joinConditions(conditions []string, logicalOp string) string {
+	if logicalOp == "" || logicalOp == "AND" {
+		return joinWith(conditions, " AND ")
+	} else if logicalOp == "OR" {
+		return joinWith(conditions, " OR ")
+	}
+	return joinWith(conditions, " AND ")
+}
+
+// joinWith 用指定连接符连接字符串
+func joinWith(strs []string, sep string) string {
 	result := ""
-	for i, cond := range conditions {
+	for i, s := range strs {
 		if i > 0 {
 			result += sep
 		}
-		result += cond
+		result += s
 	}
 	return result
 }
 
+// buildInsertQuery 构建INSERT查询
+func (s *MySQLSource) buildInsertQuery(tableName string, columns []ColumnInfo, rows []Row) (string, string, []interface{}) {
+	// 获取列名
+	columnNames := make([]string, 0)
+	for _, col := range columns {
+		columnNames = append(columnNames, col.Name)
+	}
+	columnsStr := joinWith(columnNames, ", ")
+
+	// 构建占位符
+	placeholders := make([]string, 0)
+	args := make([]interface{}, 0)
+	for _, row := range rows {
+		rowValues := make([]string, 0)
+		for _, col := range columns {
+			rowValues = append(rowValues, "?")
+			args = append(args, row[col.Name])
+		}
+		placeholders = append(placeholders, "("+joinWith(rowValues, ", ")+")")
+	}
+
+	valuesStr := joinWith(placeholders, ", ")
+
+	return columnsStr, valuesStr, args
+}
+
+// buildSetClause 构建SET子句
+func (s *MySQLSource) buildSetClause(updates Row) string {
+	clauses := make([]string, 0)
+	for field := range updates {
+		clauses = append(clauses, fmt.Sprintf("%s = ?", field))
+	}
+	return joinWith(clauses, ", ")
+}
+
+// buildFilterArgs 构建过滤条件参数
+func (s *MySQLSource) buildFilterArgs(filters []Filter) []interface{} {
+	args := make([]interface{}, 0)
+	for _, filter := range filters {
+		args = append(args, filter.Value)
+	}
+	return args
+}
+
+// buildUpdateArgs 构建UPDATE参数
+func (s *MySQLSource) buildUpdateArgs(updates Row, filters []Filter) []interface{} {
+	args := make([]interface{}, 0)
+
+	// UPDATE参数
+	for _, value := range updates {
+		args = append(args, value)
+	}
+
+	// WHERE参数
+	for _, filter := range filters {
+		args = append(args, filter.Value)
+	}
+
+	return args
+}
+
+// buildCreateTableSQL 构建CREATE TABLE语句
+func (s *MySQLSource) buildCreateTableSQL(tableInfo *TableInfo) string {
+	columnDefs := make([]string, 0)
+	for _, col := range tableInfo.Columns {
+		def := fmt.Sprintf("%s %s", col.Name, col.Type)
+
+		// 添加主键
+		if col.Primary {
+			def += " PRIMARY KEY"
+		}
+
+		// 添加默认值
+		if col.Default != "" {
+			def += fmt.Sprintf(" DEFAULT '%s'", col.Default)
+		}
+
+		// 添加非空
+		if !col.Nullable {
+			def += " NOT NULL"
+		}
+
+		columnDefs = append(columnDefs, def)
+	}
+
+	columnsStr := joinWith(columnDefs, ", ")
+	query := fmt.Sprintf("CREATE TABLE %s (%s)", tableInfo.Name, columnsStr)
+
+	return query
+}
+
+// convertRows 转换查询结果
+func (s *MySQLSource) convertRows(rows *sql.Rows, columns []sql.ColumnType) (*QueryResult, error) {
+	result := make([]Row, 0)
+
+	for rows.Next() {
+		// 创建映射
+		row := make(map[string]interface{})
+		values := make([]interface{}, len(columns))
+
+		// 扫描所有列
+		scanArgs := make([]interface{}, len(columns))
+		for i := range columns {
+			scanArgs[i] = &values[i]
+		}
+
+		if err := rows.Scan(scanArgs...); err != nil {
+			return nil, err
+		}
+
+		// 填充映射
+		for i, col := range columns {
+			// 获取列名
+			var colName string
+			if scanner, ok := col.(interface{ Name() string }); ok {
+				colName = scanner.Name()
+			} else {
+				// 备用方案：使用索引
+				colName = fmt.Sprintf("col_%d", i)
+			}
+			row[colName] = values[i]
+		}
+
+		result = append(result, row)
+	}
+
+	// 转换ColumnInfo
+	columnInfos := make([]ColumnInfo, 0, len(columns))
+	for _, col := range columns {
+		var colName string
+		var colType string
+		if scanner, ok := col.(interface{ Name() string; DatabaseTypeName() string }); ok {
+			colName = scanner.Name()
+			colType = scanner.DatabaseTypeName()
+		} else {
+			// 备用方案
+			colName = fmt.Sprintf("col_%d", 0)
+			colType = "UNKNOWN"
+		}
+		columnInfos = append(columnInfos, ColumnInfo{
+			Name: colName,
+			Type: colType,
+		})
+	}
+
+	return &QueryResult{
+		Columns: columnInfos,
+		Rows:    result,
+		Total:   int64(len(result)),
+	}, nil
+}
+
+// ==================== 工厂注册 ====================
+
 func init() {
-	RegisterFactory(NewMySQLFactory())
+	RegisterFactory(&MySQLFactory{})
+}
+
+// MySQLFactory MySQL 数据源工厂
+type MySQLFactory struct{}
+
+// GetType 实现DataSourceFactory接口
+func (f *MySQLFactory) GetType() DataSourceType {
+	return DataSourceTypeMySQL
+}
+
+// Create 实现DataSourceFactory接口
+func (f *MySQLFactory) Create(config *DataSourceConfig) (DataSource, error) {
+	return NewMySQLSource(config), nil
 }
