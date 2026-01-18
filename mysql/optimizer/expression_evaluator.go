@@ -350,21 +350,3 @@ func (e *ExpressionEvaluator) isTrue(value interface{}) bool {
 		return true
 	}
 }
-
-// toFloat64 尝试将值转换为float64
-func toFloat64(val interface{}) (float64, bool) {
-	if val == nil {
-		return 0, false
-	}
-
-	switch v := val.(type) {
-	case int, int8, int16, int32, int64:
-		return float64(reflect.ValueOf(v).Int()), true
-	case uint, uint8, uint16, uint32, uint64:
-		return float64(reflect.ValueOf(v).Uint()), true
-	case float32, float64:
-		return reflect.ValueOf(v).Float(), true
-	default:
-		return 0, false
-	}
-}

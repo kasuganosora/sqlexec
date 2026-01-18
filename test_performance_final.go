@@ -143,7 +143,6 @@ func testCacheImpact(ctx context.Context, ds resource.DataSource, metrics *monit
 		}
 	}
 	withCacheDuration := time.Since(start)
-	withCacheCount := metrics.GetQueryCount()
 
 	stats := queryCache.GetStats()
 	performanceGain := float64(noCacheDuration) / float64(withCacheDuration)

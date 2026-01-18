@@ -207,9 +207,9 @@ func (e *SimpleCardinalityEstimator) estimateRangeSelectivity(operator string, v
 		return 0.1
 	}
 
-	minFloat := toFloat64(minVal)
-	maxFloat := toFloat64(maxVal)
-	valFloat := toFloat64(value)
+	minFloat, _ := toFloat64(minVal)
+	maxFloat, _ := toFloat64(maxVal)
+	valFloat, _ := toFloat64(value)
 
 	if minFloat == maxFloat {
 		return 1.0
@@ -368,25 +368,6 @@ func (e *SimpleCardinalityEstimator) EstimateDistinct(table string, columns []st
 	return minNDV
 }
 
-// toFloat64 转换值为float64
-func toFloat64(val interface{}) float64 {
-	switch v := val.(type) {
-	case int, int8, int16, int32, int64:
-		return float64(reflect.ValueOf(v).Int())
-	case uint, uint8, uint16, uint32, uint64:
-		return float64(reflect.ValueOf(v).Uint())
-	case float32, float64:
-		return reflect.ValueOf(v).Float()
-	case string:
-		// 尝试从字符串解析数字
-		var f float64
-		fmt.Sscanf(v, "%f", &f)
-		return f
-	default:
-		return 0
-	}
-}
-
 // CollectStatistics 从数据源收集统计信息（简化版）
 func CollectStatistics(dataSource resource.DataSource, tableName string) (*TableStatistics, error) {
 	// 执行查询获取所有数据
@@ -467,38 +448,4 @@ func collectColumnStatistics(rows []resource.Row, columnName, columnType string)
 	}
 
 	return stats
-}
-
-// compareValues 比较两个值
-// 返回 -1: a < b, 0: a == b, 1: a > b
-func compareValues(a, b interface{}) int {
-	if a == nil && b == nil {
-		return 0
-	}
-	if a == nil {
-		return -1
-	}
-	if b == nil {
-		return 1
-	}
-
-	aNum, aOk := toFloat64(a)
-	bNum, bOk := toFloat64(b)
-	if aOk && bOk {
-		if aNum < bNum {
-			return -1
-		} else if aNum > bNum {
-			return 1
-		}
-		return 0
-	}
-
-	aStr := fmt.Sprintf("%v", a)
-	bStr := fmt.Sprintf("%v", b)
-	if aStr < bStr {
-		return -1
-	} else if aStr > bStr {
-		return 1
-	}
-	return 0
 }

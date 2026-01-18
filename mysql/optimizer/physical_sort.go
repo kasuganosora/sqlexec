@@ -112,56 +112,6 @@ func (p *PhysicalSort) Execute(ctx context.Context) (*resource.QueryResult, erro
 	}, nil
 }
 
-// compareValues 比较两个值
-// 返回 -1: a < b, 0: a == b, 1: a > b
-func compareValues(a, b interface{}) int {
-	if a == nil && b == nil {
-		return 0
-	}
-	if a == nil {
-		return -1
-	}
-	if b == nil {
-		return 1
-	}
-
-	// 尝试数值比较
-	aNum, aOk := toNumber(a)
-	bNum, bOk := toNumber(b)
-	if aOk && bOk {
-		if aNum < bNum {
-			return -1
-		} else if aNum > bNum {
-			return 1
-		}
-		return 0
-	}
-
-	// 字符串比较
-	aStr := fmt.Sprintf("%v", a)
-	bStr := fmt.Sprintf("%v", b)
-	if aStr < bStr {
-		return -1
-	} else if aStr > bStr {
-		return 1
-	}
-	return 0
-}
-
-// toNumber 尝试将值转换为float64
-func toNumber(val interface{}) (float64, bool) {
-	switch v := val.(type) {
-	case int, int8, int16, int32, int64:
-		return float64(reflect.ValueOf(v).Int()), true
-	case uint, uint8, uint16, uint32, uint64:
-		return float64(reflect.ValueOf(v).Uint()), true
-	case float32, float64:
-		return reflect.ValueOf(v).Float(), true
-	default:
-		return 0, false
-	}
-}
-
 // Explain 返回计划说明
 func (p *PhysicalSort) Explain() string {
 	items := ""

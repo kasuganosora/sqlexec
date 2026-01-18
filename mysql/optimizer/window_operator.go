@@ -10,7 +10,7 @@ import (
 // WindowOperator 窗口函数执行算子
 type WindowOperator struct {
 	// 子算子
-	child PhysicalOperator
+	child PhysicalPlan
 	
 	// 窗口函数定义
 	windowFuncs []*WindowFunctionDef
@@ -510,49 +510,4 @@ func (op *WindowOperator) computeMax(rows []map[string]interface{}, start, end i
 	}
 	
 	return maxVal
-}
-
-// 值比较函数
-
-func compareValues(v1, v2 interface{}) int {
-	n1, ok1 := toFloat64(v1)
-	n2, ok2 := toFloat64(v2)
-	
-	if ok1 && ok2 {
-		if n1 < n2 {
-			return -1
-		} else if n1 > n2 {
-			return 1
-		}
-		return 0
-	}
-	
-	s1 := fmt.Sprintf("%v", v1)
-	s2 := fmt.Sprintf("%v", v2)
-	
-	if s1 < s2 {
-		return -1
-	} else if s1 > s2 {
-		return 1
-	}
-	return 0
-}
-
-func compareValuesEqual(v1, v2 interface{}) bool {
-	return compareValues(v1, v2) == 0
-}
-
-func toFloat64(v interface{}) (float64, bool) {
-	switch val := v.(type) {
-	case int:
-		return float64(val), true
-	case int64:
-		return float64(val), true
-	case float32:
-		return float64(val), true
-	case float64:
-		return val, true
-	default:
-		return 0, false
-	}
 }

@@ -338,20 +338,6 @@ func compareValuesForSort(a, b interface{}) int {
 	return 0
 }
 
-// toFloat64 转换值为float64
-func toFloat64(val interface{}) float64 {
-	switch v := val.(type) {
-	case int, int8, int16, int32, int64:
-		return float64(reflect.ValueOf(v).Int())
-	case uint, uint8, uint16, uint32, uint64:
-		return float64(reflect.ValueOf(v).Uint())
-	case float32, float64:
-		return reflect.ValueOf(v).Float()
-	default:
-		return 0
-	}
-}
-
 // Explain 返回计划说明
 func (p *PhysicalMergeJoin) Explain() string {
 	return fmt.Sprintf("MergeJoin(type=%s, cost=%.2f)", p.JoinType, p.cost)

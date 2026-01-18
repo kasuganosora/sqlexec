@@ -439,53 +439,5 @@ func isTrue(value interface{}) bool {
 }
 
 // compareValuesEqual 比较两个值是否相等
-func compareValuesEqual(v1, v2 interface{}) bool {
-	if v1 == nil && v2 == nil {
-		return true
-	}
-	if v1 == nil || v2 == nil {
-		return false
-	}
-	
-	// 尝试数值比较
-	if n1, ok1 := toFloat64(v1); ok1 {
-		if n2, ok2 := toFloat64(v2); ok2 {
-			return n1 == n2
-		}
-	}
-	
-	// 字符串比较
-	return fmt.Sprintf("%v", v1) == fmt.Sprintf("%v", v2)
-}
 
-// toFloat64 转换为float64
-func toFloat64(v interface{}) (float64, bool) {
-	switch val := v.(type) {
-	case int:
-		return float64(val), true
-	case int8:
-		return float64(val), true
-	case int16:
-		return float64(val), true
-	case int32:
-		return float64(val), true
-	case int64:
-		return float64(val), true
-	case uint:
-		return float64(val), true
-	case uint8:
-		return float64(val), true
-	case uint16:
-		return float64(val), true
-	case uint32:
-		return float64(val), true
-	case uint64:
-		return float64(val), true
-	case float32:
-		return float64(val), true
-	case float64:
-		return val, true
-	default:
-		return 0, false
-	}
-}
+
