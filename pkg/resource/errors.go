@@ -39,13 +39,5 @@ func ErrOperationNotSupported(dataSourceType, operation string) error {
 	return fmt.Errorf("%s not supported for %s data source", operation, dataSourceType)
 }
 
-// ErrTransactionNotFound 事务不存在错误
-func ErrTransactionNotFound(transactionID TransactionID) error {
-	return fmt.Errorf("transaction not found: %d", transactionID)
-}
 
-// ErrInvalidTransactionType 无效的事务类型错误
-func ErrInvalidTransactionType() error {
-	return fmt.Errorf("invalid transaction type")
-}
 
