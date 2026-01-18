@@ -7,7 +7,6 @@ import (
 
 	"mysql-proxy/mysql/builtin"
 	"mysql-proxy/mysql/parser"
-	"mysql-proxy/mysql/resource"
 )
 
 // ExpressionEvaluator 表达式求值器

@@ -3,7 +3,6 @@ package optimizer
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"mysql-proxy/mysql/parser"
 )
@@ -44,7 +43,7 @@ func (r *PredicatePushDownRule) Apply(ctx context.Context, plan LogicalPlan, opt
 	// 如果子节点是 Selection，合并条件
 	if childSelection, ok := child.(*LogicalSelection); ok {
 		// 合并条件列表
-		mergedConditions := append(selection.Conditions, childSelection.Conditions...)
+		mergedConditions := append(selection.Conditions(), childSelection.Conditions()...)
 		return NewLogicalSelection(mergedConditions, childSelection.Children()[0]), nil
 	}
 
@@ -155,7 +154,7 @@ func (r *ProjectionEliminationRule) Apply(ctx context.Context, plan LogicalPlan,
 	if len(projection.Exprs) == len(childSchema) {
 		allPassThrough := true
 		for i, expr := range projection.Exprs {
-			if expr.Type != 0 || expr.Column != childSchema[i].Name {
+			if expr.Type != parser.ExprTypeColumn || expr.Column != childSchema[i].Name {
 				allPassThrough = false
 				break
 			}
@@ -197,7 +196,7 @@ func (r *LimitPushDownRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 	child := limit.children[0]
 
 	// 如果子节点是 DataSource，下推（优化扫描）
-	if dataSource, ok := child.(*LogicalDataSource); ok {
+	if _, ok := child.(*LogicalDataSource); ok {
 		// 创建带 LIMIT 的 DataSource（模拟下推）
 		// 实际实现中应该在 DataSource 中保留 LIMIT 信息
 		return plan, nil
@@ -206,8 +205,8 @@ func (r *LimitPushDownRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 	// 如果子节点是 Selection，可以下推
 	if selection, ok := child.(*LogicalSelection); ok {
 		// 创建新的 Selection，其子节点是新的 Limit
-		newLimit := NewLogicalLimit(limit.Limit, limit.Offset, selection.Children()[0])
-		return NewLogicalSelection(selection.Conditions, newLimit), nil
+		newLimit := NewLogicalLimit(limit.Limit(), limit.Offset(), selection.Children()[0])
+		return NewLogicalSelection(selection.Conditions(), newLimit), nil
 	}
 
 	return plan, nil
@@ -267,7 +266,7 @@ func (r *ConstantFoldingRule) foldSelectionConstants(selection *LogicalSelection
 	newConditions := []*parser.Expression{}
 	changed := false
 
-	for _, cond := range selection.Conditions {
+	for _, cond := range selection.Conditions() {
 		folded, isConst, err := r.tryFoldExpression(cond, evaluator)
 		if err != nil {
 			return nil, err
@@ -275,9 +274,16 @@ func (r *ConstantFoldingRule) foldSelectionConstants(selection *LogicalSelection
 
 		if isConst {
 			// 常量表达式
-			if folded == nil || folded == false {
+			if folded == nil {
 				// 条件永远为假，可以丢弃整个 Selection
 				return selection, nil
+			}
+			// 检查是否为 false 布尔值
+			if folded.Value != nil {
+				if boolVal, ok := folded.Value.(bool); ok && !boolVal {
+					// 条件永远为假，可以丢弃整个 Selection
+					return selection, nil
+				}
 			}
 			// 条件永远为真，可以移除这个条件
 			changed = true
@@ -293,7 +299,8 @@ func (r *ConstantFoldingRule) foldSelectionConstants(selection *LogicalSelection
 				return selection.children[0], nil
 			}
 		} else {
-			selection.Conditions = newConditions
+			// 创建新的 Selection 更新条件
+			return NewLogicalSelection(newConditions, selection.children[0]), nil
 		}
 	}
 
@@ -310,9 +317,11 @@ func (r *ConstantFoldingRule) foldProjectionConstants(projection *LogicalProject
 		if err != nil {
 			return nil, err
 		}
-		newExprs = append(newExprs, folded)
-		if folded != expr {
+		if isConst {
+			newExprs = append(newExprs, folded)
 			changed = true
+		} else {
+			newExprs = append(newExprs, expr)
 		}
 	}
 
@@ -325,19 +334,7 @@ func (r *ConstantFoldingRule) foldProjectionConstants(projection *LogicalProject
 
 // foldJoinConstants 折叠 Join 中的常量
 func (r *ConstantFoldingRule) foldJoinConstants(join *LogicalJoin, evaluator *ExpressionEvaluator) (LogicalPlan, error) {
-	newConditions := []*JoinCondition{}
-	changed := false
-
-	for _, cond := range join.Conditions {
-		// 简化：只处理等值连接
-		foldedCond := cond
-		newConditions = append(newConditions, foldedCond)
-	}
-
-	if changed {
-		join.Conditions = newConditions
-	}
-
+	// 简化：不处理
 	return join, nil
 }
 

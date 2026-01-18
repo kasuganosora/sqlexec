@@ -2,12 +2,9 @@ package optimizer
 
 import (
 	"context"
-	"fmt"
 	"math"
-	"reflect"
 
 	"mysql-proxy/mysql/resource"
-	"mysql-proxy/mysql/parser"
 )
 
 // TableStatistics 表统计信息

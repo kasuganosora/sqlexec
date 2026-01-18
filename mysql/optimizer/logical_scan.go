@@ -1,7 +1,6 @@
 package optimizer
 
 import (
-	"context"
 	"fmt"
 
 	"mysql-proxy/mysql/parser"

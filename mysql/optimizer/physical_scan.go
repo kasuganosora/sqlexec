@@ -3,7 +3,6 @@ package optimizer
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	"mysql-proxy/mysql/parser"
 	"mysql-proxy/mysql/resource"
@@ -804,3 +803,99 @@ type aggregateGroup struct {
 }
 
 // calculateAggregation 计算聚合函数
+func (p *PhysicalHashAggregate) calculateAggregation(agg *AggregationItem, rows []resource.Row) interface{} {
+	if len(rows) == 0 {
+		switch agg.Type {
+		case Count:
+			return int64(0)
+		case Sum, Avg, Max, Min:
+			return nil
+		}
+	}
+
+	// 获取聚合列名
+	colName := agg.Expr.Column
+	if colName == "" && agg.Expr.Function != "" {
+		colName = fmt.Sprintf("%s(%v)", agg.Expr.Function, agg.Expr.Args)
+	}
+
+	switch agg.Type {
+	case Count:
+		return int64(len(rows))
+	case Sum:
+		sum := 0.0
+		for _, row := range rows {
+			val := row[colName]
+			if val != nil {
+				fval, _ := toFloat64(val)
+				sum += fval
+			}
+		}
+		return sum
+	case Avg:
+		if len(rows) == 0 {
+			return nil
+		}
+		sum := 0.0
+		count := 0
+		for _, row := range rows {
+			val := row[colName]
+			if val != nil {
+				fval, _ := toFloat64(val)
+				sum += fval
+				count++
+			}
+		}
+		if count > 0 {
+			return sum / float64(count)
+		}
+		return nil
+	case Max:
+		var max interface{}
+		for _, row := range rows {
+			val := row[colName]
+			if val != nil && max == nil {
+				max = val
+			} else if val != nil && max != nil {
+				cmp := compareValues(val, max)
+				if cmp > 0 {
+					max = val
+				}
+			}
+		}
+		return max
+	case Min:
+		var min interface{}
+		for _, row := range rows {
+			val := row[colName]
+			if val != nil && min == nil {
+				min = val
+			} else if val != nil && min != nil {
+				cmp := compareValues(val, min)
+				if cmp < 0 {
+					min = val
+				}
+			}
+		}
+		return min
+	}
+	return nil
+}
+
+// Explain 返回计划说明
+func (p *PhysicalHashAggregate) Explain() string {
+	aggFuncs := ""
+	for i, agg := range p.AggFuncs {
+		if i > 0 {
+			aggFuncs += ", "
+		}
+		aggFuncs += agg.Type.String()
+	}
+	
+	groupBy := ""
+	if len(p.GroupByCols) > 0 {
+		groupBy = fmt.Sprintf(", GROUP BY(%s)", fmt.Sprintf("%v", p.GroupByCols))
+	}
+	
+	return fmt.Sprintf("HashAggregate(funcs=[%s]%s, cost=%.2f)", aggFuncs, groupBy, p.cost)
+}

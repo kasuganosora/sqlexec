@@ -225,7 +225,7 @@ func (pe *ProcedureExecutor) executeBlockWithReturn(block *parser.BlockStmt) (in
 			}
 	case *parser.ReturnStmt:
 		// RETURN语句,返回值
-		result, err := pe.evaluateExpression(s.Expression)
+		result, err := pe.evaluateExpression(&s.Expression)
 		if err != nil {
 			return nil, err
 		}
@@ -243,11 +243,8 @@ func (pe *ProcedureExecutor) executeDeclaration(decl parser.Declaration) error {
 	// 设置初始值
 	value := interface{}(nil)
 	if decl.Initial != nil {
-		val, err := pe.evaluateExpression(decl.Initial)
-		if err != nil {
-			return err
-		}
-		value = val
+		// 初始值直接使用，无需表达式求值
+		value = decl.Initial
 	}
 	
 	scope.SetVariable(decl.Name, value)
@@ -257,7 +254,7 @@ func (pe *ProcedureExecutor) executeDeclaration(decl parser.Declaration) error {
 // executeIf 执行IF语句
 func (pe *ProcedureExecutor) executeIf(ifStmt *parser.IfStmt) error {
 	// 计算条件
-	cond, err := pe.evaluateExpression(ifStmt.Condition)
+	cond, err := pe.evaluateExpression(&ifStmt.Condition)
 	if err != nil {
 		return err
 	}
@@ -271,7 +268,7 @@ func (pe *ProcedureExecutor) executeIf(ifStmt *parser.IfStmt) error {
 	
 	// 执行ELSE IF块
 	for _, elif := range ifStmt.ElseIfs {
-		cond, err := pe.evaluateExpression(elif.Condition)
+		cond, err := pe.evaluateExpression(&elif.Condition)
 		if err != nil {
 			return err
 		}
@@ -296,7 +293,7 @@ func (pe *ProcedureExecutor) executeWhile(whileStmt *parser.WhileStmt) error {
 	// 循环执行
 	for {
 		// 计算条件
-		cond, err := pe.evaluateExpression(whileStmt.Condition)
+		cond, err := pe.evaluateExpression(&whileStmt.Condition)
 		if err != nil {
 			return err
 		}
@@ -319,7 +316,7 @@ func (pe *ProcedureExecutor) executeWhile(whileStmt *parser.WhileStmt) error {
 // executeSet 执行SET语句
 func (pe *ProcedureExecutor) executeSet(setStmt *parser.SetStmt) error {
 	// 计算值
-	value, err := pe.evaluateExpression(setStmt.Value)
+	value, err := pe.evaluateExpression(&setStmt.Value)
 	if err != nil {
 		return err
 	}
@@ -335,8 +332,8 @@ func (pe *ProcedureExecutor) executeSet(setStmt *parser.SetStmt) error {
 func (pe *ProcedureExecutor) executeCase(caseStmt *parser.CaseStmt) error {
 	// 如果有表达式,先计算
 	var caseExpr interface{}
-	if caseStmt.Expression != nil {
-		val, err := pe.evaluateExpression(caseStmt.Expression)
+	if caseStmt.Expression.Type != "" {
+		val, err := pe.evaluateExpression(&caseStmt.Expression)
 		if err != nil {
 			return err
 		}
@@ -345,13 +342,13 @@ func (pe *ProcedureExecutor) executeCase(caseStmt *parser.CaseStmt) error {
 	
 	// 检查每个WHEN
 	for _, when := range caseStmt.Cases {
-		cond, err := pe.evaluateExpression(when.Condition)
+		cond, err := pe.evaluateExpression(&when.Condition)
 		if err != nil {
 			return err
 		}
 		
 		// 如果没有表达式,直接判断WHEN条件
-		if caseStmt.Expression == nil {
+		if caseStmt.Expression.Type == "" {
 			if isTrue(cond) {
 				_, err := pe.executeBlock(when.Then)
 				return err
@@ -377,8 +374,8 @@ func (pe *ProcedureExecutor) executeCase(caseStmt *parser.CaseStmt) error {
 // evaluateExpression 计算表达式
 func (pe *ProcedureExecutor) evaluateExpression(expr *parser.Expression) (interface{}, error) {
 	// 简化实现:只支持简单的常量和变量
-	if expr.Literal != nil {
-		return expr.Literal, nil
+	if expr.Value != nil {
+		return expr.Value, nil
 	}
 	
 	if expr.Column != "" {

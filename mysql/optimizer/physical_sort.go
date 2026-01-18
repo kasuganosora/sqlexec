@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"reflect"
 	"sort"
 
 	"mysql-proxy/mysql/resource"

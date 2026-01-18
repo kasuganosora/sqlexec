@@ -2,7 +2,6 @@ package optimizer
 
 import (
 	"context"
-	"fmt"
 
 	"mysql-proxy/mysql/parser"
 )
@@ -27,8 +26,8 @@ func (r *SemiJoinRewriteRule) Match(plan LogicalPlan) bool {
 // containsSubquery 检查是否包含指定类型的子查询
 func containsSubquery(plan LogicalPlan, queryType string) bool {
 	if selection, ok := plan.(*LogicalSelection); ok {
-		for _, cond := range selection.Conditions {
-			if r.isSubquery(cond, queryType) {
+		for _, cond := range selection.Conditions() {
+			if isSubquery(cond, queryType) {
 				return true
 			}
 		}
@@ -44,7 +43,7 @@ func containsSubquery(plan LogicalPlan, queryType string) bool {
 }
 
 // isSubquery 检查表达式是否为子查询
-func (r *SemiJoinRewriteRule) isSubquery(expr *parser.Expression, queryType string) bool {
+func isSubquery(expr *parser.Expression, queryType string) bool {
 	if expr == nil {
 		return false
 	}
@@ -58,7 +57,7 @@ func (r *SemiJoinRewriteRule) isSubquery(expr *parser.Expression, queryType stri
 	}
 
 	// 递归检查子表达式
-	if r.isSubquery(expr.Left, queryType) || r.isSubquery(expr.Right, queryType) {
+	if isSubquery(expr.Left, queryType) || isSubquery(expr.Right, queryType) {
 		return true
 	}
 
@@ -82,9 +81,9 @@ func (r *SemiJoinRewriteRule) rewriteExistsToJoin(plan LogicalPlan) LogicalPlan 
 		rewritten := false
 
 		// 遍历条件，查找EXISTS子查询
-		newConditions := make([]*parser.Expression, 0, len(selection.Conditions))
+		newConditions := make([]*parser.Expression, 0, len(selection.Conditions()))
 
-		for _, cond := range selection.Conditions {
+		for _, cond := range selection.Conditions() {
 			if r.isExistsSubquery(cond) {
 				// EXISTS (SELECT ...) -> INNER JOIN
 				// 重写为: EXISTS (SELECT ...) = TRUE
@@ -98,17 +97,23 @@ func (r *SemiJoinRewriteRule) rewriteExistsToJoin(plan LogicalPlan) LogicalPlan 
 		}
 
 		if rewritten {
-			selection.Conditions = newConditions
+			// 创建新的 Selection 更新条件
+			return NewLogicalSelection(newConditions, selection.children[0])
 		}
 
 		return selection
 	}
 
 	// 递归处理子节点
-	for i, child := range plan.Children() {
+	children := plan.Children()
+	for i, child := range children {
 		newChild := r.rewriteExistsToJoin(child)
 		if newChild != child {
-			plan.SetChildren(append(plan.Children()[:i], newChild))
+			newChildren := make([]LogicalPlan, len(children))
+			copy(newChildren, children)
+			newChildren[i] = newChild
+			plan.SetChildren(newChildren...)
+			break
 		}
 	}
 
@@ -121,9 +126,9 @@ func (r *SemiJoinRewriteRule) rewriteInToJoin(plan LogicalPlan) LogicalPlan {
 		rewritten := false
 
 		// 遍历条件，查找IN子查询
-		newConditions := make([]*parser.Expression, 0, len(selection.Conditions))
+		newConditions := make([]*parser.Expression, 0, len(selection.Conditions()))
 
-		for _, cond := range selection.Conditions {
+		for _, cond := range selection.Conditions() {
 			if r.isInSubquery(cond) {
 				// column IN (SELECT ...) -> JOIN
 				// 重写为: column IN (SELECT ...) = TRUE
@@ -137,17 +142,23 @@ func (r *SemiJoinRewriteRule) rewriteInToJoin(plan LogicalPlan) LogicalPlan {
 		}
 
 		if rewritten {
-			selection.Conditions = newConditions
+			// 创建新的 Selection 更新条件
+			return NewLogicalSelection(newConditions, selection.children[0])
 		}
 
 		return selection
 	}
 
 	// 递归处理子节点
-	for i, child := range plan.Children() {
+	children := plan.Children()
+	for i, child := range children {
 		newChild := r.rewriteInToJoin(child)
 		if newChild != child {
-			plan.SetChildren(append(plan.Children()[:i], newChild))
+			newChildren := make([]LogicalPlan, len(children))
+			copy(newChildren, children)
+			newChildren[i] = newChild
+			plan.SetChildren(newChildren...)
+			break
 		}
 	}
 
