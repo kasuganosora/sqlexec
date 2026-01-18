@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"mysql-proxy/mysql/builtin"
 	"mysql-proxy/mysql/parser"
 	"mysql-proxy/mysql/resource"
 )
@@ -183,14 +184,32 @@ func (e *ExpressionEvaluator) evaluateUnaryOp(expr *parser.Expression, row parse
 }
 
 // evaluateFunction 计算函数调用
-func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row resource.Row) (interface{}, error) {
+func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row parser.Row) (interface{}, error) {
 	if expr.Function == "" {
 		return nil, fmt.Errorf("function name is empty")
 	}
 
-	// TODO: 实现内置函数
-	// 例如: COUNT, SUM, AVG, MAX, MIN, UPPER, LOWER, SUBSTRING 等
-	return nil, fmt.Errorf("function evaluation not implemented: %s", expr.Function)
+	// 转换为小写以支持大小写不敏感的函数名
+	funcName := strings.ToLower(expr.Function)
+
+	// 尝试从内置函数注册表获取函数
+	info, exists := builtin.GetGlobal(funcName)
+	if !exists {
+		return nil, fmt.Errorf("function not found: %s", expr.Function)
+	}
+
+	// 计算参数
+	args := make([]interface{}, 0, len(expr.Args))
+	for _, argExpr := range expr.Args {
+		argValue, err := e.Evaluate(&argExpr, row)
+		if err != nil {
+			return nil, fmt.Errorf("argument evaluation failed for function %s: %w", expr.Function, err)
+		}
+		args = append(args, argValue)
+	}
+
+	// 调用函数处理函数
+	return info.Handler(args)
 }
 
 // compareValues 比较两个值
