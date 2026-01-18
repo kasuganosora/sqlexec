@@ -26,13 +26,16 @@ func NewOptimizer(dataSource resource.DataSource) *Optimizer {
 
 // Optimize 优化查询计划
 func (o *Optimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (PhysicalPlan, error) {
+	fmt.Println("  [DEBUG] Optimize: 步骤1 - 转换为逻辑计划")
 	// 1. 转换为逻辑计划
 	logicalPlan, err := o.convertToLogicalPlan(stmt)
 	if err != nil {
 		return nil, fmt.Errorf("convert to logical plan failed: %w", err)
 	}
+	fmt.Println("  [DEBUG] Optimize: 逻辑计划转换完成, 类型:", logicalPlan.Explain())
 
 	// 2. 应用优化规则
+	fmt.Println("  [DEBUG] Optimize: 步骤2 - 应用优化规则")
 	optCtx := &OptimizationContext{
 		DataSource: o.dataSource,
 		TableInfo: make(map[string]*resource.TableInfo),
@@ -44,12 +47,15 @@ func (o *Optimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (Ph
 	if err != nil {
 		return nil, fmt.Errorf("apply optimization rules failed: %w", err)
 	}
+	fmt.Println("  [DEBUG] Optimize: 优化规则应用完成")
 
 	// 3. 转换为物理计划
+	fmt.Println("  [DEBUG] Optimize: 步骤3 - 转换为物理计划")
 	physicalPlan, err := o.convertToPhysicalPlan(ctx, optimizedPlan, optCtx)
 	if err != nil {
 		return nil, fmt.Errorf("convert to physical plan failed: %w", err)
 	}
+	fmt.Println("  [DEBUG] Optimize: 物理计划转换完成")
 
 	return physicalPlan, nil
 }
@@ -72,13 +78,17 @@ func (o *Optimizer) convertToLogicalPlan(stmt *parser.SQLStatement) (LogicalPlan
 
 // convertSelect 转换 SELECT 语句
 func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, error) {
+	fmt.Println("  [DEBUG] convertSelect: 开始转换, 表名:", stmt.From)
 	// 1. 创建 DataSource
 	tableInfo, err := o.dataSource.GetTableInfo(context.Background(), stmt.From)
 	if err != nil {
+		fmt.Println("  [DEBUG] convertSelect: GetTableInfo 失败:", err)
 		return nil, fmt.Errorf("get table info failed: %w", err)
 	}
+	fmt.Println("  [DEBUG] convertSelect: GetTableInfo 成功, 列数:", len(tableInfo.Columns))
 
 	var logicalPlan LogicalPlan = NewLogicalDataSource(stmt.From, tableInfo)
+	fmt.Println("  [DEBUG] convertSelect: LogicalDataSource 创建完成")
 
 	// 2. 应用 WHERE 条件（Selection）
 	if stmt.Where != nil {
@@ -115,10 +125,16 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 	}
 
 	// 6. 应用 SELECT 列（Projection）
+	fmt.Printf("  [DEBUG] convertSelect: SELECT列数量: %d, IsWildcard=%v\n", len(stmt.Columns), isWildcard(stmt.Columns))
+	if len(stmt.Columns) > 0 {
+		fmt.Printf("  [DEBUG] convertSelect: cols[0].Name='%s'\n", stmt.Columns[0].Name)
+	}
 	if len(stmt.Columns) > 0 && !isWildcard(stmt.Columns) {
+		fmt.Println("  [DEBUG] convertSelect: 创建Projection")
 		exprs := make([]*parser.Expression, len(stmt.Columns))
 		aliases := make([]string, len(stmt.Columns))
 		for i, col := range stmt.Columns {
+			fmt.Printf("  [DEBUG] convertSelect: 列%d: Name='%s', Alias='%s'\n", i, col.Name, col.Alias)
 			exprs[i] = &parser.Expression{
 				Type:   parser.ExprTypeColumn,
 				Column: col.Name,
@@ -172,24 +188,119 @@ func isWildcard(cols []parser.SelectColumn) bool {
 	return false
 }
 
+// convertConditionsToFilters 将条件表达式转换为过滤器
+func (o *Optimizer) convertConditionsToFilters(conditions []*parser.Expression) []resource.Filter {
+	filters := []resource.Filter{}
+
+	for _, cond := range conditions {
+		if cond == nil {
+			continue
+		}
+
+		filter := o.convertExpressionToFilter(cond)
+		if filter != nil {
+			filters = append(filters, *filter)
+		}
+	}
+
+	fmt.Println("  [DEBUG] convertConditionsToFilters: 生成的过滤器数量:", len(filters))
+	return filters
+}
+
+// convertExpressionToFilter 将表达式转换为过滤器
+func (o *Optimizer) convertExpressionToFilter(expr *parser.Expression) *resource.Filter {
+	if expr == nil || expr.Type != parser.ExprTypeOperator {
+		return nil
+	}
+
+		// 处理二元比较表达式 (e.g., age > 30, name = 'Alice')
+		if expr.Left != nil && expr.Right != nil && expr.Operator != "" {
+			// 左边是列名
+			if expr.Left.Type == parser.ExprTypeColumn && expr.Left.Column != "" {
+				// 右边是常量值
+				if expr.Right.Type == parser.ExprTypeValue {
+					// 映射操作符
+					operator := o.mapOperator(expr.Operator)
+					return &resource.Filter{
+						Field:    expr.Left.Column,
+						Operator:  operator,
+						Value:     expr.Right.Value,
+					}
+				}
+			}
+		}
+
+		// 处理 AND 逻辑表达式
+		if expr.Operator == "and" && expr.Left != nil && expr.Right != nil {
+			leftFilter := o.convertExpressionToFilter(expr.Left)
+			rightFilter := o.convertExpressionToFilter(expr.Right)
+			if leftFilter != nil {
+				return leftFilter
+			}
+			if rightFilter != nil {
+				return rightFilter
+			}
+		}
+
+	return nil
+}
+
+// mapOperator 映射parser操作符到resource.Filter操作符
+func (o *Optimizer) mapOperator(parserOp string) string {
+	// 转换parser操作符到resource.Filter操作符
+	switch parserOp {
+	case "gt":
+		return ">"
+	case "gte":
+		return ">="
+	case "lt":
+		return "<"
+	case "lte":
+		return "<="
+	case "eq", "===":
+		return "="
+	case "ne", "!=":
+		return "!="
+	default:
+		return parserOp
+	}
+}
+
 // convertToPhysicalPlan 将逻辑计划转换为物理计划
 func (o *Optimizer) convertToPhysicalPlan(ctx context.Context, logicalPlan LogicalPlan, optCtx *OptimizationContext) (PhysicalPlan, error) {
 	switch p := logicalPlan.(type) {
 	case *LogicalDataSource:
-		return NewPhysicalTableScan(p.TableName, p.TableInfo, o.dataSource), nil
+		// 获取下推的谓词条件
+		pushedDownPredicates := p.GetPushedDownPredicates()
+		filters := o.convertConditionsToFilters(pushedDownPredicates)
+		// 获取下推的Limit
+		limitInfo := p.GetPushedDownLimit()
+		fmt.Printf("  [DEBUG] convertToPhysicalPlan: DataSource(%s), 下推谓词数量: %d, 下推Limit: %v\n", p.TableName, len(filters), limitInfo != nil)
+		return NewPhysicalTableScan(p.TableName, p.TableInfo, o.dataSource, filters, limitInfo), nil
 	case *LogicalSelection:
 		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		// 简化：不转换条件为过滤器
-		return NewPhysicalSelection(p.GetConditions(), []resource.Filter{}, child, o.dataSource), nil
+		// 转换条件为过滤器
+		filters := o.convertConditionsToFilters(p.GetConditions())
+		fmt.Println("  [DEBUG] convertToPhysicalPlan: Selection, 过滤器数量:", len(filters))
+		return NewPhysicalSelection(p.GetConditions(), filters, child, o.dataSource), nil
 	case *LogicalProjection:
 		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		return NewPhysicalProjection(p.GetExprs(), p.GetAliases(), child), nil
+		exprs := p.GetExprs()
+		aliases := p.GetAliases()
+		fmt.Printf("  [DEBUG] convertToPhysicalPlan: Projection, 表达式数量: %d, 别名数量: %d\n", len(exprs), len(aliases))
+		for i, expr := range exprs {
+			fmt.Printf("  [DEBUG] convertToPhysicalPlan: 表达式%d: Type=%d, Column='%s'\n", i, expr.Type, expr.Column)
+			if i < len(aliases) {
+				fmt.Printf("  [DEBUG] convertToPhysicalPlan: 别名%d: '%s'\n", i, aliases[i])
+			}
+		}
+		return NewPhysicalProjection(exprs, aliases, child), nil
 	case *LogicalLimit:
 		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {

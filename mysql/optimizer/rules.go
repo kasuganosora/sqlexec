@@ -35,9 +35,12 @@ func (r *PredicatePushDownRule) Apply(ctx context.Context, plan LogicalPlan, opt
 
 	child := selection.children[0]
 
-	// 如果子节点是 DataSource，可以直接合并（已经是最优）
-	if _, ok := child.(*LogicalDataSource); ok {
-		return plan, nil
+	// 如果子节点是 DataSource，将谓词标记到DataSource上（下推成功）
+	if dataSource, ok := child.(*LogicalDataSource); ok {
+		// 将Selection的条件标记到DataSource，表示可以在扫描时过滤
+		dataSource.PushDownPredicates(selection.Conditions())
+		// 返回child，消除Selection节点（条件已下推到DataSource）
+		return child, nil
 	}
 
 	// 如果子节点是 Selection，合并条件
@@ -85,6 +88,13 @@ func (r *ColumnPruningRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 	for _, expr := range projection.Exprs {
 		collectRequiredColumns(expr, requiredCols)
 	}
+	
+	// 打印需要的列
+	keys := make([]string, 0, len(requiredCols))
+	for k := range requiredCols {
+		keys = append(keys, k)
+	}
+	fmt.Printf("  [DEBUG] ColumnPruningRule.Apply: 需要的列: %v\n", keys)
 
 	// 如果子节点是 DataSource，调整输出列
 	if dataSource, ok := child.(*LogicalDataSource); ok {
@@ -97,9 +107,19 @@ func (r *ColumnPruningRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 		}
 		// 如果有变化，创建新的 DataSource
 		if len(newColumns) < len(dataSource.Columns) {
+			fmt.Printf("  [DEBUG] ColumnPruningRule.Apply: 原列数: %d, 裁剪后: %d\n", len(dataSource.Columns), len(newColumns))
+			// 保存下推的谓词和Limit信息
+			predicates := dataSource.GetPushedDownPredicates()
+			limitInfo := dataSource.GetPushedDownLimit()
+			
 			newDataSource := NewLogicalDataSource(dataSource.TableName, dataSource.TableInfo)
 			newDataSource.Columns = newColumns
+			newDataSource.PushDownPredicates(predicates)
+			if limitInfo != nil {
+				newDataSource.PushDownLimit(limitInfo.Limit, limitInfo.Offset)
+			}
 			projection.children[0] = newDataSource
+			fmt.Printf("  [DEBUG] ColumnPruningRule.Apply: 列裁剪完成\n")
 		}
 	}
 
@@ -195,14 +215,15 @@ func (r *LimitPushDownRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 
 	child := limit.children[0]
 
-	// 如果子节点是 DataSource，下推（优化扫描）
-	if _, ok := child.(*LogicalDataSource); ok {
-		// 创建带 LIMIT 的 DataSource（模拟下推）
-		// 实际实现中应该在 DataSource 中保留 LIMIT 信息
-		return plan, nil
+	// 如果子节点是 DataSource，下推到DataSource
+	if dataSource, ok := child.(*LogicalDataSource); ok {
+		// 标记Limit到DataSource
+		dataSource.PushDownLimit(limit.Limit(), limit.Offset())
+		// 返回child，消除Limit节点（已下推）
+		return child, nil
 	}
 
-	// 如果子节点是 Selection，可以下推
+	// 如果子节点是 Selection，可以下推到Selection的子节点
 	if selection, ok := child.(*LogicalSelection); ok {
 		// 创建新的 Selection，其子节点是新的 Limit
 		newLimit := NewLogicalLimit(limit.Limit(), limit.Offset(), selection.Children()[0])
@@ -229,7 +250,7 @@ func (r *ConstantFoldingRule) Match(plan LogicalPlan) bool {
 
 // Apply 应用规则
 func (r *ConstantFoldingRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
-	evaluator := NewExpressionEvaluator()
+	evaluator := NewExpressionEvaluatorWithoutAPI()
 	return r.foldConstants(plan, evaluator)
 }
 
@@ -421,7 +442,7 @@ func (r *ConstantFoldingRule) tryFoldExpression(expr *parser.Expression, evaluat
 
 // DefaultRuleSet 返回默认规则集
 func DefaultRuleSet() RuleSet {
-	return RuleSet{
+	rules := RuleSet{
 		&PredicatePushDownRule{},
 		&ColumnPruningRule{},
 		&ProjectionEliminationRule{},
@@ -431,6 +452,11 @@ func DefaultRuleSet() RuleSet {
 		&JoinEliminationRule{},
 		&SemiJoinRewriteRule{},
 	}
+	fmt.Println("  [DEBUG] DefaultRuleSet: 创建规则集, 数量:", len(rules))
+	for i, r := range rules {
+		fmt.Printf("  [DEBUG]   规则%d: %s\n", i, r.Name())
+	}
+	return rules
 }
 
 // RuleExecutor 规则执行器
@@ -447,15 +473,18 @@ func NewRuleExecutor(rules RuleSet) *RuleExecutor {
 
 // Execute 执行所有规则
 func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
+	fmt.Println("  [DEBUG] RuleExecutor: 开始执行规则, 规则数量:", len(re.rules))
 	current := plan
 	maxIterations := 10 // 防止无限循环
 	iterations := 0
 
 	for iterations < maxIterations {
+		fmt.Println("  [DEBUG] RuleExecutor: 迭代", iterations+1)
 		changed := false
 
 		for _, rule := range re.rules {
 			if rule.Match(current) {
+				fmt.Println("  [DEBUG] RuleExecutor: 规则", rule.Name(), "匹配")
 				newPlan, err := rule.Apply(ctx, current, optCtx)
 				if err != nil {
 					return nil, fmt.Errorf("rule %s failed: %w", rule.Name(), err)
@@ -463,30 +492,37 @@ func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *O
 				if newPlan != current {
 					current = newPlan
 					changed = true
+					fmt.Println("  [DEBUG] RuleExecutor: 规则", rule.Name(), "已应用")
 				}
 			}
 
 			// 递归应用到子节点
-			for i, child := range current.Children() {
+			children := current.Children()
+			fmt.Println("  [DEBUG] RuleExecutor: 处理子节点, 子节点数:", len(children))
+			for i, child := range children {
+				fmt.Println("  [DEBUG] RuleExecutor: 递归处理子节点", i, "类型:", child.Explain())
 				newChild, err := re.Execute(ctx, child, optCtx)
 				if err != nil {
 					return nil, err
 				}
 				if newChild != child {
-					children := current.Children()
+					children = current.Children()
 					children[i] = newChild
 					current.SetChildren(children...)
 					changed = true
+					fmt.Println("  [DEBUG] RuleExecutor: 子节点", i, "已更新")
 				}
 			}
 		}
 
 		if !changed {
+			fmt.Println("  [DEBUG] RuleExecutor: 没有变化，退出")
 			break
 		}
 
 		iterations++
 	}
 
+	fmt.Println("  [DEBUG] RuleExecutor: 执行完成, 总迭代次数:", iterations)
 	return current, nil
 }

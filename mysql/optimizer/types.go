@@ -225,25 +225,53 @@ type RuleSet []OptimizationRule
 
 // Apply 应用所有规则
 func (rs RuleSet) Apply(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
+	fmt.Println("  [DEBUG] RuleSet.Apply: 开始, 当前计划:", plan.Explain())
 	current := plan
 	changed := true
+	maxIterations := 10 // 防止无限循环
+	iterations := 0
 
 	// 迭代应用规则，直到不再变化
-	for changed {
+	for changed && iterations < maxIterations {
 		changed = false
+		iterations++
+		fmt.Println("  [DEBUG] RuleSet.Apply: 迭代", iterations)
+
 		for _, rule := range rs {
 			if rule.Match(current) {
+				fmt.Println("  [DEBUG] RuleSet.Apply: 匹配规则", rule.Name())
 				newPlan, err := rule.Apply(ctx, current, optCtx)
 				if err != nil {
 					return nil, fmt.Errorf("rule %s failed: %w", rule.Name(), err)
 				}
-				if newPlan != nil {
+				if newPlan != nil && newPlan != current {
 					current = newPlan
+					changed = true
+					fmt.Println("  [DEBUG] RuleSet.Apply: 规则", rule.Name(), "应用成功")
+				}
+			}
+		}
+
+		// 递归应用到子节点
+		children := current.Children()
+		if len(children) > 0 {
+			fmt.Println("  [DEBUG] RuleSet.Apply: 递归处理子节点, 数量:", len(children))
+			for i, child := range children {
+				newChild, err := rs.Apply(ctx, child, optCtx)
+				if err != nil {
+					return nil, err
+				}
+				if newChild != child {
+					fmt.Println("  [DEBUG] RuleSet.Apply: 子节点", i, "已更新")
+					allChildren := current.Children()
+					allChildren[i] = newChild
+					current.SetChildren(allChildren...)
 					changed = true
 				}
 			}
 		}
 	}
 
+	fmt.Println("  [DEBUG] RuleSet.Apply: 完成, 总迭代次数:", iterations)
 	return current, nil
 }

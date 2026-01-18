@@ -2,6 +2,7 @@ package optimizer
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"mysql-proxy/mysql/parser"
@@ -27,11 +28,22 @@ func (r *JoinReorderRule) Match(plan LogicalPlan) bool {
 
 // containsJoin 递归检查是否包含JOIN节点
 func containsJoin(plan LogicalPlan) bool {
+	// 检查当前节点
 	if _, ok := plan.(*LogicalJoin); ok {
 		return true
 	}
+	if _, ok := plan.(*LogicalDataSource); ok {
+		// DataSource节点，不需要递归检查
+		return false
+	}
 
-	for _, child := range plan.Children() {
+	// 递归检查子节点
+	children := plan.Children()
+	if children == nil {
+		return false
+	}
+
+	for _, child := range children {
 		if containsJoin(child) {
 			return true
 		}
@@ -42,8 +54,10 @@ func containsJoin(plan LogicalPlan) bool {
 
 // Apply 应用规则：重排序JOIN顺序
 func (r *JoinReorderRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
+	fmt.Println("  [DEBUG] JoinReorderRule.Apply: 开始")
 	// 收集所有JOIN节点
 	joinNodes := collectJoins(plan)
+	fmt.Println("  [DEBUG] JoinReorderRule.Apply: 收集到JOIN节点数:", len(joinNodes))
 
 	if len(joinNodes) < 2 {
 		// 少于2个JOIN，不需要重排序

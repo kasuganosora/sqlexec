@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mysql-proxy/mysql/optimizer"
 	"mysql-proxy/mysql/parser"
 	"mysql-proxy/mysql/protocol"
 	"mysql-proxy/mysql/resource"
@@ -55,6 +56,8 @@ type Server struct {
 	mu                sync.RWMutex
 	parser            *parser.Parser
 	handler           *parser.HandlerChain
+	optimizedExecutor *optimizer.OptimizedExecutor
+	useOptimizer      bool
 }
 
 // NewServer 创建新的服务器实例
@@ -80,26 +83,33 @@ func NewServer() *Server {
 	chain.RegisterHandler("USE", parser.NewUseHandler())
 	chain.SetDefaultHandler(parser.NewDefaultHandler())
 	
-	return &Server{
+	server := &Server{
 		sessionMgr:    session.NewSessionMgr(context.Background(), session.NewMemoryDriver()),
 		dataSourceMgr: resource.GetDefaultManager(),
 		parser:        p,
 		handler:       chain,
+		useOptimizer:   false, // 默认关闭优化器
 	}
+
+	return server
 }
 
 // SetDataSource 设置默认数据源
 func (s *Server) SetDataSource(ds resource.DataSource) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	if !ds.IsConnected() {
 		if err := ds.Connect(context.Background()); err != nil {
 			return fmt.Errorf("failed to connect data source: %w", err)
 		}
 	}
-	
+
 	s.defaultDataSource = ds
+
+	// 初始化优化执行器
+	s.optimizedExecutor = optimizer.NewOptimizedExecutor(ds, s.useOptimizer)
+
 	return nil
 }
 
@@ -108,6 +118,23 @@ func (s *Server) GetDataSource() resource.DataSource {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.defaultDataSource
+}
+
+// SetUseOptimizer 设置是否使用优化器
+func (s *Server) SetUseOptimizer(use bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.useOptimizer = use
+	if s.optimizedExecutor != nil {
+		s.optimizedExecutor.SetUseOptimizer(use)
+	}
+}
+
+// GetUseOptimizer 获取是否使用优化器
+func (s *Server) GetUseOptimizer() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.useOptimizer
 }
 
 // SetDataSourceManager 设置数据源管理器
@@ -902,7 +929,7 @@ func (s *Server) sendVariablesResultSet(ctx context.Context, conn net.Conn, sess
 	return nil
 }
 
-// handleSelectQuery 处理SELECT查询 - 使用QueryBuilder执行实际查询
+// handleSelectQuery 处理SELECT查询 - 使用OptimizedExecutor执行查询
 func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *session.Session, query string) error {
 	// 获取数据源
 	ds := s.GetDataSource()
@@ -911,7 +938,45 @@ func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *ses
 		return s.sendResultSet(ctx, conn, sess)
 	}
 
-	// 使用QueryBuilder构建并执行查询
+	// 解析SQL
+	adapter := parser.NewSQLAdapter()
+	parseResult, err := adapter.Parse(query)
+	if err != nil {
+		log.Printf("解析SQL失败: %v", err)
+		return protocol.SendError(conn, fmt.Errorf("SQL解析错误: %w", err))
+	}
+
+	if !parseResult.Success {
+		log.Printf("解析SQL失败: %s", parseResult.Error)
+		return protocol.SendError(conn, fmt.Errorf("SQL解析失败: %s", parseResult.Error))
+	}
+
+	// 如果启用了优化器，使用 OptimizedExecutor
+	if s.useOptimizer {
+		s.mu.Lock()
+		if s.optimizedExecutor == nil {
+			s.optimizedExecutor = optimizer.NewOptimizedExecutor(ds, true)
+		}
+		executor := s.optimizedExecutor
+		s.mu.Unlock()
+
+		result, err := executor.ExecuteSelect(ctx, parseResult.Statement.Select)
+		if err != nil {
+			log.Printf("优化执行查询失败: %v", err)
+			// 降级到传统路径
+			builder := parser.NewQueryBuilder(ds)
+			result, err = builder.BuildAndExecute(ctx, query)
+			if err != nil {
+				log.Printf("执行查询失败: %v", err)
+				return protocol.SendError(conn, fmt.Errorf("查询执行错误: %w", err))
+			}
+		}
+
+		// 发送查询结果
+		return s.sendQueryResult(ctx, conn, sess, result)
+	}
+
+	// 使用传统 QueryBuilder 路径
 	builder := parser.NewQueryBuilder(ds)
 	result, err := builder.BuildAndExecute(ctx, query)
 	if err != nil {
@@ -923,7 +988,7 @@ func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *ses
 	return s.sendQueryResult(ctx, conn, sess, result)
 }
 
-// handleDMLQuery 处理DML查询 - 使用QueryBuilder执行
+// handleDMLQuery 处理DML查询 - 使用OptimizedExecutor执行
 func (s *Server) handleDMLQuery(ctx context.Context, conn net.Conn, sess *session.Session, query string, stmtType string) error {
 	// 获取数据源
 	ds := s.GetDataSource()
@@ -932,9 +997,41 @@ func (s *Server) handleDMLQuery(ctx context.Context, conn net.Conn, sess *sessio
 		return protocol.SendOK(conn, sess.GetNextSequenceID())
 	}
 
-	// 使用QueryBuilder构建并执行DML操作
-	builder := parser.NewQueryBuilder(ds)
-	dmlResult, err := builder.BuildAndExecute(ctx, query)
+	// 解析SQL
+	adapter := parser.NewSQLAdapter()
+	parseResult, err := adapter.Parse(query)
+	if err != nil {
+		log.Printf("解析SQL失败: %v", err)
+		return protocol.SendError(conn, fmt.Errorf("SQL解析错误: %w", err))
+	}
+
+	if !parseResult.Success {
+		log.Printf("解析SQL失败: %s", parseResult.Error)
+		return protocol.SendError(conn, fmt.Errorf("SQL解析失败: %s", parseResult.Error))
+	}
+
+	// 使用 OptimizedExecutor 执行 DML 操作
+	s.mu.Lock()
+	if s.optimizedExecutor == nil {
+		s.optimizedExecutor = optimizer.NewOptimizedExecutor(ds, false)
+	}
+	executor := s.optimizedExecutor
+	s.mu.Unlock()
+
+	var dmlResult *resource.QueryResult
+	switch parseResult.Statement.Type {
+	case parser.SQLTypeInsert:
+		dmlResult, err = executor.ExecuteInsert(ctx, parseResult.Statement.Insert)
+	case parser.SQLTypeUpdate:
+		dmlResult, err = executor.ExecuteUpdate(ctx, parseResult.Statement.Update)
+	case parser.SQLTypeDelete:
+		dmlResult, err = executor.ExecuteDelete(ctx, parseResult.Statement.Delete)
+	default:
+		// 降级到传统路径
+		builder := parser.NewQueryBuilder(ds)
+		dmlResult, err = builder.BuildAndExecute(ctx, query)
+	}
+
 	if err != nil {
 		log.Printf("执行DML操作失败: %v", err)
 		return protocol.SendError(conn, fmt.Errorf("DML执行错误: %w", err))
@@ -944,7 +1041,7 @@ func (s *Server) handleDMLQuery(ctx context.Context, conn net.Conn, sess *sessio
 	return protocol.SendOK(conn, sess.GetNextSequenceID())
 }
 
-// handleDDLQuery 处理DDL查询 - 使用QueryBuilder执行
+// handleDDLQuery 处理DDL查询 - 使用OptimizedExecutor执行
 func (s *Server) handleDDLQuery(ctx context.Context, conn net.Conn, sess *session.Session, query string, stmtType string) error {
 	// 获取数据源
 	ds := s.GetDataSource()
@@ -953,9 +1050,41 @@ func (s *Server) handleDDLQuery(ctx context.Context, conn net.Conn, sess *sessio
 		return protocol.SendOK(conn, sess.GetNextSequenceID())
 	}
 
-	// 使用QueryBuilder构建并执行DDL操作
-	builder := parser.NewQueryBuilder(ds)
-	_, err := builder.BuildAndExecute(ctx, query)
+	// 解析SQL
+	adapter := parser.NewSQLAdapter()
+	parseResult, err := adapter.Parse(query)
+	if err != nil {
+		log.Printf("解析SQL失败: %v", err)
+		return protocol.SendError(conn, fmt.Errorf("SQL解析错误: %w", err))
+	}
+
+	if !parseResult.Success {
+		log.Printf("解析SQL失败: %s", parseResult.Error)
+		return protocol.SendError(conn, fmt.Errorf("SQL解析失败: %s", parseResult.Error))
+	}
+
+	// 使用 OptimizedExecutor 执行 DDL 操作
+	s.mu.Lock()
+	if s.optimizedExecutor == nil {
+		s.optimizedExecutor = optimizer.NewOptimizedExecutor(ds, false)
+	}
+	executor := s.optimizedExecutor
+	s.mu.Unlock()
+
+	var ddlResult *resource.QueryResult
+	switch parseResult.Statement.Type {
+	case parser.SQLTypeCreate:
+		ddlResult, err = executor.ExecuteCreate(ctx, parseResult.Statement.Create)
+	case parser.SQLTypeDrop:
+		ddlResult, err = executor.ExecuteDrop(ctx, parseResult.Statement.Drop)
+	case parser.SQLTypeAlter:
+		ddlResult, err = executor.ExecuteAlter(ctx, parseResult.Statement.Alter)
+	default:
+		// 降级到传统路径
+		builder := parser.NewQueryBuilder(ds)
+		ddlResult, err = builder.BuildAndExecute(ctx, query)
+	}
+
 	if err != nil {
 		log.Printf("执行DDL操作失败: %v", err)
 		return protocol.SendError(conn, fmt.Errorf("DDL执行错误: %w", err))

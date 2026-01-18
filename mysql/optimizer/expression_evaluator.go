@@ -22,6 +22,14 @@ func NewExpressionEvaluator(fnAPI *builtin.FunctionAPI) *ExpressionEvaluator {
 	}
 }
 
+// NewExpressionEvaluatorWithoutAPI 创建不依赖函数API的表达式求值器
+// 用于不需要调用函数的场景（如常量折叠）
+func NewExpressionEvaluatorWithoutAPI() *ExpressionEvaluator {
+	return &ExpressionEvaluator{
+		functionAPI: nil,
+	}
+}
+
 // Evaluate 计算表达式的值
 func (e *ExpressionEvaluator) Evaluate(expr *parser.Expression, row parser.Row) (interface{}, error) {
 	if expr == nil {
@@ -201,8 +209,8 @@ func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row pars
 		return nil, fmt.Errorf("function API not initialized")
 	}
 
-	info, exists := e.functionAPI.GetFunction(funcName)
-	if !exists {
+	info, err := e.functionAPI.GetFunction(funcName)
+	if err != nil {
 		return nil, fmt.Errorf("function not found: %s", expr.Function)
 	}
 
@@ -283,25 +291,25 @@ func (e *ExpressionEvaluator) toInt(v interface{}) (interface{}, error) {
 	}
 	switch val := v.(type) {
 	case int:
-		return v, nil
+		return val, nil
 	case int8:
-		return int(v), nil
+		return int(val), nil
 	case int16:
-		return int(v), nil
+		return int(val), nil
 	case int32:
-		return int(v), nil
+		return int(val), nil
 	case int64:
-		return int(v), nil
+		return int(val), nil
 	case float32:
-		return int(float64(v)), nil
+		return int(float64(val)), nil
 	case float64:
-		return int(v), nil
+		return int(val), nil
 	case string:
 		// 尝试解析字符串
 		var result int
-		_, err := fmt.Sscanf(v, "%d", &result)
+		_, err := fmt.Sscanf(val, "%d", &result)
 		if err != nil {
-			return nil, fmt.Errorf("cannot convert string '%s' to int: %v", v, err)
+			return nil, fmt.Errorf("cannot convert string '%s' to int: %v", val, err)
 		}
 		return result, nil
 	default:
@@ -316,25 +324,25 @@ func (e *ExpressionEvaluator) toInt64(v interface{}) (interface{}, error) {
 	}
 	switch val := v.(type) {
 	case int:
-		return int64(v), nil
+		return int64(val), nil
 	case int8:
-		return int64(v), nil
+		return int64(val), nil
 	case int16:
-		return int64(v), nil
+		return int64(val), nil
 	case int32:
-		return int64(v), nil
+		return int64(val), nil
 	case int64:
-		return v, nil
+		return val, nil
 	case float32:
-		return int64(v), nil
+		return int64(val), nil
 	case float64:
-		return int64(v), nil
+		return int64(val), nil
 	case string:
 		// 尝试解析字符串
 		var result int64
-		_, err := fmt.Sscanf(v, "%d", &result)
+		_, err := fmt.Sscanf(val, "%d", &result)
 		if err != nil {
-			return nil, fmt.Errorf("cannot convert string '%s' to int64: %v", v, err)
+			return nil, fmt.Errorf("cannot convert string '%s' to int64: %v", val, err)
 		}
 		return result, nil
 	default:
@@ -349,27 +357,27 @@ func (e *ExpressionEvaluator) toFloat64(v interface{}) (interface{}, error) {
 	}
 	switch val := v.(type) {
 	case int:
-		return float64(v), nil
+		return float64(val), nil
 	case int8:
-		return float64(v), nil
+		return float64(val), nil
 	case int16:
-		return float64(v), nil
+		return float64(val), nil
 	case int32:
-		return float64(v), nil
+		return float64(val), nil
 	case int64:
-		return float64(v), nil
+		return float64(val), nil
 	case float32:
-		return float64(v), nil
+		return float64(val), nil
 	case float64:
-		return v, nil
+		return val, nil
 	case string:
-		result, err := strconv.ParseFloat(v, 64)
+		result, err := strconv.ParseFloat(val, 64)
 		if err == nil {
 			return result, nil
 		}
 		// 尝试解析整数
 		var intResult int64
-		_, intErr := fmt.Sscanf(v, "%d", &intResult)
+		_, intErr := fmt.Sscanf(val, "%d", &intResult)
 		if intErr == nil {
 			return float64(intResult), nil
 		}
@@ -386,15 +394,15 @@ func (e *ExpressionEvaluator) toString(v interface{}) (interface{}, error) {
 	}
 	switch val := v.(type) {
 	case string:
-		return v, nil
+		return val, nil
 	case int, int8, int16, int32, int64:
-		return fmt.Sprintf("%d", v), nil
+		return fmt.Sprintf("%d", val), nil
 	case float32, float64:
-		return fmt.Sprintf("%v", v), nil
+		return fmt.Sprintf("%v", val), nil
 	case bool:
-		return fmt.Sprintf("%t", v), nil
+		return fmt.Sprintf("%t", val), nil
 	default:
-		return fmt.Sprintf("%v", v), nil
+		return fmt.Sprintf("%v", val), nil
 	}
 }
 

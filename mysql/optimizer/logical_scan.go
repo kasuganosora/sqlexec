@@ -7,13 +7,21 @@ import (
 	"mysql-proxy/mysql/resource"
 )
 
+// LimitInfo Limit信息
+type LimitInfo struct {
+	Limit  int64
+	Offset int64
+}
+
 // LogicalDataSource 逻辑数据源（表扫描）
 type LogicalDataSource struct {
-	TableName  string
-	Columns    []ColumnInfo
-	TableInfo  *resource.TableInfo
-	Statistics *Statistics
-	children   []LogicalPlan
+	TableName   string
+	Columns     []ColumnInfo
+	TableInfo   *resource.TableInfo
+	Statistics  *Statistics
+	children    []LogicalPlan
+	pushedDownPredicates []*parser.Expression // 下推的谓词条件
+	pushedDownLimit     *LimitInfo           // 下推的Limit信息
 }
 
 // NewLogicalDataSource 创建逻辑数据源
@@ -66,6 +74,29 @@ func (p *LogicalDataSource) Table() string {
 // Explain 返回计划说明
 func (p *LogicalDataSource) Explain() string {
 	return fmt.Sprintf("DataSource(%s)", p.TableName)
+}
+
+// PushDownPredicates 添加下推的谓词条件
+func (p *LogicalDataSource) PushDownPredicates(conditions []*parser.Expression) {
+	p.pushedDownPredicates = append(p.pushedDownPredicates, conditions...)
+}
+
+// GetPushedDownPredicates 获取下推的谓词条件
+func (p *LogicalDataSource) GetPushedDownPredicates() []*parser.Expression {
+	return p.pushedDownPredicates
+}
+
+// PushDownLimit 添加下推的Limit
+func (p *LogicalDataSource) PushDownLimit(limit, offset int64) {
+	p.pushedDownLimit = &LimitInfo{
+		Limit:  limit,
+		Offset: offset,
+	}
+}
+
+// GetPushedDownLimit 获取下推的Limit
+func (p *LogicalDataSource) GetPushedDownLimit() *LimitInfo {
+	return p.pushedDownLimit
 }
 
 // LogicalSelection 逻辑过滤（选择）
@@ -268,7 +299,7 @@ func (p *LogicalLimit) GetOffset() int64 {
 
 // Explain 返回计划说明
 func (p *LogicalLimit) Explain() string {
-	return fmt.Sprintf("Limit(offset=%d, limit=%d)", p.Offset, p.Limit)
+	return fmt.Sprintf("Limit(offset=%d, limit=%d)", p.Offset(), p.Limit())
 }
 
 // LogicalSort 逻辑排序

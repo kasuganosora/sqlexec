@@ -609,6 +609,14 @@ func (a *SQLAdapter) convertAlterTableStmt(stmt *ast.AlterTableStmt) (*AlterStat
 func (a *SQLAdapter) convertSelectField(field *ast.SelectField) (*SelectColumn, error) {
 	col := &SelectColumn{}
 
+	// 检查通配符：使用字符串检查
+	if field.WildCard != nil {
+		col.IsWildcard = true
+		col.Name = "*"
+		return col, nil
+	}
+
+	// 处理列名
 	if expr, ok := field.Expr.(*ast.ColumnNameExpr); ok {
 		col.Name = expr.Name.Name.String()
 		col.Table = expr.Name.Schema.String()

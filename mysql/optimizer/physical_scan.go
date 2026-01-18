@@ -16,10 +16,12 @@ type PhysicalTableScan struct {
 	cost       float64
 	children   []PhysicalPlan
 	dataSource resource.DataSource
+	filters    []resource.Filter // 下推的过滤条件
+	limitInfo  *LimitInfo      // 下推的Limit信息
 }
 
 // NewPhysicalTableScan 创建物理表扫描
-func NewPhysicalTableScan(tableName string, tableInfo *resource.TableInfo, dataSource resource.DataSource) *PhysicalTableScan {
+func NewPhysicalTableScan(tableName string, tableInfo *resource.TableInfo, dataSource resource.DataSource, filters []resource.Filter, limitInfo *LimitInfo) *PhysicalTableScan {
 	columns := make([]ColumnInfo, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		columns = append(columns, ColumnInfo{
@@ -31,14 +33,21 @@ func NewPhysicalTableScan(tableName string, tableInfo *resource.TableInfo, dataS
 
 	// 假设表有1000行
 	rowCount := int64(1000)
+	
+	// 如果有Limit，调整成本估计
+	if limitInfo != nil && limitInfo.Limit > 0 {
+		rowCount = limitInfo.Limit
+	}
 
 	return &PhysicalTableScan{
 		TableName: tableName,
 		Columns:   columns,
 		TableInfo: tableInfo,
-		cost:      float64(rowCount) * 0.1, // 简化的成本计算
-		dataSource: dataSource,
+		cost:      float64(rowCount),
 		children:  []PhysicalPlan{},
+		dataSource: dataSource,
+		filters:   filters,
+		limitInfo: limitInfo,
 	}
 }
 
@@ -64,7 +73,36 @@ func (p *PhysicalTableScan) Cost() float64 {
 
 // Execute 执行扫描
 func (p *PhysicalTableScan) Execute(ctx context.Context) (*resource.QueryResult, error) {
-	return p.dataSource.Query(ctx, p.TableName, &resource.QueryOptions{})
+	fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 开始查询表 %s, 过滤器数: %d, Limit: %v\n", p.TableName, len(p.filters), p.limitInfo)
+	
+	// 如果有下推的过滤条件，使用QueryOptions中的Filters
+	options := &resource.QueryOptions{}
+	if len(p.filters) > 0 {
+		options.Filters = p.filters
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用下推的过滤条件\n")
+		for i, filter := range p.filters {
+			fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
+		}
+	}
+	
+	// 如果有下推的Limit，应用Limit
+	if p.limitInfo != nil {
+		if p.limitInfo.Limit > 0 {
+			options.Limit = int(p.limitInfo.Limit)
+		}
+		if p.limitInfo.Offset > 0 {
+			options.Offset = int(p.limitInfo.Offset)
+		}
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用下推的Limit: limit=%d, offset=%d\n", options.Limit, options.Offset)
+	}
+	
+	result, err := p.dataSource.Query(ctx, p.TableName, options)
+	if err != nil {
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 查询失败 %v\n", err)
+		return nil, err
+	}
+	fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 查询完成，返回 %d 行\n", len(result.Rows))
+	return result, nil
 }
 
 // Explain 返回计划说明
@@ -159,11 +197,53 @@ func matchesFilter(row resource.Row, filter resource.Filter) bool {
 		return false
 	}
 
-	// 简化实现，只支持等值比较
-	if filter.Operator == "=" {
-		return fmt.Sprintf("%v", value) == fmt.Sprintf("%v", filter.Value)
+	// 类型转换比较
+	return compareWithOperator(value, filter.Value, filter.Operator)
+}
+
+// compareWithOperator 使用指定操作符比较两个值
+func compareWithOperator(left, right interface{}, op string) bool {
+	leftVal, leftOk := toFloat64(left)
+	if !leftOk {
+		// 无法转换为数字，使用字符串比较
+		return compareStrings(left, right, op)
 	}
-	return true
+
+	rightVal, rightOk := toFloat64(right)
+	if rightOk {
+		// 两者都是数字，使用数字比较
+		switch op {
+		case "=":
+			return leftVal == rightVal
+		case ">", "gt":
+			return leftVal > rightVal
+		case ">=", "gte":
+			return leftVal >= rightVal
+		case "<", "lt":
+			return leftVal < rightVal
+		case "<=", "lte":
+			return leftVal <= rightVal
+		case "!=", "ne":
+			return leftVal != rightVal
+		}
+	}
+
+	// 默认：使用字符串比较
+	return compareStrings(left, right, op)
+}
+
+// compareStrings 比较字符串值
+func compareStrings(left, right interface{}, op string) bool {
+	leftStr := fmt.Sprintf("%v", left)
+	rightStr := fmt.Sprintf("%v", right)
+
+	switch op {
+	case "=":
+		return leftStr == rightStr
+	case "!=", "ne":
+		return leftStr != rightStr
+	}
+	return false
 }
 
 // Explain 返回计划说明
@@ -242,21 +322,30 @@ func (p *PhysicalProjection) Execute(ctx context.Context) (*resource.QueryResult
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 输入行数: %d, 输入列数: %d\n", len(input.Rows), len(input.Columns))
 
 	// 应用投影（简化实现，只支持列选择）
 	output := []resource.Row{}
-	for _, row := range input.Rows {
+	for rowIdx, row := range input.Rows {
 		newRow := make(resource.Row)
+		fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 处理行 %d, 原始keys: %v\n", rowIdx, getMapKeys(row))
 		for i, expr := range p.Exprs {
 			if expr.Type == parser.ExprTypeColumn {
+				fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 尝试提取列 %s (别名: %s)\n", expr.Column, p.Aliases[i])
 				if val, exists := row[expr.Column]; exists {
 					newRow[p.Aliases[i]] = val
+					fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 提取成功, 值: %v\n", val)
+				} else {
+					fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 列 %s 不存在于行中\n", expr.Column)
+					// 简化：不支持表达式计算
+					newRow[p.Aliases[i]] = nil
 				}
 			} else {
 				// 简化：不支持表达式计算
 				newRow[p.Aliases[i]] = nil
 			}
 		}
+		fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 新行keys: %v\n", getMapKeys(newRow))
 		output = append(output, newRow)
 	}
 
@@ -270,11 +359,21 @@ func (p *PhysicalProjection) Execute(ctx context.Context) (*resource.QueryResult
 		}
 	}
 
+	fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 输出行数: %d, 输出列: %v\n", len(output), p.Aliases)
 	return &resource.QueryResult{
 		Columns: columns,
 		Rows:    output,
 		Total:    int64(len(output)),
 	}, nil
+}
+
+// getMapKeys 获取map的所有key
+func getMapKeys(m resource.Row) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // Explain 返回计划说明

@@ -42,7 +42,7 @@ func NewWindowOperator(child PhysicalPlan, windowFuncs []*parser.WindowExpressio
 	return &WindowOperator{
 		child:        child,
 		windowFuncs:  funcDefs,
-		evaluator:    NewExpressionEvaluator(),
+		evaluator:    NewExpressionEvaluatorWithoutAPI(),
 	}
 }
 

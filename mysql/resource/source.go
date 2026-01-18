@@ -88,12 +88,13 @@ type Filter struct {
 
 // QueryOptions 查询选项
 type QueryOptions struct {
-	Filters   []Filter   `json:"filters,omitempty"`
-	OrderBy   string     `json:"order_by,omitempty"`
-	Order     string     `json:"order,omitempty"` // ASC, DESC
-	Limit     int        `json:"limit,omitempty"`
-	Offset    int        `json:"offset,omitempty"`
-	SelectAll bool       `json:"select_all,omitempty"` // 是否是 select *
+	Filters     []Filter `json:"filters,omitempty"`
+	OrderBy     string   `json:"order_by,omitempty"`
+	Order       string   `json:"order,omitempty"` // ASC, DESC
+	Limit       int      `json:"limit,omitempty"`
+	Offset      int      `json:"offset,omitempty"`
+	SelectAll   bool     `json:"select_all,omitempty"`   // 是否是 select *
+	SelectColumns []string `json:"select_columns,omitempty"` // 指定要查询的列（列裁剪）
 }
 
 // InsertOptions 插入选项
