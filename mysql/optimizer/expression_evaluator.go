@@ -3,6 +3,7 @@ package optimizer
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"mysql-proxy/mysql/builtin"
@@ -10,11 +11,15 @@ import (
 )
 
 // ExpressionEvaluator 表达式求值器
-type ExpressionEvaluator struct{}
+type ExpressionEvaluator struct {
+	functionAPI *builtin.FunctionAPI
+}
 
 // NewExpressionEvaluator 创建表达式求值器
-func NewExpressionEvaluator() *ExpressionEvaluator {
-	return &ExpressionEvaluator{}
+func NewExpressionEvaluator(fnAPI *builtin.FunctionAPI) *ExpressionEvaluator {
+	return &ExpressionEvaluator{
+		functionAPI: fnAPI,
+	}
 }
 
 // Evaluate 计算表达式的值
@@ -182,7 +187,7 @@ func (e *ExpressionEvaluator) evaluateUnaryOp(expr *parser.Expression, row parse
 	}
 }
 
-// evaluateFunction 计算函数调用
+// evaluateFunction 计算函数调用（支持自定义函数）
 func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row parser.Row) (interface{}, error) {
 	if expr.Function == "" {
 		return nil, fmt.Errorf("function name is empty")
@@ -191,24 +196,206 @@ func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row pars
 	// 转换为小写以支持大小写不敏感的函数名
 	funcName := strings.ToLower(expr.Function)
 
-	// 尝试从内置函数注册表获取函数
-	info, exists := builtin.GetGlobal(funcName)
+	// 优先从FunctionAPI获取函数（包括内置和用户函数）
+	if e.functionAPI == nil {
+		return nil, fmt.Errorf("function API not initialized")
+	}
+
+	info, exists := e.functionAPI.GetFunction(funcName)
 	if !exists {
 		return nil, fmt.Errorf("function not found: %s", expr.Function)
 	}
 
-	// 计算参数
+	// 计算参数（带类型检查）
 	args := make([]interface{}, 0, len(expr.Args))
-	for _, argExpr := range expr.Args {
+	for i, argExpr := range expr.Args {
 		argValue, err := e.Evaluate(&argExpr, row)
 		if err != nil {
-			return nil, fmt.Errorf("argument evaluation failed for function %s: %w", expr.Function, err)
+			return nil, fmt.Errorf("argument %d evaluation failed for function %s: %w", i, expr.Function, err)
 		}
-		args = append(args, argValue)
+
+		// 类型检查和自动转换
+		convertedValue, err := e.convertToExpectedType(argValue, info.Parameters, i)
+		if err != nil {
+			return nil, fmt.Errorf("argument %d type conversion failed for function %s: %w", i, expr.Function, err)
+		}
+		args = append(args, convertedValue)
 	}
 
 	// 调用函数处理函数
-	return info.Handler(args)
+	result, err := info.Handler(args)
+	if err != nil {
+		return nil, fmt.Errorf("function %s execution failed: %w", expr.Function, err)
+	}
+
+	return result, nil
+}
+
+// convertToExpectedType 将值转换为期望的类型
+func (e *ExpressionEvaluator) convertToExpectedType(value interface{}, params []builtin.FunctionParam, argIndex int) (interface{}, error) {
+	if argIndex >= len(params) {
+		return value, nil // 参数数量不匹配，返回原值
+	}
+
+	expectedType := params[argIndex].Type
+
+	// 如果期望类型为空或值为nil，直接返回
+	if expectedType == "" || value == nil {
+		return value, nil
+	}
+
+	// 类型转换映射
+	switch expectedType {
+	case "int", "integer":
+		return e.toInt(value)
+	case "bigint", "long":
+		return e.toInt64(value)
+	case "decimal", "numeric", "number":
+		return e.toFloat64(value)
+	case "varchar", "char", "text", "string":
+		return e.toString(value)
+	default:
+		return value, nil // 未知类型，返回原值
+	}
+}
+
+// exists 检查值是否存在（替代 ! 运算符）
+func (e *ExpressionEvaluator) exists(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	switch v.(type) {
+	case string:
+		return len(v.(string)) > 0
+	case []interface{}:
+		return len(v.([]interface{})) > 0
+	case map[string]interface{}:
+		return len(v.(map[string]interface{})) > 0
+	default:
+		return true
+	}
+}
+
+// toInt 转换为int
+func (e *ExpressionEvaluator) toInt(v interface{}) (interface{}, error) {
+	if v == nil {
+		return nil, fmt.Errorf("cannot convert nil to int")
+	}
+	switch val := v.(type) {
+	case int:
+		return v, nil
+	case int8:
+		return int(v), nil
+	case int16:
+		return int(v), nil
+	case int32:
+		return int(v), nil
+	case int64:
+		return int(v), nil
+	case float32:
+		return int(float64(v)), nil
+	case float64:
+		return int(v), nil
+	case string:
+		// 尝试解析字符串
+		var result int
+		_, err := fmt.Sscanf(v, "%d", &result)
+		if err != nil {
+			return nil, fmt.Errorf("cannot convert string '%s' to int: %v", v, err)
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("cannot convert %T to int", reflect.TypeOf(v))
+	}
+}
+
+// toInt64 转换为int64
+func (e *ExpressionEvaluator) toInt64(v interface{}) (interface{}, error) {
+	if v == nil {
+		return nil, fmt.Errorf("cannot convert nil to int64")
+	}
+	switch val := v.(type) {
+	case int:
+		return int64(v), nil
+	case int8:
+		return int64(v), nil
+	case int16:
+		return int64(v), nil
+	case int32:
+		return int64(v), nil
+	case int64:
+		return v, nil
+	case float32:
+		return int64(v), nil
+	case float64:
+		return int64(v), nil
+	case string:
+		// 尝试解析字符串
+		var result int64
+		_, err := fmt.Sscanf(v, "%d", &result)
+		if err != nil {
+			return nil, fmt.Errorf("cannot convert string '%s' to int64: %v", v, err)
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("cannot convert %T to int64", reflect.TypeOf(v))
+	}
+}
+
+// toFloat64 转换为float64
+func (e *ExpressionEvaluator) toFloat64(v interface{}) (interface{}, error) {
+	if v == nil {
+		return nil, fmt.Errorf("cannot convert nil to float64")
+	}
+	switch val := v.(type) {
+	case int:
+		return float64(v), nil
+	case int8:
+		return float64(v), nil
+	case int16:
+		return float64(v), nil
+	case int32:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case float32:
+		return float64(v), nil
+	case float64:
+		return v, nil
+	case string:
+		result, err := strconv.ParseFloat(v, 64)
+		if err == nil {
+			return result, nil
+		}
+		// 尝试解析整数
+		var intResult int64
+		_, intErr := fmt.Sscanf(v, "%d", &intResult)
+		if intErr == nil {
+			return float64(intResult), nil
+		}
+		return nil, err
+	default:
+		return nil, fmt.Errorf("cannot convert %T to float64", reflect.TypeOf(v))
+	}
+}
+
+// toString 转换为string
+func (e *ExpressionEvaluator) toString(v interface{}) (interface{}, error) {
+	if v == nil {
+		return "", nil
+	}
+	switch val := v.(type) {
+	case string:
+		return v, nil
+	case int, int8, int16, int32, int64:
+		return fmt.Sprintf("%d", v), nil
+	case float32, float64:
+		return fmt.Sprintf("%v", v), nil
+	case bool:
+		return fmt.Sprintf("%t", v), nil
+	default:
+		return fmt.Sprintf("%v", v), nil
+	}
 }
 
 // compareValues 比较两个值
