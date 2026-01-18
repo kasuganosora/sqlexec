@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -31,30 +30,29 @@ func DefaultExcelConfig(filePath string) *ExcelConfig {
 
 // ExcelSource Excel数据源实现
 type ExcelSource struct {
-	config     *ExcelConfig
-	file       *excelize.File
-	connected  bool
-	sheetName  string
-	mu         sync.RWMutex
-	dataConfig *DataSourceConfig
+	*BaseDataSource
+	config    *ExcelConfig
+	file      *excelize.File
+	sheetName string
 }
 
 // NewExcelSource 创建Excel数据源
 func NewExcelSource(config *ExcelConfig) *ExcelSource {
+	dataConfig := &DataSourceConfig{
+		Type:     DataSourceTypeCSV, // Excel暂不单独定义类型
+		Name:     "excel",
+		Writable: !config.ReadOnly,
+	}
 	return &ExcelSource{
-		config: config,
-		dataConfig: &DataSourceConfig{
-			Type:     DataSourceTypeCSV, // Excel暂不单独定义类型
-			Name:     "excel",
-			Writable: !config.ReadOnly,
-		},
+		BaseDataSource: NewBaseDataSource(dataConfig, !config.ReadOnly),
+		config:        config,
 	}
 }
 
 // Connect 连接到Excel文件
 func (s *ExcelSource) Connect(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.BaseDataSource.mu.Lock()
+	defer s.BaseDataSource.mu.Unlock()
 
 	if s.connected {
 		return nil
@@ -64,7 +62,7 @@ func (s *ExcelSource) Connect(ctx context.Context) error {
 	if _, err := os.Stat(s.config.FilePath); os.IsNotExist(err) {
 		// 文件不存在，如果是只读模式则报错
 		if s.config.ReadOnly {
-			return fmt.Errorf("file not found: %s", s.config.FilePath)
+			return ErrFileNotFound(s.config.FilePath, "Excel")
 		}
 		// 可写模式，创建新文件
 		s.file = excelize.NewFile()
@@ -116,8 +114,8 @@ func (s *ExcelSource) Connect(ctx context.Context) error {
 
 // Close 关闭连接
 func (s *ExcelSource) Close(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.BaseDataSource.mu.Lock()
+	defer s.BaseDataSource.mu.Unlock()
 
 	if !s.connected || s.file == nil {
 		return nil
@@ -140,9 +138,7 @@ func (s *ExcelSource) Close(ctx context.Context) error {
 
 // IsConnected 检查是否已连接
 func (s *ExcelSource) IsConnected() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.connected
+	return s.BaseDataSource.IsConnected()
 }
 
 // IsWritable 检查是否可写
@@ -152,7 +148,7 @@ func (s *ExcelSource) IsWritable() bool {
 
 // GetConfig 获取数据源配置
 func (s *ExcelSource) GetConfig() *DataSourceConfig {
-	return s.dataConfig
+	return s.BaseDataSource.GetConfig()
 }
 
 // GetTables 获取所有表（工作表）
@@ -318,11 +314,11 @@ func (s *ExcelSource) Query(ctx context.Context, tableName string, options *Quer
 // Insert 插入数据
 func (s *ExcelSource) Insert(ctx context.Context, tableName string, rows []Row, options *InsertOptions) (int64, error) {
 	if s.config.ReadOnly {
-		return 0, fmt.Errorf("excel source is read-only")
+		return 0, ErrReadOnly("Excel")
 	}
 
-	if !s.connected {
-		return 0, fmt.Errorf("not connected")
+	if !s.IsConnected() {
+		return 0, ErrNotConnected()
 	}
 
 	// 检查工作表是否存在
@@ -371,40 +367,40 @@ func (s *ExcelSource) Insert(ctx context.Context, tableName string, rows []Row, 
 // Update 更新数据（Excel不支持原位更新）
 func (s *ExcelSource) Update(ctx context.Context, tableName string, filters []Filter, updates Row, options *UpdateOptions) (int64, error) {
 	if s.config.ReadOnly {
-		return 0, fmt.Errorf("excel source is read-only")
+		return 0, ErrReadOnly("Excel")
 	}
 
-	if !s.connected {
-		return 0, fmt.Errorf("not connected")
+	if !s.IsConnected() {
+		return 0, ErrNotConnected()
 	}
 
 	// Excel不支持原位更新，需要读取所有数据、修改、重新写入
 	// 这里简化实现：返回错误
-	return 0, fmt.Errorf("update not supported for excel source")
+	return 0, ErrOperationNotSupported("Excel", "update")
 }
 
 // Delete 删除数据（Excel不支持）
 func (s *ExcelSource) Delete(ctx context.Context, tableName string, filters []Filter, options *DeleteOptions) (int64, error) {
 	if s.config.ReadOnly {
-		return 0, fmt.Errorf("excel source is read-only")
+		return 0, ErrReadOnly("Excel")
 	}
 
-	if !s.connected {
-		return 0, fmt.Errorf("not connected")
+	if !s.IsConnected() {
+		return 0, ErrNotConnected()
 	}
 
 	// Excel不支持删除行
-	return 0, fmt.Errorf("delete not supported for excel source")
+	return 0, ErrOperationNotSupported("Excel", "delete")
 }
 
 // CreateTable 创建表（工作表）
 func (s *ExcelSource) CreateTable(ctx context.Context, tableInfo *TableInfo) error {
 	if s.config.ReadOnly {
-		return fmt.Errorf("excel source is read-only")
+		return ErrReadOnly("Excel")
 	}
 
-	if !s.connected {
-		return fmt.Errorf("not connected")
+	if !s.IsConnected() {
+		return ErrNotConnected()
 	}
 
 	if tableInfo == nil {
@@ -441,11 +437,11 @@ func (s *ExcelSource) CreateTable(ctx context.Context, tableInfo *TableInfo) err
 // DropTable 删除表（工作表）
 func (s *ExcelSource) DropTable(ctx context.Context, tableName string) error {
 	if s.config.ReadOnly {
-		return fmt.Errorf("excel source is read-only")
+		return ErrReadOnly("Excel")
 	}
 
-	if !s.connected {
-		return fmt.Errorf("not connected")
+	if !s.IsConnected() {
+		return ErrNotConnected()
 	}
 
 	if err := s.file.DeleteSheet(tableName); err != nil {
@@ -458,11 +454,11 @@ func (s *ExcelSource) DropTable(ctx context.Context, tableName string) error {
 // TruncateTable 清空表（删除所有数据但保留结构）
 func (s *ExcelSource) TruncateTable(ctx context.Context, tableName string) error {
 	if s.config.ReadOnly {
-		return fmt.Errorf("excel source is read-only")
+		return ErrReadOnly("Excel")
 	}
 
-	if !s.connected {
-		return fmt.Errorf("not connected")
+	if !s.IsConnected() {
+		return ErrNotConnected()
 	}
 
 	// 获取列头
@@ -498,7 +494,7 @@ func (s *ExcelSource) TruncateTable(ctx context.Context, tableName string) error
 
 // Execute 执行自定义SQL（不支持）
 func (s *ExcelSource) Execute(ctx context.Context, sql string) (*QueryResult, error) {
-	return nil, fmt.Errorf("execute not supported for excel source")
+	return nil, ErrOperationNotSupported("Excel", "execute")
 }
 
 // matchFilters 检查行是否匹配所有过滤条件
@@ -534,23 +530,23 @@ func matchFilters(row []string, headers []string, filters []Filter) bool {
 				return false
 			}
 		case ">":
-			if !excelCompareNumeric(cellValue, filter.Value, ">") {
+			if !compareValues(cellValue, filter.Value, ">") {
 				return false
 			}
 		case ">=":
-			if !excelCompareNumeric(cellValue, filter.Value, ">=") {
+			if !compareValues(cellValue, filter.Value, ">=") {
 				return false
 			}
 		case "<":
-			if !excelCompareNumeric(cellValue, filter.Value, "<") {
+			if !compareValues(cellValue, filter.Value, "<") {
 				return false
 			}
 		case "<=":
-			if !excelCompareNumeric(cellValue, filter.Value, "<=") {
+			if !compareValues(cellValue, filter.Value, "<=") {
 				return false
 			}
 		case "LIKE":
-			if !matchLike(cellValue, fmt.Sprintf("%v", filter.Value)) {
+			if !compareValues(cellValue, filter.Value, "LIKE") {
 				return false
 			}
 		}
@@ -582,7 +578,7 @@ func excelCompareNumeric(a, b interface{}, op string) bool {
 		}
 	}
 
-	switch op {
+		switch op {
 	case ">":
 		return aNum > bNum
 	case ">=":
@@ -596,40 +592,30 @@ func excelCompareNumeric(a, b interface{}, op string) bool {
 	}
 }
 
-// matchLike 匹配LIKE模式
-func matchLike(value, pattern string) bool {
-	// 简化的LIKE匹配，只支持通配符%
-	valueStr := fmt.Sprintf("%v", value)
-	patternStr := fmt.Sprintf("%v", pattern)
-
-	// 简单的字符串包含匹配
-	if patternStr == "%" {
+// compareValues 比较两个值（使用通用方法）
+func compareValues(a, b interface{}, op string) bool {
+	switch op {
+	case "=":
+		return CompareEqual(a, b)
+	case "!=":
+		return !CompareEqual(a, b)
+	case ">":
+		return CompareGreater(a, b)
+	case ">=":
+		return CompareGreater(a, b) || CompareEqual(a, b)
+	case "<":
+		return !CompareGreater(a, b) && !CompareEqual(a, b)
+	case "<=":
+		return !CompareGreater(a, b)
+	case "LIKE":
+		return CompareLike(a, b)
+	default:
 		return true
 	}
-
-	if patternStr[0] == '%' && patternStr[len(patternStr)-1] == '%' {
-		// %pattern%
-		subPattern := patternStr[1 : len(patternStr)-1]
-		return len(valueStr) >= len(subPattern) &&
-			valueStr[0:len(subPattern)] == subPattern ||
-			valueStr[len(valueStr)-len(subPattern):] == subPattern
-	}
-
-	if patternStr[0] == '%' {
-		// %pattern
-		return len(valueStr) >= len(patternStr)-1 &&
-			valueStr[len(valueStr)-(len(patternStr)-1):] == patternStr[1:]
-	}
-
-	if patternStr[len(patternStr)-1] == '%' {
-		// pattern%
-		return len(valueStr) >= len(patternStr)-1 &&
-			valueStr[0:len(patternStr)-1] == patternStr[:len(patternStr)-1]
-	}
-
-	// 无通配符，精确匹配
-	return valueStr == patternStr
 }
+
+
+
 
 // sortRows 对行进行排序
 func sortRows(rows [][]string, headers []string, orderBy string, order string) {
@@ -666,10 +652,10 @@ func sortRows(rows [][]string, headers []string, orderBy string, order string) {
 			}
 
 			if order == "DESC" {
-				shouldSwap = excelCompareNumeric(val1, val2, "<")
+				shouldSwap = CompareGreater(val1, val2)
 			} else {
 				// ASC
-				shouldSwap = excelCompareNumeric(val1, val2, ">")
+				shouldSwap = CompareGreater(val2, val1)
 			}
 
 			if shouldSwap {

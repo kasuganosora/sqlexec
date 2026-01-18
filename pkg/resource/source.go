@@ -167,35 +167,6 @@ type DataSource interface {
 	Execute(ctx context.Context, sql string) (*QueryResult, error)
 }
 
-// MVCCDataSource MVCC数据源接口（可选）
-type MVCCDataSource interface {
-	DataSource
-	
-	// SupportMVCC 是否支持MVCC
-	SupportMVCC() bool
-	
-	// BeginTransaction 开始事务
-	BeginTransaction(ctx context.Context) (interface{}, error)
-	
-	// CommitTransaction 提交事务
-	CommitTransaction(ctx context.Context, txn interface{}) error
-	
-	// RollbackTransaction 回滚事务
-	RollbackTransaction(ctx context.Context, txn interface{}) error
-	
-	// QueryWithTransaction 使用事务查询
-	QueryWithTransaction(ctx context.Context, txn interface{}, tableName string, options *QueryOptions) (*QueryResult, error)
-	
-	// InsertWithTransaction 使用事务插入
-	InsertWithTransaction(ctx context.Context, txn interface{}, tableName string, rows []Row, options *InsertOptions) (int64, error)
-	
-	// UpdateWithTransaction 使用事务更新
-	UpdateWithTransaction(ctx context.Context, txn interface{}, tableName string, filters []Filter, updates Row, options *UpdateOptions) (int64, error)
-	
-	// DeleteWithTransaction 使用事务删除
-	DeleteWithTransaction(ctx context.Context, txn interface{}, tableName string, filters []Filter, options *DeleteOptions) (int64, error)
-}
-
 // TransactionOptions 事务选项
 type TransactionOptions struct {
 	IsolationLevel string `json:"isolation_level,omitempty"` // READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE

@@ -3,15 +3,11 @@ package resource
 import (
 	"context"
 	"fmt"
-	"sync"
 )
 
 // MemorySource 内存数据源实现
 type MemorySource struct {
-	config    *DataSourceConfig
-	connected bool
-	writable  bool
-	mu        sync.RWMutex
+	*BaseDataSource
 	tables    map[string]*TableInfo
 	data      map[string][]Row
 	autoID    map[string]int64
@@ -42,50 +38,39 @@ func (f *MemoryFactory) Create(config *DataSourceConfig) (DataSource, error) {
 		writable = config.Writable
 	}
 	return &MemorySource{
-		config:    config,
-		writable:  writable,
-		tables:    make(map[string]*TableInfo),
-		data:      make(map[string][]Row),
-		autoID:    make(map[string]int64),
-		foreignKeys: make(map[string]map[string]*ForeignKeyInfo),
+		BaseDataSource:   NewBaseDataSource(config, writable),
+		tables:          make(map[string]*TableInfo),
+		data:            make(map[string][]Row),
+		autoID:          make(map[string]int64),
+		foreignKeys:      make(map[string]map[string]*ForeignKeyInfo),
 		uniqueConstraints: make(map[string]map[string]bool),
-		uniqueValues: make(map[string]map[string]map[interface{}]bool),
+		uniqueValues:     make(map[string]map[string]map[interface{}]bool),
 	}, nil
 }
 
 // Connect 连接数据源
 func (s *MemorySource) Connect(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.connected = true
-	return nil
+	return s.BaseDataSource.Connect(ctx)
 }
 
 // Close 关闭连接
 func (s *MemorySource) Close(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.connected = false
-	return nil
+	return s.BaseDataSource.Close(ctx)
 }
 
 // IsConnected 检查是否已连接
 func (s *MemorySource) IsConnected() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.connected
+	return s.BaseDataSource.IsConnected()
 }
 
 // GetConfig 获取数据源配置
 func (s *MemorySource) GetConfig() *DataSourceConfig {
-	return s.config
+	return s.BaseDataSource.GetConfig()
 }
 
 // IsWritable 检查是否可写
 func (s *MemorySource) IsWritable() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.writable
+	return s.BaseDataSource.IsWritable()
 }
 
 // GetTables 获取所有表
@@ -130,13 +115,13 @@ func (s *MemorySource) Query(ctx context.Context, tableName string, options *Que
 	}
 
 	// 应用过滤器
-	filteredRows := s.applyFilters(rows, options)
+	filteredRows := ApplyFilters(rows, options)
 
 	// 应用排序
-	sortedRows := s.applyOrder(filteredRows, options)
+	sortedRows := ApplyOrder(filteredRows, options)
 
 	// 应用分页
-	pagedRows := s.applyPagination(sortedRows, options)
+	pagedRows := ApplyPagination(sortedRows, options.Offset, options.Limit)
 
 	// Total应该是返回的行数，而不是过滤前的总行数
 	total := int64(len(pagedRows))
@@ -154,7 +139,7 @@ func (s *MemorySource) Insert(ctx context.Context, tableName string, rows []Row,
 	defer s.mu.Unlock()
 
 	// 检查是否可写
-	if !s.writable {
+	if !s.IsWritable() {
 		return 0, fmt.Errorf("data source is read-only")
 	}
 
@@ -223,7 +208,7 @@ func (s *MemorySource) Update(ctx context.Context, tableName string, filters []F
 	defer s.mu.Unlock()
 
 	// 检查是否可写
-	if !s.writable {
+	if !s.IsWritable() {
 		return 0, fmt.Errorf("data source is read-only")
 	}
 
@@ -283,7 +268,7 @@ func (s *MemorySource) Delete(ctx context.Context, tableName string, filters []F
 	defer s.mu.Unlock()
 
 	// 检查是否可写
-	if !s.writable {
+	if !s.IsWritable() {
 		return 0, fmt.Errorf("data source is read-only")
 	}
 
@@ -361,7 +346,7 @@ func (s *MemorySource) checkRestrictConstraints(tableName string, rows []Row, in
 						for _, idx := range indices {
 							delRow := rows[idx]
 							if pkValue, pkExists := delRow[pkColumn]; pkExists {
-								if compareEqual(pkValue, refValue) {
+								if CompareEqual(pkValue, refValue) {
 									// 检查外键的删除策略
 									if fk.OnDelete == "RESTRICT" || fk.OnDelete == "" {
 										return fmt.Errorf("cannot delete row: foreign key constraint restrict: referenced by %s.%s", refTableName, colName)
@@ -476,146 +461,7 @@ func (s *MemorySource) Execute(ctx context.Context, sql string) (*QueryResult, e
 	return nil, fmt.Errorf("memory data source does not support SQL execution")
 }
 
-// applyFilters 应用过滤器
-func (s *MemorySource) applyFilters(rows []Row, options *QueryOptions) []Row {
-	if options == nil || len(options.Filters) == 0 {
-		return rows
-	}
 
-	result := []Row{}
-	for _, row := range rows {
-		if s.matchesFilters(row, options.Filters) {
-			result = append(result, row)
-		}
-	}
-	return result
-}
-
-// matchesFilters 检查行是否匹配过滤器列表
-func (s *MemorySource) matchesFilters(row Row, filters []Filter) bool {
-	// 如果没有过滤器，所有行都匹配
-	if len(filters) == 0 {
-		return true
-	}
-
-	// 检查第一个过滤器
-	filter := filters[0]
-
-	// 如果有逻辑操作符
-	if filter.LogicOp == "OR" || filter.LogicOp == "or" {
-		// OR 操作：行的任何子过滤器匹配即可
-		return s.matchesAnySubFilter(row, filter.SubFilters)
-	}
-
-	// 如果有 AND 逻辑操作符
-	if filter.LogicOp == "AND" || filter.LogicOp == "and" {
-		// AND 操作：行的所有子过滤器都必须匹配
-		return s.matchesAllSubFilters(row, filter.SubFilters)
-	}
-
-	// 默认（AND 逻辑）：所有过滤器都必须匹配
-	for _, f := range filters {
-		if !s.matchFilter(row, f) {
-			return false
-		}
-	}
-	return true
-}
-
-// matchesAnySubFilter 检查行是否匹配任意子过滤器（OR 逻辑）
-func (s *MemorySource) matchesAnySubFilter(row Row, subFilters []Filter) bool {
-	// 如果没有子过滤器，返回 true
-	if len(subFilters) == 0 {
-		return true
-	}
-	// 检查是否有子过滤器匹配
-	for _, subFilter := range subFilters {
-		if s.matchFilter(row, subFilter) {
-			return true
-		}
-	}
-	return false
-}
-
-// matchesAllSubFilters 检查行是否匹配所有子过滤器（AND 逻辑）
-func (s *MemorySource) matchesAllSubFilters(row Row, subFilters []Filter) bool {
-	// 如果没有子过滤器，返回 true
-	if len(subFilters) == 0 {
-		return true
-	}
-	// 检查是否所有子过滤器都匹配
-	for _, subFilter := range subFilters {
-		if !s.matchFilter(row, subFilter) {
-			return false
-		}
-	}
-	return true
-}
-
-// matchFilter 匹配过滤器
-func (s *MemorySource) matchFilter(row Row, filter Filter) bool {
-	value, exists := row[filter.Field]
-	if !exists {
-		return false
-	}
-
-	switch filter.Operator {
-	case "=":
-		return compareEqual(value, filter.Value)
-	case "!=":
-		return !compareEqual(value, filter.Value)
-	case ">":
-		return compareGreater(value, filter.Value)
-	case "<":
-		return !compareGreater(value, filter.Value) && !compareEqual(value, filter.Value)
-	case ">=":
-		return compareGreater(value, filter.Value) || compareEqual(value, filter.Value)
-	case "<=":
-		return !compareGreater(value, filter.Value)
-	case "LIKE":
-		return compareLike(value, filter.Value)
-	case "NOT LIKE":
-		return !compareLike(value, filter.Value)
-	case "IN":
-		return compareIn(value, filter.Value)
-	case "NOT IN":
-		return !compareIn(value, filter.Value)
-	case "BETWEEN":
-		return compareBetween(value, filter.Value)
-	case "NOT BETWEEN":
-		return !compareBetween(value, filter.Value)
-	default:
-		return false
-	}
-}
-
-// applyOrder 应用排序
-func (s *MemorySource) applyOrder(rows []Row, options *QueryOptions) []Row {
-	if options == nil || options.OrderBy == "" {
-		return rows
-	}
-
-	result := make([]Row, len(rows))
-	copy(result, rows)
-
-	// 简化的排序实现
-	order := options.Order
-	if order == "" {
-		order = "ASC"
-	}
-
-	// 这里应该实现更复杂的排序逻辑
-	// 为简化，仅返回原始顺序
-	return result
-}
-
-// applyPagination 应用分页
-func (s *MemorySource) applyPagination(rows []Row, options *QueryOptions) []Row {
-	if options == nil {
-		return rows
-	}
-	return ApplyPagination(rows, options.Offset, options.Limit)
-}
 
 // findMatchedRows 查找匹配的行索引
 func (s *MemorySource) findMatchedRows(rows []Row, options *QueryOptions) []int {
@@ -623,7 +469,7 @@ func (s *MemorySource) findMatchedRows(rows []Row, options *QueryOptions) []int 
 	for i, row := range rows {
 		match := true
 		for _, filter := range options.Filters {
-			if !s.matchFilter(row, filter) {
+			if !MatchFilter(row, filter) {
 				match = false
 				break
 			}
@@ -733,7 +579,7 @@ func (s *MemorySource) validateForeignKeyConstraint(tableName string, row Row) e
 		valueExists := false
 		for _, refRow := range referencedRows {
 			if refValue, refExists := refRow[fk.Column]; refExists {
-				if compareEqual(refValue, value) {
+				if CompareEqual(refValue, value) {
 					valueExists = true
 					break
 				}
@@ -768,7 +614,7 @@ func (s *MemorySource) validateUniqueConstraintOnUpdate(tableName string, column
 	oldValue, oldExists := allRows[currentRowIndex][columnName]
 
 	// 如果新旧值相同，不需要检查
-	if oldExists && compareEqual(oldValue, newValue) {
+	if oldExists && CompareEqual(oldValue, newValue) {
 		return nil
 	}
 
@@ -779,7 +625,7 @@ func (s *MemorySource) validateUniqueConstraintOnUpdate(tableName string, column
 		}
 
 		if rowValue, exists := row[columnName]; exists {
-			if compareEqual(rowValue, newValue) {
+			if CompareEqual(rowValue, newValue) {
 				return fmt.Errorf("unique constraint violation: column %s value %v already exists", columnName, newValue)
 			}
 		}

@@ -6,17 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sync"
 )
 
 // JSONSource JSON文件数据源实现
 type JSONSource struct {
-	config      *DataSourceConfig
-	connected   bool
-	writable    bool // JSON文件默认只读
-	mu          sync.RWMutex
-	filePath    string
-	columns     []ColumnInfo
+	*BaseFileDataSource
 	// 并行读取配置
 	chunkSize   int64
 	workers     int
@@ -43,28 +37,28 @@ func (f *JSONFactory) Create(config *DataSourceConfig) (DataSource, error) {
 	if config.Options == nil {
 		config.Options = make(map[string]interface{})
 	}
-	
+
 	chunkSize := int64(1 << 20) // 1MB
 	if cs, ok := config.Options["chunk_size"]; ok {
 		if num, ok := cs.(int64); ok && num > 0 {
 			chunkSize = num
 		}
 	}
-	
+
 	workers := 4
 	if w, ok := config.Options["workers"]; ok {
 		if num, ok := w.(int); ok && num > 0 && num <= 32 {
 			workers = num
 		}
 	}
-	
+
 	arrayMode := true
 	if am, ok := config.Options["array_mode"]; ok {
 		if b, ok := am.(bool); ok {
 			arrayMode = b
 		}
 	}
-	
+
 	recordsPath := ""
 	if rp, ok := config.Options["records_path"]; ok {
 		if str, ok := rp.(string); ok {
@@ -73,152 +67,111 @@ func (f *JSONFactory) Create(config *DataSourceConfig) (DataSource, error) {
 	}
 
 	return &JSONSource{
-		config:      config,
-		writable:    false, // JSON文件默认只读
-		filePath:    config.Name,
-		chunkSize:   chunkSize,
-		workers:     workers,
-		arrayMode:   arrayMode,
-		recordsPath: recordsPath,
+		BaseFileDataSource: NewBaseFileDataSource(config, config.Name, false),
+		chunkSize:         chunkSize,
+		workers:           workers,
+		arrayMode:         arrayMode,
+		recordsPath:       recordsPath,
 	}, nil
 }
 
 // Connect 连接数据源
 func (s *JSONSource) Connect(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	
+	s.BaseDataSource.mu.Lock()
+	defer s.BaseDataSource.mu.Unlock()
+
 	// 检查文件是否存在
 	if _, err := os.Stat(s.filePath); err != nil {
-		return fmt.Errorf("JSON file not found: %s", s.filePath)
+		return ErrFileNotFound(s.filePath, "JSON")
 	}
-	
+
 	// 推断列信息
 	if err := s.inferSchema(ctx); err != nil {
 		return fmt.Errorf("failed to infer schema: %w", err)
 	}
-	
+
 	s.connected = true
 	return nil
 }
 
-// Close 关闭连接
-func (s *JSONSource) Close(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.connected = false
-	return nil
-}
-
-// IsConnected 检查是否已连接
-func (s *JSONSource) IsConnected() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.connected
-}
-
-// GetConfig 获取数据源配置
-func (s *JSONSource) GetConfig() *DataSourceConfig {
-	return s.config
-}
-
-// IsWritable 检查是否可写
-func (s *JSONSource) IsWritable() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.writable
-}
-
 // GetTables 获取所有表
 func (s *JSONSource) GetTables(ctx context.Context) ([]string, error) {
-	if !s.IsConnected() {
-		return nil, fmt.Errorf("not connected")
-	}
-	return []string{"json_data"}, nil
+	return s.BaseFileDataSource.GetTables(ctx, "json_data")
 }
 
 // GetTableInfo 获取表信息
 func (s *JSONSource) GetTableInfo(ctx context.Context, tableName string) (*TableInfo, error) {
-	if !s.IsConnected() {
-		return nil, fmt.Errorf("not connected")
-	}
-	
-	if tableName != "json_data" {
-		return nil, fmt.Errorf("table %s not found", tableName)
-	}
-	
-	return &TableInfo{
-		Name:    "json_data",
-		Columns: s.columns,
-	}, nil
+	return s.BaseFileDataSource.GetTableInfo(ctx, tableName, "json_data")
 }
 
 // Query 查询数据
 func (s *JSONSource) Query(ctx context.Context, tableName string, options *QueryOptions) (*QueryResult, error) {
-	if !s.IsConnected() {
-		return nil, fmt.Errorf("not connected")
+	if err := s.CheckConnected(); err != nil {
+		return nil, err
 	}
-	
-	if tableName != "json_data" {
-		return nil, fmt.Errorf("table %s not found", tableName)
+
+	if err := s.CheckTableExists(tableName, "json_data"); err != nil {
+		return nil, err
 	}
-	
+
 	// 读取数据
 	rows, err := s.readAll(ctx)
 	if err != nil {
 		return nil, err
 	}
-	
-	// 应用过滤器
-	filteredRows := s.applyFilters(rows, options)
-	
-	// 应用排序
-	sortedRows := s.applyOrder(filteredRows, options)
-	
-	// 应用分页
-	total := int64(len(sortedRows))
-	pagedRows := s.applyPagination(sortedRows, options)
-	
+
+	// 获取需要读取的列
+	neededColumns := GetNeededColumns(options)
+
+	// 应用查询操作（过滤、排序、分页、列裁剪）
+	pagedRows := ApplyQueryOperations(rows, options, &s.columns)
+
+	// 构建列信息
+	columns := s.GetColumns()
+	if len(neededColumns) > 0 {
+		columns = s.FilterColumns(neededColumns)
+	}
+
 	return &QueryResult{
-		Columns: s.columns,
+		Columns: columns,
 		Rows:    pagedRows,
-		Total:   total,
+		Total:   int64(len(pagedRows)),
 	}, nil
 }
 
 // Insert 插入数据
 func (s *JSONSource) Insert(ctx context.Context, tableName string, rows []Row, options *InsertOptions) (int64, error) {
-	return 0, fmt.Errorf("JSON data source is read-only")
+	return s.BaseFileDataSource.Insert(ctx, tableName, rows, options, "JSON")
 }
 
 // Update 更新数据
 func (s *JSONSource) Update(ctx context.Context, tableName string, filters []Filter, updates Row, options *UpdateOptions) (int64, error) {
-	return 0, fmt.Errorf("JSON data source is read-only")
+	return s.BaseFileDataSource.Update(ctx, tableName, filters, updates, options, "JSON")
 }
 
 // Delete 删除数据
 func (s *JSONSource) Delete(ctx context.Context, tableName string, filters []Filter, options *DeleteOptions) (int64, error) {
-	return 0, fmt.Errorf("JSON data source is read-only")
+	return s.BaseFileDataSource.Delete(ctx, tableName, filters, options, "JSON")
 }
 
 // CreateTable 创建表
 func (s *JSONSource) CreateTable(ctx context.Context, tableInfo *TableInfo) error {
-	return fmt.Errorf("JSON data source is read-only")
+	return s.BaseFileDataSource.CreateTable(ctx, tableInfo, "JSON")
 }
 
 // DropTable 删除表
 func (s *JSONSource) DropTable(ctx context.Context, tableName string) error {
-	return fmt.Errorf("JSON data source is read-only")
+	return s.BaseFileDataSource.DropTable(ctx, tableName, "JSON")
 }
 
 // TruncateTable 清空表
 func (s *JSONSource) TruncateTable(ctx context.Context, tableName string) error {
-	return fmt.Errorf("JSON data source is read-only")
+	return s.BaseFileDataSource.TruncateTable(ctx, tableName, "JSON")
 }
 
 // Execute 执行自定义SQL语句
 func (s *JSONSource) Execute(ctx context.Context, sql string) (*QueryResult, error) {
-	return nil, fmt.Errorf("JSON data source does not support SQL execution")
+	return s.BaseFileDataSource.Execute(ctx, "JSON", sql)
 }
 
 // inferSchema 推断JSON文件的列信息
@@ -244,7 +197,7 @@ func (s *JSONSource) inferSchema(ctx context.Context) error {
 		}
 	} else {
 		// 行分隔格式: 每行一个JSON对象
-		lines := splitLines(data)
+		lines := SplitLines(data)
 		for _, line := range lines {
 			var record map[string]interface{}
 			if err := json.Unmarshal([]byte(line), &record); err != nil {
@@ -269,16 +222,17 @@ func (s *JSONSource) inferSchema(ctx context.Context) error {
 	}
 	
 	// 推断每列的类型
-	s.columns = make([]ColumnInfo, 0, len(fieldsMap))
+	columns := make([]ColumnInfo, 0, len(fieldsMap))
 	for field, values := range fieldsMap {
 		colType := s.inferColumnType(values)
-		s.columns = append(s.columns, ColumnInfo{
+		columns = append(columns, ColumnInfo{
 			Name:     field,
 			Type:     colType,
 			Nullable: true,
 			Primary:  false,
 		})
 	}
+	s.SetColumns(columns)
 	
 	return nil
 }
@@ -383,121 +337,6 @@ func (s *JSONSource) readAll(ctx context.Context) ([]Row, error) {
 	}
 	
 	return rows, nil
-}
-
-// applyFilters 应用过滤器
-func (s *JSONSource) applyFilters(rows []Row, options *QueryOptions) []Row {
-	if options == nil || len(options.Filters) == 0 {
-		return rows
-	}
-	
-	result := make([]Row, 0, len(rows))
-	for _, row := range rows {
-		if s.matchesFilters(row, options.Filters) {
-			result = append(result, row)
-		}
-	}
-	return result
-}
-
-// matchesFilters 检查行是否匹配过滤器
-func (s *JSONSource) matchesFilters(row Row, filters []Filter) bool {
-	for _, filter := range filters {
-		if !s.matchFilter(row, filter) {
-			return false
-		}
-	}
-	return true
-}
-
-// matchFilter 匹配单个过滤器
-func (s *JSONSource) matchFilter(row Row, filter Filter) bool {
-	value, exists := row[filter.Field]
-	if !exists {
-		return false
-	}
-	
-	switch filter.Operator {
-	case "=":
-		return s.compareEqual(value, filter.Value)
-	case "!=":
-		return !s.compareEqual(value, filter.Value)
-	case ">":
-		return s.compareGreater(value, filter.Value)
-	case "<":
-		return !s.compareGreater(value, filter.Value) && !s.compareEqual(value, filter.Value)
-	case ">=":
-		return s.compareGreater(value, filter.Value) || s.compareEqual(value, filter.Value)
-	case "<=":
-		return !s.compareGreater(value, filter.Value)
-	default:
-		return true
-	}
-}
-
-// 比较辅助函数
-func (s *JSONSource) compareEqual(a, b interface{}) bool {
-	if cmp, ok := s.compareNumeric(a, b); ok {
-		return cmp == 0
-	}
-	return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
-}
-
-func (s *JSONSource) compareGreater(a, b interface{}) bool {
-	if cmp, ok := s.compareNumeric(a, b); ok {
-		return cmp > 0
-	}
-	aStr := fmt.Sprintf("%v", a)
-	bStr := fmt.Sprintf("%v", b)
-	return aStr > bStr
-}
-
-func (s *JSONSource) compareNumeric(a, b interface{}) (int, bool) {
-	aFloat, okA := s.toFloat64(a)
-	bFloat, okB := s.toFloat64(b)
-	if !okA || !okB {
-		return 0, false
-	}
-	
-	if aFloat < bFloat {
-		return -1, true
-	} else if aFloat > bFloat {
-		return 1, true
-	}
-	return 0, true
-}
-
-func (s *JSONSource) toFloat64(v interface{}) (float64, bool) {
-	switch val := v.(type) {
-	case int:
-		return float64(val), true
-	case int64:
-		return float64(val), true
-	case float32:
-		return float64(val), true
-	case float64:
-		return val, true
-	default:
-		return 0, false
-	}
-}
-
-// applyOrder 应用排序
-func (s *JSONSource) applyOrder(rows []Row, options *QueryOptions) []Row {
-	if options == nil || options.OrderBy == "" {
-		return rows
-	}
-	
-	// 简化实现: 返回原始顺序
-	return rows
-}
-
-// applyPagination 应用分页
-func (s *JSONSource) applyPagination(rows []Row, options *QueryOptions) []Row {
-	if options == nil {
-		return rows
-	}
-	return ApplyPagination(rows, options.Offset, options.Limit)
 }
 
 // 初始化

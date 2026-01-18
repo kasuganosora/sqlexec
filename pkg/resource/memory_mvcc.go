@@ -30,11 +30,10 @@ type MVCCContext struct {
 // NewMVCCMemorySource 创建支持MVCC的内存数据源
 func NewMVCCMemorySource(config *DataSourceConfig) *MVCCMemorySource {
 	base := &MemorySource{
-		config:   config,
-		writable: true,
-		tables:   make(map[string]*TableInfo),
-		data:     make(map[string][]Row),
-		autoID:   make(map[string]int64),
+		BaseDataSource: NewBaseDataSource(config, true),
+		tables:         make(map[string]*TableInfo),
+		data:           make(map[string][]Row),
+		autoID:         make(map[string]int64),
 	}
 
 	manager := mvcc.GetGlobalManager()
@@ -232,13 +231,13 @@ func (s *MVCCMemorySource) QueryWithTransaction(ctx context.Context, tableName s
 	}
 
 	// 应用过滤器
-	filteredRows := s.applyFilters(rows, options)
+	filteredRows := ApplyFilters(rows, options)
 
 	// 应用排序
-	sortedRows := s.applyOrder(filteredRows, options)
+	sortedRows := ApplyOrder(filteredRows, options)
 
 	// 应用分页
-	pagedRows := s.applyPagination(sortedRows, options)
+	pagedRows := ApplyPagination(sortedRows, options.Offset, options.Limit)
 
 	total := int64(len(pagedRows))
 
@@ -335,7 +334,7 @@ func (s *MVCCMemorySource) UpdateWithTransaction(ctx context.Context, tableName 
 	matchedVersions := make([]*mvcc.TupleVersion, 0)
 	for _, version := range visibleVersions {
 		if row, ok := version.GetValue().(Row); ok {
-			if s.matchesFilters(row, filters) {
+			if MatchesFilters(row, filters) {
 				matchedVersions = append(matchedVersions, version)
 			}
 		}
@@ -408,7 +407,7 @@ func (s *MVCCMemorySource) DeleteWithTransaction(ctx context.Context, tableName 
 	deleted := int64(0)
 	for _, version := range visibleVersions {
 		if row, ok := version.GetValue().(Row); ok {
-			if s.matchesFilters(row, filters) {
+			if MatchesFilters(row, filters) {
 				txnCtx.deletes[tableName][version.CTID] = true
 				deleted++
 			}

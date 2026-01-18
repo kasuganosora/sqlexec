@@ -72,7 +72,7 @@ func (tm *TransactionManager) Commit(txn *Transaction) error {
 	}
 
 	if _, exists := tm.transactions[txn.ID]; !exists {
-		return fmt.Errorf("transaction not found: %d", txn.ID)
+		return ErrTransactionNotFound(txn.ID)
 	}
 
 	delete(tm.transactions, txn.ID)
@@ -89,7 +89,7 @@ func (tm *TransactionManager) Rollback(txn *Transaction) error {
 	}
 
 	if _, exists := tm.transactions[txn.ID]; !exists {
-		return fmt.Errorf("transaction not found: %d", txn.ID)
+		return ErrTransactionNotFound(txn.ID)
 	}
 
 	delete(tm.transactions, txn.ID)
@@ -112,7 +112,7 @@ func (tm *TransactionManager) GetTransaction(id TransactionID) (*Transaction, er
 
 	txn, exists := tm.transactions[id]
 	if !exists {
-		return nil, fmt.Errorf("transaction not found: %d", id)
+		return nil, ErrTransactionNotFound(id)
 	}
 	return txn, nil
 }
@@ -257,6 +257,43 @@ func (a *MVCCDataSourceAdapter) Query(ctx context.Context, tableName string, opt
 	return a.inner.Query(ctx, tableName, options)
 }
 
+// ==================== MVCCDataSource2 数据源接口（可选）====================
+
+// MVCCDataSource2 MVCC数据源接口（可选）
+type MVCCDataSource interface {
+	DataSource
+
+	// SupportMVCC 是否支持MVCC
+	SupportMVCC() bool
+
+	// BeginTransaction 开始事务
+	BeginTransaction(ctx context.Context, level string) (interface{}, error)
+
+	// CommitTransaction 提交事务
+	CommitTransaction(ctx context.Context, txn interface{}) error
+
+	// RollbackTransaction 回滚事务
+	RollbackTransaction(ctx context.Context, txn interface{}) error
+
+	// QueryWithTransaction 使用事务查询
+	QueryWithTransaction(ctx context.Context, txn interface{}, tableName string, options *QueryOptions) (*QueryResult, error)
+
+	// InsertWithTransaction 使用事务插入
+	InsertWithTransaction(ctx context.Context, txn interface{}, tableName string, rows []Row, options *InsertOptions) (int64, error)
+
+	// UpdateWithTransaction 使用事务更新
+	UpdateWithTransaction(ctx context.Context, txn interface{}, tableName string, filters []Filter, updates Row, options *UpdateOptions) (int64, error)
+
+	// DeleteWithTransaction 使用事务删除
+	DeleteWithTransaction(ctx context.Context, txn interface{}, tableName string, filters []Filter, options *DeleteOptions) (int64, error)
+}
+
+// TransactionOptions2 事务选项
+type TransactionOptions2 struct {
+	IsolationLevel string `json:"isolation_level,omitempty"` // READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE
+	ReadOnly       bool   `json:"read_only,omitempty"`        // 只读事务
+}
+
 // Insert 插入数据（支持事务）
 func (a *MVCCDataSourceAdapter) Insert(ctx context.Context, tableName string, rows []Row, options *InsertOptions) (int64, error) {
 	a.mu.RLock()
@@ -374,7 +411,7 @@ func (a *MVCCDataSourceAdapter) CommitTransaction(ctx context.Context, txn inter
 	if t, ok := txn.(*Transaction); ok {
 		return a.txnMgr.Commit(t)
 	}
-	return fmt.Errorf("invalid transaction type")
+	return ErrInvalidTransactionType()
 }
 
 // RollbackTransaction 回滚事务
@@ -382,7 +419,7 @@ func (a *MVCCDataSourceAdapter) RollbackTransaction(ctx context.Context, txn int
 	if t, ok := txn.(*Transaction); ok {
 		return a.txnMgr.Rollback(t)
 	}
-	return fmt.Errorf("invalid transaction type")
+	return ErrInvalidTransactionType()
 }
 
 // SupportMVCC 是否支持MVCC

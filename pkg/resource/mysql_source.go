@@ -576,12 +576,12 @@ func (s *MySQLSource) buildFilterCondition(filter Filter) string {
 
 // joinConditions 连接条件
 func (s *MySQLSource) joinConditions(conditions []string, logicalOp string) string {
-	if logicalOp == "" || logicalOp == "AND" {
-		return joinWith(conditions, " AND ")
+		if logicalOp == "" || logicalOp == "AND" {
+		return JoinWith(conditions, " AND ")
 	} else if logicalOp == "OR" {
-		return joinWith(conditions, " OR ")
+		return JoinWith(conditions, " OR ")
 	}
-	return joinWith(conditions, " AND ")
+	return JoinWith(conditions, " AND ")
 }
 
 // buildInsertQuery 构建INSERT查询
@@ -591,7 +591,7 @@ func (s *MySQLSource) buildInsertQuery(tableName string, columns []ColumnInfo, r
 	for _, col := range columns {
 		columnNames = append(columnNames, col.Name)
 	}
-	columnsStr := joinWith(columnNames, ", ")
+	columnsStr := JoinWith(columnNames, ", ")
 
 	// 构建占位符
 	placeholders := make([]string, 0)
@@ -602,10 +602,10 @@ func (s *MySQLSource) buildInsertQuery(tableName string, columns []ColumnInfo, r
 			rowValues = append(rowValues, "?")
 			args = append(args, row[col.Name])
 		}
-		placeholders = append(placeholders, "("+joinWith(rowValues, ", ")+")")
+		placeholders = append(placeholders, "("+JoinWith(rowValues, ", ")+")")
 	}
 
-	valuesStr := joinWith(placeholders, ", ")
+	valuesStr := JoinWith(placeholders, ", ")
 
 	return columnsStr, valuesStr, args
 }
@@ -616,7 +616,7 @@ func (s *MySQLSource) buildSetClause(updates Row) string {
 	for field := range updates {
 		clauses = append(clauses, fmt.Sprintf("%s = ?", field))
 	}
-	return joinWith(clauses, ", ")
+	return JoinWith(clauses, ", ")
 }
 
 // buildFilterArgs 构建过滤条件参数
@@ -669,7 +669,7 @@ func (s *MySQLSource) buildCreateTableSQL(tableInfo *TableInfo) string {
 		columnDefs = append(columnDefs, def)
 	}
 
-	columnsStr := joinWith(columnDefs, ", ")
+	columnsStr := JoinWith(columnDefs, ", ")
 	query := fmt.Sprintf("CREATE TABLE %s (%s)", tableInfo.Name, columnsStr)
 
 	return query

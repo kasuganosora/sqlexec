@@ -260,8 +260,8 @@ func (idx *BTreeIndex) insert(node *BTreeNode, key interface{}, value int) error
 
 // findPosition 在节点中查找键的位置
 func (idx *BTreeIndex) findPosition(node *BTreeNode, key interface{}) int {
-	return sort.Search(len(node.Keys), func(i int) bool {
-		return compareValues(key, node.Keys[i]) < 0
+		return sort.Search(len(node.Keys), func(i int) bool {
+		return CompareValues(key, node.Keys[i]) < 0
 	})
 }
 
@@ -310,7 +310,7 @@ func (idx *BTreeIndex) lookup(node *BTreeNode, key interface{}) []int {
 	// 叶子节点
 	if node.IsLeaf {
 		for i, k := range node.Keys {
-			if compareValues(key, k) == 0 && i < len(node.Values) {
+			if CompareValues(key, k) == 0 && i < len(node.Values) {
 				return []int{node.Values[i]}
 			}
 		}
@@ -321,7 +321,7 @@ func (idx *BTreeIndex) lookup(node *BTreeNode, key interface{}) []int {
 	pos := idx.findPosition(node, key)
 
 	// 检查是否找到
-	if pos < len(node.Keys) && compareValues(key, node.Keys[pos]) == 0 {
+	if pos < len(node.Keys) && CompareValues(key, node.Keys[pos]) == 0 {
 		// 在内部节点找到键，继续到右子节点查找实际值
 		if pos+1 < len(node.Children) {
 			return idx.lookup(node.Children[pos+1], key)
@@ -359,7 +359,7 @@ func (idx *BTreeIndex) rangeLookup(node *BTreeNode, min, max interface{}, result
 	// 叶子节点
 	if node.IsLeaf {
 		for i, key := range node.Keys {
-			if compareValues(key, min) >= 0 && compareValues(key, max) <= 0 {
+			if CompareValues(key, min) >= 0 && CompareValues(key, max) <= 0 {
 				if i < len(node.Values) {
 					result = append(result, node.Values[i])
 				}
@@ -600,53 +600,4 @@ func (m *IndexManager) indexMatchesFilters(indexInfo *IndexInfo, filters []Filte
 
 // ==================== 比较函数 ====================
 
-// compareValues 比较两个值
-func compareValues(a, b interface{}) int {
-	if a == nil && b == nil {
-		return 0
-	}
-	if a == nil {
-		return -1
-	}
-	if b == nil {
-		return 1
-	}
 
-	// 尝试数值比较
-	aFloat, aOk := toFloat64(a)
-	bFloat, bOk := toFloat64(b)
-	if aOk && bOk {
-		if aFloat < bFloat {
-			return -1
-		} else if aFloat > bFloat {
-			return 1
-		}
-		return 0
-	}
-
-	// 字符串比较
-	aStr := fmt.Sprintf("%v", a)
-	bStr := fmt.Sprintf("%v", b)
-	if aStr < bStr {
-		return -1
-	} else if aStr > bStr {
-		return 1
-	}
-	return 0
-}
-
-// toFloat64 转换为float64
-func toFloat64(v interface{}) (float64, bool) {
-	switch val := v.(type) {
-	case int:
-		return float64(val), true
-	case int64:
-		return float64(val), true
-	case float32:
-		return float64(val), true
-	case float64:
-		return val, true
-	default:
-		return 0, false
-	}
-}

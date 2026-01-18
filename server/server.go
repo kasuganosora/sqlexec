@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/server/protocol"
+	"github.com/kasuganosora/sqlexec/pkg/config"
 	"github.com/kasuganosora/sqlexec/pkg/session"
 )
 

@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kasuganosora/sqlexec/pkg/optimizer"
-	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource"
 )
 
@@ -26,10 +24,21 @@ func NewBenchmarkSuite() *BenchmarkSuite {
 // Setup 测试环境设置
 func (bs *BenchmarkSuite) Setup() error {
 	// 创建内存数据源
-	memSource := resource.NewMemorySource()
+	factory := resource.NewMemoryFactory()
+	memSource, err := factory.Create(&resource.DataSourceConfig{
+		Type: resource.DataSourceTypeMemory,
+	})
+	if err != nil {
+		return err
+	}
+	
+	ms, ok := memSource.(*resource.MemorySource)
+	if !ok {
+		return fmt.Errorf("failed to create memory source")
+	}
 	
 	// 生成测试数据
-	if err := bs.generateTestTables(memSource); err != nil {
+	if err := bs.generateTestTables(ms); err != nil {
 		return err
 	}
 	
@@ -84,7 +93,12 @@ func (bs *BenchmarkSuite) createTable(dataSource *resource.MemorySource, tableNa
 		})
 	}
 	
-	if err := dataSource.CreateTable(context.Background(), tableName, columns); err != nil {
+	tableInfo := &resource.TableInfo{
+		Name:    tableName,
+		Columns: columns,
+	}
+	
+	if err := dataSource.CreateTable(context.Background(), tableInfo); err != nil {
 		return fmt.Errorf("create table failed: %w", err)
 	}
 	
@@ -119,8 +133,16 @@ func (bs *BenchmarkSuite) createTable(dataSource *resource.MemorySource, tableNa
 		data[i] = row
 	}
 	
-	// 批量插入
-	return dataSource.BatchInsert(context.Background(), tableName, columns, data)
+	// 逐行插入
+	var totalInserted int64
+	for i := 0; i < len(data); i++ {
+		count, err := dataSource.Insert(context.Background(), tableName, []resource.Row{data[i]}, nil)
+		if err != nil {
+			return fmt.Errorf("insert row failed: %w", err)
+		}
+		totalInserted += count
+	}
+	return nil
 }
 
 // ============================================================================
@@ -406,9 +428,8 @@ func BenchmarkSort_SingleColumn(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := suite.dataSource.Query(context.Background(), "small_table", &resource.QueryOptions{
-			OrderBy: []resource.OrderByItem{
-				{Column: "col0", Direction: "ASC"},
-			},
+			OrderBy: "col0",
+			Order:   "ASC",
 		})
 		if err != nil {
 			b.Fatalf("query failed: %v", err)
@@ -426,10 +447,8 @@ func BenchmarkSort_MultiColumn(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, err := suite.dataSource.Query(context.Background(), "small_table", &resource.QueryOptions{
-			OrderBy: []resource.OrderByItem{
-				{Column: "col4", Direction: "ASC"},
-				{Column: "col0", Direction: "DESC"},
-			},
+			OrderBy: "col4",
+			Order:   "ASC",
 		})
 		if err != nil {
 			b.Fatalf("query failed: %v", err)

@@ -166,7 +166,7 @@ func (c *StatementCache) evict() {
 // isTableRelated 检查查询是否与表相关
 func (c *StatementCache) isTableRelated(query, tableName string) bool {
 	// 简单实现：检查查询中是否包含表名
-	return containsTable(query, tableName)
+	return ContainsTable(query, tableName)
 }
 
 // getModifiedTables 获取修改的表列表
@@ -324,7 +324,7 @@ func (c *QueryCache) evict() {
 
 // isTableRelated 检查查询是否与表相关
 func (c *QueryCache) isTableRelated(query, tableName string) bool {
-	return containsTable(query, tableName)
+	return ContainsTable(query, tableName)
 }
 
 // ==================== 慢查询日志 ====================
