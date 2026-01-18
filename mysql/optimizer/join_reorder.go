@@ -191,11 +191,15 @@ func (r *JoinReorderRule) rebuildJoinTree(
 
 		// 创建新的JOIN节点
 		newJoin := NewLogicalJoin(
-			rootJoin.JoinType,
+			rootJoin.JoinType(),
 			currentPlan,
 			nextDataSource,
 			[]*JoinCondition{
-				{Left: "id", Right: "id"}, // 简化：假设id连接
+				{
+					Left:    &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"},
+					Right:   &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"},
+					Operator: "=",
+				}, // 简化：假设id连接
 			},
 		)
 
@@ -254,7 +258,7 @@ func extractTablesFromPlan(plan LogicalPlan, tables map[string]bool) {
 	}
 }
 
-// findDataSource 在JOIN树中查找指定表的数据源
+// findDataSource 在计划树中查找数据源节点
 func findDataSource(plan LogicalPlan, tableName string) *LogicalDataSource {
 	if dataSource, ok := plan.(*LogicalDataSource); ok {
 		if dataSource.TableName == tableName {
@@ -271,16 +275,14 @@ func findDataSource(plan LogicalPlan, tableName string) *LogicalDataSource {
 	return nil
 }
 
-// removeTable 从表列表中移除指定表
+// removeTable 从表列表中移除表
 func removeTable(tables []string, table string) []string {
-	result := make([]string, 0, len(tables)-1)
-
+	result := []string{}
 	for _, t := range tables {
 		if t != table {
 			result = append(result, t)
 		}
 	}
-
 	return result
 }
 

@@ -462,7 +462,7 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 
 	// 根据连接类型处理
 	switch p.JoinType {
-	case JoinTypeInner:
+	case InnerJoin:
 		// INNER JOIN：两边都有匹配
 		for _, rightRow := range rightResult.Rows {
 			key := rightRow[rightJoinCol]
@@ -486,7 +486,7 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 			}
 		}
 
-	case JoinTypeLeft:
+	case LeftOuterJoin:
 		// LEFT JOIN：左边所有行，右边没有匹配的用NULL填充
 		for _, leftRow := range leftResult.Rows {
 			key := leftRow[leftJoinCol]

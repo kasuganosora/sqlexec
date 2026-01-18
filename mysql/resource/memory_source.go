@@ -10,6 +10,7 @@ import (
 type MemorySource struct {
 	config      *DataSourceConfig
 	connected   bool
+	writable    bool
 	mu          sync.RWMutex
 	tables      map[string]*TableInfo
 	data        map[string][]Row
@@ -31,11 +32,17 @@ func (f *MemoryFactory) GetType() DataSourceType {
 
 // Create 实现DataSourceFactory接口
 func (f *MemoryFactory) Create(config *DataSourceConfig) (DataSource, error) {
+	// 内存数据源默认可写
+	writable := true
+	if config != nil {
+		writable = config.Writable
+	}
 	return &MemorySource{
-		config: config,
-		tables: make(map[string]*TableInfo),
-		data:   make(map[string][]Row),
-		autoID: make(map[string]int64),
+		config:   config,
+		writable: writable,
+		tables:   make(map[string]*TableInfo),
+		data:     make(map[string][]Row),
+		autoID:   make(map[string]int64),
 	}, nil
 }
 
@@ -65,6 +72,13 @@ func (s *MemorySource) IsConnected() bool {
 // GetConfig 获取数据源配置
 func (s *MemorySource) GetConfig() *DataSourceConfig {
 	return s.config
+}
+
+// IsWritable 检查是否可写
+func (s *MemorySource) IsWritable() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.writable
 }
 
 // GetTables 获取所有表
@@ -132,6 +146,11 @@ func (s *MemorySource) Insert(ctx context.Context, tableName string, rows []Row,
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	
+	// 检查是否可写
+	if !s.writable {
+		return 0, fmt.Errorf("data source is read-only")
+	}
+	
 	// 检查表是否存在
 	table, ok := s.tables[tableName]
 	if !ok {
@@ -183,6 +202,11 @@ func (s *MemorySource) Update(ctx context.Context, tableName string, filters []F
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	
+	// 检查是否可写
+	if !s.writable {
+		return 0, fmt.Errorf("data source is read-only")
+	}
+	
 	// 检查表是否存在
 	if _, ok := s.tables[tableName]; !ok {
 		return 0, fmt.Errorf("table %s not found", tableName)
@@ -213,6 +237,11 @@ func (s *MemorySource) Update(ctx context.Context, tableName string, filters []F
 func (s *MemorySource) Delete(ctx context.Context, tableName string, filters []Filter, options *DeleteOptions) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	
+	// 检查是否可写
+	if !s.writable {
+		return 0, fmt.Errorf("data source is read-only")
+	}
 	
 	// 检查表是否存在
 	if _, ok := s.tables[tableName]; !ok {

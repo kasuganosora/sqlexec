@@ -1,6 +1,7 @@
 package optimizer
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"reflect"
@@ -315,8 +316,18 @@ func (e *SimpleCardinalityEstimator) estimateRowCount(plan LogicalPlan) int64 {
 
 	if selection, ok := plan.(*LogicalSelection); ok {
 		if len(selection.children) > 0 {
-			baseCount := e.estimateRowCount(selection.children[0])
-			return e.EstimateFilter(getTableName(selection.children[0]), selection.Conditions...)
+			tableName := getTableName(selection.children[0])
+			conditions := selection.Conditions()
+			// 转换表达式到过滤器
+			filters := make([]resource.Filter, len(conditions))
+			for i, cond := range conditions {
+				filters[i] = resource.Filter{
+					Field:    expressionToString(cond),
+					Operator:  "=",
+					Value:     cond.Value,
+				}
+			}
+			return e.EstimateFilter(tableName, filters)
 		}
 	}
 

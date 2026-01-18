@@ -2,8 +2,10 @@ package optimizer
 
 import (
 	"context"
+	"fmt"
 
 	"mysql-proxy/mysql/parser"
+	"mysql-proxy/mysql/resource"
 )
 
 // JoinEliminationRule JOIN消除规则
@@ -26,7 +28,7 @@ func (r *JoinEliminationRule) Match(plan LogicalPlan) bool {
 // Apply 应用规则：消除冗余JOIN
 func (r *JoinEliminationRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
 	// 尝试消除每个JOIN节点
-	return r.eliminateJoins(plan)
+	return r.eliminateJoins(plan), nil
 }
 
 // eliminateJoins 递归消除JOIN节点
@@ -63,20 +65,21 @@ func (r *JoinEliminationRule) canEliminate(join *LogicalJoin) bool {
 	// 2. 连接条件包含等式
 	// 3. 右表（或左表）可以被推导
 
-	if len(join.Conditions) == 0 {
+	conditions := join.Conditions()
+	if len(conditions) == 0 {
 		return false // 没有连接条件，不能消除
 	}
 
 	// 检查连接条件是否为等值
-	for _, cond := range join.Conditions {
-		if !isEqualityCondition(cond) {
+	for i := range conditions {
+		if !isEqualityCondition(conditions[i]) {
 			return false // 不是等值条件，不能消除
 		}
 	}
 
 	// 检查是否为1:1关系
-	leftCardinality := r.cardinalityEstimator.EstimateRowCount(join.Children()[0])
-	rightCardinality := r.cardinalityEstimator.EstimateRowCount(join.Children()[1])
+	leftCardinality := r.cardinalityEstimator.EstimateFilter(getTableName(join.Children()[0]), []resource.Filter{})
+	rightCardinality := r.cardinalityEstimator.EstimateFilter(getTableName(join.Children()[1]), []resource.Filter{})
 
 	// 如果一边表很小（如1行），可以考虑消除
 	if leftCardinality <= 1 || rightCardinality <= 1 {
@@ -96,7 +99,7 @@ func (r *JoinEliminationRule) canEliminate(join *LogicalJoin) bool {
 func isEqualityCondition(cond *JoinCondition) bool {
 	// 简化：检查连接条件的结构
 	// 实际应该检查表达式类型
-	return cond.Left != "" && cond.Right != ""
+	return cond.Left != nil && cond.Right != nil && cond.Operator == "="
 }
 
 // isForeignKeyPrimaryKeyJoin 检查是否为外键-主键JOIN（简化版）
@@ -116,15 +119,34 @@ func (r *JoinEliminationRule) isForeignKeyPrimaryKeyJoin(join *LogicalJoin) bool
 	rightTable := rightTables[0]
 
 	// 检查连接条件
-	for _, cond := range join.Conditions {
+	conditions := join.Conditions()
+	for _, cond := range conditions {
 		// 如果连接条件是 id = other_id，可能是外键主键关系
-		if (cond.Left == "id" || cond.Left == "id_"+leftTable) &&
-			(cond.Right == rightTable+"_id" || cond.Right == "id") {
+		leftExpr := expressionToString(cond.Left)
+		rightExpr := expressionToString(cond.Right)
+		if (leftExpr == "id" || leftExpr == "id_"+leftTable) &&
+			(rightExpr == rightTable+"_id" || rightExpr == "id") {
 			return true
 		}
 	}
 
 	return false
+}
+
+// expressionToString 将表达式转换为字符串（简化版）
+func expressionToString(expr *parser.Expression) string {
+	if expr == nil {
+		return ""
+	}
+	// 简化实现：直接返回字面量值或列名
+	// 实际应该遍历表达式树
+	if expr.Type == parser.ExprTypeValue {
+		return fmt.Sprintf("%v", expr.Value)
+	}
+	if expr.Type == parser.ExprTypeColumn {
+		return expr.Column
+	}
+	return ""
 }
 
 // extractTableNames 从计划中提取表名

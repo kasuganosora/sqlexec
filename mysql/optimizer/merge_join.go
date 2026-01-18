@@ -90,6 +90,9 @@ func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*resource.QueryResult,
 	leftRows := p.sortByColumn(leftResult.Rows, leftJoinCol)
 	rightRows := p.sortByColumn(rightResult.Rows, rightJoinCol)
 
+	// 使用 joinConditionsString 处理连接条件字符串
+	_ = joinConditionsString(p.Conditions) // 简化：暂时忽略
+
 	// 4. 执行两路归并
 	output := p.mergeRows(leftRows, rightRows, leftJoinCol, rightJoinCol, p.JoinType)
 
@@ -160,7 +163,7 @@ func (p *PhysicalMergeJoin) mergeRows(
 	output := make([]resource.Row, 0, leftCount+rightCount)
 
 	switch joinType {
-	case JoinTypeInner:
+	case InnerJoin:
 		// INNER JOIN: 只有两边都有的行
 		for i < leftCount && j < rightCount {
 			leftVal := leftRows[i][leftCol]
@@ -183,7 +186,7 @@ func (p *PhysicalMergeJoin) mergeRows(
 			}
 		}
 
-	case JoinTypeLeft:
+	case LeftOuterJoin:
 		// LEFT JOIN: 左表所有行，右表匹配的行
 		for i < leftCount {
 			leftRow := leftRows[i]
@@ -213,7 +216,7 @@ func (p *PhysicalMergeJoin) mergeRows(
 			i++
 		}
 
-	case JoinTypeRight:
+	case RightOuterJoin:
 		// RIGHT JOIN: 右表所有行，左表匹配的行
 		for j < rightCount {
 			rightRow := rightRows[j]
@@ -245,7 +248,7 @@ func (p *PhysicalMergeJoin) mergeRows(
 
 	default:
 		// 其他JOIN类型：默认为INNER JOIN
-		return p.mergeRows(leftRows, rightRows, leftCol, rightCol, JoinTypeInner)
+		return p.mergeRows(leftRows, rightRows, leftCol, rightCol, InnerJoin)
 	}
 
 	return output

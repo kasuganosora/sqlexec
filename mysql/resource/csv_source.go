@@ -15,6 +15,7 @@ import (
 type CSVSource struct {
 	config      *DataSourceConfig
 	connected   bool
+	writable    bool // CSV文件默认只读
 	mu          sync.RWMutex
 	filePath    string
 	columns     []ColumnInfo
@@ -84,6 +85,7 @@ func (f *CSVFactory) Create(config *DataSourceConfig) (DataSource, error) {
 	
 	return &CSVSource{
 		config:    config,
+		writable:   false, // CSV文件默认只读
 		filePath:  config.Name,
 		delimiter: delimiter,
 		header:    header,
@@ -130,6 +132,13 @@ func (s *CSVSource) IsConnected() bool {
 // GetConfig 获取数据源配置
 func (s *CSVSource) GetConfig() *DataSourceConfig {
 	return s.config
+}
+
+// IsWritable 检查是否可写
+func (s *CSVSource) IsWritable() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.writable
 }
 
 // GetTables 获取所有表 (CSV文件本身作为一个表)

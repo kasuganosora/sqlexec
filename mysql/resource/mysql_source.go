@@ -14,6 +14,7 @@ type MySQLSource struct {
 	config    *DataSourceConfig
 	db        *sql.DB
 	connected bool
+	writable  bool // 是否可写
 	mu        sync.RWMutex
 }
 
@@ -41,8 +42,14 @@ func (f *MySQLFactory) Create(config *DataSourceConfig) (DataSource, error) {
 	if config.Database == "" {
 		config.Database = "test"
 	}
+	// MySQL默认可写
+	writable := true
+	if config != nil {
+		writable = config.Writable
+	}
 	return &MySQLSource{
-		config: config,
+		config:   config,
+		writable: writable,
 	}, nil
 }
 
@@ -102,6 +109,13 @@ func (s *MySQLSource) IsConnected() bool {
 // GetConfig 获取数据源配置
 func (s *MySQLSource) GetConfig() *DataSourceConfig {
 	return s.config
+}
+
+// IsWritable 检查是否可写
+func (s *MySQLSource) IsWritable() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.writable
 }
 
 // GetTables 获取所有表
@@ -252,14 +266,19 @@ func (s *MySQLSource) Insert(ctx context.Context, tableName string, rows []Row, 
 	if err := s.ensureConnected(ctx); err != nil {
 		return 0, err
 	}
-	
+
+	// 检查是否可写
+	if !s.writable {
+		return 0, fmt.Errorf("data source is read-only, INSERT operation not allowed")
+	}
+
 	if len(rows) == 0 {
 		return 0, nil
 	}
-	
+
 	// 构建插入SQL
 	query, args := s.buildInsertSQL(tableName, rows, options)
-	
+
 	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert data: %w", err)
@@ -278,24 +297,29 @@ func (s *MySQLSource) Update(ctx context.Context, tableName string, filters []Fi
 	if err := s.ensureConnected(ctx); err != nil {
 		return 0, err
 	}
-	
+
+	// 检查是否可写
+	if !s.writable {
+		return 0, fmt.Errorf("data source is read-only, UPDATE operation not allowed")
+	}
+
 	if len(updates) == 0 {
 		return 0, nil
 	}
-	
+
 	// 构建更新SQL
 	query, args := s.buildUpdateSQL(tableName, filters, updates, options)
-	
+
 	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("failed to update data: %w", err)
 	}
-	
+
 	affected, err := result.RowsAffected()
 	if err != nil {
 		return 0, fmt.Errorf("failed to get affected rows: %w", err)
 	}
-	
+
 	return affected, nil
 }
 
@@ -304,11 +328,16 @@ func (s *MySQLSource) Delete(ctx context.Context, tableName string, filters []Fi
 	if err := s.ensureConnected(ctx); err != nil {
 		return 0, err
 	}
-	
+
+	// 检查是否可写
+	if !s.writable {
+		return 0, fmt.Errorf("data source is read-only, DELETE operation not allowed")
+	}
+
 	if len(filters) == 0 && (options == nil || !options.Force) {
 		return 0, fmt.Errorf("delete operation requires filters or force option")
 	}
-	
+
 	// 构建删除SQL
 	query, args := s.buildDeleteSQL(tableName, filters, options)
 	

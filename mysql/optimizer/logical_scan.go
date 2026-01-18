@@ -53,10 +53,10 @@ func (p *LogicalDataSource) Schema() []ColumnInfo {
 
 // RowCount 返回预估行数
 func (p *LogicalDataSource) RowCount() int64 {
-	if p.TableInfo != nil {
-		return int64(len(p.TableInfo.Rows))
+	if p.Statistics != nil {
+		return p.Statistics.RowCount
 	}
-	return 0
+	return 1000 // 默认估计
 }
 
 // Table 返回表名
@@ -106,6 +106,11 @@ func (p *LogicalSelection) Conditions() []*parser.Expression {
 	return p.filterConditions
 }
 
+// GetConditions 返回过滤条件（用于避免与Conditions方法冲突）
+func (p *LogicalSelection) GetConditions() []*parser.Expression {
+	return p.filterConditions
+}
+
 // Selectivity 返回选择率
 func (p *LogicalSelection) Selectivity() float64 {
 	// 简化实现：默认0.1（10%的选择率）
@@ -115,8 +120,9 @@ func (p *LogicalSelection) Selectivity() float64 {
 // Explain 返回计划说明
 func (p *LogicalSelection) Explain() string {
 	condStr := ""
-	if len(p.Conditions) > 0 {
-		condStr = fmt.Sprintf(" WHERE %v", p.Conditions[0])
+	conditions := p.GetConditions()
+	if len(conditions) > 0 {
+		condStr = fmt.Sprintf(" WHERE %v", conditions[0])
 	}
 	return fmt.Sprintf("Selection%s", condStr)
 }
@@ -284,15 +290,20 @@ func (p *LogicalSort) Schema() []ColumnInfo {
 	return []ColumnInfo{}
 }
 
-// OrderByItems 返回排序列表
-func (p *LogicalSort) OrderByItems() []*OrderByItem {
-	return p.OrderByItems
+// GetOrderByItems 返回排序列表
+func (p *LogicalSort) GetOrderByItems() []*OrderByItem {
+	result := make([]*OrderByItem, 0, len(p.OrderBy))
+	for i := range p.OrderBy {
+		result = append(result, &p.OrderBy[i])
+	}
+	return result
 }
 
 // Explain 返回计划说明
 func (p *LogicalSort) Explain() string {
 	items := ""
-	for i, item := range p.OrderBy {
+	orderByItems := p.GetOrderByItems()
+	for i, item := range orderByItems {
 		if i > 0 {
 			items += ", "
 		}
@@ -432,36 +443,52 @@ func (p *LogicalAggregate) AggFuncs() []*AggregationItem {
 	return p.aggFuncs
 }
 
+// GetAggFuncs 返回聚合函数列表（用于避免与方法名冲突）
+func (p *LogicalAggregate) GetAggFuncs() []*AggregationItem {
+	return p.aggFuncs
+}
+
 // GroupByCols 返回分组列列表
 func (p *LogicalAggregate) GroupByCols() []string {
+	return p.groupByFields
+}
+
+// GetGroupByCols 返回分组列列表（用于避免与方法名冲突）
+func (p *LogicalAggregate) GetGroupByCols() []string {
 	return p.groupByFields
 }
 
 // Explain 返回计划说明
 func (p *LogicalAggregate) Explain() string {
 	aggStr := ""
-	for i, agg := range p.AggFuncs {
+	aggFuncs := p.GetAggFuncs()
+	for i, agg := range aggFuncs {
 		if i > 0 {
 			aggStr += ", "
 		}
 		aggStr += fmt.Sprintf("%s(%v)", agg.Type, agg.Expr)
 	}
 	groupStr := ""
-	if len(p.GroupByCols) > 0 {
-		groupStr = fmt.Sprintf(" GROUP BY %v", p.GroupByCols)
+	groupByCols := p.GetGroupByCols()
+	if len(groupByCols) > 0 {
+		groupStr = fmt.Sprintf(" GROUP BY %v", groupByCols)
 	}
 	return fmt.Sprintf("Aggregate(%s%s)", aggStr, groupStr)
 }
 
 // LogicalUnion 逻辑联合
 type LogicalUnion struct {
-	children []LogicalPlan
+	children    []LogicalPlan
+	unionType   string
+	all         bool
 }
 
 // NewLogicalUnion 创建逻辑联合
 func NewLogicalUnion(children ...LogicalPlan) *LogicalUnion {
 	return &LogicalUnion{
-		children: children,
+		children:    children,
+		unionType:   "UNION",
+		all:         false,
 	}
 }
 

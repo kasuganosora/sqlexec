@@ -561,6 +561,65 @@
 
 ---
 
+## QueryBuilder 集成 ✅ 已完成
+
+**目标**: 将 QueryBuilder 集成到 MySQL 服务器，实现完整的 SQL 查询执行流程
+
+### 已完成 ✓
+
+- [x] 为 Server 添加 DataSourceManager 支持
+  - [x] 添加 dataSourceMgr 和 defaultDataSource 字段
+  - [x] 实现 SetDataSource() 和 GetDataSource() 方法
+  - [x] 实现 SetDataSourceManager() 和 GetDataSourceManager() 方法
+
+- [x] 集成 QueryBuilder 到查询处理流程
+  - [x] 修改 handleQuery() 方法
+  - [x] 添加 handleSelectQuery() 处理 SELECT 查询
+  - [x] 添加 handleDMLQuery() 处理 DML 操作
+  - [x] 添加 handleDDLQuery() 处理 DDL 操作
+
+- [x] 实现实际结果集返回
+  - [x] 添加 sendQueryResult() 方法
+  - [x] 实现 MySQL 类型转换 (getMySQLType)
+  - [x] 实现列标志处理 (getColumnFlags)
+  - [x] 实现值格式化 (formatValue)
+
+- [x] 创建集成测试
+  - [x] 完整的 SELECT 查询测试
+  - [x] WHERE 条件过滤测试
+  - [x] ORDER BY 排序测试
+  - [x] LIMIT 分页测试
+  - [x] INSERT 操作测试
+  - [x] UPDATE 操作测试
+  - [x] DELETE 操作测试
+
+### 测试结果
+```
+✅ 测试1: SELECT * FROM users - 查询到3行数据
+✅ 测试2: SELECT * FROM users WHERE age > 25 - 查询到2行数据
+✅ 测试3: SELECT * FROM users ORDER BY age - 查询到3行数据
+✅ 测试4: SELECT * FROM users LIMIT 2 - 查询到2行数据
+✅ 测试5: INSERT - 插入成功，当前共4行
+✅ 测试6: UPDATE - 更新成功
+✅ 测试7: DELETE - 删除成功，当前共3行
+```
+
+### 查询处理流程
+```
+SELECT 查询: COM_QUERY → Parser → Handler → handleSelectQuery → QueryBuilder → DataSource → sendQueryResult
+DML 操作:  COM_QUERY → Parser → Handler → handleDMLQuery → QueryBuilder → DataSource → SendOK
+DDL 操作:  COM_QUERY → Parser → Handler → handleDDLQuery → QueryBuilder → DataSource → SendOK
+```
+
+### 代码变更
+- `mysql/service.go`: 新增 ~200 行
+- `test_querybuilder_integration.go`: 新增 ~240 行
+
+### 相关文档
+- [QUERYBUILDER_INTEGRATION_COMPLETE.md](./QUERYBUILDER_INTEGRATION_COMPLETE.md) - 完成报告
+
+---
+
 ## 🔗 相关文档
 - [TIDB_INTEGRATION.md](./TIDB_INTEGRATION.md) - TiDB 集成研究报告
 - [mysql/resource/README.md](./mysql/resource/README.md) - 数据源接口文档

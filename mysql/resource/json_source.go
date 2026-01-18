@@ -14,6 +14,7 @@ import (
 type JSONSource struct {
 	config      *DataSourceConfig
 	connected   bool
+	writable    bool // JSON文件默认只读
 	mu          sync.RWMutex
 	filePath    string
 	columns     []ColumnInfo
@@ -71,9 +72,10 @@ func (f *JSONFactory) Create(config *DataSourceConfig) (DataSource, error) {
 			recordsPath = str
 		}
 	}
-	
+
 	return &JSONSource{
 		config:      config,
+		writable:    false, // JSON文件默认只读
 		filePath:    config.Name,
 		chunkSize:   chunkSize,
 		workers:     workers,
@@ -119,6 +121,13 @@ func (s *JSONSource) IsConnected() bool {
 // GetConfig 获取数据源配置
 func (s *JSONSource) GetConfig() *DataSourceConfig {
 	return s.config
+}
+
+// IsWritable 检查是否可写
+func (s *JSONSource) IsWritable() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.writable
 }
 
 // GetTables 获取所有表

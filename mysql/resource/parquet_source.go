@@ -13,6 +13,7 @@ import (
 type ParquetSource struct {
 	config      *DataSourceConfig
 	connected   bool
+	writable    bool // Parquet文件默认只读
 	mu          sync.RWMutex
 	filePath    string
 	columns     []ColumnInfo
@@ -58,6 +59,7 @@ func (f *ParquetFactory) Create(config *DataSourceConfig) (DataSource, error) {
 	
 	return &ParquetSource{
 		config:    config,
+		writable:  false, // Parquet文件默认只读
 		filePath:  config.Name,
 		batchSize: batchSize,
 		workers:   workers,
@@ -101,6 +103,13 @@ func (s *ParquetSource) IsConnected() bool {
 // GetConfig 获取数据源配置
 func (s *ParquetSource) GetConfig() *DataSourceConfig {
 	return s.config
+}
+
+// IsWritable 检查是否可写
+func (s *ParquetSource) IsWritable() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.writable
 }
 
 // GetTables 获取所有表

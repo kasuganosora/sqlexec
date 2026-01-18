@@ -8,6 +8,7 @@ import (
 	"log"
 	"mysql-proxy/mysql/parser"
 	"mysql-proxy/mysql/protocol"
+	"mysql-proxy/mysql/resource"
 	"mysql-proxy/mysql/session"
 	"net"
 	"strings"
@@ -48,10 +49,12 @@ func getSession(ctx context.Context) *session.Session {
 
 // Server MySQL 服务器
 type Server struct {
-	sessionMgr *session.SessionMgr
-	mu         sync.RWMutex
-	parser     *parser.Parser
-	handler    *parser.HandlerChain
+	sessionMgr        *session.SessionMgr
+	dataSourceMgr     *resource.DataSourceManager
+	defaultDataSource resource.DataSource
+	mu                sync.RWMutex
+	parser            *parser.Parser
+	handler           *parser.HandlerChain
 }
 
 // NewServer 创建新的服务器实例
@@ -78,10 +81,47 @@ func NewServer() *Server {
 	chain.SetDefaultHandler(parser.NewDefaultHandler())
 	
 	return &Server{
-		sessionMgr: session.NewSessionMgr(context.Background(), session.NewMemoryDriver()),
-		parser:     p,
-		handler:    chain,
+		sessionMgr:    session.NewSessionMgr(context.Background(), session.NewMemoryDriver()),
+		dataSourceMgr: resource.GetDefaultManager(),
+		parser:        p,
+		handler:       chain,
 	}
+}
+
+// SetDataSource 设置默认数据源
+func (s *Server) SetDataSource(ds resource.DataSource) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	if !ds.IsConnected() {
+		if err := ds.Connect(context.Background()); err != nil {
+			return fmt.Errorf("failed to connect data source: %w", err)
+		}
+	}
+	
+	s.defaultDataSource = ds
+	return nil
+}
+
+// GetDataSource 获取默认数据源
+func (s *Server) GetDataSource() resource.DataSource {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.defaultDataSource
+}
+
+// SetDataSourceManager 设置数据源管理器
+func (s *Server) SetDataSourceManager(mgr *resource.DataSourceManager) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.dataSourceMgr = mgr
+}
+
+// GetDataSourceManager 获取数据源管理器
+func (s *Server) GetDataSourceManager() *resource.DataSourceManager {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.dataSourceMgr
 }
 
 // HandleConn 用于处理MYSQL的链接
@@ -271,17 +311,17 @@ func (s *Server) handleQuery(ctx context.Context, conn net.Conn, packet *protoco
 	// 根据结果类型返回不同的响应
 	switch r := result.(type) {
 	case *parser.QueryResult:
-		// SELECT 查询
+		// SELECT 查询 - 使用QueryBuilder执行
 		log.Printf("SELECT 查询结果，涉及表: %v, 列: %v", r.Tables, r.Columns)
-		return s.sendResultSet(ctx, conn, sess)
+		return s.handleSelectQuery(ctx, conn, sess, query)
 	case *parser.DMLResult:
-		// INSERT/UPDATE/DELETE
-		log.Printf("DML 操作完成: %s, 影响行数: %d", r.Type, r.Affected)
-		return protocol.SendOK(conn, sess.GetNextSequenceID())
+		// INSERT/UPDATE/DELETE - 使用QueryBuilder执行
+		log.Printf("DML 操作，类型: %s, 涉及表: %v", r.Type, r.Tables)
+		return s.handleDMLQuery(ctx, conn, sess, query, r.Type)
 	case *parser.DDLResult:
-		// CREATE/DROP/ALTER
-		log.Printf("DDL 操作完成: %s, 涉及表: %v", r.Type, r.Tables)
-		return protocol.SendOK(conn, sess.GetNextSequenceID())
+		// CREATE/DROP/ALTER - 使用QueryBuilder执行
+		log.Printf("DDL 操作，类型: %s, 涉及表: %v", r.Type, r.Tables)
+		return s.handleDDLQuery(ctx, conn, sess, query, r.Type)
 	case *parser.SetResult:
 		// SET 命令
 		log.Printf("设置变量完成: %d 个变量", r.Count)
@@ -860,6 +900,204 @@ func (s *Server) sendVariablesResultSet(ctx context.Context, conn net.Conn, sess
 	}
 
 	return nil
+}
+
+// handleSelectQuery 处理SELECT查询 - 使用QueryBuilder执行实际查询
+func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *session.Session, query string) error {
+	// 获取数据源
+	ds := s.GetDataSource()
+	if ds == nil {
+		log.Printf("未设置数据源，返回默认结果")
+		return s.sendResultSet(ctx, conn, sess)
+	}
+
+	// 使用QueryBuilder构建并执行查询
+	builder := parser.NewQueryBuilder(ds)
+	result, err := builder.BuildAndExecute(ctx, query)
+	if err != nil {
+		log.Printf("执行查询失败: %v", err)
+		return protocol.SendError(conn, fmt.Errorf("查询执行错误: %w", err))
+	}
+
+	// 发送实际查询结果
+	return s.sendQueryResult(ctx, conn, sess, result)
+}
+
+// handleDMLQuery 处理DML查询 - 使用QueryBuilder执行
+func (s *Server) handleDMLQuery(ctx context.Context, conn net.Conn, sess *session.Session, query string, stmtType string) error {
+	// 获取数据源
+	ds := s.GetDataSource()
+	if ds == nil {
+		log.Printf("未设置数据源，返回OK")
+		return protocol.SendOK(conn, sess.GetNextSequenceID())
+	}
+
+	// 使用QueryBuilder构建并执行DML操作
+	builder := parser.NewQueryBuilder(ds)
+	dmlResult, err := builder.BuildAndExecute(ctx, query)
+	if err != nil {
+		log.Printf("执行DML操作失败: %v", err)
+		return protocol.SendError(conn, fmt.Errorf("DML执行错误: %w", err))
+	}
+
+	log.Printf("%s 操作完成，影响行数: %d", stmtType, dmlResult.Total)
+	return protocol.SendOK(conn, sess.GetNextSequenceID())
+}
+
+// handleDDLQuery 处理DDL查询 - 使用QueryBuilder执行
+func (s *Server) handleDDLQuery(ctx context.Context, conn net.Conn, sess *session.Session, query string, stmtType string) error {
+	// 获取数据源
+	ds := s.GetDataSource()
+	if ds == nil {
+		log.Printf("未设置数据源，返回OK")
+		return protocol.SendOK(conn, sess.GetNextSequenceID())
+	}
+
+	// 使用QueryBuilder构建并执行DDL操作
+	builder := parser.NewQueryBuilder(ds)
+	_, err := builder.BuildAndExecute(ctx, query)
+	if err != nil {
+		log.Printf("执行DDL操作失败: %v", err)
+		return protocol.SendError(conn, fmt.Errorf("DDL执行错误: %w", err))
+	}
+
+	log.Printf("%s 操作完成", stmtType)
+	return protocol.SendOK(conn, sess.GetNextSequenceID())
+}
+
+// sendQueryResult 发送查询结果集
+func (s *Server) sendQueryResult(ctx context.Context, conn net.Conn, sess *session.Session, result *resource.QueryResult) error {
+	var err error
+
+	// 发送列数
+	columnCountPacket := &protocol.ColumnCountPacket{
+		Packet: protocol.Packet{
+			SequenceID: sess.GetNextSequenceID(),
+		},
+		ColumnCount: uint64(len(result.Columns)),
+	}
+	columnCountData, err := columnCountPacket.MarshalDefault()
+	if err != nil {
+		return err
+	}
+	if _, err := conn.Write(columnCountData); err != nil {
+		return err
+	}
+
+	// 发送列定义
+	for _, col := range result.Columns {
+		fieldMeta := protocol.FieldMetaPacket{
+			Packet: protocol.Packet{
+				SequenceID: sess.GetNextSequenceID(),
+			},
+			FieldMeta: protocol.FieldMeta{
+				Catalog:                   "def",
+				Schema:                    "",
+				Table:                     "",
+				OrgTable:                  "",
+				Name:                      col.Name,
+				OrgName:                   col.Name,
+				LengthOfFixedLengthFields:  12,
+				CharacterSet:              33,
+				ColumnLength:              255,
+				Type:                      s.getMySQLType(col.Type),
+				Flags:                     s.getColumnFlags(col),
+				Decimals:                  0,
+				Reserved:                  "\x00\x00",
+			},
+		}
+		fieldMetaData, err := fieldMeta.MarshalDefault()
+		if err != nil {
+			return err
+		}
+		if _, err := conn.Write(fieldMetaData); err != nil {
+			return err
+		}
+	}
+
+	// 发送列结束包
+	eofPacket := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
+	eofData, err := eofPacket.Marshal()
+	if err != nil {
+		return err
+	}
+	if _, err := conn.Write(eofData); err != nil {
+		return err
+	}
+
+	// 发送数据行
+	for _, row := range result.Rows {
+		rowData := protocol.RowDataPacket{
+			Packet: protocol.Packet{
+				SequenceID: sess.GetNextSequenceID(),
+			},
+			RowData: make([]string, len(result.Columns)),
+		}
+
+		for i, col := range result.Columns {
+			val := row[col.Name]
+			rowData.RowData[i] = s.formatValue(val)
+		}
+
+		rowDataBytes, err := rowData.Marshal()
+		if err != nil {
+			return err
+		}
+		if _, err := conn.Write(rowDataBytes); err != nil {
+			return err
+		}
+	}
+
+	// 发送结果集结束包
+	finalEof := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
+	finalEofData, err := finalEof.Marshal()
+	if err != nil {
+		return err
+	}
+	if _, err := conn.Write(finalEofData); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// getMySQLType 获取MySQL类型
+func (s *Server) getMySQLType(typeStr string) byte {
+	typeStr = strings.ToLower(typeStr)
+	switch {
+	case typeStr == "int", typeStr == "integer":
+		return protocol.MYSQL_TYPE_LONG
+	case typeStr == "bigint":
+		return protocol.MYSQL_TYPE_LONGLONG
+	case typeStr == "float", typeStr == "double":
+		return protocol.MYSQL_TYPE_DOUBLE
+	case typeStr == "string", typeStr == "varchar", typeStr == "text":
+		return protocol.MYSQL_TYPE_VAR_STRING
+	case typeStr == "bool", typeStr == "boolean":
+		return protocol.MYSQL_TYPE_TINY
+	default:
+		return protocol.MYSQL_TYPE_VAR_STRING
+	}
+}
+
+// getColumnFlags 获取列标志
+func (s *Server) getColumnFlags(col resource.ColumnInfo) uint16 {
+	var flags uint16
+	if col.Primary {
+		flags |= protocol.PRI_KEY_FLAG
+	}
+	if !col.Nullable {
+		flags |= protocol.NOT_NULL_FLAG
+	}
+	return flags
+}
+
+// formatValue 格式化值
+func (s *Server) formatValue(val interface{}) string {
+	if val == nil {
+		return "NULL"
+	}
+	return fmt.Sprintf("%v", val)
 }
 
 // countParams 统计SQL中的参数数量

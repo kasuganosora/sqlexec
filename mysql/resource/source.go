@@ -34,6 +34,7 @@ type DataSourceConfig struct {
 	Username string                    `json:"username,omitempty"`
 	Password string                    `json:"password,omitempty"`
 	Database string                    `json:"database,omitempty"`
+	Writable  bool                      `json:"writable,omitempty"` // 是否可写，默认true
 	Options  map[string]interface{}    `json:"options,omitempty"`
 }
 
@@ -80,6 +81,7 @@ type QueryOptions struct {
 	Order     string     `json:"order,omitempty"` // ASC, DESC
 	Limit     int        `json:"limit,omitempty"`
 	Offset    int        `json:"offset,omitempty"`
+	SelectAll bool       `json:"select_all,omitempty"` // 是否是 select *
 }
 
 // InsertOptions 插入选项
@@ -107,6 +109,9 @@ type DataSource interface {
 	
 	// IsConnected 检查是否已连接
 	IsConnected() bool
+	
+	// IsWritable 检查是否可写
+	IsWritable() bool
 	
 	// GetConfig 获取数据源配置
 	GetConfig() *DataSourceConfig

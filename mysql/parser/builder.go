@@ -62,6 +62,16 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 	// 构建 QueryOptions
 	options := &resource.QueryOptions{}
 
+	// 检查是否是 select *
+	isSelectAll := false
+	for _, col := range stmt.Columns {
+		if col.IsWildcard {
+			isSelectAll = true
+			break
+		}
+	}
+	options.SelectAll = isSelectAll
+
 	// 处理 WHERE 条件
 	if stmt.Where != nil {
 		options.Filters = b.convertExpressionToFilters(stmt.Where)
@@ -89,6 +99,80 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
 
+	// 如果是 select *，需要确保返回的行数据不包含隐藏字段
+	if isSelectAll {
+		// 数据源层已经过滤了 _ttl 字段，这里再次确保
+		// 构建新的行数据，只包含列定义中的字段
+		filteredRows := make([]resource.Row, 0, len(result.Rows))
+		for _, row := range result.Rows {
+			filteredRow := make(resource.Row)
+			for _, col := range result.Columns {
+				if val, exists := row[col.Name]; exists {
+					filteredRow[col.Name] = val
+				}
+			}
+			filteredRows = append(filteredRows, filteredRow)
+		}
+		result.Rows = filteredRows
+		return result, nil
+	}
+
+	// 如果不是 select *，则需要根据 SELECT 的列来过滤结果
+	if len(stmt.Columns) > 0 {
+		// 构建列名列表
+		selectedColumns := make([]string, 0, len(stmt.Columns))
+		for _, col := range stmt.Columns {
+			// 跳过空列名和以 _ 开头的列名
+			if len(col.Name) > 0 && col.Name[0] != '_' {
+				selectedColumns = append(selectedColumns, col.Name)
+			}
+		}
+
+		// 如果没有有效的列名，则使用数据源返回的列
+		if len(selectedColumns) == 0 {
+			return result, nil
+		}
+
+		// 构建新的列定义
+		newColumns := make([]resource.ColumnInfo, 0, len(selectedColumns))
+		for _, colName := range selectedColumns {
+			// 查找对应的列定义
+			found := false
+			for _, col := range result.Columns {
+				if col.Name == colName {
+					newColumns = append(newColumns, col)
+					found = true
+					break
+				}
+			}
+			// 如果没有找到列定义（比如 _ttl 这种隐藏字段），则创建一个基本的列定义
+			if !found {
+				newColumns = append(newColumns, resource.ColumnInfo{
+					Name:     colName,
+					Type:     "int64",
+					Nullable:  true,
+					Primary:   false,
+				})
+			}
+		}
+
+		// 过滤行数据，只保留选择的列
+		filteredRows := make([]resource.Row, 0, len(result.Rows))
+		for _, row := range result.Rows {
+			filteredRow := make(resource.Row)
+			for _, colName := range selectedColumns {
+				if val, exists := row[colName]; exists {
+					filteredRow[colName] = val
+				}
+			}
+			filteredRows = append(filteredRows, filteredRow)
+		}
+
+		// 更新结果
+		result.Columns = newColumns
+		result.Rows = filteredRows
+	}
+
 	// TODO: 处理 JOIN
 	// TODO: 处理聚合函数
 	// TODO: 处理 GROUP BY
@@ -99,6 +183,11 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 
 // executeInsert 执行 INSERT
 func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement) (*resource.QueryResult, error) {
+	// 检查数据源是否可写
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is read-only, INSERT operation not allowed")
+	}
+
 	// 转换值为行数据
 	rows := make([]resource.Row, 0, len(stmt.Values))
 	for _, values := range stmt.Values {
@@ -127,6 +216,11 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 
 // executeUpdate 执行 UPDATE
 func (b *QueryBuilder) executeUpdate(ctx context.Context, stmt *UpdateStatement) (*resource.QueryResult, error) {
+	// 检查数据源是否可写
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is read-only, UPDATE operation not allowed")
+	}
+
 	// 转换 WHERE 条件
 	var filters []resource.Filter
 	if stmt.Where != nil {
@@ -155,6 +249,11 @@ func (b *QueryBuilder) executeUpdate(ctx context.Context, stmt *UpdateStatement)
 
 // executeDelete 执行 DELETE
 func (b *QueryBuilder) executeDelete(ctx context.Context, stmt *DeleteStatement) (*resource.QueryResult, error) {
+	// 检查数据源是否可写
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is read-only, DELETE operation not allowed")
+	}
+
 	// 转换 WHERE 条件
 	var filters []resource.Filter
 	if stmt.Where != nil {
@@ -177,6 +276,11 @@ func (b *QueryBuilder) executeDelete(ctx context.Context, stmt *DeleteStatement)
 
 // executeCreate 执行 CREATE
 func (b *QueryBuilder) executeCreate(ctx context.Context, stmt *CreateStatement) (*resource.QueryResult, error) {
+	// 检查数据源是否可写
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is read-only, CREATE operation not allowed")
+	}
+
 	if stmt.Type == "TABLE" {
 		tableInfo := &resource.TableInfo{
 			Name:    stmt.Name,
@@ -208,6 +312,11 @@ func (b *QueryBuilder) executeCreate(ctx context.Context, stmt *CreateStatement)
 
 // executeDrop 执行 DROP
 func (b *QueryBuilder) executeDrop(ctx context.Context, stmt *DropStatement) (*resource.QueryResult, error) {
+	// 检查数据源是否可写
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is read-only, DROP operation not allowed")
+	}
+
 	if stmt.Type == "TABLE" {
 		err := b.dataSource.DropTable(ctx, stmt.Name)
 		if err != nil {
