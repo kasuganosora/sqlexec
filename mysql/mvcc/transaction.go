@@ -58,6 +58,24 @@ func (t *Transaction) Age() time.Duration {
 	return time.Since(t.startTime)
 }
 
+func (t *Transaction) SetStatus(status TransactionStatus) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.status = status
+}
+
+func (t *Transaction) GetStatus() TransactionStatus {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.status
+}
+
+func (t *Transaction) SetEndTime(endTime time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.endTime = endTime
+}
+
 type Command interface {
 	Apply() error
 	Rollback() error

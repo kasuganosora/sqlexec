@@ -416,3 +416,33 @@ func (m *Manager) GetCommitLog() *CommitLog {
 func (m *Manager) GetVisibilityChecker() *VisibilityChecker {
 	return m.checker
 }
+
+// SetTransactionStatus 设置事务状态（用于外部事务管理）
+func (m *Manager) SetTransactionStatus(xid XID, status TransactionStatus) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	txn, exists := m.transactions[xid]
+	if !exists {
+		return fmt.Errorf("transaction not found: %d", xid)
+	}
+
+	txn.SetStatus(status)
+
+	if status == TxnStatusCommitted || status == TxnStatusAborted {
+		txn.SetEndTime(time.Now())
+		m.clog.SetStatus(xid, status)
+		delete(m.transactions, xid)
+		delete(m.snapshots, xid)
+	}
+
+	return nil
+}
+
+// GetTransaction 获取事务
+func (m *Manager) GetTransaction(xid XID) (*Transaction, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	txn, exists := m.transactions[xid]
+	return txn, exists
+}
