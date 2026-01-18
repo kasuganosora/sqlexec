@@ -145,8 +145,7 @@ func (p *ConnectionPool) Close() error {
 	defer p.mu.Unlock()
 
 	for e := p.connections.Front(); e != nil; e = e.Next() {
-		wrapper, ok := e.Value.(*ConnectionWrapper)
-		if ok {
+		if _, ok := e.Value.(*ConnectionWrapper); ok {
 			p.connections.Remove(e)
 			// 注意：这里不关闭实际的数据库连接，因为它由外部管理
 			p.metrics.IncrementDestroyed()

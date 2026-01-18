@@ -169,7 +169,6 @@ func (s *MySQLSource) GetTableInfo(ctx context.Context, tableName string) (*Tabl
 			Name:    colName,
 			Type:    fieldType,
 			Primary:  key == "PRI",
-			Default: nil,
 		}
 
 		if defaultVal.Valid {
@@ -218,14 +217,14 @@ func (s *MySQLSource) Query(ctx context.Context, tableName string, options *Quer
 	}
 	defer rows.Close()
 
-	// 获取表信息
-	tableInfo, err := s.GetTableInfo(ctx, tableName)
+	// 获取列类型信息
+	columnTypes, err := rows.ColumnTypes()
 	if err != nil {
 		return nil, err
 	}
 
 	// 转换结果
-	result, err := s.convertRows(rows, tableInfo.Columns)
+	result, err := s.convertRows(rows, columnTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -445,22 +444,14 @@ func (s *MySQLSource) Execute(ctx context.Context, sql string) (*QueryResult, er
 	}
 	defer rows.Close()
 
-	// 获取列信息
-	columns, err := rows.Columns()
+	// 获取列类型信息
+	columnTypes, err := rows.ColumnTypes()
 	if err != nil {
 		return nil, err
 	}
 
-	columnInfos := make([]ColumnInfo, 0)
-	for _, col := range columns {
-		columnInfos = append(columnInfos, ColumnInfo{
-			Name: col.Name(),
-			Type: col.DatabaseTypeName(),
-		})
-	}
-
 	// 转换结果
-	result, err := s.convertRows(rows, columnInfos)
+	result, err := s.convertRows(rows, columnTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -697,7 +688,7 @@ func (s *MySQLSource) buildCreateTableSQL(tableInfo *TableInfo) string {
 }
 
 // convertRows 转换查询结果
-func (s *MySQLSource) convertRows(rows *sql.Rows, columns []sql.ColumnType) (*QueryResult, error) {
+func (s *MySQLSource) convertRows(rows *sql.Rows, columns []*sql.ColumnType) (*QueryResult, error) {
 	result := make([]Row, 0)
 
 	for rows.Next() {
@@ -718,13 +709,7 @@ func (s *MySQLSource) convertRows(rows *sql.Rows, columns []sql.ColumnType) (*Qu
 		// 填充映射
 		for i, col := range columns {
 			// 获取列名
-			var colName string
-			if scanner, ok := col.(interface{ Name() string }); ok {
-				colName = scanner.Name()
-			} else {
-				// 备用方案：使用索引
-				colName = fmt.Sprintf("col_%d", i)
-			}
+			colName := col.Name()
 			row[colName] = values[i]
 		}
 
@@ -734,19 +719,9 @@ func (s *MySQLSource) convertRows(rows *sql.Rows, columns []sql.ColumnType) (*Qu
 	// 转换ColumnInfo
 	columnInfos := make([]ColumnInfo, 0, len(columns))
 	for _, col := range columns {
-		var colName string
-		var colType string
-		if scanner, ok := col.(interface{ Name() string; DatabaseTypeName() string }); ok {
-			colName = scanner.Name()
-			colType = scanner.DatabaseTypeName()
-		} else {
-			// 备用方案
-			colName = fmt.Sprintf("col_%d", 0)
-			colType = "UNKNOWN"
-		}
 		columnInfos = append(columnInfos, ColumnInfo{
-			Name: colName,
-			Type: colType,
+			Name: col.Name(),
+			Type: col.DatabaseTypeName(),
 		})
 	}
 
