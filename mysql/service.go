@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mysql-proxy/mysql/monitor"
 	"mysql-proxy/mysql/optimizer"
 	"mysql-proxy/mysql/parser"
+	"mysql-proxy/mysql/pool"
 	"mysql-proxy/mysql/protocol"
 	"mysql-proxy/mysql/resource"
 	"mysql-proxy/mysql/session"
@@ -58,6 +60,14 @@ type Server struct {
 	handler           *parser.HandlerChain
 	optimizedExecutor *optimizer.OptimizedExecutor
 	useOptimizer      bool
+	
+	// 池系统
+	goroutinePool     *pool.GoroutinePool
+	objectPool        *pool.ObjectPool
+	
+	// 监控系统
+	metricsCollector  *monitor.MetricsCollector
+	cacheManager     *monitor.CacheManager
 }
 
 // NewServer 创建新的服务器实例
@@ -83,12 +93,33 @@ func NewServer() *Server {
 	chain.RegisterHandler("USE", parser.NewUseHandler())
 	chain.SetDefaultHandler(parser.NewDefaultHandler())
 	
+	// 创建池系统
+	goroutinePool := pool.NewGoroutinePool(10, 1000) // 10个worker，队列大小1000
+	
+	objectPool := pool.NewObjectPool(
+		func() (interface{}, error) {
+			return make(map[string]interface{}), nil
+		},
+		func(obj interface{}) error {
+			return nil
+		},
+		100, // 最大对象数
+	)
+	
+	// 创建监控系统
+	metricsCollector := monitor.NewMetricsCollector()
+	cacheManager := monitor.NewCacheManager(1000, 1000, 100)
+	
 	server := &Server{
-		sessionMgr:    session.NewSessionMgr(context.Background(), session.NewMemoryDriver()),
-		dataSourceMgr: resource.GetDefaultManager(),
-		parser:        p,
-		handler:       chain,
-		useOptimizer:   false, // 默认关闭优化器
+		sessionMgr:       session.NewSessionMgr(context.Background(), session.NewMemoryDriver()),
+		dataSourceMgr:    resource.GetDefaultManager(),
+		parser:           p,
+		handler:          chain,
+		useOptimizer:     false, // 默认关闭优化器
+		goroutinePool:    goroutinePool,
+		objectPool:       objectPool,
+		metricsCollector: metricsCollector,
+		cacheManager:     cacheManager,
 	}
 
 	return server
@@ -931,6 +962,22 @@ func (s *Server) sendVariablesResultSet(ctx context.Context, conn net.Conn, sess
 
 // handleSelectQuery 处理SELECT查询 - 使用OptimizedExecutor执行查询
 func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *session.Session, query string) error {
+	// 开始监控查询
+	startTime := time.Now()
+	s.metricsCollector.StartQuery()
+	defer s.metricsCollector.EndQuery()
+
+	// 检查缓存（使用查询缓存）
+	queryCache := s.cacheManager.GetQueryCache()
+	if cachedResult, found := queryCache.Get(query); found {
+		log.Printf("查询命中缓存: %s", query)
+		result := cachedResult.(*resource.QueryResult)
+		
+		// 记录缓存命中
+		s.metricsCollector.RecordQuery(time.Since(startTime), true, "")
+		return s.sendQueryResult(ctx, conn, sess, result)
+	}
+
 	// 获取数据源
 	ds := s.GetDataSource()
 	if ds == nil {
@@ -943,13 +990,17 @@ func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *ses
 	parseResult, err := adapter.Parse(query)
 	if err != nil {
 		log.Printf("解析SQL失败: %v", err)
+		s.metricsCollector.RecordError("SQL_PARSE_ERROR")
 		return protocol.SendError(conn, fmt.Errorf("SQL解析错误: %w", err))
 	}
 
 	if !parseResult.Success {
 		log.Printf("解析SQL失败: %s", parseResult.Error)
+		s.metricsCollector.RecordError("SQL_PARSE_ERROR")
 		return protocol.SendError(conn, fmt.Errorf("SQL解析失败: %s", parseResult.Error))
 	}
+
+	var result *resource.QueryResult
 
 	// 如果启用了优化器，使用 OptimizedExecutor
 	if s.useOptimizer {
@@ -960,31 +1011,64 @@ func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *ses
 		executor := s.optimizedExecutor
 		s.mu.Unlock()
 
-		result, err := executor.ExecuteSelect(ctx, parseResult.Statement.Select)
+		// 使用goroutine池执行查询
+		errCh := make(chan error, 1)
+		resultCh := make(chan *resource.QueryResult, 1)
+		
+		err = s.goroutinePool.Submit(func() {
+			r, e := executor.ExecuteSelect(ctx, parseResult.Statement.Select)
+			resultCh <- r
+			errCh <- e
+		})
+		
 		if err != nil {
-			log.Printf("优化执行查询失败: %v", err)
+			log.Printf("提交查询任务失败: %v", err)
+			s.metricsCollector.RecordError("POOL_SUBMIT_ERROR")
 			// 降级到传统路径
 			builder := parser.NewQueryBuilder(ds)
 			result, err = builder.BuildAndExecute(ctx, query)
 			if err != nil {
 				log.Printf("执行查询失败: %v", err)
+				s.metricsCollector.RecordError("QUERY_EXECUTION_ERROR")
 				return protocol.SendError(conn, fmt.Errorf("查询执行错误: %w", err))
 			}
+		} else {
+			// 等待查询完成
+			result = <-resultCh
+			err = <-errCh
+			if err != nil {
+				log.Printf("优化执行查询失败: %v", err)
+				s.metricsCollector.RecordError("OPTIMIZER_ERROR")
+				// 降级到传统路径
+				builder := parser.NewQueryBuilder(ds)
+				result, err = builder.BuildAndExecute(ctx, query)
+				if err != nil {
+					log.Printf("执行查询失败: %v", err)
+					s.metricsCollector.RecordError("QUERY_EXECUTION_ERROR")
+					return protocol.SendError(conn, fmt.Errorf("查询执行错误: %w", err))
+				}
+			}
 		}
-
-		// 发送查询结果
-		return s.sendQueryResult(ctx, conn, sess, result)
+	} else {
+		// 使用传统的 QueryBuilder 路径
+		builder := parser.NewQueryBuilder(ds)
+		result, err = builder.BuildAndExecute(ctx, query)
+		if err != nil {
+			log.Printf("执行查询失败: %v", err)
+			s.metricsCollector.RecordError("QUERY_EXECUTION_ERROR")
+			return protocol.SendError(conn, fmt.Errorf("查询执行错误: %w", err))
+		}
 	}
 
-	// 使用传统 QueryBuilder 路径
-	builder := parser.NewQueryBuilder(ds)
-	result, err := builder.BuildAndExecute(ctx, query)
-	if err != nil {
-		log.Printf("执行查询失败: %v", err)
-		return protocol.SendError(conn, fmt.Errorf("查询执行错误: %w", err))
+	// 缓存查询结果（仅缓存成功的结果）
+	if result != nil && len(result.Rows) > 0 {
+		queryCache.Set(query, result, 5*time.Minute) // 缓存5分钟
 	}
 
-	// 发送实际查询结果
+	// 记录成功查询
+	s.metricsCollector.RecordQuery(time.Since(startTime), true, "")
+
+	// 发送查询结果
 	return s.sendQueryResult(ctx, conn, sess, result)
 }
 
@@ -1071,18 +1155,17 @@ func (s *Server) handleDDLQuery(ctx context.Context, conn net.Conn, sess *sessio
 	executor := s.optimizedExecutor
 	s.mu.Unlock()
 
-	var ddlResult *resource.QueryResult
 	switch parseResult.Statement.Type {
 	case parser.SQLTypeCreate:
-		ddlResult, err = executor.ExecuteCreate(ctx, parseResult.Statement.Create)
+		_, err = executor.ExecuteCreate(ctx, parseResult.Statement.Create)
 	case parser.SQLTypeDrop:
-		ddlResult, err = executor.ExecuteDrop(ctx, parseResult.Statement.Drop)
+		_, err = executor.ExecuteDrop(ctx, parseResult.Statement.Drop)
 	case parser.SQLTypeAlter:
-		ddlResult, err = executor.ExecuteAlter(ctx, parseResult.Statement.Alter)
+		_, err = executor.ExecuteAlter(ctx, parseResult.Statement.Alter)
 	default:
 		// 降级到传统路径
 		builder := parser.NewQueryBuilder(ds)
-		ddlResult, err = builder.BuildAndExecute(ctx, query)
+		_, err = builder.BuildAndExecute(ctx, query)
 	}
 
 	if err != nil {
@@ -1350,3 +1433,92 @@ func (s *Server) handleSetCommand(ctx context.Context, conn net.Conn, sess *sess
 	
 	return protocol.SendOK(conn, sess.GetNextSequenceID())
 }
+
+// Close 关闭服务器并释放资源
+func (s *Server) Close() error {
+	log.Println("正在关闭服务器并释放资源...")
+	
+	var errs []error
+	
+	// 关闭goroutine池
+	if s.goroutinePool != nil {
+		if err := s.goroutinePool.Close(); err != nil {
+			log.Printf("关闭goroutine池失败: %v", err)
+			errs = append(errs, err)
+		} else {
+			log.Println("goroutine池已关闭")
+		}
+	}
+	
+	// 关闭对象池
+	if s.objectPool != nil {
+		if err := s.objectPool.Close(); err != nil {
+			log.Printf("关闭对象池失败: %v", err)
+			errs = append(errs, err)
+		} else {
+			log.Println("对象池已关闭")
+		}
+	}
+	
+	// 获取监控指标快照（用于日志）
+	if s.metricsCollector != nil {
+		snapshot := s.metricsCollector.GetSnapshot()
+		log.Printf("查询统计: 总计=%d, 成功=%d, 失败=%d, 成功率=%.2f%%",
+			snapshot.QueryCount,
+			snapshot.QuerySuccess,
+			snapshot.QueryError,
+			snapshot.SuccessRate,
+		)
+		log.Printf("性能统计: 平均耗时=%v",
+			snapshot.AvgDuration,
+		)
+		
+		// 获取缓存统计
+		if s.cacheManager != nil {
+			allCacheStats := s.cacheManager.GetStats()
+			queryCacheStats := allCacheStats["query"]
+			if queryCacheStats != nil {
+				log.Printf("缓存统计: 命中率=%.2f%%, 缓存大小=%d, 命中=%d, 未命中=%d",
+					queryCacheStats.HitRate,
+					queryCacheStats.Size,
+					queryCacheStats.Hits,
+					queryCacheStats.Misses,
+				)
+			}
+		}
+	}
+	
+	if len(errs) > 0 {
+		return fmt.Errorf("关闭服务器时发生 %d 个错误", len(errs))
+	}
+	
+	log.Println("服务器已关闭")
+	return nil
+}
+
+// GetMetricsCollector 获取监控指标收集器
+func (s *Server) GetMetricsCollector() *monitor.MetricsCollector {
+	return s.metricsCollector
+}
+
+// GetCacheManager 获取缓存管理器
+func (s *Server) GetCacheManager() *monitor.CacheManager {
+	return s.cacheManager
+}
+
+// GetGoroutinePoolStats 获取goroutine池统计信息
+func (s *Server) GetGoroutinePoolStats() pool.PoolStats {
+	if s.goroutinePool == nil {
+		return pool.PoolStats{}
+	}
+	return s.goroutinePool.Stats()
+}
+
+// GetObjectPoolStats 获取对象池统计信息
+func (s *Server) GetObjectPoolStats() pool.PoolStats {
+	if s.objectPool == nil {
+		return pool.PoolStats{}
+	}
+	return s.objectPool.Stats()
+}
+

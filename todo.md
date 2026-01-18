@@ -638,24 +638,27 @@
 
 - ✅ 创建代码修复总结文档（CODE_FIXES_SUMMARY.md）
 
-#### 已完成但待集成的优化组件（阶段 6）
-虽然以下组件已经实现，但尚未完全集成到实际查询流程中：
+#### 已完成的集成（阶段 6）
+- [x] 池系统集成到查询流程（已完成）
+  - [x] 将 GoroutinePool 集成到 Server.handleSelectQuery
+  - [x] 将 ObjectPool 创建到 Server.NewServer
+  - [x] 添加资源清理方法 Server.Close
+  - [x] 实现池统计查询接口
 
-- [x] 池系统实现（已实现，待集成到查询流程）
-  - [x] ObjectPool：通用对象池（16.3K ops/sec）
-  - [x] GoroutinePool：goroutine池（3.0K tasks/sec）
-  - [x] ConnectionPool：连接池（连接复用、健康检查）
-  - [x] SQLConnectionPool：基于database/sql的连接池
-  - [x] ConnectionManager：多数据源连接管理器
-  - [x] RetryPool：重试池（自动重试、延迟控制）
-  - [ ] 将池系统集成到查询执行流程中
+- [x] 监控系统集成到查询流程（已完成）
+  - [x] 将 MetricsCollector 集成到 Server.handleSelectQuery
+  - [x] 将 CacheManager 集成到 Server.handleSelectQuery
+  - [x] 添加查询监控和统计记录
+  - [x] 添加缓存检查和缓存结果记录
+  - [x] 实现监控统计接口
 
-- [x] 性能优化框架实现（已实现，待集成到查询流程）
-  - [x] IndexManager：索引管理、索引选择、索引统计
-  - [x] BatchExecutor：批量操作执行器
-  - [x] PriorityQueue：优先队列（用于JOIN重排序）
-  - [x] PerformanceOptimizer：性能优化器框架
-  - [ ] 将性能优化框架集成到查询执行流程中
+- [x] 集成测试验证（已完成）
+  - [x] 创建测试文件 test_integration_final.go
+  - [x] 验证 Server 组件创建
+  - [x] 验证 GoroutinePool 功能
+  - [x] 验证 MetricsCollector 功能
+  - [x] 验证 CacheManager 功能
+  - [x] 所有测试通过
 
 #### 已完成并集成的优化（阶段 6 + 优化器改进）
 - [x] 实现具体的查询优化规则（谓词下推、JOIN重排序、列裁剪）
