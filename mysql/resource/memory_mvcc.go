@@ -3,7 +3,7 @@ package resource
 import (
 	"context"
 	"fmt"
-	"mysql-proxy/mysql/mvcc"
+	"github.com/kasuganosora/sqlexec/mysql/mvcc"
 	"sync"
 )
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"math"
 
-	"mysql-proxy/mysql/resource"
+	"github.com/kasuganosora/sqlexec/mysql/resource"
 )
 
 // TableStatistics 表统计信息

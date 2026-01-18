@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"mysql-proxy/mysql/mvcc"
+	"github.com/kasuganosora/sqlexec/mysql/mvcc"
 )
 
 // TestBasicTransaction 测试基本事务操作

@@ -3,7 +3,7 @@ package optimizer
 // 为 LogicalSelection 和其他算子添加访问器方法
 // 用于修复方法名冲突问题
 
-import "mysql-proxy/mysql/parser"
+import "github.com/kasuganosora/sqlexec/mysql/parser"
 
 // SelectionConditions 过滤条件访问器
 func SelectionConditions(conditions []*parser.Expression) []*parser.Expression {

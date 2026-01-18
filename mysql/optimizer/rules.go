@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"mysql-proxy/mysql/parser"
+	"github.com/kasuganosora/sqlexec/mysql/parser"
 )
 
 // PredicatePushDownRule 谓词下推规则

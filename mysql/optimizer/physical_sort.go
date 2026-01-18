@@ -6,7 +6,7 @@ import (
 	"math"
 	"sort"
 
-	"mysql-proxy/mysql/resource"
+	"github.com/kasuganosora/sqlexec/mysql/resource"
 )
 
 // PhysicalSort 物理排序

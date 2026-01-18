@@ -3,7 +3,7 @@ package optimizer
 import (
 	"context"
 
-	"mysql-proxy/mysql/parser"
+	"github.com/kasuganosora/sqlexec/mysql/parser"
 )
 
 // SemiJoinRewriteRule 半连接重写规则

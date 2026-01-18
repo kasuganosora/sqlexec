@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"mysql-proxy/mysql/parser"
-	"mysql-proxy/mysql/resource"
+	"github.com/kasuganosora/sqlexec/mysql/parser"
+	"github.com/kasuganosora/sqlexec/mysql/resource"
 )
 
 // PhysicalTableScan 物理表扫描

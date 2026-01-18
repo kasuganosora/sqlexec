@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"mysql-proxy/mysql/builtin"
-	"mysql-proxy/mysql/parser"
+	"github.com/kasuganosora/sqlexec/mysql/builtin"
+	"github.com/kasuganosora/sqlexec/mysql/parser"
 )
 
 // ExpressionEvaluator 表达式求值器

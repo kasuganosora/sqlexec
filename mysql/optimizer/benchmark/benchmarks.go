@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"mysql-proxy/mysql/optimizer"
-	"mysql-proxy/mysql/parser"
-	"mysql-proxy/mysql/resource"
+	"github.com/kasuganosora/sqlexec/mysql/optimizer"
+	"github.com/kasuganosora/sqlexec/mysql/parser"
+	"github.com/kasuganosora/sqlexec/mysql/resource"
 )
 
 // BenchmarkSuite 基准测试套件

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"mysql-proxy/mysql/parser"
+	"github.com/kasuganosora/sqlexec/mysql/parser"
 )
 
 // JoinReorderRule JOIN重排序规则

@@ -3,8 +3,8 @@ package optimizer
 import (
 	"fmt"
 
-	"mysql-proxy/mysql/parser"
-	"mysql-proxy/mysql/resource"
+	"github.com/kasuganosora/sqlexec/mysql/parser"
+	"github.com/kasuganosora/sqlexec/mysql/resource"
 )
 
 // LimitInfo Limit信息

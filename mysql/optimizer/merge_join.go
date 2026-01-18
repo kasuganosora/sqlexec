@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"mysql-proxy/mysql/resource"
+	"github.com/kasuganosora/sqlexec/mysql/resource"
 )
 
 // PhysicalMergeJoin 物理归并连接

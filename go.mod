@@ -1,4 +1,4 @@
-module mysql-proxy
+module github.com/kasuganosora/sqlexec
 
 go 1.24.2
 

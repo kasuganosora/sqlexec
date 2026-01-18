@@ -7,8 +7,8 @@ import (
 	"io"
 	"log"
 	"math/rand"
-	"mysql-proxy/mysql/protocol"
-	"mysql-proxy/mysql/session"
+	"github.com/kasuganosora/sqlexec/mysql/protocol"
+	"github.com/kasuganosora/sqlexec/mysql/session"
 	"net"
 	"strings"
 )

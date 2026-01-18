@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"mysql-proxy/server"
+	"github.com/kasuganosora/sqlexec/server"
 	"net"
 )
 

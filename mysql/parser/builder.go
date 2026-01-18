@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mysql-proxy/mysql/resource"
+	"github.com/kasuganosora/sqlexec/mysql/resource"
 )
 
 // QueryBuilder 查询构建器
