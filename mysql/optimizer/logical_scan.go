@@ -182,8 +182,18 @@ func (p *LogicalProjection) Expressions() []*parser.Expression {
 	return p.Exprs
 }
 
+// GetExprs 返回投影表达式（用于避免与Expressions方法冲突）
+func (p *LogicalProjection) GetExprs() []*parser.Expression {
+	return p.Exprs
+}
+
 // Aliases 返回别名列表
 func (p *LogicalProjection) Aliases() []string {
+	return p.columnAliases
+}
+
+// GetAliases 返回别名列表（用于避免与Aliases方法冲突）
+func (p *LogicalProjection) GetAliases() []string {
 	return p.columnAliases
 }
 
@@ -242,8 +252,18 @@ func (p *LogicalLimit) Limit() int64 {
 	return p.limitVal
 }
 
+// GetLimit 返回LIMIT值（用于避免与Limit方法冲突）
+func (p *LogicalLimit) GetLimit() int64 {
+	return p.limitVal
+}
+
 // Offset 返回OFFSET值
 func (p *LogicalLimit) Offset() int64 {
+	return p.offsetVal
+}
+
+// GetOffset 返回OFFSET值（用于避免与Offset方法冲突）
+func (p *LogicalLimit) GetOffset() int64 {
 	return p.offsetVal
 }
 
@@ -373,8 +393,18 @@ func (p *LogicalJoin) JoinType() JoinType {
 	return p.joinType
 }
 
+// GetJoinType 返回连接类型（用于避免与JoinType方法冲突）
+func (p *LogicalJoin) GetJoinType() JoinType {
+	return p.joinType
+}
+
 // Conditions 返回连接条件
 func (p *LogicalJoin) Conditions() []*JoinCondition {
+	return p.joinConditions
+}
+
+// GetJoinConditions 返回连接条件（用于避免与Conditions方法冲突）
+func (p *LogicalJoin) GetJoinConditions() []*JoinCondition {
 	return p.joinConditions
 }
 
@@ -510,14 +540,14 @@ func (p *LogicalUnion) Schema() []ColumnInfo {
 	return []ColumnInfo{}
 }
 
-// UnionType 返回UNION类型
-func (p *LogicalUnion) UnionType() string {
-	return p.UnionType
+// GetUnionType 返回UNION类型
+func (p *LogicalUnion) GetUnionType() string {
+	return p.unionType
 }
 
-// All 返回是否包含重复行
-func (p *LogicalUnion) All() bool {
-	return p.All
+// GetAll 返回是否包含重复行
+func (p *LogicalUnion) GetAll() bool {
+	return p.all
 }
 
 // Explain 返回计划说明

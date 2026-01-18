@@ -37,7 +37,7 @@ func NewPhysicalTableScan(tableName string, tableInfo *resource.TableInfo, dataS
 		TableName: tableName,
 		Columns:   columns,
 		TableInfo: tableInfo,
-		cost:      rowCount * 0.1, // 简化的成本计算
+		cost:      float64(rowCount) * 0.1, // 简化的成本计算
 		dataSource: dataSource,
 		children:  []PhysicalPlan{},
 	}
@@ -433,9 +433,11 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 	// 获取连接条件（简化：只支持单列等值连接）
 	leftJoinCol := ""
 	rightJoinCol := ""
-	if len(p.Conditions) > 0 {
-		leftJoinCol = p.Conditions[0].Left
-		rightJoinCol = p.Conditions[0].Right
+	if len(p.Conditions) > 0 && p.Conditions[0].Left != nil {
+		leftJoinCol = fmt.Sprintf("%v", p.Conditions[0].Left)
+	}
+	if len(p.Conditions) > 0 && p.Conditions[0].Right != nil {
+		rightJoinCol = fmt.Sprintf("%v", p.Conditions[0].Right)
 	}
 
 	// 1. 执行左表（构建端）
@@ -485,28 +487,15 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 				}
 			}
 		}
-
 	case LeftOuterJoin:
 		// LEFT JOIN：左边所有行，右边没有匹配的用NULL填充
-		for _, leftRow := range leftResult.Rows {
-			key := leftRow[leftJoinCol]
-			rightRows, hasMatch := hashTable[key]
-			// 在LEFT JOIN中，我们需要用右表去匹配左表，所以要重新构建右表的哈希表
-			// 这里简化处理：如果左表的key在哈希表中，说明有匹配（虽然逻辑上不太对）
-			// 正确的做法：为右表也构建哈希表
-		}
-		// 重新构建右表的哈希表用于LEFT JOIN
-		rightHashTable := make(map[interface{}][]resource.Row)
-		for _, row := range rightResult.Rows {
-			key := row[rightJoinCol]
-			rightHashTable[key] = append(rightHashTable[key], row)
-		}
-
-		for _, leftRow := range leftResult.Rows {
-			key := leftRow[leftJoinCol]
-			if rightRows, exists := rightHashTable[key]; exists {
+		// 跟踪右边已匹配的行
+		rightMatched := make(map[int]bool)
+		for _, rightRow := range rightResult.Rows {
+			key := rightRow[rightJoinCol]
+			if leftRows, exists := hashTable[key]; exists {
 				// 有匹配：连接
-				for _, rightRow := range rightRows {
+				for _, leftRow := range leftRows {
 					merged := make(resource.Row)
 					for k, v := range leftRow {
 						merged[k] = v
@@ -520,8 +509,22 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 					}
 					output = append(output, merged)
 				}
-			} else {
-				// 无匹配：左边行 + 右边NULL
+			// 标记右边已匹配的行 - 简化：不比较行内容
+			// 由于 map 不能直接比较，使用索引方式
+			rightMatched[len(rightResult.Rows)-1] = true
+			}
+		}
+		// 添加左边没有匹配的行
+		for _, leftRow := range leftResult.Rows {
+			leftKey := leftRow[leftJoinCol]
+			matched := false
+			for _, rightRow := range rightResult.Rows {
+				if rightRow[rightJoinCol] == leftKey {
+					matched = true
+					break
+				}
+			}
+			if !matched {
 				merged := make(resource.Row)
 				for k, v := range leftRow {
 					merged[k] = v
@@ -536,8 +539,7 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 				output = append(output, merged)
 			}
 		}
-
-	case JoinTypeRight:
+case RightOuterJoin:
 		// RIGHT JOIN：右边所有行，左边没有匹配的用NULL填充
 		// 重新构建左表的哈希表用于RIGHT JOIN
 		leftHashTable := make(map[interface{}][]resource.Row)
@@ -581,7 +583,7 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 			}
 		}
 
-	default:
+default:
 		return nil, fmt.Errorf("unsupported join type: %s", p.JoinType)
 	}
 
@@ -802,106 +804,3 @@ type aggregateGroup struct {
 }
 
 // calculateAggregation 计算聚合函数
-func (p *PhysicalHashAggregate) calculateAggregation(agg *AggregationItem, rows []resource.Row) interface{} {
-	if len(rows) == 0 {
-		return nil
-	}
-
-	switch agg.Type {
-	case AggregationTypeCount:
-		// COUNT(*) 或 COUNT(column)
-		if agg.Expr == "*" {
-			return int64(len(rows))
-		}
-		count := int64(0)
-		for _, row := range rows {
-			if _, exists := row[agg.Expr]; exists && row[agg.Expr] != nil {
-				count++
-			}
-		}
-		return count
-
-	case AggregationTypeSum:
-		sum := 0.0
-		for _, row := range rows {
-			if val, exists := row[agg.Expr]; exists && val != nil {
-				sum += convertToFloat64(val)
-			}
-		}
-		return sum
-
-	case AggregationTypeAvg:
-		sum := 0.0
-		count := 0
-		for _, row := range rows {
-			if val, exists := row[agg.Expr]; exists && val != nil {
-				sum += convertToFloat64(val)
-				count++
-			}
-		}
-		if count == 0 {
-			return nil
-		}
-		return sum / float64(count)
-
-	case AggregationTypeMax:
-		max := float64(-1e308)
-		hasValue := false
-		for _, row := range rows {
-			if val, exists := row[agg.Expr]; exists && val != nil {
-				fval := convertToFloat64(val)
-				if !hasValue || fval > max {
-					max = fval
-					hasValue = true
-				}
-			}
-		}
-		if !hasValue {
-			return nil
-		}
-		return max
-
-	case AggregationTypeMin:
-		min := float64(1e308)
-		hasValue := false
-		for _, row := range rows {
-			if val, exists := row[agg.Expr]; exists && val != nil {
-				fval := convertToFloat64(val)
-				if !hasValue || fval < min {
-					min = fval
-					hasValue = true
-				}
-			}
-		}
-		if !hasValue {
-			return nil
-		}
-		return min
-
-	default:
-		return nil
-	}
-}
-
-// convertToFloat64 将值转换为float64
-func convertToFloat64(val interface{}) float64 {
-	switch v := val.(type) {
-	case int, int8, int16, int32, int64:
-		return float64(reflect.ValueOf(v).Int())
-	case uint, uint8, uint16, uint32, uint64:
-		return float64(reflect.ValueOf(v).Uint())
-	case float32, float64:
-		return reflect.ValueOf(v).Float()
-	default:
-		// 尝试从字符串转换
-		s := fmt.Sprintf("%v", v)
-		var f float64
-		fmt.Sscanf(s, "%f", &f)
-		return f
-	}
-}
-
-// Explain 返回计划说明
-func (p *PhysicalHashAggregate) Explain() string {
-	return fmt.Sprintf("HashAggregate(cost=%.2f)", p.cost)
-}

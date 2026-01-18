@@ -78,18 +78,18 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 		return nil, fmt.Errorf("get table info failed: %w", err)
 	}
 
-	dataSource := NewLogicalDataSource(stmt.From, tableInfo)
+	var logicalPlan LogicalPlan = NewLogicalDataSource(stmt.From, tableInfo)
 
 	// 2. 应用 WHERE 条件（Selection）
 	if stmt.Where != nil {
 		conditions := o.extractConditions(stmt.Where)
-		dataSource = NewLogicalSelection(conditions, dataSource)
+		logicalPlan = NewLogicalSelection(conditions, logicalPlan)
 	}
 
 	// 3. 应用 GROUP BY（Aggregate）
 	if len(stmt.GroupBy) > 0 {
 		aggFuncs := o.extractAggFuncs(stmt.Columns)
-		dataSource = NewLogicalAggregate(aggFuncs, stmt.GroupBy, dataSource)
+		logicalPlan = NewLogicalAggregate(aggFuncs, stmt.GroupBy, logicalPlan)
 	}
 
 	// 4. 应用 ORDER BY（Sort）
@@ -101,7 +101,7 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 				Direction: item.Direction,
 			}
 		}
-		dataSource = NewLogicalSort(orderItems, dataSource)
+		logicalPlan = NewLogicalSort(orderItems, logicalPlan)
 	}
 
 	// 5. 应用 LIMIT（Limit）
@@ -111,7 +111,7 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 		if stmt.Offset != nil {
 			offset = *stmt.Offset
 		}
-		dataSource = NewLogicalLimit(limit, offset, dataSource)
+		logicalPlan = NewLogicalLimit(limit, offset, logicalPlan)
 	}
 
 	// 6. 应用 SELECT 列（Projection）
@@ -129,10 +129,10 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 				aliases[i] = col.Name
 			}
 		}
-		dataSource = NewLogicalProjection(exprs, aliases, dataSource)
+		logicalPlan = NewLogicalProjection(exprs, aliases, logicalPlan)
 	}
 
-	return dataSource, nil
+	return logicalPlan, nil
 }
 
 // convertInsert 转换 INSERT 语句
@@ -176,26 +176,26 @@ func isWildcard(cols []parser.SelectColumn) bool {
 func (o *Optimizer) convertToPhysicalPlan(ctx context.Context, logicalPlan LogicalPlan, optCtx *OptimizationContext) (PhysicalPlan, error) {
 	switch p := logicalPlan.(type) {
 	case *LogicalDataSource:
-		return NewPhysicalTableScan(p.TableName, p.TableInfo, o.dataSource)
+		return NewPhysicalTableScan(p.TableName, p.TableInfo, o.dataSource), nil
 	case *LogicalSelection:
 		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
 		// 简化：不转换条件为过滤器
-		return NewPhysicalSelection(p.Conditions, []resource.Filter{}, child, o.dataSource)
+		return NewPhysicalSelection(p.GetConditions(), []resource.Filter{}, child, o.dataSource), nil
 	case *LogicalProjection:
 		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		return NewPhysicalProjection(p.Exprs, p.Aliases, child)
+		return NewPhysicalProjection(p.GetExprs(), p.GetAliases(), child), nil
 	case *LogicalLimit:
 		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		return NewPhysicalLimit(p.Limit, p.Offset, child)
+		return NewPhysicalLimit(p.GetLimit(), p.GetOffset(), child), nil
 	case *LogicalSort:
 		// 简化：暂时不实现排序
 		return o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
@@ -208,13 +208,13 @@ func (o *Optimizer) convertToPhysicalPlan(ctx context.Context, logicalPlan Logic
 		if err != nil {
 			return nil, err
 		}
-		return NewPhysicalHashJoin(p.JoinType, left, right, p.Conditions)
+		return NewPhysicalHashJoin(p.GetJoinType(), left, right, p.GetJoinConditions()), nil
 	case *LogicalAggregate:
 		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		return NewPhysicalHashAggregate(p.AggFuncs, p.GroupByCols, child)
+		return NewPhysicalHashAggregate(p.GetAggFuncs(), p.GetGroupByCols(), child), nil
 	default:
 		return nil, fmt.Errorf("unsupported logical plan type: %T", p)
 	}

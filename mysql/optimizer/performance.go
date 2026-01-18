@@ -155,7 +155,7 @@ func NewBatchExecutor(batchSize int, flushInterval time.Duration, flushFunc func
 		flushInterval: flushInterval,
 		flushFunc:     flushFunc,
 	}
-	be.timer = time.AfterFunc(flushInterval, be.flush)
+	be.timer = time.AfterFunc(flushInterval, func() { be.flush() })
 	return be
 }
 

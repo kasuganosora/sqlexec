@@ -223,10 +223,14 @@ func (pe *ProcedureExecutor) executeBlockWithReturn(block *parser.BlockStmt) (in
 			if err := pe.executeCase(s); err != nil {
 				return nil, err
 			}
-		case *parser.ReturnStmt:
-			// RETURN语句,返回值
-			return pe.evaluateExpression(s.Expression)
+	case *parser.ReturnStmt:
+		// RETURN语句,返回值
+		result, err := pe.evaluateExpression(s.Expression)
+		if err != nil {
+			return nil, err
 		}
+		return result, nil
+	}
 	}
 	
 	return nil, nil

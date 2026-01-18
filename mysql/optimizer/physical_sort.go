@@ -93,13 +93,13 @@ func (p *PhysicalSort) Execute(ctx context.Context) (*resource.QueryResult, erro
 
 			// 比较两个值
 			cmp := compareValues(leftVal, rightVal)
-			if cmp != 0 {
-				// DESC 需要反转比较结果
-				if item.Desc {
-					return cmp > 0
-				}
-				return cmp < 0
+		if cmp != 0 {
+			// DESC 需要反转比较结果
+			if item.Direction == "DESC" {
+				return cmp > 0
 			}
+			return cmp < 0
+		}
 		}
 		// 所有排序列都相等，保持原顺序
 		return i < j
@@ -119,10 +119,10 @@ func (p *PhysicalSort) Explain() string {
 		if i > 0 {
 			items += ", "
 		}
-		direction := "ASC"
-		if item.Desc {
-			direction = "DESC"
-		}
+	direction := "ASC"
+	if item.Direction == "DESC" {
+		direction = "DESC"
+	}
 		items += fmt.Sprintf("%s %s", item.Column, direction)
 	}
 	return fmt.Sprintf("Sort(%s, cost=%.2f)", items, p.cost)

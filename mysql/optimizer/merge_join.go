@@ -90,9 +90,6 @@ func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*resource.QueryResult,
 	leftRows := p.sortByColumn(leftResult.Rows, leftJoinCol)
 	rightRows := p.sortByColumn(rightResult.Rows, rightJoinCol)
 
-	// 使用 joinConditionsString 处理连接条件字符串
-	_ = joinConditionsString(p.Conditions) // 简化：暂时忽略
-
 	// 4. 执行两路归并
 	output := p.mergeRows(leftRows, rightRows, leftJoinCol, rightJoinCol, p.JoinType)
 
@@ -301,8 +298,16 @@ func getJoinColumns(conditions []*JoinCondition) (string, string) {
 		return "", ""
 	}
 
-	// 简化：取第一个条件
-	return conditions[0].Left, conditions[0].Right
+	// 简化：取第一个条件的字符串表示
+	if conditions[0].Left != nil {
+		leftStr := fmt.Sprintf("%v", conditions[0].Left)
+		if conditions[0].Right != nil {
+			rightStr := fmt.Sprintf("%v", conditions[0].Right)
+			return leftStr, rightStr
+		}
+		return leftStr, ""
+	}
+	return "", ""
 }
 
 // compareValuesForSort 为归并排序比较两个值
