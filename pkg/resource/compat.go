@@ -1,12 +1,12 @@
 package resource
 
 import (
+	"fmt"
+
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/infrastructure/cache"
-	"github.com/kasuganosora/sqlexec/pkg/resource/infrastructure/errors"
 	"github.com/kasuganosora/sqlexec/pkg/resource/infrastructure/pool"
-	resourcememory "github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/kasuganosora/sqlexec/pkg/resource/util"
 )
 
@@ -88,28 +88,19 @@ func ErrTableNotFound(tableName string) error {
 }
 
 func ErrDataSourceNotFound(dataSourceName string) error {
-	return &ErrDataSourceNotFound{Name: dataSourceName}
+	return fmt.Errorf("data source %s not found", dataSourceName)
 }
 
 func ErrFileNotFound(filePath, fileType string) error {
-	return errors.NewErrFileNotFound(filePath, fileType)
+	return fmt.Errorf("%s file not found: %s", fileType, filePath)
 }
 
 func ErrSQLNotSupported(dataSourceType string) error {
-	return errors.NewErrSQLNotSupported(dataSourceType)
+	return fmt.Errorf("%s data source does not support SQL execution", dataSourceType)
 }
 
 func ErrOperationNotSupported(dataSourceType, operation string) error {
-	return errors.NewErrOperationNotSupported(dataSourceType, operation)
-}
-
-// ErrDataSourceNotFound 数据源不存在错误（兼容）
-type ErrDataSourceNotFound struct {
-	Name string
-}
-
-func (e *ErrDataSourceNotFound) Error() string {
-	return "data source " + e.Name + " not found"
+	return fmt.Errorf("%s not supported for %s data source", operation, dataSourceType)
 }
 
 // ==================== 重新导出工具函数 ====================
@@ -123,8 +114,6 @@ var (
 	ReplaceAll       = util.ReplaceAll
 	ContainsTable    = util.ContainsTable
 	ContainsWord     = util.ContainsWord
-	SplitLines       = util.SplitLines
-	JoinWith         = util.JoinWith
 	CompareEqual     = util.CompareEqual
 	CompareNumeric   = util.CompareNumeric
 	CompareGreater   = util.CompareGreater
@@ -138,7 +127,6 @@ var (
 	MatchFilter      = util.MatchFilter
 	ApplyOrder       = util.ApplyOrder
 	ApplyPagination  = util.ApplyPagination
-	JoinConditions   = util.JoinConditions
 )
 
 // ==================== 重新导出工厂注册函数 ====================
@@ -175,14 +163,6 @@ func GetDefaultManager() *DataSourceManager {
 
 // ==================== 重新导出缓存和连接池 ====================
 
-// StatementCache 语句缓存（兼容）
-type StatementCache = sql.StatementCache
-
-// NewStatementCache 创建语句缓存
-func NewStatementCache() *StatementCache {
-	return sql.NewStatementCache()
-}
-
 // QueryCache 查询缓存（兼容）
 type QueryCache = cache.QueryCache
 
@@ -198,28 +178,6 @@ type ConnectionPool = pool.ConnectionPool
 func NewConnectionPool() *ConnectionPool {
 	return pool.NewConnectionPool()
 }
-
-// SlowQueryLogger 慢查询日志器（兼容）
-type SlowQueryLogger = sql.SlowQueryLogger
-
-// NewSlowQueryLogger 创建慢查询日志器
-func NewSlowQueryLogger() *SlowQueryLogger {
-	return sql.NewSlowQueryLogger()
-}
-
-// ==================== 重新导出索引相关 ====================
-
-// IndexType 索引类型（兼容）
-type IndexType = resourcememory.IndexType
-
-const (
-	IndexTypeHash  = resourcememory.IndexTypeHash
-	IndexTypeBTree = resourcememory.IndexTypeBTree
-	IndexTypeSkip  = resourcememory.IndexTypeSkip
-)
-
-// IndexInfo 索引信息（兼容）
-type IndexInfo = resourcememory.IndexInfo
 
 // ==================== 初始化函数 ====================
 
