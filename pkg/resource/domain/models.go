@@ -1,0 +1,173 @@
+package domain
+
+// DataSourceType 数据源类型
+type DataSourceType string
+
+// String 返回数据源类型的字符串表示
+func (t DataSourceType) String() string {
+	return string(t)
+}
+
+const (
+	// DataSourceTypeMemory 内存数据源
+	DataSourceTypeMemory DataSourceType = "memory"
+	// DataSourceTypeMySQL MySQL数据源
+	DataSourceTypeMySQL DataSourceType = "mysql"
+	// DataSourceTypePostgreSQL PostgreSQL数据源
+	DataSourceTypePostgreSQL DataSourceType = "postgresql"
+	// DataSourceTypeSQLite SQLite数据源
+	DataSourceTypeSQLite DataSourceType = "sqlite"
+	// DataSourceTypeCSV CSV文件数据源
+	DataSourceTypeCSV DataSourceType = "csv"
+	// DataSourceTypeExcel Excel文件数据源
+	DataSourceTypeExcel DataSourceType = "excel"
+	// DataSourceTypeJSON JSON文件数据源
+	DataSourceTypeJSON DataSourceType = "json"
+	// DataSourceTypeParquet Parquet文件数据源
+	DataSourceTypeParquet DataSourceType = "parquet"
+)
+
+// DataSourceConfig 数据源配置
+type DataSourceConfig struct {
+	Type     DataSourceType         `json:"type"`
+	Name     string                 `json:"name"`
+	Host     string                 `json:"host,omitempty"`
+	Port     int                    `json:"port,omitempty"`
+	Username string                 `json:"username,omitempty"`
+	Password string                 `json:"password,omitempty"`
+	Database string                 `json:"database,omitempty"`
+	Writable  bool                   `json:"writable,omitempty"` // 是否可写，默认true
+	Options  map[string]interface{} `json:"options,omitempty"`
+}
+
+// TableInfo 表信息
+type TableInfo struct {
+	Name    string       `json:"name"`
+	Schema  string       `json:"schema,omitempty"`
+	Columns []ColumnInfo `json:"columns"`
+}
+
+// ColumnInfo 列信息
+type ColumnInfo struct {
+	Name         string           `json:"name"`
+	Type         string           `json:"type"`
+	Nullable     bool             `json:"nullable"`
+	Primary      bool             `json:"primary"`
+	Default      string           `json:"default,omitempty"`
+	Unique       bool             `json:"unique,omitempty"`          // 唯一约束
+	AutoIncrement bool            `json:"auto_increment,omitempty"` // 自动递增
+	ForeignKey   *ForeignKeyInfo  `json:"foreign_key,omitempty"`    // 外键约束
+}
+
+// ForeignKeyInfo 外键信息
+type ForeignKeyInfo struct {
+	Table    string `json:"table"`              // 引用的表
+	Column   string `json:"column"`             // 引用的列
+	OnDelete string `json:"on_delete,omitempty"`  // 删除策略：CASCADE, SET NULL, NO ACTION
+	OnUpdate string `json:"on_update,omitempty"`  // 更新策略
+}
+
+// Row 行数据
+type Row map[string]interface{}
+
+// QueryResult 查询结果
+type QueryResult struct {
+	Columns []ColumnInfo `json:"columns"`
+	Rows    []Row        `json:"rows"`
+	Total   int64        `json:"total"`
+}
+
+// Filter 查询过滤器
+type Filter struct {
+	Field      string      `json:"field"`
+	Operator   string      `json:"operator"` // =, !=, >, <, >=, <=, LIKE, IN, BETWEEN
+	Value      interface{} `json:"value"`
+	LogicOp    string      `json:"logic_op,omitempty"`    // AND, OR (用于多条件组合)
+	SubFilters []Filter    `json:"sub_filters,omitempty"` // 子过滤器（用于逻辑组合）
+}
+
+// QueryOptions 查询选项
+type QueryOptions struct {
+	Filters      []Filter `json:"filters,omitempty"`
+	OrderBy      string   `json:"order_by,omitempty"`
+	Order        string   `json:"order,omitempty"` // ASC, DESC
+	Limit        int      `json:"limit,omitempty"`
+	Offset       int      `json:"offset,omitempty"`
+	SelectAll    bool     `json:"select_all,omitempty"`     // 是否是 select *
+	SelectColumns []string `json:"select_columns,omitempty"` // 指定要查询的列（列裁剪）
+}
+
+// InsertOptions 插入选项
+type InsertOptions struct {
+	Replace bool `json:"replace,omitempty"` // 如果存在则替换
+}
+
+// UpdateOptions 更新选项
+type UpdateOptions struct {
+	Upsert bool `json:"upsert,omitempty"` // 如果不存在则插入
+}
+
+// DeleteOptions 删除选项
+type DeleteOptions struct {
+	Force bool `json:"force,omitempty"` // 强制删除
+}
+
+// TransactionOptions 事务选项
+type TransactionOptions struct {
+	IsolationLevel string `json:"isolation_level,omitempty"` // READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE
+	ReadOnly       bool   `json:"read_only,omitempty"`        // 只读事务
+}
+
+// ConstraintType 约束类型
+type ConstraintType string
+
+const (
+	ConstraintTypeUnique     ConstraintType = "unique"
+	ConstraintTypeForeignKey ConstraintType = "foreign_key"
+	ConstraintTypeCheck      ConstraintType = "check"
+	ConstraintTypePrimaryKey  ConstraintType = "primary_key"
+)
+
+// IndexType 索引类型
+type IndexType string
+
+const (
+	IndexTypeBTree IndexType = "btree"
+	IndexTypeHash  IndexType = "hash"
+)
+
+// ForeignKeyReference 外键引用信息
+type ForeignKeyReference struct {
+	Table   string   `json:"table"`
+	Columns []string `json:"columns"`
+}
+
+// Constraint 约束信息
+type Constraint struct {
+	Name       string                `json:"name"`
+	Type       ConstraintType         `json:"type"`
+	Columns    []string              `json:"columns"`
+	Table      string                `json:"table"`
+	References *ForeignKeyReference  `json:"references,omitempty"`
+	CheckExpr  string                `json:"check_expr,omitempty"`
+	Enabled    bool                  `json:"enabled"`
+}
+
+// Index 索引信息
+type Index struct {
+	Name     string      `json:"name"`
+	Table    string      `json:"table"`
+	Columns  []string    `json:"columns"`
+	Type     IndexType   `json:"type"`
+	Unique   bool        `json:"unique"`
+	Primary  bool        `json:"primary"`
+	Enabled  bool        `json:"enabled"`
+}
+
+// Schema 模式信息
+type Schema struct {
+	Name        string       `json:"name"`
+	Tables      []*TableInfo `json:"tables"`
+	Indexes     []*Index     `json:"indexes"`
+	Constraints []*Constraint `json:"constraints"`
+}

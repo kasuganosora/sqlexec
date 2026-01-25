@@ -1,0 +1,914 @@
+package memory
+
+import (
+	"context"
+	"testing"
+
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+)
+
+// TestNewMemorySource 测试创建内存数据源
+func TestNewMemorySource(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  *domain.DataSourceConfig
+		wantNil bool
+	}{
+		{
+			name:    "with nil config",
+			config:  nil,
+			wantNil: false,
+		},
+		{
+			name: "with valid config",
+			config: &domain.DataSourceConfig{
+				Type:     domain.DataSourceTypeMemory,
+				Name:     "test",
+				Writable: true,
+			},
+			wantNil: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ms := NewMemorySource(tt.config)
+			if (ms == nil) != tt.wantNil {
+				t.Errorf("NewMemorySource() = %v, wantNil %v", ms, tt.wantNil)
+			}
+			if ms != nil {
+				if ms.config == nil {
+					t.Errorf("Expected config to be set")
+				}
+				if ms.tables == nil {
+					t.Errorf("Expected tables to be initialized")
+				}
+				if ms.data == nil {
+					t.Errorf("Expected data to be initialized")
+				}
+			}
+		})
+	}
+}
+
+// TestMemorySource_ConnectClose 测试连接和关闭
+func TestMemorySource_ConnectClose(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	// 初始状态应该是未连接
+	if ms.IsConnected() {
+		t.Errorf("Expected initial state to be disconnected")
+	}
+
+	// 连接
+	if err := ms.Connect(ctx); err != nil {
+		t.Errorf("Connect() error = %v", err)
+	}
+
+	if !ms.IsConnected() {
+		t.Errorf("Expected to be connected after Connect()")
+	}
+
+	// 关闭
+	if err := ms.Close(ctx); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+
+	if ms.IsConnected() {
+		t.Errorf("Expected to be disconnected after Close()")
+	}
+}
+
+// TestMemorySource_GetConfig 测试获取配置
+func TestMemorySource_GetConfig(t *testing.T) {
+	config := &domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Name:     "test-db",
+		Writable: false,
+	}
+	ms := NewMemorySource(config)
+
+	got := ms.GetConfig()
+	if got == nil {
+		t.Errorf("GetConfig() returned nil")
+		return
+	}
+
+	if got.Type != config.Type {
+		t.Errorf("GetConfig().Type = %v, want %v", got.Type, config.Type)
+	}
+	if got.Name != config.Name {
+		t.Errorf("GetConfig().Name = %v, want %v", got.Name, config.Name)
+	}
+	if got.Writable != config.Writable {
+		t.Errorf("GetConfig().Writable = %v, want %v", got.Writable, config.Writable)
+	}
+}
+
+// TestMemorySource_IsWritable 测试可写性检查
+func TestMemorySource_IsWritable(t *testing.T) {
+	tests := []struct {
+		name     string
+		writable bool
+	}{
+		{"writable", true},
+		{"read-only", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &domain.DataSourceConfig{
+				Type:     domain.DataSourceTypeMemory,
+				Writable: tt.writable,
+			}
+			ms := NewMemorySource(config)
+
+			if ms.IsWritable() != tt.writable {
+				t.Errorf("IsWritable() = %v, want %v", ms.IsWritable(), tt.writable)
+			}
+		})
+	}
+}
+
+// TestMemorySource_CreateTable 测试创建表
+func TestMemorySource_CreateTable(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "users",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true, AutoIncrement: true},
+			{Name: "name", Type: "string", Nullable: false},
+			{Name: "email", Type: "string", Nullable: true, Default: "unknown@example.com"},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 验证表已创建
+	tables, err := ms.GetTables(ctx)
+	if err != nil {
+		t.Errorf("GetTables() error = %v", err)
+	}
+	if len(tables) != 1 {
+		t.Errorf("Expected 1 table, got %d", len(tables))
+	}
+	if len(tables) > 0 && tables[0] != "users" {
+		t.Errorf("Expected table name 'users', got %v", tables[0])
+	}
+
+	// 尝试创建重复表
+	if err := ms.CreateTable(ctx, tableInfo); err == nil {
+		t.Errorf("Expected error when creating duplicate table")
+	}
+}
+
+// TestMemorySource_DropTable 测试删除表
+func TestMemorySource_DropTable(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "temp",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 删除表
+	if err := ms.DropTable(ctx, "temp"); err != nil {
+		t.Errorf("DropTable() error = %v", err)
+	}
+
+	// 验证表已删除
+	tables, err := ms.GetTables(ctx)
+	if err != nil {
+		t.Errorf("GetTables() error = %v", err)
+	}
+	if len(tables) != 0 {
+		t.Errorf("Expected 0 tables, got %d", len(tables))
+	}
+
+	// 尝试删除不存在的表
+	if err := ms.DropTable(ctx, "nonexistent"); err == nil {
+		t.Errorf("Expected error when dropping nonexistent table")
+	}
+}
+
+// TestMemorySource_TruncateTable 测试清空表
+func TestMemorySource_TruncateTable(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "products",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "name", Type: "string"},
+		},
+	}
+
+	// 创建表并插入数据
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	rows := []domain.Row{
+		{"id": 1, "name": "Product A"},
+		{"id": 2, "name": "Product B"},
+	}
+
+	if _, err := ms.Insert(ctx, "products", rows, nil); err != nil {
+		t.Errorf("Insert() error = %v", err)
+	}
+
+	// 查询验证数据存在
+	result, err := ms.Query(ctx, "products", &domain.QueryOptions{})
+	if err != nil {
+		t.Errorf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Errorf("Expected 2 rows before truncate, got %d", len(result.Rows))
+	}
+
+	// 清空表
+	if err := ms.TruncateTable(ctx, "products"); err != nil {
+		t.Errorf("TruncateTable() error = %v", err)
+	}
+
+	// 验证数据已清空
+	result, err = ms.Query(ctx, "products", &domain.QueryOptions{})
+	if err != nil {
+		t.Errorf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 0 {
+		t.Errorf("Expected 0 rows after truncate, got %d", len(result.Rows))
+	}
+}
+
+// TestMemorySource_Insert 测试插入数据
+func TestMemorySource_Insert(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "employees",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true, AutoIncrement: true},
+			{Name: "name", Type: "string", Nullable: false},
+			{Name: "salary", Type: "float64", Default: "0"},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 插入数据
+	rows := []domain.Row{
+		{"name": "Alice", "salary": 50000.0},
+		{"name": "Bob", "salary": 60000.0},
+	}
+
+	inserted, err := ms.Insert(ctx, "employees", rows, nil)
+	if err != nil {
+		t.Errorf("Insert() error = %v", err)
+	}
+	if inserted != 2 {
+		t.Errorf("Expected to insert 2 rows, got %d", inserted)
+	}
+
+	// 验证数据
+	result, err := ms.Query(ctx, "employees", &domain.QueryOptions{})
+	if err != nil {
+		t.Errorf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Errorf("Expected 2 rows, got %d", len(result.Rows))
+	}
+
+	// 验证自增ID
+	if id, ok := result.Rows[0]["id"].(int64); !ok || id <= 0 {
+		t.Errorf("Expected auto-increment ID, got %v", result.Rows[0]["id"])
+	}
+
+	// 验证默认值
+	if salary, ok := result.Rows[0]["salary"].(float64); !ok || salary != 50000.0 {
+		t.Errorf("Expected salary 50000.0, got %v", result.Rows[0]["salary"])
+	}
+}
+
+// TestMemorySource_Insert_AutoIncrement 测试自增ID
+func TestMemorySource_Insert_AutoIncrement(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "items",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true, AutoIncrement: true},
+			{Name: "value", Type: "string"},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 分批插入
+	for i := 0; i < 3; i++ {
+		rows := []domain.Row{{"value": string(rune('A' + i))}}
+		if _, err := ms.Insert(ctx, "items", rows, nil); err != nil {
+			t.Errorf("Insert() error = %v", err)
+		}
+	}
+
+	// 查询验证ID
+	result, err := ms.Query(ctx, "items", &domain.QueryOptions{})
+	if err != nil {
+		t.Errorf("Query() error = %v", err)
+	}
+
+	if len(result.Rows) != 3 {
+		t.Errorf("Expected 3 rows, got %d", len(result.Rows))
+	}
+
+	for i, row := range result.Rows {
+		expectedID := int64(i + 1)
+		if id, ok := row["id"].(int64); !ok || id != expectedID {
+			t.Errorf("Row %d: Expected ID %d, got %v", i, expectedID, row["id"])
+		}
+	}
+}
+
+// TestMemorySource_Insert_DefaultValues 测试默认值
+func TestMemorySource_Insert_DefaultValues(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "orders",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "status", Type: "string", Default: "pending"},
+			{Name: "amount", Type: "float64", Default: "0"},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 插入只包含ID的数据
+	rows := []domain.Row{{"id": 1}}
+	if _, err := ms.Insert(ctx, "orders", rows, nil); err != nil {
+		t.Errorf("Insert() error = %v", err)
+	}
+
+	// 查询验证默认值
+	result, err := ms.Query(ctx, "orders", &domain.QueryOptions{})
+	if err != nil {
+		t.Errorf("Query() error = %v", err)
+	}
+
+	if len(result.Rows) != 1 {
+		t.Errorf("Expected 1 row, got %d", len(result.Rows))
+	}
+
+	row := result.Rows[0]
+	if status, ok := row["status"].(string); !ok || status != "pending" {
+		t.Errorf("Expected status 'pending', got %v", row["status"])
+	}
+	if amount, ok := row["amount"].(string); !ok || amount != "0" {
+		t.Errorf("Expected amount '0', got %v", row["amount"])
+	}
+}
+
+// TestMemorySource_Insert_ReadOnly 测试只读模式下的插入
+func TestMemorySource_Insert_ReadOnly(t *testing.T) {
+	config := &domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Writable: false,
+	}
+	ms := NewMemorySource(config)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "readonly_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 尝试插入数据
+	rows := []domain.Row{{"id": 1}}
+	_, err := ms.Insert(ctx, "readonly_table", rows, nil)
+	if err == nil {
+		t.Errorf("Expected error when inserting into read-only data source")
+	}
+}
+
+// TestMemorySource_Query 测试查询数据
+func TestMemorySource_Query(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "students",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "name", Type: "string"},
+			{Name: "age", Type: "int64"},
+			{Name: "grade", Type: "float64"},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 插入测试数据
+	rows := []domain.Row{
+		{"id": 1, "name": "Alice", "age": int64(20), "grade": 85.5},
+		{"id": 2, "name": "Bob", "age": int64(22), "grade": 90.0},
+		{"id": 3, "name": "Charlie", "age": int64(20), "grade": 75.5},
+		{"id": 4, "name": "Diana", "age": int64(21), "grade": 95.0},
+	}
+
+	if _, err := ms.Insert(ctx, "students", rows, nil); err != nil {
+		t.Errorf("Insert() error = %v", err)
+	}
+
+	// 测试简单查询
+	result, err := ms.Query(ctx, "students", &domain.QueryOptions{})
+	if err != nil {
+		t.Errorf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 4 {
+		t.Errorf("Expected 4 rows, got %d", len(result.Rows))
+	}
+
+	// 测试带过滤器的查询
+	result, err = ms.Query(ctx, "students", &domain.QueryOptions{
+		Filters: []domain.Filter{
+			{Field: "age", Operator: "=", Value: int64(20)},
+		},
+	})
+	if err != nil {
+		t.Errorf("Query() with filter error = %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Errorf("Expected 2 rows with age=20, got %d", len(result.Rows))
+	}
+
+	// 测试带排序的查询
+	result, err = ms.Query(ctx, "students", &domain.QueryOptions{
+		OrderBy: "grade",
+		Order:   "DESC",
+	})
+	if err != nil {
+		t.Errorf("Query() with order error = %v", err)
+	}
+	if len(result.Rows) != 4 {
+		t.Errorf("Expected 4 rows with order, got %d", len(result.Rows))
+	}
+	if len(result.Rows) > 0 {
+		if grade, ok := result.Rows[0]["grade"].(float64); !ok || grade != 95.0 {
+			t.Errorf("Expected highest grade 95.0, got %v", result.Rows[0]["grade"])
+		}
+	}
+
+	// 测试带分页的查询
+	result, err = ms.Query(ctx, "students", &domain.QueryOptions{
+		Limit:  2,
+		Offset: 1,
+	})
+	if err != nil {
+		t.Errorf("Query() with pagination error = %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Errorf("Expected 2 rows with pagination, got %d", len(result.Rows))
+	}
+
+	// 查询不存在的表
+	_, err = ms.Query(ctx, "nonexistent", &domain.QueryOptions{})
+	if err == nil {
+		t.Errorf("Expected error when querying nonexistent table")
+	}
+}
+
+// TestMemorySource_Update 测试更新数据
+func TestMemorySource_Update(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "tasks",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "title", Type: "string"},
+			{Name: "status", Type: "string"},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 插入数据
+	rows := []domain.Row{
+		{"id": 1, "title": "Task 1", "status": "pending"},
+		{"id": 2, "title": "Task 2", "status": "completed"},
+	}
+
+	if _, err := ms.Insert(ctx, "tasks", rows, nil); err != nil {
+		t.Errorf("Insert() error = %v", err)
+	}
+
+	// 更新数据
+	updated, err := ms.Update(ctx, "tasks",
+		[]domain.Filter{
+			{Field: "status", Operator: "=", Value: "pending"},
+		},
+		domain.Row{"status": "in_progress"},
+		nil,
+	)
+	if err != nil {
+		t.Errorf("Update() error = %v", err)
+	}
+	if updated != 1 {
+		t.Errorf("Expected to update 1 row, got %d", updated)
+	}
+
+	// 验证更新
+	result, err := ms.Query(ctx, "tasks", &domain.QueryOptions{
+		Filters: []domain.Filter{
+			{Field: "id", Operator: "=", Value: int64(1)},
+		},
+	})
+	if err != nil {
+		t.Errorf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 1 {
+		t.Errorf("Expected 1 row, got %d", len(result.Rows))
+	}
+	if status, ok := result.Rows[0]["status"].(string); !ok || status != "in_progress" {
+		t.Errorf("Expected status 'in_progress', got %v", result.Rows[0]["status"])
+	}
+
+	// 更新不存在的表
+	_, err = ms.Update(ctx, "nonexistent", []domain.Filter{}, domain.Row{}, nil)
+	if err == nil {
+		t.Errorf("Expected error when updating nonexistent table")
+	}
+}
+
+// TestMemorySource_Delete 测试删除数据
+func TestMemorySource_Delete(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "records",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "value", Type: "string"},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 插入数据
+	rows := []domain.Row{
+		{"id": 1, "value": "A"},
+		{"id": 2, "value": "B"},
+		{"id": 3, "value": "C"},
+	}
+
+	if _, err := ms.Insert(ctx, "records", rows, nil); err != nil {
+		t.Errorf("Insert() error = %v", err)
+	}
+
+	// 删除数据
+	deleted, err := ms.Delete(ctx, "records",
+		[]domain.Filter{
+			{Field: "id", Operator: "=", Value: int64(2)},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Errorf("Delete() error = %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("Expected to delete 1 row, got %d", deleted)
+	}
+
+	// 验证删除
+	result, err := ms.Query(ctx, "records", &domain.QueryOptions{})
+	if err != nil {
+		t.Errorf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Errorf("Expected 2 rows after delete, got %d", len(result.Rows))
+	}
+
+	// 测试force删除
+	forceDeleted, err := ms.Delete(ctx, "records", []domain.Filter{}, &domain.DeleteOptions{Force: true})
+	if err != nil {
+		t.Errorf("Delete() with force error = %v", err)
+	}
+	if forceDeleted != 2 {
+		t.Errorf("Expected to force delete 2 rows, got %d", forceDeleted)
+	}
+
+	// 验证全部删除
+	result, err = ms.Query(ctx, "records", &domain.QueryOptions{})
+	if err != nil {
+		t.Errorf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 0 {
+		t.Errorf("Expected 0 rows after force delete, got %d", len(result.Rows))
+	}
+
+	// 删除不存在的表
+	_, err = ms.Delete(ctx, "nonexistent", []domain.Filter{}, nil)
+	if err == nil {
+		t.Errorf("Expected error when deleting from nonexistent table")
+	}
+}
+
+// TestMemorySource_Execute 测试执行SQL
+func TestMemorySource_Execute(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	// 内存数据源不支持SQL执行
+	_, err := ms.Execute(ctx, "SELECT * FROM users")
+	if err == nil {
+		t.Errorf("Expected error when executing SQL")
+	}
+}
+
+// TestMemorySource_GetTableInfo 测试获取表信息
+func TestMemorySource_GetTableInfo(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "info_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "data", Type: "string"},
+		},
+	}
+
+	// 创建表
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 获取表信息
+	got, err := ms.GetTableInfo(ctx, "info_table")
+	if err != nil {
+		t.Errorf("GetTableInfo() error = %v", err)
+	}
+	if got == nil {
+		t.Errorf("GetTableInfo() returned nil")
+	}
+	if got.Name != "info_table" {
+		t.Errorf("Expected table name 'info_table', got %v", got.Name)
+	}
+	if len(got.Columns) != 2 {
+		t.Errorf("Expected 2 columns, got %d", len(got.Columns))
+	}
+
+	// 获取不存在的表信息
+	_, err = ms.GetTableInfo(ctx, "nonexistent")
+	if err == nil {
+		t.Errorf("Expected error when getting info for nonexistent table")
+	}
+}
+
+// TestMemorySource_Clear 测试清空所有数据
+func TestMemorySource_Clear(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	// 创建表
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+		},
+	}
+
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() error = %v", err)
+	}
+
+	// 验证表存在
+	tables, err := ms.GetTables(ctx)
+	if err != nil {
+		t.Errorf("GetTables() error = %v", err)
+	}
+	if len(tables) != 1 {
+		t.Errorf("Expected 1 table, got %d", len(tables))
+	}
+
+	// 清空所有数据
+	ms.Clear()
+
+	// 验证所有数据已清空
+	tables, err = ms.GetTables(ctx)
+	if err != nil {
+		t.Errorf("GetTables() error = %v", err)
+	}
+	if len(tables) != 0 {
+		t.Errorf("Expected 0 tables after clear, got %d", len(tables))
+	}
+}
+
+// TestMemorySource_GetTableData_SetTableData 测试内部方法
+func TestMemorySource_GetTableData_SetTableData(t *testing.T) {
+	ms := NewMemorySource(nil)
+
+	// 设置表数据
+	testRows := []domain.Row{
+		{"id": 1, "name": "Test"},
+	}
+	ms.SetTableData("internal_test", testRows)
+
+	// 获取表数据
+	data, ok := ms.GetTableData("internal_test")
+	if !ok {
+		t.Errorf("Expected to find table data")
+	}
+	if len(data) != 1 {
+		t.Errorf("Expected 1 row, got %d", len(data))
+	}
+
+	// 获取不存在的表数据
+	_, ok = ms.GetTableData("nonexistent")
+	if ok {
+		t.Errorf("Expected false for nonexistent table")
+	}
+}
+
+// TestMemorySource_Comprehensive 综合测试
+func TestMemorySource_Comprehensive(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	// 1. 创建表
+	tableInfo := &domain.TableInfo{
+		Name: "comprehensive_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true, AutoIncrement: true},
+			{Name: "name", Type: "string", Nullable: false},
+			{Name: "email", Type: "string", Nullable: true},
+		},
+	}
+
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatalf("CreateTable() error = %v", err)
+	}
+
+	// 2. 插入数据
+	rows := []domain.Row{
+		{"name": "Alice", "email": "alice@example.com"},
+		{"name": "Bob", "email": "bob@example.com"},
+		{"name": "Charlie"},
+	}
+
+	inserted, err := ms.Insert(ctx, "comprehensive_test", rows, nil)
+	if err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+	if inserted != 3 {
+		t.Fatalf("Expected to insert 3 rows, got %d", inserted)
+	}
+
+	// 3. 查询数据
+	result, err := ms.Query(ctx, "comprehensive_test", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 3 {
+		t.Fatalf("Expected 3 rows, got %d", len(result.Rows))
+	}
+
+	// 4. 更新数据
+	updated, err := ms.Update(ctx, "comprehensive_test",
+		[]domain.Filter{
+			{Field: "name", Operator: "=", Value: "Alice"},
+		},
+		domain.Row{"email": "newalice@example.com"},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated != 1 {
+		t.Fatalf("Expected to update 1 row, got %d", updated)
+	}
+
+	// 5. 删除数据
+	deleted, err := ms.Delete(ctx, "comprehensive_test",
+		[]domain.Filter{
+			{Field: "name", Operator: "=", Value: "Charlie"},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("Expected to delete 1 row, got %d", deleted)
+	}
+
+	// 6. 验证最终状态
+	result, err = ms.Query(ctx, "comprehensive_test", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Fatalf("Expected 2 rows after operations, got %d", len(result.Rows))
+	}
+
+	// 7. 清空表
+	if err := ms.TruncateTable(ctx, "comprehensive_test"); err != nil {
+		t.Fatalf("TruncateTable() error = %v", err)
+	}
+
+	// 8. 删除表
+	if err := ms.DropTable(ctx, "comprehensive_test"); err != nil {
+		t.Fatalf("DropTable() error = %v", err)
+	}
+}
+
+// TestMemorySource_ConcurrentOperations 并发操作测试
+func TestMemorySource_ConcurrentOperations(t *testing.T) {
+	ms := NewMemorySource(nil)
+	ctx := context.Background()
+
+	tableInfo := &domain.TableInfo{
+		Name: "concurrent_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "value", Type: "string"},
+		},
+	}
+
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatalf("CreateTable() error = %v", err)
+	}
+
+	// 并发插入
+	done := make(chan bool)
+	for i := 0; i < 10; i++ {
+		go func(idx int) {
+			defer func() { done <- true }()
+			rows := []domain.Row{
+				{"id": int64(idx), "value": string(rune('A' + idx))},
+			}
+			ms.Insert(ctx, "concurrent_test", rows, nil)
+		}(i)
+	}
+
+	// 等待所有插入完成
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// 验证数据
+	result, err := ms.Query(ctx, "concurrent_test", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 10 {
+		t.Fatalf("Expected 10 rows after concurrent inserts, got %d", len(result.Rows))
+	}
+}

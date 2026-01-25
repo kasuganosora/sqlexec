@@ -1,0 +1,118 @@
+package util
+
+import (
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+)
+
+// ApplyFilters 应用过滤器（通用实现）
+func ApplyFilters(rows []domain.Row, options *domain.QueryOptions) []domain.Row {
+	if options == nil || len(options.Filters) == 0 {
+		return rows
+	}
+
+	result := []domain.Row{}
+	for _, row := range rows {
+		if MatchesFilters(row, options.Filters) {
+			result = append(result, row)
+		}
+	}
+	return result
+}
+
+// MatchesFilters 检查行是否匹配过滤器列表
+func MatchesFilters(row domain.Row, filters []domain.Filter) bool {
+	// 如果没有过滤器，所有行都匹配
+	if len(filters) == 0 {
+		return true
+	}
+
+	// 检查第一个过滤器
+	filter := filters[0]
+
+	// 如果有逻辑操作符
+	if filter.LogicOp == "OR" || filter.LogicOp == "or" {
+		// OR 操作：行的任何子过滤器匹配即可
+		return MatchesAnySubFilter(row, filter.SubFilters)
+	}
+
+	// 如果有 AND 逻辑操作符
+	if filter.LogicOp == "AND" || filter.LogicOp == "and" {
+		// AND 操作：行的所有子过滤器都必须匹配
+		return MatchesAllSubFilters(row, filter.SubFilters)
+	}
+
+	// 默认（AND 逻辑）：所有过滤器都必须匹配
+	for _, f := range filters {
+		if !MatchFilter(row, f) {
+			return false
+		}
+	}
+	return true
+}
+
+// MatchesAnySubFilter 检查行是否匹配任意子过滤器（OR 逻辑）
+func MatchesAnySubFilter(row domain.Row, subFilters []domain.Filter) bool {
+	// 如果没有子过滤器，返回 true
+	if len(subFilters) == 0 {
+		return true
+	}
+	// 检查是否有子过滤器匹配
+	for _, subFilter := range subFilters {
+		if MatchFilter(row, subFilter) {
+			return true
+		}
+	}
+	return false
+}
+
+// MatchesAllSubFilters 检查行是否匹配所有子过滤器（AND 逻辑）
+func MatchesAllSubFilters(row domain.Row, subFilters []domain.Filter) bool {
+	// 如果没有子过滤器，返回 true
+	if len(subFilters) == 0 {
+		return true
+	}
+	// 检查是否所有子过滤器都匹配
+	for _, subFilter := range subFilters {
+		if !MatchFilter(row, subFilter) {
+			return false
+		}
+	}
+	return true
+}
+
+// MatchFilter 匹配单个过滤器
+func MatchFilter(row domain.Row, filter domain.Filter) bool {
+	value, exists := row[filter.Field]
+	if !exists {
+		return false
+	}
+
+	switch filter.Operator {
+	case "=":
+		return CompareEqual(value, filter.Value)
+	case "!=":
+		return !CompareEqual(value, filter.Value)
+	case ">":
+		return CompareGreater(value, filter.Value)
+	case "<":
+		return !CompareGreater(value, filter.Value) && !CompareEqual(value, filter.Value)
+	case ">=":
+		return CompareGreater(value, filter.Value) || CompareEqual(value, filter.Value)
+	case "<=":
+		return !CompareGreater(value, filter.Value)
+	case "LIKE":
+		return CompareLike(value, filter.Value)
+	case "NOT LIKE":
+		return !CompareLike(value, filter.Value)
+	case "IN":
+		return CompareIn(value, filter.Value)
+	case "NOT IN":
+		return !CompareIn(value, filter.Value)
+	case "BETWEEN":
+		return CompareBetween(value, filter.Value)
+	case "NOT BETWEEN":
+		return !CompareBetween(value, filter.Value)
+	default:
+		return false
+	}
+}

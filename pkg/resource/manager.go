@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // DataSourceManager 数据源管理器
@@ -332,6 +334,127 @@ func (m *DataSourceManager) GetDefaultName() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.defaultDS
+}
+
+// ==================== 能力接口支持 ====================
+
+// IsWritable 检查数据源是否可写
+// 使用domain.HasWriteSupport辅助函数
+func (m *DataSourceManager) IsWritable(name string) (bool, error) {
+	ds, err := m.Get(name)
+	if err != nil {
+		return false, err
+	}
+	
+	// 使用辅助函数检查写支持
+	return domain.HasWriteSupport(ds), nil
+}
+
+// SupportsMVCC 检查数据源是否支持MVCC
+// 使用domain.HasMVCCSupport辅助函数
+func (m *DataSourceManager) SupportsMVCC(name string) (bool, error) {
+	ds, err := m.Get(name)
+	if err != nil {
+		return false, err
+	}
+	
+	// 使用辅助函数检查MVCC支持
+	return domain.HasMVCCSupport(ds), nil
+}
+
+// BeginTx 在指定数据源开始事务
+// 如果数据源支持MVCC，使用其事务接口
+// 否则返回错误
+func (m *DataSourceManager) BeginTx(ctx context.Context, name string, readOnly bool) (int64, error) {
+	ds, err := m.Get(name)
+	if err != nil {
+		return 0, err
+	}
+	
+	// 检查是否支持MVCC
+	mvccable, ok := domain.GetMVCCDataSource(ds)
+	if !ok {
+		return 0, fmt.Errorf("data source %s does not support MVCC", name)
+	}
+	
+	// 调用事务方法
+	return mvccable.BeginTx(ctx, readOnly)
+}
+
+// CommitTx 提交指定数据源的事务
+func (m *DataSourceManager) CommitTx(ctx context.Context, name string, txnID int64) error {
+	ds, err := m.Get(name)
+	if err != nil {
+		return err
+	}
+	
+	// 检查是否支持MVCC
+	mvccable, ok := domain.GetMVCCDataSource(ds)
+	if !ok {
+		return fmt.Errorf("data source %s does not support MVCC", name)
+	}
+	
+	// 调用提交方法
+	return mvccable.CommitTx(ctx, txnID)
+}
+
+// RollbackTx 回滚指定数据源的事务
+func (m *DataSourceManager) RollbackTx(ctx context.Context, name string, txnID int64) error {
+	ds, err := m.Get(name)
+	if err != nil {
+		return err
+	}
+	
+	// 检查是否支持MVCC
+	mvccable, ok := domain.GetMVCCDataSource(ds)
+	if !ok {
+		return fmt.Errorf("data source %s does not support MVCC", name)
+	}
+	
+	// 调用回滚方法
+	return mvccable.RollbackTx(ctx, txnID)
+}
+
+// ==================== 批量能力查询 ====================
+
+// GetWritableSources 获取所有可写的数据源
+func (m *DataSourceManager) GetWritableSources(ctx context.Context) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	writableSources := make([]string, 0)
+	for name, ds := range m.sources {
+		if domain.HasWriteSupport(ds) {
+			writableSources = append(writableSources, name)
+		}
+	}
+	return writableSources, nil
+}
+
+// GetMVCCSources 获取所有支持MVCC的数据源
+func (m *DataSourceManager) GetMVCCSources(ctx context.Context) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	mvccSources := make([]string, 0)
+	for name, ds := range m.sources {
+		if domain.HasMVCCSupport(ds) {
+			mvccSources = append(mvccSources, name)
+		}
+	}
+	return mvccSources, nil
+}
+
+// GetSourceCapabilities 获取数据源的能力信息
+func (m *DataSourceManager) GetSourceCapabilities(ctx context.Context, name string) (writable, mvcc bool, err error) {
+	ds, err := m.Get(name)
+	if err != nil {
+		return false, false, err
+	}
+	
+	writable = domain.HasWriteSupport(ds)
+	mvcc = domain.HasMVCCSupport(ds)
+	return writable, mvcc, nil
 }
 
 // 全局数据源管理器实例
