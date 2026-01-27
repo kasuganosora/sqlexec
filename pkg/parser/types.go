@@ -18,10 +18,11 @@ const (
 	SQLTypeTruncate  SQLType = "TRUNCATE"
 	SQLTypeShow      SQLType = "SHOW"
 	SQLTypeDescribe  SQLType = "DESCRIBE"
-	SQLTypeBegin    SQLType = "BEGIN"
-	SQLTypeCommit   SQLType = "COMMIT"
-	SQLTypeRollback SQLType = "ROLLBACK"
-	SQLTypeUse      SQLType = "USE"
+	SQLTypeExplain   SQLType = "EXPLAIN"
+	SQLTypeBegin     SQLType = "BEGIN"
+	SQLTypeCommit    SQLType = "COMMIT"
+	SQLTypeRollback  SQLType = "ROLLBACK"
+	SQLTypeUse       SQLType = "USE"
 	SQLTypeUnknown   SQLType = "UNKNOWN"
 
 	// 排序方向
@@ -42,6 +43,7 @@ type SQLStatement struct {
 	Alter     *AlterStatement     `json:"alter,omitempty"`
 	Show      *ShowStatement      `json:"show,omitempty"`
 	Describe  *DescribeStatement  `json:"describe,omitempty"`
+	Explain   *ExplainStatement   `json:"explain,omitempty"`
 	Begin     *TransactionStatement `json:"begin,omitempty"`
 	Commit    *TransactionStatement `json:"commit,omitempty"`
 	Rollback  *TransactionStatement `json:"rollback,omitempty"`
@@ -129,6 +131,14 @@ type ShowStatement struct {
 type DescribeStatement struct {
 	Table  string `json:"table"`
 	Column string `json:"column,omitempty"`
+}
+
+// ExplainStatement EXPLAIN 语句
+type ExplainStatement struct {
+	Query      *SelectStatement `json:"query,omitempty"`      // The query to explain
+	TargetSQL  string          `json:"target_sql,omitempty"` // Raw SQL string
+	Format     string          `json:"format,omitempty"`    // Format type (e.g., "TREE", "JSON")
+	Analyze    bool            `json:"analyze,omitempty"`   // EXPLAIN ANALYZE
 }
 
 // UseStatement USE 语句

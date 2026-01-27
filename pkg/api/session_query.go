@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
@@ -88,4 +89,100 @@ func (s *Session) QueryOne(sql string, args ...interface{}) (domain.Row, error) 
 	}
 
 	return query.Row(), nil
+}
+
+// Explain executes an EXPLAIN statement and returns the execution plan
+// Supports parameter binding with ? placeholders
+// Example: session.Explain("SELECT * FROM users WHERE id = ?", 1)
+func (s *Session) Explain(sql string, args ...interface{}) (string, error) {
+	s.mu.RLock()
+	if s.err != nil {
+		s.mu.RUnlock()
+		return "", s.err
+	}
+	s.mu.RUnlock()
+
+	// Bind parameters if provided
+	boundSQL := sql
+	if len(args) > 0 {
+		var err error
+		boundSQL, err = bindParams(sql, args)
+		if err != nil {
+			return "", WrapError(err, ErrCodeInvalidParam, "failed to bind parameters")
+		}
+	}
+
+	s.logger.Debug("Explain: %s", boundSQL)
+
+	// Parse SQL to verify it's an EXPLAIN statement
+	parseResult, err := s.coreSession.GetAdapter().Parse(boundSQL)
+	if err != nil {
+		return "", WrapError(err, ErrCodeSyntax, "failed to parse SQL")
+	}
+
+	if !parseResult.Success {
+		return "", NewError(ErrCodeSyntax, "SQL parse error: "+parseResult.Error, nil)
+	}
+
+	// Check if it's an EXPLAIN statement
+	if parseResult.Statement.Type != "EXPLAIN" {
+		return "", NewError(ErrCodeInvalidParam, "expected EXPLAIN statement, got "+string(parseResult.Statement.Type), nil)
+	}
+
+	// Check cache if enabled
+	if s.cacheEnabled {
+		if explain, found := s.db.cache.GetExplain(boundSQL); found {
+			s.logger.Debug("Cache hit for explain")
+			return explain, nil
+		}
+	}
+
+	// Generate execution plan using optimizer
+	ctx := context.Background()
+
+	// Try to get execution plan from the result
+	result, err := s.coreSession.ExecuteQuery(ctx, boundSQL)
+	if err != nil {
+		return "", WrapError(err, ErrCodeInternal, "failed to execute explain")
+	}
+
+	// Generate explain output
+	explain := generateExplainOutput(result)
+
+	// Cache explain result
+	if s.cacheEnabled {
+		s.db.cache.SetExplain(boundSQL, explain)
+	}
+
+	return explain, nil
+}
+
+// generateExplainOutput generates formatted explain output
+func generateExplainOutput(result *domain.QueryResult) string {
+	// Generate basic explain output
+	output := "Query Execution Plan:\n"
+	output += "===================\n"
+	output += "\n"
+
+	// Add execution statistics
+	if result != nil {
+		output += "Execution Statistics:\n"
+		output += "-------------------\n"
+		output += fmt.Sprintf("Rows Returned: %d\n", result.Total)
+		if len(result.Columns) > 0 {
+			output += fmt.Sprintf("Columns: %d\n", len(result.Columns))
+			output += "Column Names: "
+			for i, col := range result.Columns {
+				if i > 0 {
+					output += ", "
+				}
+				output += col.Name
+			}
+			output += "\n"
+		}
+	} else {
+		output += "No execution statistics available\n"
+	}
+
+	return output
 }

@@ -26,16 +26,25 @@ var DefaultCacheConfig = CacheConfig{
 
 // QueryCache 查询缓存
 type QueryCache struct {
-	store   map[string]*CacheEntry
-	mu      sync.RWMutex
-	ttl     time.Duration
-	maxSize int
+	store         map[string]*CacheEntry
+	explainStore  map[string]*ExplainEntry
+	mu            sync.RWMutex
+	ttl           time.Duration
+	maxSize       int
 }
 
 // CacheEntry 缓存条目
 type CacheEntry struct {
 	Result    *domain.QueryResult
 	Params    []interface{}
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	Hits      int64
+}
+
+// ExplainEntry Explain 缓存条目
+type ExplainEntry struct {
+	Explain   string
 	CreatedAt time.Time
 	ExpiresAt time.Time
 	Hits      int64
@@ -48,9 +57,10 @@ func NewQueryCache(config CacheConfig) *QueryCache {
 	}
 
 	return &QueryCache{
-		store:   make(map[string]*CacheEntry),
-		ttl:     config.TTL,
-		maxSize: config.MaxSize,
+		store:        make(map[string]*CacheEntry),
+		explainStore: make(map[string]*ExplainEntry),
+		ttl:          config.TTL,
+		maxSize:      config.MaxSize,
 	}
 }
 
@@ -266,3 +276,82 @@ func (s CacheStats) String() string {
 	return fmt.Sprintf("Size: %d/%d, TotalHits: %d, Oldest: %v, Newest: %v",
 		s.Size, s.MaxSize, s.TotalHits, s.Oldest, s.Newest)
 }
+
+// GetExplain 获取 Explain 缓存
+func (c *QueryCache) GetExplain(sql string) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+
+	key := c.generateKey(sql, nil)
+
+	c.mu.RLock()
+	entry, exists := c.explainStore[key]
+	c.mu.RUnlock()
+
+	if !exists {
+		return "", false
+	}
+
+	// 检查是否过期
+	if time.Now().After(entry.ExpiresAt) {
+		c.mu.Lock()
+		delete(c.explainStore, key)
+		c.mu.Unlock()
+		return "", false
+	}
+
+	// 更新命中次数
+	entry.Hits++
+
+	return entry.Explain, true
+}
+
+// SetExplain 设置 Explain 缓存
+func (c *QueryCache) SetExplain(sql string, explain string) {
+	if c == nil || explain == "" {
+		return
+	}
+
+	key := c.generateKey(sql, nil)
+
+	// 检查缓存大小限制
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(c.store)+len(c.explainStore) >= c.maxSize {
+		c.evictOldestExplain()
+	}
+
+	now := time.Now()
+	entry := &ExplainEntry{
+		Explain:   explain,
+		CreatedAt: now,
+		ExpiresAt: now.Add(c.ttl),
+		Hits:      0,
+	}
+
+	c.explainStore[key] = entry
+}
+
+// evictOldestExplain 淘汰最老的 Explain 缓存条目
+func (c *QueryCache) evictOldestExplain() {
+	if len(c.explainStore) == 0 {
+		return
+	}
+
+	oldestKey := ""
+	var oldestTime time.Time
+
+	for key, entry := range c.explainStore {
+		if oldestTime.IsZero() || entry.CreatedAt.Before(oldestTime) {
+			oldestKey = key
+			oldestTime = entry.CreatedAt
+		}
+	}
+
+	if oldestKey != "" {
+		delete(c.explainStore, oldestKey)
+	}
+}
+

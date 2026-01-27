@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -174,7 +175,25 @@ func (a *SQLAdapter) convertToStatement(node ast.StmtNode) (*SQLStatement, error
 			stmt.Describe = describeStmt
 		} else {
 			// Regular EXPLAIN statement
-			stmt.Type = SQLTypeSelect // Treat as SELECT-like for now
+			stmt.Type = SQLTypeExplain
+			explainStmt := &ExplainStatement{
+				TargetSQL: stmt.RawSQL,
+				Format:    "TREE", // Default format
+				Analyze:   strings.HasPrefix(strings.ToUpper(stmt.RawSQL), "EXPLAIN ANALYZE"),
+			}
+
+			// Try to extract the inner SELECT statement
+			if stmtNode.Stmt != nil {
+				if selectStmt, ok := stmtNode.Stmt.(*ast.SelectStmt); ok {
+					selectStmt, err := a.convertSelectStmt(selectStmt)
+					if err != nil {
+						return nil, err
+					}
+					explainStmt.Query = selectStmt
+				}
+			}
+
+			stmt.Explain = explainStmt
 		}
 
 	default:

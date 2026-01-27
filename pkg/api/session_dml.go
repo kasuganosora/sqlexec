@@ -10,7 +10,7 @@ import (
 
 // Execute executes an INSERT, UPDATE, or DELETE statement and returns number of affected rows
 // Supports parameter binding with ? placeholders
-// For SELECT, SHOW, and DESCRIBE statements, use Query() method instead
+// For SELECT, SHOW, DESCRIBE, and EXPLAIN statements, use Query() or Explain() method instead
 func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 	s.mu.RLock()
 	if s.err != nil {
@@ -59,8 +59,8 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 		result, err = s.coreSession.ExecuteDelete(ctx, boundSQL, nil)
 	case parser.SQLTypeUse:
 		result, err = s.coreSession.ExecuteQuery(ctx, boundSQL)
-	case parser.SQLTypeSelect, parser.SQLTypeShow, parser.SQLTypeDescribe:
-		return nil, NewError(ErrCodeInvalidParam, fmt.Sprintf("use Query() method for %s statements", parseResult.Statement.Type), nil)
+	case parser.SQLTypeSelect, parser.SQLTypeShow, parser.SQLTypeDescribe, parser.SQLTypeExplain:
+		return nil, NewError(ErrCodeInvalidParam, fmt.Sprintf("use Query() method for %s statements (or Explain() for EXPLAIN)", parseResult.Statement.Type), nil)
 	default:
 		return nil, NewError(ErrCodeNotSupported, fmt.Sprintf("unsupported statement type: %v", parseResult.Statement.Type), nil)
 	}
