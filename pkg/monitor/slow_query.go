@@ -269,6 +269,14 @@ func (s *SlowQueryAnalyzer) AnalyzeSlowQueries() *SlowQueryAnalysis {
 		analysis.AvgRowCount = totalRowCount / int64(len(s.slowQueries))
 	}
 
+	// 计算表级别的平均值
+	for _, stats := range analysis.TableStats {
+		if stats.QueryCount > 0 {
+			stats.AvgDuration = stats.TotalDuration / time.Duration(stats.QueryCount)
+			stats.AvgRowCount = stats.TotalRowCount / int64(stats.QueryCount)
+		}
+	}
+
 	return analysis
 }
 
