@@ -25,12 +25,23 @@ func NewTransaction(session *Session, tx domain.Transaction) *Transaction {
 }
 
 // Query 事务内查询
+// Supports parameter binding with ? placeholders
 func (t *Transaction) Query(sql string, args ...interface{}) (*Query, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if !t.active {
 		return nil, NewError(ErrCodeTransaction, "transaction is not active", nil)
+	}
+
+	// Bind parameters if provided
+	boundSQL := sql
+	if len(args) > 0 {
+		var err error
+		boundSQL, err = bindParams(sql, args)
+		if err != nil {
+			return nil, WrapError(err, ErrCodeInvalidParam, "failed to bind parameters")
+		}
 	}
 
 	// 使用事务执行查询
@@ -40,10 +51,11 @@ func (t *Transaction) Query(sql string, args ...interface{}) (*Query, error) {
 		return nil, WrapError(err, ErrCodeTransaction, "transaction query failed")
 	}
 
-	return NewQuery(t.session, result, sql, args), nil
+	return NewQuery(t.session, result, boundSQL, nil), nil
 }
 
 // Execute 事务内执行命令
+// Supports parameter binding with ? placeholders
 func (t *Transaction) Execute(sql string, args ...interface{}) (*Result, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -52,13 +64,24 @@ func (t *Transaction) Execute(sql string, args ...interface{}) (*Result, error) 
 		return nil, NewError(ErrCodeTransaction, "transaction is not active", nil)
 	}
 
+	// Bind parameters if provided
+	boundSQL := sql
+	if len(args) > 0 {
+		var err error
+		boundSQL, err = bindParams(sql, args)
+		if err != nil {
+			return nil, WrapError(err, ErrCodeInvalidParam, "failed to bind parameters")
+		}
+	}
+
 	// 解析 SQL 确定操作类型
 	// 简化实现：假设用户直接调用 DataSource 的方法
 	// 实际实现需要解析 SQL 并调用相应的方法
 
-	// TODO: 解析 SQL 并执行
+	// TODO: 解析 boundSQL 并执行
 	// 这里需要完善：解析 SQL -> 调用 Insert/Update/Delete 方法
 	// 临时返回错误
+	_ = boundSQL // Use boundSQL to avoid "declared and not used" error
 	return nil, NewError(ErrCodeNotSupported, "transaction.Execute not fully implemented yet", nil)
 }
 

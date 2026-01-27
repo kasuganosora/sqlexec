@@ -7,6 +7,8 @@ import (
 )
 
 // Query executes a SELECT, SHOW, or DESCRIBE query and returns a Query object for iterating through results
+// Supports parameter binding with ? placeholders
+// Example: session.Query("SELECT * FROM users WHERE id = ?", 1)
 func (s *Session) Query(sql string, args ...interface{}) (*Query, error) {
 	s.mu.RLock()
 	if s.err != nil {
@@ -15,33 +17,44 @@ func (s *Session) Query(sql string, args ...interface{}) (*Query, error) {
 	}
 	s.mu.RUnlock()
 
-	s.logger.Debug("Query: %s", sql)
+	// Bind parameters if provided
+	boundSQL := sql
+	if len(args) > 0 {
+		var err error
+		boundSQL, err = bindParams(sql, args)
+		if err != nil {
+			return nil, WrapError(err, ErrCodeInvalidParam, "failed to bind parameters")
+		}
+	}
+
+	s.logger.Debug("Query: %s", boundSQL)
 
 	// Check cache if enabled
 	if s.cacheEnabled {
-		if result, found := s.db.cache.Get(sql, args); found {
+		if result, found := s.db.cache.Get(boundSQL, nil); found {
 			s.logger.Debug("Cache hit for query")
-			return NewQuery(s, result, sql, args), nil
+			return NewQuery(s, result, boundSQL, nil), nil
 		}
 	}
 
 	// Parse and execute query
 	ctx := context.Background()
 
-	result, err := s.coreSession.ExecuteQuery(ctx, sql)
+	result, err := s.coreSession.ExecuteQuery(ctx, boundSQL)
 	if err != nil {
 		return nil, WrapError(err, ErrCodeSyntax, "failed to execute query")
 	}
 
-	// Cache result
+	// Cache result (with bound SQL, not original)
 	if s.cacheEnabled {
-		s.db.cache.Set(sql, args, result)
+		s.db.cache.Set(boundSQL, nil, result)
 	}
 
-	return NewQuery(s, result, sql, args), nil
+	return NewQuery(s, result, boundSQL, nil), nil
 }
 
 // QueryAll executes a query and returns all rows at once
+// Supports parameter binding with ? placeholders
 func (s *Session) QueryAll(sql string, args ...interface{}) ([]domain.Row, error) {
 	query, err := s.Query(sql, args...)
 	if err != nil {
@@ -62,6 +75,7 @@ func (s *Session) QueryAll(sql string, args ...interface{}) ([]domain.Row, error
 }
 
 // QueryOne executes a query and returns first row only
+// Supports parameter binding with ? placeholders
 func (s *Session) QueryOne(sql string, args ...interface{}) (domain.Row, error) {
 	query, err := s.Query(sql, args...)
 	if err != nil {

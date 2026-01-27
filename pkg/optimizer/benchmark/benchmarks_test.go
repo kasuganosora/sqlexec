@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 )
 
 // BenchmarkSuite 基准测试套件
@@ -24,15 +25,16 @@ func NewBenchmarkSuite() *BenchmarkSuite {
 // Setup 测试环境设置
 func (bs *BenchmarkSuite) Setup() error {
 	// 创建内存数据源
-	factory := domain.NewMemoryFactory()
+	factory := memory.NewMemoryFactory()
 	memSource, err := factory.Create(&domain.DataSourceConfig{
-		Type: domain.DataSourceTypeMemory,
+		Type:     domain.DataSourceTypeMemory,
+		Writable: true,
 	})
 	if err != nil {
 		return err
 	}
-	
-	ms, ok := memSource.(*domain.MemorySource)
+
+	ms, ok := memSource.(*memory.MVCCDataSource)
 	if !ok {
 		return fmt.Errorf("failed to create memory source")
 	}
@@ -47,7 +49,7 @@ func (bs *BenchmarkSuite) Setup() error {
 }
 
 // generateTestTables 生成测试表
-func (bs *BenchmarkSuite) generateTestTables(dataSource *domain.MemorySource) error {
+func (bs *BenchmarkSuite) generateTestTables(dataSource *memory.MVCCDataSource) error {
 	// 小数据集表 (1,000行)
 	if err := bs.createTable(dataSource, "small_table", 1000, 10); err != nil {
 		return err
@@ -75,7 +77,7 @@ func (bs *BenchmarkSuite) generateTestTables(dataSource *domain.MemorySource) er
 }
 
 // createTable 创建测试表
-func (bs *BenchmarkSuite) createTable(dataSource *domain.MemorySource, tableName string, rowCount, colCount int) error {
+func (bs *BenchmarkSuite) createTable(dataSource *memory.MVCCDataSource, tableName string, rowCount, colCount int) error {
 	// 创建表
 	columns := []domain.ColumnInfo{}
 	for i := 0; i < colCount; i++ {

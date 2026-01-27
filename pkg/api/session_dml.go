@@ -9,6 +9,7 @@ import (
 )
 
 // Execute executes an INSERT, UPDATE, or DELETE statement and returns number of affected rows
+// Supports parameter binding with ? placeholders
 // For SELECT, SHOW, and DESCRIBE statements, use Query() method instead
 func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 	s.mu.RLock()
@@ -18,10 +19,20 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 	}
 	s.mu.RUnlock()
 
-	s.logger.Debug("Execute: %s", sql)
+	// Bind parameters if provided
+	boundSQL := sql
+	if len(args) > 0 {
+		var err error
+		boundSQL, err = bindParams(sql, args)
+		if err != nil {
+			return nil, WrapError(err, ErrCodeInvalidParam, "failed to bind parameters")
+		}
+	}
+
+	s.logger.Debug("Execute: %s", boundSQL)
 
 	// Parse SQL to determine statement type
-	parseResult, err := s.coreSession.GetAdapter().Parse(sql)
+	parseResult, err := s.coreSession.GetAdapter().Parse(boundSQL)
 	if err != nil {
 		return nil, WrapError(err, ErrCodeSyntax, "failed to parse SQL")
 	}
@@ -31,7 +42,7 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 	}
 
 	// Check for read-only information_schema operations (check both SQL string and parsed statement)
-	if s.isInformationSchemaOperation(sql, parseResult.Statement) {
+	if s.isInformationSchemaOperation(boundSQL, parseResult.Statement) {
 		s.logger.Debug("Blocking information_schema DML operation")
 		return nil, NewError(ErrCodeInternal, "information_schema is read-only: DML operations are not supported", nil)
 	}
@@ -41,13 +52,13 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 
 	switch parseResult.Statement.Type {
 	case parser.SQLTypeInsert:
-		result, err = s.coreSession.ExecuteInsert(ctx, sql, nil)
+		result, err = s.coreSession.ExecuteInsert(ctx, boundSQL, nil)
 	case parser.SQLTypeUpdate:
-		result, err = s.coreSession.ExecuteUpdate(ctx, sql, nil, nil)
+		result, err = s.coreSession.ExecuteUpdate(ctx, boundSQL, nil, nil)
 	case parser.SQLTypeDelete:
-		result, err = s.coreSession.ExecuteDelete(ctx, sql, nil)
+		result, err = s.coreSession.ExecuteDelete(ctx, boundSQL, nil)
 	case parser.SQLTypeUse:
-		result, err = s.coreSession.ExecuteQuery(ctx, sql)
+		result, err = s.coreSession.ExecuteQuery(ctx, boundSQL)
 	case parser.SQLTypeSelect, parser.SQLTypeShow, parser.SQLTypeDescribe:
 		return nil, NewError(ErrCodeInvalidParam, fmt.Sprintf("use Query() method for %s statements", parseResult.Statement.Type), nil)
 	default:
