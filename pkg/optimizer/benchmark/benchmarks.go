@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // BenchmarkSuite 基准测试套件
 type BenchmarkSuite struct {
-	dataSource resource.DataSource
+	dataSource domain.DataSource
 }
 
 // NewBenchmarkSuite 创建基准测试套件
@@ -24,15 +24,15 @@ func NewBenchmarkSuite() *BenchmarkSuite {
 // Setup 测试环境设置
 func (bs *BenchmarkSuite) Setup() error {
 	// 创建内存数据源
-	factory := resource.NewMemoryFactory()
-	memSource, err := factory.Create(&resource.DataSourceConfig{
-		Type: resource.DataSourceTypeMemory,
+	factory := domain.NewMemoryFactory()
+	memSource, err := factory.Create(&domain.DataSourceConfig{
+		Type: domain.DataSourceTypeMemory,
 	})
 	if err != nil {
 		return err
 	}
 	
-	ms, ok := memSource.(*resource.MemorySource)
+	ms, ok := memSource.(*domain.MemorySource)
 	if !ok {
 		return fmt.Errorf("failed to create memory source")
 	}
@@ -47,7 +47,7 @@ func (bs *BenchmarkSuite) Setup() error {
 }
 
 // generateTestTables 生成测试表
-func (bs *BenchmarkSuite) generateTestTables(dataSource *resource.MemorySource) error {
+func (bs *BenchmarkSuite) generateTestTables(dataSource *domain.MemorySource) error {
 	// 小数据集表 (1,000行)
 	if err := bs.createTable(dataSource, "small_table", 1000, 10); err != nil {
 		return err
@@ -75,9 +75,9 @@ func (bs *BenchmarkSuite) generateTestTables(dataSource *resource.MemorySource) 
 }
 
 // createTable 创建测试表
-func (bs *BenchmarkSuite) createTable(dataSource *resource.MemorySource, tableName string, rowCount, colCount int) error {
+func (bs *BenchmarkSuite) createTable(dataSource *domain.MemorySource, tableName string, rowCount, colCount int) error {
 	// 创建表
-	columns := []resource.ColumnInfo{}
+	columns := []domain.ColumnInfo{}
 	for i := 0; i < colCount; i++ {
 		colType := "VARCHAR"
 		if i%4 == 0 {
@@ -86,14 +86,14 @@ func (bs *BenchmarkSuite) createTable(dataSource *resource.MemorySource, tableNa
 			colType = "FLOAT"
 		}
 		
-		columns = append(columns, resource.ColumnInfo{
+		columns = append(columns, domain.ColumnInfo{
 			Name:     fmt.Sprintf("col%d", i),
 			Type:     colType,
 			Nullable: i == 3, // 某些列可为NULL
 		})
 	}
 	
-	tableInfo := &resource.TableInfo{
+	tableInfo := &domain.TableInfo{
 		Name:    tableName,
 		Columns: columns,
 	}
@@ -103,9 +103,9 @@ func (bs *BenchmarkSuite) createTable(dataSource *resource.MemorySource, tableNa
 	}
 	
 	// 生成测试数据
-	data := make([]resource.Row, rowCount)
+	data := make([]domain.Row, rowCount)
 	for i := 0; i < rowCount; i++ {
-		row := make(resource.Row)
+		row := make(domain.Row)
 		for j := 0; j < colCount; j++ {
 			colName := fmt.Sprintf("col%d", j)
 			
@@ -136,7 +136,7 @@ func (bs *BenchmarkSuite) createTable(dataSource *resource.MemorySource, tableNa
 	// 逐行插入
 	var totalInserted int64
 	for i := 0; i < len(data); i++ {
-		count, err := dataSource.Insert(context.Background(), tableName, []resource.Row{data[i]}, nil)
+		count, err := dataSource.Insert(context.Background(), tableName, []domain.Row{data[i]}, nil)
 		if err != nil {
 			return fmt.Errorf("insert row failed: %w", err)
 		}
@@ -158,7 +158,7 @@ func BenchmarkTableScan_Small(b *testing.B) {
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "small_table", &resource.QueryOptions{})
+		_, err := suite.dataSource.Query(context.Background(), "small_table", &domain.QueryOptions{})
 		if err != nil {
 			b.Fatalf("query failed: %v", err)
 		}
@@ -174,7 +174,7 @@ func BenchmarkTableScan_Medium(b *testing.B) {
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "medium_table", &resource.QueryOptions{})
+		_, err := suite.dataSource.Query(context.Background(), "medium_table", &domain.QueryOptions{})
 		if err != nil {
 			b.Fatalf("query failed: %v", err)
 		}
@@ -190,7 +190,7 @@ func BenchmarkTableScan_Large(b *testing.B) {
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "large_table", &resource.QueryOptions{})
+		_, err := suite.dataSource.Query(context.Background(), "large_table", &domain.QueryOptions{})
 		if err != nil {
 			b.Fatalf("query failed: %v", err)
 		}
@@ -208,13 +208,13 @@ func BenchmarkFilter_Simple(b *testing.B) {
 		b.Fatalf("setup failed: %v", err)
 	}
 	
-	filters := []resource.Filter{
+	filters := []domain.Filter{
 		{Field: "col0", Operator: ">", Value: 500},
 	}
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "medium_table", &resource.QueryOptions{
+		_, err := suite.dataSource.Query(context.Background(), "medium_table", &domain.QueryOptions{
 			Filters: filters,
 		})
 		if err != nil {
@@ -230,7 +230,7 @@ func BenchmarkFilter_Complex(b *testing.B) {
 		b.Fatalf("setup failed: %v", err)
 	}
 	
-	filters := []resource.Filter{
+	filters := []domain.Filter{
 		{Field: "col0", Operator: ">", Value: 100},
 		{Field: "col1", Operator: "<", Value: 500},
 		{Field: "col4", Operator: "=", Value: "value_50"},
@@ -238,7 +238,7 @@ func BenchmarkFilter_Complex(b *testing.B) {
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "medium_table", &resource.QueryOptions{
+		_, err := suite.dataSource.Query(context.Background(), "medium_table", &domain.QueryOptions{
 			Filters: filters,
 		})
 		if err != nil {
@@ -387,7 +387,7 @@ func BenchmarkLimit_Small(b *testing.B) {
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "medium_table", &resource.QueryOptions{
+		_, err := suite.dataSource.Query(context.Background(), "medium_table", &domain.QueryOptions{
 			Limit: 10,
 		})
 		if err != nil {
@@ -405,7 +405,7 @@ func BenchmarkLimit_Medium(b *testing.B) {
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "medium_table", &resource.QueryOptions{
+		_, err := suite.dataSource.Query(context.Background(), "medium_table", &domain.QueryOptions{
 			Limit: 100,
 		})
 		if err != nil {
@@ -427,7 +427,7 @@ func BenchmarkSort_SingleColumn(b *testing.B) {
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "small_table", &resource.QueryOptions{
+		_, err := suite.dataSource.Query(context.Background(), "small_table", &domain.QueryOptions{
 			OrderBy: "col0",
 			Order:   "ASC",
 		})
@@ -446,7 +446,7 @@ func BenchmarkSort_MultiColumn(b *testing.B) {
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "small_table", &resource.QueryOptions{
+		_, err := suite.dataSource.Query(context.Background(), "small_table", &domain.QueryOptions{
 			OrderBy: "col4",
 			Order:   "ASC",
 		})
@@ -476,7 +476,7 @@ func BenchmarkConcurrentQueries(b *testing.B) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				_, _ = suite.dataSource.Query(context.Background(), "small_table", &resource.QueryOptions{})
+				_, _ = suite.dataSource.Query(context.Background(), "small_table", &domain.QueryOptions{})
 			}()
 		}
 		wg.Wait()
@@ -488,10 +488,10 @@ func BenchmarkConcurrentQueries(b *testing.B) {
 // ============================================================================
 
 // executeQuery 执行SQL查询（简化版，用于JOIN等复杂查询）
-func (bs *BenchmarkSuite) executeQuery(sql string) (*resource.QueryResult, error) {
+func (bs *BenchmarkSuite) executeQuery(sql string) (*domain.QueryResult, error) {
 	// 这里应该调用优化器和执行引擎
 	// 简化实现：直接返回数据源查询结果
-	return bs.dataSource.Query(context.Background(), "medium_table", &resource.QueryOptions{})
+	return bs.dataSource.Query(context.Background(), "medium_table", &domain.QueryOptions{})
 }
 
 // ============================================================================
@@ -578,8 +578,8 @@ func BenchmarkPerformanceComparison(b *testing.B) {
 func benchmarkFilterWithoutIndex(b *testing.B, suite *BenchmarkSuite) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := suite.dataSource.Query(context.Background(), "medium_table", &resource.QueryOptions{
-			Filters: []resource.Filter{
+		_, err := suite.dataSource.Query(context.Background(), "medium_table", &domain.QueryOptions{
+			Filters: []domain.Filter{
 				{Field: "col0", Operator: "=", Value: 500},
 			},
 		})

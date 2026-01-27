@@ -82,6 +82,15 @@ func MatchesAllSubFilters(row domain.Row, subFilters []domain.Filter) bool {
 
 // MatchFilter 匹配单个过滤器
 func MatchFilter(row domain.Row, filter domain.Filter) bool {
+	// 处理逻辑运算符（AND/OR）
+	if filter.LogicOp == "OR" || filter.LogicOp == "or" {
+		return MatchesAnySubFilter(row, filter.SubFilters)
+	}
+	if filter.LogicOp == "AND" || filter.LogicOp == "and" {
+		return MatchesAllSubFilters(row, filter.SubFilters)
+	}
+
+	// 处理普通字段比较
 	value, exists := row[filter.Field]
 	if !exists {
 		return false

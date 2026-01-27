@@ -5,23 +5,23 @@ import (
 	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // PhysicalTableScan 物理表扫描
 type PhysicalTableScan struct {
 	TableName  string
 	Columns    []ColumnInfo
-	TableInfo  *resource.TableInfo
+	TableInfo  *domain.TableInfo
 	cost       float64
 	children   []PhysicalPlan
-	dataSource resource.DataSource
-	filters    []resource.Filter // 下推的过滤条件
+	dataSource domain.DataSource
+	filters    []domain.Filter // 下推的过滤条件
 	limitInfo  *LimitInfo      // 下推的Limit信息
 }
 
 // NewPhysicalTableScan 创建物理表扫描
-func NewPhysicalTableScan(tableName string, tableInfo *resource.TableInfo, dataSource resource.DataSource, filters []resource.Filter, limitInfo *LimitInfo) *PhysicalTableScan {
+func NewPhysicalTableScan(tableName string, tableInfo *domain.TableInfo, dataSource domain.DataSource, filters []domain.Filter, limitInfo *LimitInfo) *PhysicalTableScan {
 	columns := make([]ColumnInfo, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		columns = append(columns, ColumnInfo{
@@ -72,11 +72,11 @@ func (p *PhysicalTableScan) Cost() float64 {
 }
 
 // Execute 执行扫描
-func (p *PhysicalTableScan) Execute(ctx context.Context) (*resource.QueryResult, error) {
+func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 开始查询表 %s, 过滤器数: %d, Limit: %v\n", p.TableName, len(p.filters), p.limitInfo)
 	
 	// 如果有下推的过滤条件，使用QueryOptions中的Filters
-	options := &resource.QueryOptions{}
+	options := &domain.QueryOptions{}
 	if len(p.filters) > 0 {
 		options.Filters = p.filters
 		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用下推的过滤条件\n")
@@ -113,14 +113,14 @@ func (p *PhysicalTableScan) Explain() string {
 // PhysicalSelection 物理过滤
 type PhysicalSelection struct {
 	Conditions []*parser.Expression
-	Filters    []resource.Filter
+	Filters    []domain.Filter
 	cost       float64
 	children   []PhysicalPlan
-	dataSource resource.DataSource
+	dataSource domain.DataSource
 }
 
 // NewPhysicalSelection 创建物理过滤
-func NewPhysicalSelection(conditions []*parser.Expression, filters []resource.Filter, child PhysicalPlan, dataSource resource.DataSource) *PhysicalSelection {
+func NewPhysicalSelection(conditions []*parser.Expression, filters []domain.Filter, child PhysicalPlan, dataSource domain.DataSource) *PhysicalSelection {
 	inputCost := child.Cost()
 	cost := inputCost*1.2 + 10 // 过滤成本
 
@@ -157,7 +157,7 @@ func (p *PhysicalSelection) Cost() float64 {
 }
 
 // Execute 执行过滤
-func (p *PhysicalSelection) Execute(ctx context.Context) (*resource.QueryResult, error) {
+func (p *PhysicalSelection) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	if len(p.children) == 0 {
 		return nil, fmt.Errorf("PhysicalSelection has no child")
 	}
@@ -169,7 +169,7 @@ func (p *PhysicalSelection) Execute(ctx context.Context) (*resource.QueryResult,
 	}
 
 	// 手动应用过滤（简化实现）
-	filtered := []resource.Row{}
+	filtered := []domain.Row{}
 	for _, row := range input.Rows {
 		match := true
 		for _, filter := range p.Filters {
@@ -183,7 +183,7 @@ func (p *PhysicalSelection) Execute(ctx context.Context) (*resource.QueryResult,
 		}
 	}
 
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Columns: input.Columns,
 		Rows:    filtered,
 		Total:    int64(len(filtered)),
@@ -191,7 +191,7 @@ func (p *PhysicalSelection) Execute(ctx context.Context) (*resource.QueryResult,
 }
 
 // matchesFilter 检查行是否匹配过滤器（简化实现）
-func matchesFilter(row resource.Row, filter resource.Filter) bool {
+func matchesFilter(row domain.Row, filter domain.Filter) bool {
 	value, exists := row[filter.Field]
 	if !exists {
 		return false
@@ -312,7 +312,7 @@ func (p *PhysicalProjection) Cost() float64 {
 }
 
 // Execute 执行投影
-func (p *PhysicalProjection) Execute(ctx context.Context) (*resource.QueryResult, error) {
+func (p *PhysicalProjection) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	if len(p.children) == 0 {
 		return nil, fmt.Errorf("PhysicalProjection has no child")
 	}
@@ -325,9 +325,9 @@ func (p *PhysicalProjection) Execute(ctx context.Context) (*resource.QueryResult
 	fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 输入行数: %d, 输入列数: %d\n", len(input.Rows), len(input.Columns))
 
 	// 应用投影（简化实现，只支持列选择）
-	output := []resource.Row{}
+	output := []domain.Row{}
 	for rowIdx, row := range input.Rows {
-		newRow := make(resource.Row)
+		newRow := make(domain.Row)
 		fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 处理行 %d, 原始keys: %v\n", rowIdx, getMapKeys(row))
 		for i, expr := range p.Exprs {
 			if expr.Type == parser.ExprTypeColumn {
@@ -350,9 +350,9 @@ func (p *PhysicalProjection) Execute(ctx context.Context) (*resource.QueryResult
 	}
 
 	// 更新列信息
-	columns := make([]resource.ColumnInfo, len(p.Columns))
+	columns := make([]domain.ColumnInfo, len(p.Columns))
 	for i, col := range p.Columns {
-		columns[i] = resource.ColumnInfo{
+		columns[i] = domain.ColumnInfo{
 			Name:     col.Name,
 			Type:     col.Type,
 			Nullable: col.Nullable,
@@ -360,7 +360,7 @@ func (p *PhysicalProjection) Execute(ctx context.Context) (*resource.QueryResult
 	}
 
 	fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 输出行数: %d, 输出列: %v\n", len(output), p.Aliases)
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Columns: columns,
 		Rows:    output,
 		Total:    int64(len(output)),
@@ -368,7 +368,7 @@ func (p *PhysicalProjection) Execute(ctx context.Context) (*resource.QueryResult
 }
 
 // getMapKeys 获取map的所有key
-func getMapKeys(m resource.Row) []string {
+func getMapKeys(m domain.Row) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
@@ -426,7 +426,7 @@ func (p *PhysicalLimit) Cost() float64 {
 }
 
 // Execute 执行限制
-func (p *PhysicalLimit) Execute(ctx context.Context) (*resource.QueryResult, error) {
+func (p *PhysicalLimit) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	if len(p.children) == 0 {
 		return nil, fmt.Errorf("PhysicalLimit has no child")
 	}
@@ -443,9 +443,9 @@ func (p *PhysicalLimit) Execute(ctx context.Context) (*resource.QueryResult, err
 		start = 0
 	}
 	if start >= int64(len(input.Rows)) {
-		return &resource.QueryResult{
+		return &domain.QueryResult{
 			Columns: input.Columns,
-			Rows:    []resource.Row{},
+			Rows:    []domain.Row{},
 			Total:    0,
 		}, nil
 	}
@@ -457,7 +457,7 @@ func (p *PhysicalLimit) Execute(ctx context.Context) (*resource.QueryResult, err
 
 	output := input.Rows[start:end]
 
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Columns: input.Columns,
 		Rows:    output,
 		Total:    int64(len(output)),
@@ -523,7 +523,7 @@ func (p *PhysicalHashJoin) Cost() float64 {
 }
 
 // Execute 执行哈希连接
-func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, error) {
+func (p *PhysicalHashJoin) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	if len(p.children) != 2 {
 		return nil, fmt.Errorf("HashJoin requires exactly 2 children")
 	}
@@ -551,14 +551,14 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 	}
 
 	// 3. 构建哈希表（从左表）
-	hashTable := make(map[interface{}][]resource.Row)
+	hashTable := make(map[interface{}][]domain.Row)
 	for _, row := range leftResult.Rows {
 		key := row[leftJoinCol]
 		hashTable[key] = append(hashTable[key], row)
 	}
 
 	// 4. 探测右表并产生结果
-	output := []resource.Row{}
+	output := []domain.Row{}
 
 	// 根据连接类型处理
 	switch p.JoinType {
@@ -569,7 +569,7 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 			if leftRows, exists := hashTable[key]; exists {
 				for _, leftRow := range leftRows {
 					// 合并左右行
-					merged := make(resource.Row)
+					merged := make(domain.Row)
 					for k, v := range leftRow {
 						merged[k] = v
 					}
@@ -594,7 +594,7 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 			if leftRows, exists := hashTable[key]; exists {
 				// 有匹配：连接
 				for _, leftRow := range leftRows {
-					merged := make(resource.Row)
+					merged := make(domain.Row)
 					for k, v := range leftRow {
 						merged[k] = v
 					}
@@ -623,7 +623,7 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 				}
 			}
 			if !matched {
-				merged := make(resource.Row)
+				merged := make(domain.Row)
 				for k, v := range leftRow {
 					merged[k] = v
 				}
@@ -640,7 +640,7 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*resource.QueryResult, 
 case RightOuterJoin:
 		// RIGHT JOIN：右边所有行，左边没有匹配的用NULL填充
 		// 重新构建左表的哈希表用于RIGHT JOIN
-		leftHashTable := make(map[interface{}][]resource.Row)
+		leftHashTable := make(map[interface{}][]domain.Row)
 		for _, row := range leftResult.Rows {
 			key := row[leftJoinCol]
 			leftHashTable[key] = append(leftHashTable[key], row)
@@ -651,7 +651,7 @@ case RightOuterJoin:
 			if leftRows, exists := leftHashTable[key]; exists {
 				// 有匹配：连接
 				for _, leftRow := range leftRows {
-					merged := make(resource.Row)
+					merged := make(domain.Row)
 					for k, v := range leftRow {
 						merged[k] = v
 					}
@@ -666,7 +666,7 @@ case RightOuterJoin:
 				}
 			} else {
 				// 无匹配：左边NULL + 右边行
-				merged := make(resource.Row)
+				merged := make(domain.Row)
 				for _, col := range leftResult.Columns {
 					merged[col.Name] = nil
 				}
@@ -686,7 +686,7 @@ default:
 	}
 
 	// 合并列信息
-	columns := []resource.ColumnInfo{}
+	columns := []domain.ColumnInfo{}
 	columns = append(columns, leftResult.Columns...)
 	for _, col := range rightResult.Columns {
 		// 检查列名是否冲突
@@ -698,7 +698,7 @@ default:
 			}
 		}
 		if conflict {
-			columns = append(columns, resource.ColumnInfo{
+			columns = append(columns, domain.ColumnInfo{
 				Name:     "right_" + col.Name,
 				Type:     col.Type,
 				Nullable: true,
@@ -708,7 +708,7 @@ default:
 		}
 	}
 
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Columns: columns,
 		Rows:    output,
 		Total:   int64(len(output)),
@@ -790,7 +790,7 @@ func (p *PhysicalHashAggregate) Cost() float64 {
 }
 
 // Execute 执行哈希聚合
-func (p *PhysicalHashAggregate) Execute(ctx context.Context) (*resource.QueryResult, error) {
+func (p *PhysicalHashAggregate) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	if len(p.children) == 0 {
 		return nil, fmt.Errorf("HashAggregate has no child")
 	}
@@ -828,7 +828,7 @@ func (p *PhysicalHashAggregate) Execute(ctx context.Context) (*resource.QueryRes
 		if !exists {
 			group = &aggregateGroup{
 				key:    key,
-				rows:   []resource.Row{},
+				rows:   []domain.Row{},
 				values: make(map[string]interface{}),
 			}
 			groups[keyStr] = group
@@ -838,9 +838,9 @@ func (p *PhysicalHashAggregate) Execute(ctx context.Context) (*resource.QueryRes
 	}
 
 	// 为每个分组计算聚合函数
-	output := []resource.Row{}
+	output := []domain.Row{}
 	for _, group := range groups {
-		row := make(resource.Row)
+		row := make(domain.Row)
 
 		// 添加 GROUP BY 列
 		for i, colName := range p.GroupByCols {
@@ -863,11 +863,11 @@ func (p *PhysicalHashAggregate) Execute(ctx context.Context) (*resource.QueryRes
 	}
 
 	// 构建列信息
-	columns := []resource.ColumnInfo{}
+	columns := []domain.ColumnInfo{}
 
 	// GROUP BY 列
 	for _, colName := range p.GroupByCols {
-		columns = append(columns, resource.ColumnInfo{
+		columns = append(columns, domain.ColumnInfo{
 			Name:     colName,
 			Type:     "unknown",
 			Nullable: true,
@@ -880,14 +880,14 @@ func (p *PhysicalHashAggregate) Execute(ctx context.Context) (*resource.QueryRes
 		if colName == "" {
 			colName = fmt.Sprintf("%s(%v)", agg.Type, agg.Expr)
 		}
-		columns = append(columns, resource.ColumnInfo{
+		columns = append(columns, domain.ColumnInfo{
 			Name:     colName,
 			Type:     "unknown",
 			Nullable: true,
 		})
 	}
 
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Columns: columns,
 		Rows:    output,
 		Total:   int64(len(output)),
@@ -897,12 +897,12 @@ func (p *PhysicalHashAggregate) Execute(ctx context.Context) (*resource.QueryRes
 // aggregateGroup 表示一个分组
 type aggregateGroup struct {
 	key    []interface{}
-	rows   []resource.Row
+	rows   []domain.Row
 	values map[string]interface{}
 }
 
 // calculateAggregation 计算聚合函数
-func (p *PhysicalHashAggregate) calculateAggregation(agg *AggregationItem, rows []resource.Row) interface{} {
+func (p *PhysicalHashAggregate) calculateAggregation(agg *AggregationItem, rows []domain.Row) interface{} {
 	if len(rows) == 0 {
 		switch agg.Type {
 		case Count:

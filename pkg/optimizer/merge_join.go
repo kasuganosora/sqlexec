@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // PhysicalMergeJoin 物理归并连接
@@ -64,7 +64,7 @@ func (p *PhysicalMergeJoin) Cost() float64 {
 }
 
 // Execute 执行归并连接
-func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*resource.QueryResult, error) {
+func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	if len(p.children) != 2 {
 		return nil, fmt.Errorf("MergeJoin requires exactly 2 children")
 	}
@@ -94,7 +94,7 @@ func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*resource.QueryResult,
 	output := p.mergeRows(leftRows, rightRows, leftJoinCol, rightJoinCol, p.JoinType)
 
 	// 5. 合并列信息
-	columns := []resource.ColumnInfo{}
+	columns := []domain.ColumnInfo{}
 	columns = append(columns, leftResult.Columns...)
 	for _, col := range rightResult.Columns {
 		// 检查列名冲突
@@ -106,7 +106,7 @@ func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*resource.QueryResult,
 			}
 		}
 		if conflict {
-			columns = append(columns, resource.ColumnInfo{
+			columns = append(columns, domain.ColumnInfo{
 				Name:     "right_" + col.Name,
 				Type:     col.Type,
 				Nullable: col.Nullable,
@@ -116,7 +116,7 @@ func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*resource.QueryResult,
 		}
 	}
 
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Columns: columns,
 		Rows:    output,
 		Total:    int64(len(output)),
@@ -124,9 +124,9 @@ func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*resource.QueryResult,
 }
 
 // sortByColumn 按指定列排序行数据
-func (p *PhysicalMergeJoin) sortByColumn(rows []resource.Row, column string) []resource.Row {
+func (p *PhysicalMergeJoin) sortByColumn(rows []domain.Row, column string) []domain.Row {
 	// 使用稳定的排序算法
-	sorted := make([]resource.Row, len(rows))
+	sorted := make([]domain.Row, len(rows))
 	copy(sorted, rows)
 
 	// 简单冒泡排序（实际应该用更高效的算法）
@@ -147,17 +147,17 @@ func (p *PhysicalMergeJoin) sortByColumn(rows []resource.Row, column string) []r
 
 // mergeRows 使用两路归并算法合并已排序的行
 func (p *PhysicalMergeJoin) mergeRows(
-	leftRows, rightRows []resource.Row,
+	leftRows, rightRows []domain.Row,
 	leftCol, rightCol string,
 	joinType JoinType,
-) []resource.Row {
+) []domain.Row {
 	
 	// 使用归并排序算法
 	i, j := 0, 0
 	leftCount := len(leftRows)
 	rightCount := len(rightRows)
 
-	output := make([]resource.Row, 0, leftCount+rightCount)
+	output := make([]domain.Row, 0, leftCount+rightCount)
 
 	switch joinType {
 	case InnerJoin:
@@ -252,8 +252,8 @@ func (p *PhysicalMergeJoin) mergeRows(
 }
 
 // mergeRow 合并两行数据
-func (p *PhysicalMergeJoin) mergeRow(left, right resource.Row) resource.Row {
-	merged := make(resource.Row)
+func (p *PhysicalMergeJoin) mergeRow(left, right domain.Row) domain.Row {
+	merged := make(domain.Row)
 
 	// 添加左行数据
 	for k, v := range left {
@@ -274,8 +274,8 @@ func (p *PhysicalMergeJoin) mergeRow(left, right resource.Row) resource.Row {
 }
 
 // mergeRowWithNull 合并行数据，一边为NULL
-func (p *PhysicalMergeJoin) mergeRowWithNull(notNull, nullRow resource.Row) resource.Row {
-	merged := make(resource.Row)
+func (p *PhysicalMergeJoin) mergeRowWithNull(notNull, nullRow domain.Row) domain.Row {
+	merged := make(domain.Row)
 
 	// 添加非NULL行的数据
 	for k, v := range notNull {

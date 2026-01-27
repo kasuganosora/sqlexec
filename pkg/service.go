@@ -18,7 +18,8 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/pool"
 	"github.com/kasuganosora/sqlexec/server/protocol"
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/kasuganosora/sqlexec/pkg/session"
 )
 
@@ -56,8 +57,8 @@ func getSession(ctx context.Context) *session.Session {
 // Server MySQL 服务器
 type Server struct {
 	sessionMgr        *session.SessionMgr
-	dataSourceMgr     *resource.DataSourceManager
-	defaultDataSource resource.DataSource
+	dataSourceMgr     *application.DataSourceManager
+	defaultDataSource domain.DataSource
 	mu                sync.RWMutex
 	parser            *parser.Parser
 	handler           *parser.HandlerChain
@@ -132,7 +133,7 @@ func NewServer(cfg *config.Config) *Server {
 
 	server := &Server{
 		sessionMgr:       session.NewSessionMgr(context.Background(), session.NewMemoryDriver()),
-		dataSourceMgr:    resource.GetDefaultManager(),
+		dataSourceMgr:    application.GetDefaultManager(),
 		parser:           p,
 		handler:          chain,
 		useOptimizer:     cfg.Optimizer.Enabled,
@@ -147,7 +148,7 @@ func NewServer(cfg *config.Config) *Server {
 }
 
 // SetDataSource 设置默认数据源
-func (s *Server) SetDataSource(ds resource.DataSource) error {
+func (s *Server) SetDataSource(ds domain.DataSource) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -166,7 +167,7 @@ func (s *Server) SetDataSource(ds resource.DataSource) error {
 }
 
 // GetDataSource 获取默认数据源
-func (s *Server) GetDataSource() resource.DataSource {
+func (s *Server) GetDataSource() domain.DataSource {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.defaultDataSource
@@ -190,14 +191,14 @@ func (s *Server) GetUseOptimizer() bool {
 }
 
 // SetDataSourceManager 设置数据源管理器
-func (s *Server) SetDataSourceManager(mgr *resource.DataSourceManager) {
+func (s *Server) SetDataSourceManager(mgr *application.DataSourceManager) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.dataSourceMgr = mgr
 }
 
 // GetDataSourceManager 获取数据源管理器
-func (s *Server) GetDataSourceManager() *resource.DataSourceManager {
+func (s *Server) GetDataSourceManager() *application.DataSourceManager {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.dataSourceMgr
@@ -992,7 +993,7 @@ func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *ses
 	queryCache := s.cacheManager.GetQueryCache()
 	if cachedResult, found := queryCache.Get(query); found {
 		log.Printf("查询命中缓存: %s", query)
-		result := cachedResult.(*resource.QueryResult)
+		result := cachedResult.(*domain.QueryResult)
 
 		// 记录缓存命中
 		s.metricsCollector.RecordQuery(time.Since(startTime), true, "")
@@ -1021,7 +1022,7 @@ func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *ses
 		return protocol.SendError(conn, fmt.Errorf("SQL解析失败: %s", parseResult.Error))
 	}
 
-	var result *resource.QueryResult
+	var result *domain.QueryResult
 
 	// 如果启用了优化器，使用 OptimizedExecutor
 	if s.useOptimizer {
@@ -1034,7 +1035,7 @@ func (s *Server) handleSelectQuery(ctx context.Context, conn net.Conn, sess *ses
 
 		// 使用goroutine池执行查询
 		errCh := make(chan error, 1)
-		resultCh := make(chan *resource.QueryResult, 1)
+		resultCh := make(chan *domain.QueryResult, 1)
 
 		err = s.goroutinePool.Submit(func() {
 			r, e := executor.ExecuteSelect(ctx, parseResult.Statement.Select)
@@ -1123,7 +1124,7 @@ func (s *Server) handleDMLQuery(ctx context.Context, conn net.Conn, sess *sessio
 	executor := s.optimizedExecutor
 	s.mu.Unlock()
 
-	var dmlResult *resource.QueryResult
+	var dmlResult *domain.QueryResult
 	switch parseResult.Statement.Type {
 	case parser.SQLTypeInsert:
 		dmlResult, err = executor.ExecuteInsert(ctx, parseResult.Statement.Insert)
@@ -1199,7 +1200,7 @@ func (s *Server) handleDDLQuery(ctx context.Context, conn net.Conn, sess *sessio
 }
 
 // sendQueryResult 发送查询结果集
-func (s *Server) sendQueryResult(ctx context.Context, conn net.Conn, sess *session.Session, result *resource.QueryResult) error {
+func (s *Server) sendQueryResult(ctx context.Context, conn net.Conn, sess *session.Session, result *domain.QueryResult) error {
 	var err error
 
 	// 发送列数
@@ -1314,7 +1315,7 @@ func (s *Server) getMySQLType(typeStr string) byte {
 }
 
 // getColumnFlags 获取列标志
-func (s *Server) getColumnFlags(col resource.ColumnInfo) uint16 {
+func (s *Server) getColumnFlags(col domain.ColumnInfo) uint16 {
 	var flags uint16
 	if col.Primary {
 		flags |= protocol.PRI_KEY_FLAG

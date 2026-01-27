@@ -150,6 +150,33 @@ func (a *SQLAdapter) convertToStatement(node ast.StmtNode) (*SQLStatement, error
 		}
 		stmt.Alter = alterStmt
 
+	case *ast.UseStmt:
+		stmt.Type = SQLTypeUse
+		useStmt := a.convertUseStmt(stmtNode)
+		stmt.Use = useStmt
+
+	case *ast.ShowStmt:
+		stmt.Type = SQLTypeShow
+		showStmt, err := a.convertShowStmt(stmtNode)
+		if err != nil {
+			return nil, err
+		}
+		stmt.Show = showStmt
+
+	case *ast.ExplainStmt:
+		// DESCRIBE/DESC statements are parsed as ExplainStmt with a ShowStmt inside
+		if showStmt, ok := stmtNode.Stmt.(*ast.ShowStmt); ok && showStmt.Tp == ast.ShowColumns {
+			stmt.Type = SQLTypeDescribe
+			describeStmt, err := a.convertDescribeFromShowStmt(showStmt)
+			if err != nil {
+				return nil, err
+			}
+			stmt.Describe = describeStmt
+		} else {
+			// Regular EXPLAIN statement
+			stmt.Type = SQLTypeSelect // Treat as SELECT-like for now
+		}
+
 	default:
 		stmt.Type = SQLTypeUnknown
 	}
@@ -180,7 +207,12 @@ func (a *SQLAdapter) convertSelectStmt(stmt *ast.SelectStmt) (*SelectStatement, 
 		// 从 Join 的左表获取主表名
 		if tableSource, ok := stmt.From.TableRefs.Left.(*ast.TableSource); ok {
 			if tableName, ok := tableSource.Source.(*ast.TableName); ok {
-				selectStmt.From = tableName.Name.String()
+				// Preserve full qualified table name (schema.table)
+				fullName := tableName.Name.String()
+				if tableName.Schema.String() != "" {
+					fullName = tableName.Schema.String() + "." + fullName
+				}
+				selectStmt.From = fullName
 			}
 		}
 
@@ -719,4 +751,71 @@ func (a *SQLAdapter) extractValue(node ast.ExprNode) (interface{}, error) {
 	// 如果不是ValueExpr，可能是其他表达式类型
 	// 对于LIMIT，我们可能需要使用不同的方法
 	return nil, fmt.Errorf("not a value expression: %T", node)
+}
+
+// convertShowStmt 转换 SHOW 语句
+func (a *SQLAdapter) convertShowStmt(stmt *ast.ShowStmt) (*ShowStatement, error) {
+	showStmt := &ShowStatement{}
+
+	// 获取 SHOW 类型
+	switch stmt.Tp {
+	case ast.ShowTables:
+		showStmt.Type = "TABLES"
+	case ast.ShowDatabases:
+		showStmt.Type = "DATABASES"
+	case ast.ShowColumns:
+		showStmt.Type = "COLUMNS"
+		if stmt.Table != nil {
+			showStmt.Table = stmt.Table.Name.String()
+		}
+	case ast.ShowCreateTable:
+		showStmt.Type = "CREATE_TABLE"
+		if stmt.Table != nil {
+			showStmt.Table = stmt.Table.Name.String()
+		}
+	default:
+		showStmt.Type = "UNKNOWN"
+	}
+
+	// 处理 LIKE 子句
+	if stmt.Pattern != nil {
+		showStmt.Like = stmt.Pattern.OriginalText()
+	}
+
+	// 处理 WHERE 子句
+	if stmt.Where != nil {
+		showStmt.Where = stmt.Where.OriginalText()
+	}
+
+	return showStmt, nil
+}
+
+// convertDescribeFromShowStmt 从 ShowStmt 转换 DESCRIBE 语句
+// DESCRIBE/DESC 语句被 TiDB parser 解析为 ExplainStmt，其中包含一个 ShowStmt
+func (a *SQLAdapter) convertDescribeFromShowStmt(stmt *ast.ShowStmt) (*DescribeStatement, error) {
+	describeStmt := &DescribeStatement{}
+
+	// 获取表名
+	if stmt.Table != nil {
+		describeStmt.Table = stmt.Table.Name.String()
+	}
+
+	// 获取列名（如果有）
+	if stmt.Column != nil {
+		describeStmt.Column = stmt.Column.Name.String()
+	}
+
+	return describeStmt, nil
+}
+
+// convertUseStmt 转换 USE 语句
+func (a *SQLAdapter) convertUseStmt(stmt *ast.UseStmt) *UseStatement {
+	// UseStmt.DBName is a CIStr (C identifier string)
+	// Convert it to regular Go string
+	dbName := string(stmt.DBName)
+	
+	useStmt := &UseStatement{
+		Database: dbName,
+	}
+	return useStmt
 }

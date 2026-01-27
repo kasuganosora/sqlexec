@@ -1,0 +1,78 @@
+package api
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/kasuganosora/sqlexec/pkg/parser"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+)
+
+// Execute executes an INSERT, UPDATE, or DELETE statement and returns number of affected rows
+// For SELECT, SHOW, and DESCRIBE statements, use Query() method instead
+func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
+	s.mu.RLock()
+	if s.err != nil {
+		s.mu.RUnlock()
+		return nil, s.err
+	}
+	s.mu.RUnlock()
+
+	s.logger.Debug("Execute: %s", sql)
+
+	// Parse SQL to determine statement type
+	parseResult, err := s.coreSession.GetAdapter().Parse(sql)
+	if err != nil {
+		return nil, WrapError(err, ErrCodeSyntax, "failed to parse SQL")
+	}
+
+	if !parseResult.Success {
+		return nil, NewError(ErrCodeSyntax, "SQL parse error: "+parseResult.Error, nil)
+	}
+
+	// Check for read-only information_schema operations (check both SQL string and parsed statement)
+	if s.isInformationSchemaOperation(sql, parseResult.Statement) {
+		s.logger.Debug("Blocking information_schema DML operation")
+		return nil, NewError(ErrCodeInternal, "information_schema is read-only: DML operations are not supported", nil)
+	}
+
+	ctx := context.Background()
+	var result *domain.QueryResult
+
+	switch parseResult.Statement.Type {
+	case parser.SQLTypeInsert:
+		result, err = s.coreSession.ExecuteInsert(ctx, sql, nil)
+	case parser.SQLTypeUpdate:
+		result, err = s.coreSession.ExecuteUpdate(ctx, sql, nil, nil)
+	case parser.SQLTypeDelete:
+		result, err = s.coreSession.ExecuteDelete(ctx, sql, nil)
+	case parser.SQLTypeUse:
+		result, err = s.coreSession.ExecuteQuery(ctx, sql)
+	case parser.SQLTypeSelect, parser.SQLTypeShow, parser.SQLTypeDescribe:
+		return nil, NewError(ErrCodeInvalidParam, fmt.Sprintf("use Query() method for %s statements", parseResult.Statement.Type), nil)
+	default:
+		return nil, NewError(ErrCodeNotSupported, fmt.Sprintf("unsupported statement type: %v", parseResult.Statement.Type), nil)
+	}
+
+	if err != nil {
+		return nil, WrapError(err, ErrCodeInternal, "failed to execute statement")
+	}
+
+	// Clear cache for affected table
+	if s.cacheEnabled {
+		var tableName string
+		switch parseResult.Statement.Type {
+		case parser.SQLTypeInsert:
+			tableName = parseResult.Statement.Insert.Table
+		case parser.SQLTypeUpdate:
+			tableName = parseResult.Statement.Update.Table
+		case parser.SQLTypeDelete:
+			tableName = parseResult.Statement.Delete.Table
+		}
+		if tableName != "" {
+			s.db.cache.ClearTable(tableName)
+		}
+	}
+
+	return NewResult(result.Total, 0, nil), nil
+}

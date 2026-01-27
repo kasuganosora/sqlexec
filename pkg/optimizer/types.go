@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
 
@@ -38,7 +38,7 @@ type PhysicalPlan interface {
 	Cost() float64
 
 	// Execute 执行计划
-	Execute(ctx context.Context) (*resource.QueryResult, error)
+	Execute(ctx context.Context) (*domain.QueryResult, error)
 
 	// Explain 返回计划说明
 	Explain() string
@@ -122,6 +122,18 @@ type JoinCondition struct {
 	Operator string
 }
 
+// LimitInfo Limit信息
+type LimitInfo struct {
+	Limit  int64
+	Offset int64
+}
+
+// OrderByItem 排序项
+type OrderByItem struct {
+	Column    string
+	Direction string // "ASC" or "DESC"
+}
+
 // Statistics 统计信息（简化版）
 type Statistics struct {
 	RowCount   int64
@@ -131,8 +143,8 @@ type Statistics struct {
 
 // OptimizationContext 优化上下文
 type OptimizationContext struct {
-	DataSource resource.DataSource
-	TableInfo  map[string]*resource.TableInfo
+	DataSource domain.DataSource
+	TableInfo  map[string]*domain.TableInfo
 	Stats      map[string]*Statistics
 	CostModel  CostModel
 }

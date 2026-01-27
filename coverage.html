@@ -1,0 +1,1829 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>api: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/kasuganosora/sqlexec/pkg/api/cache.go (90.0%)</option>
+				
+				<option value="file1">github.com/kasuganosora/sqlexec/pkg/api/db.go (94.0%)</option>
+				
+				<option value="file2">github.com/kasuganosora/sqlexec/pkg/api/errors.go (95.3%)</option>
+				
+				<option value="file3">github.com/kasuganosora/sqlexec/pkg/api/logger.go (94.3%)</option>
+				
+				<option value="file4">github.com/kasuganosora/sqlexec/pkg/api/mock.go (41.7%)</option>
+				
+				<option value="file5">github.com/kasuganosora/sqlexec/pkg/api/query.go (91.5%)</option>
+				
+				<option value="file6">github.com/kasuganosora/sqlexec/pkg/api/result.go (100.0%)</option>
+				
+				<option value="file7">github.com/kasuganosora/sqlexec/pkg/api/session.go (69.8%)</option>
+				
+				<option value="file8">github.com/kasuganosora/sqlexec/pkg/api/transaction.go (97.6%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package api
+
+import (
+        "fmt"
+        "hash/fnv"
+        "sort"
+        "sync"
+        "time"
+
+        "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+)
+
+// CacheConfig 缓存配置
+type CacheConfig struct {
+        Enabled bool
+        TTL     time.Duration // 缓存过期时间
+        MaxSize int           // 最大缓存条目数
+}
+
+// DefaultCacheConfig 默认缓存配置
+var DefaultCacheConfig = CacheConfig{
+        Enabled: true,
+        TTL:     5 * time.Minute,
+        MaxSize: 1000,
+}
+
+// QueryCache 查询缓存
+type QueryCache struct {
+        store   map[string]*CacheEntry
+        mu      sync.RWMutex
+        ttl     time.Duration
+        maxSize int
+}
+
+// CacheEntry 缓存条目
+type CacheEntry struct {
+        Result    *domain.QueryResult
+        Params    []interface{}
+        CreatedAt time.Time
+        ExpiresAt time.Time
+        Hits      int64
+}
+
+// NewQueryCache 创建查询缓存
+func NewQueryCache(config CacheConfig) *QueryCache <span class="cov8" title="1">{
+        if !config.Enabled </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">return &amp;QueryCache{
+                store:   make(map[string]*CacheEntry),
+                ttl:     config.TTL,
+                maxSize: config.MaxSize,
+        }</span>
+}
+
+// Get 获取缓存
+func (c *QueryCache) Get(sql string, params []interface{}) (*domain.QueryResult, bool) <span class="cov8" title="1">{
+        if c == nil </span><span class="cov8" title="1">{
+                return nil, false
+        }</span>
+
+        <span class="cov8" title="1">key := c.generateKey(sql, params)
+
+        c.mu.RLock()
+        entry, exists := c.store[key]
+        c.mu.RUnlock()
+
+        if !exists </span><span class="cov8" title="1">{
+                return nil, false
+        }</span>
+
+        // 检查是否过期
+        <span class="cov8" title="1">if time.Now().After(entry.ExpiresAt) </span><span class="cov0" title="0">{
+                c.mu.Lock()
+                delete(c.store, key)
+                c.mu.Unlock()
+                return nil, false
+        }</span>
+
+        // 更新命中次数
+        <span class="cov8" title="1">entry.Hits++
+
+        return entry.Result, true</span>
+}
+
+// Set 设置缓存
+func (c *QueryCache) Set(sql string, params []interface{}, result *domain.QueryResult) <span class="cov8" title="1">{
+        if c == nil || result == nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">key := c.generateKey(sql, params)
+
+        // 检查缓存大小限制
+        c.mu.Lock()
+        defer c.mu.Unlock()
+
+        if len(c.store) &gt;= c.maxSize </span><span class="cov8" title="1">{
+                c.evictOldest()
+        }</span>
+
+        <span class="cov8" title="1">now := time.Now()
+        entry := &amp;CacheEntry{
+                Result:    result,
+                Params:    params,
+                CreatedAt: now,
+                ExpiresAt: now.Add(c.ttl),
+                Hits:      0,
+        }
+
+        c.store[key] = entry</span>
+}
+
+// Clear 清空所有缓存
+func (c *QueryCache) Clear() <span class="cov8" title="1">{
+        if c == nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">c.mu.Lock()
+        defer c.mu.Unlock()
+        c.store = make(map[string]*CacheEntry)</span>
+}
+
+// ClearTable 清空指定表的缓存
+func (c *QueryCache) ClearTable(tableName string) <span class="cov8" title="1">{
+        if c == nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">c.mu.Lock()
+        defer c.mu.Unlock()
+
+        // 删除所有包含该表名的缓存键
+        for key := range c.store </span><span class="cov8" title="1">{
+                if c.containsTable(key, tableName) </span><span class="cov8" title="1">{
+                        delete(c.store, key)
+                }</span>
+        }
+}
+
+// ClearExpired 清空过期的缓存
+func (c *QueryCache) ClearExpired() <span class="cov8" title="1">{
+        if c == nil </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">now := time.Now()
+        keysToDelete := []string{}
+
+        c.mu.RLock()
+        for key, entry := range c.store </span><span class="cov8" title="1">{
+                if now.After(entry.ExpiresAt) </span><span class="cov8" title="1">{
+                        keysToDelete = append(keysToDelete, key)
+                }</span>
+        }
+        <span class="cov8" title="1">c.mu.RUnlock()
+
+        if len(keysToDelete) &gt; 0 </span><span class="cov8" title="1">{
+                c.mu.Lock()
+                for _, key := range keysToDelete </span><span class="cov8" title="1">{
+                        delete(c.store, key)
+                }</span>
+                <span class="cov8" title="1">c.mu.Unlock()</span>
+        }
+}
+
+// Stats 获取缓存统计信息
+func (c *QueryCache) Stats() CacheStats <span class="cov8" title="1">{
+        if c == nil </span><span class="cov0" title="0">{
+                return CacheStats{}
+        }</span>
+
+        <span class="cov8" title="1">c.mu.RLock()
+        defer c.mu.RUnlock()
+
+        size := len(c.store)
+        totalHits := int64(0)
+        oldest := time.Time{}
+        newest := time.Time{}
+
+        for _, entry := range c.store </span><span class="cov8" title="1">{
+                totalHits += entry.Hits
+                if oldest.IsZero() || entry.CreatedAt.Before(oldest) </span><span class="cov8" title="1">{
+                        oldest = entry.CreatedAt
+                }</span>
+                <span class="cov8" title="1">if newest.IsZero() || entry.CreatedAt.After(newest) </span><span class="cov8" title="1">{
+                        newest = entry.CreatedAt
+                }</span>
+        }
+
+        <span class="cov8" title="1">return CacheStats{
+                Size:     size,
+                MaxSize:  c.maxSize,
+                TotalHits: totalHits,
+                Oldest:   oldest,
+                Newest:   newest,
+        }</span>
+}
+
+// generateKey 生成缓存键
+func (c *QueryCache) generateKey(sql string, params []interface{}) string <span class="cov8" title="1">{
+        h := fnv.New32a()
+        h.Write([]byte(sql))
+
+        // 参数排序以确保相同参数不同顺序生成相同键
+        if len(params) &gt; 0 </span><span class="cov8" title="1">{
+                sort.Slice(params, func(i, j int) bool </span><span class="cov8" title="1">{
+                        return fmt.Sprintf("%v", params[i]) &lt; fmt.Sprintf("%v", params[j])
+                }</span>)
+
+                <span class="cov8" title="1">for _, param := range params </span><span class="cov8" title="1">{
+                        h.Write([]byte(fmt.Sprintf("%v", param)))
+                }</span>
+        }
+
+        <span class="cov8" title="1">return fmt.Sprintf("%x", h.Sum32())</span>
+}
+
+// containsTable 检查缓存键是否包含指定表名
+func (c *QueryCache) containsTable(key, tableName string) bool <span class="cov8" title="1">{
+        // 简单实现：检查键中是否包含表名
+        // TODO: 更精确的实现可能需要解析 SQL
+        return len(key) &gt; 0 &amp;&amp; contains(key, tableName)
+}</span>
+
+// evictOldest 淘汰最老的缓存条目
+func (c *QueryCache) evictOldest() <span class="cov8" title="1">{
+        if len(c.store) == 0 </span><span class="cov0" title="0">{
+                return
+        }</span>
+
+        <span class="cov8" title="1">oldestKey := ""
+        var oldestTime time.Time
+
+        for key, entry := range c.store </span><span class="cov8" title="1">{
+                if oldestTime.IsZero() || entry.CreatedAt.Before(oldestTime) </span><span class="cov8" title="1">{
+                        oldestKey = key
+                        oldestTime = entry.CreatedAt
+                }</span>
+        }
+
+        <span class="cov8" title="1">if oldestKey != "" </span><span class="cov8" title="1">{
+                delete(c.store, oldestKey)
+        }</span>
+}
+
+// contains 检查字符串是否包含子串（不区分大小写）
+func contains(s, substr string) bool <span class="cov8" title="1">{
+        // 简化实现
+        return len(s) &gt; 0 &amp;&amp; len(substr) &gt; 0 &amp;&amp; len(s) &gt;= len(substr)
+}</span>
+
+// CacheStats 缓存统计信息
+type CacheStats struct {
+        Size     int       // 当前缓存条目数
+        MaxSize  int       // 最大缓存条目数
+        TotalHits int64     // 总命中次数
+        Oldest   time.Time // 最老的缓存创建时间
+        Newest   time.Time // 最新的缓存创建时间
+}
+
+// String 返回统计信息的字符串表示
+func (s CacheStats) String() string <span class="cov8" title="1">{
+        return fmt.Sprintf("Size: %d/%d, TotalHits: %d, Oldest: %v, Newest: %v",
+                s.Size, s.MaxSize, s.TotalHits, s.Oldest, s.Newest)
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package api
+
+import (
+        "context"
+        "sync"
+        "time"
+        
+        "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+        "github.com/kasuganosora/sqlexec/pkg/session"
+)
+
+// DB is the main database object for managing datasources and creating sessions
+type DB struct {
+        mu           sync.RWMutex
+        dataSources  map[string]domain.DataSource
+        defaultDS    string
+        cache        *QueryCache
+        logger       Logger
+        config       *DBConfig
+}
+
+// DBConfig contains configuration options for the DB object
+type DBConfig struct {
+        CacheEnabled  bool
+        CacheSize     int
+        CacheTTL      int // seconds
+        DefaultLogger Logger
+        DebugMode     bool
+}
+
+// NewDB creates a new DB object with the given configuration
+func NewDB(config *DBConfig) (*DB, error) <span class="cov8" title="1">{
+        if config == nil </span><span class="cov8" title="1">{
+                config = &amp;DBConfig{
+                        CacheEnabled:  true,
+                        CacheSize:     1000,
+                        CacheTTL:      300, // 5 minutes
+                        DefaultLogger: NewDefaultLogger(LogInfo),
+                        DebugMode:     false,
+                }
+        }</span>
+
+        // Ensure logger is set
+        <span class="cov8" title="1">if config.DefaultLogger == nil </span><span class="cov8" title="1">{
+                config.DefaultLogger = NewDefaultLogger(LogInfo)
+        }</span>
+
+        <span class="cov8" title="1">cache := NewQueryCache(CacheConfig{
+                Enabled:  config.CacheEnabled,
+                TTL:      time.Duration(config.CacheTTL) * time.Second,
+                MaxSize:  config.CacheSize,
+        })
+
+        return &amp;DB{
+                dataSources: make(map[string]domain.DataSource),
+                cache:       cache,
+                logger:      config.DefaultLogger,
+                config:      config,
+        }, nil</span>
+}
+
+// RegisterDataSource registers a datasource with the given name
+func (db *DB) RegisterDataSource(name string, ds domain.DataSource) error <span class="cov8" title="1">{
+        if name == "" </span><span class="cov8" title="1">{
+                return NewError(ErrCodeInvalidParam, "datasource name cannot be empty", nil)
+        }</span>
+        <span class="cov8" title="1">if ds == nil </span><span class="cov8" title="1">{
+                return NewError(ErrCodeInvalidParam, "datasource cannot be nil", nil)
+        }</span>
+
+        <span class="cov8" title="1">db.mu.Lock()
+        defer db.mu.Unlock()
+
+        if _, exists := db.dataSources[name]; exists </span><span class="cov8" title="1">{
+                return NewError(ErrCodeDSAlreadyExists, "datasource '"+name+"' already exists", nil)
+        }</span>
+
+        <span class="cov8" title="1">db.dataSources[name] = ds
+
+        // If this is the first datasource, set it as default
+        if db.defaultDS == "" </span><span class="cov8" title="1">{
+                db.defaultDS = name
+        }</span>
+
+        <span class="cov8" title="1">db.logger.Debug("Registered datasource: %s", name)
+        return nil</span>
+}
+
+// GetDataSource returns the datasource with the given name
+func (db *DB) GetDataSource(name string) (domain.DataSource, error) <span class="cov8" title="1">{
+        db.mu.RLock()
+        defer db.mu.RUnlock()
+
+        ds, exists := db.dataSources[name]
+        if !exists </span><span class="cov8" title="1">{
+                return nil, NewError(ErrCodeDSNotFound, "datasource '"+name+"' not found", nil)
+        }</span>
+
+        <span class="cov8" title="1">return ds, nil</span>
+}
+
+// GetDefaultDataSource returns the default datasource
+func (db *DB) GetDefaultDataSource() (domain.DataSource, error) <span class="cov8" title="1">{
+        db.mu.RLock()
+        defer db.mu.RUnlock()
+
+        if db.defaultDS == "" </span><span class="cov8" title="1">{
+                return nil, NewError(ErrCodeDSNotFound, "no default datasource set", nil)
+        }</span>
+
+        <span class="cov8" title="1">ds, exists := db.dataSources[db.defaultDS]
+        if !exists </span><span class="cov0" title="0">{
+                return nil, NewError(ErrCodeDSNotFound, "default datasource '"+db.defaultDS+"' not found", nil)
+        }</span>
+
+        <span class="cov8" title="1">return ds, nil</span>
+}
+
+// SetDefaultDataSource sets the default datasource
+func (db *DB) SetDefaultDataSource(name string) error <span class="cov8" title="1">{
+        db.mu.Lock()
+        defer db.mu.Unlock()
+
+        if _, exists := db.dataSources[name]; !exists </span><span class="cov8" title="1">{
+                return NewError(ErrCodeDSNotFound, "datasource '"+name+"' not found", nil)
+        }</span>
+
+        <span class="cov8" title="1">db.defaultDS = name
+        db.logger.Debug("Default datasource set to: %s", name)
+        return nil</span>
+}
+
+// Session creates a new session with the default datasource and default options
+func (db *DB) Session() *Session <span class="cov8" title="1">{
+        return db.SessionWithOptions(&amp;SessionOptions{
+                DataSourceName: db.defaultDS,
+                Isolation:      IsolationRepeatableRead,
+                ReadOnly:       false,
+                CacheEnabled:   db.config.CacheEnabled,
+        })
+}</span>
+
+// SessionWithOptions creates a new session with custom options
+func (db *DB) SessionWithOptions(opts *SessionOptions) *Session <span class="cov8" title="1">{
+        dsName := opts.DataSourceName
+        if dsName == "" </span><span class="cov0" title="0">{
+                dsName = db.defaultDS
+        }</span>
+
+        <span class="cov8" title="1">ds, err := db.GetDataSource(dsName)
+        if err != nil </span><span class="cov8" title="1">{
+                // If we can't get the datasource, return a session that will error on first use
+                return &amp;Session{
+                        db:      db,
+                        coreSession: nil,
+                        options: opts,
+                        logger:  db.logger,
+                        err:     err,
+                }
+        }</span>
+
+        <span class="cov8" title="1">coreSession := session.NewCoreSession(ds)
+        apiSession := &amp;Session{
+                db:          db,
+                coreSession: coreSession,
+                options:     opts,
+                cacheEnabled: opts.CacheEnabled,
+                logger:      db.logger,
+        }
+
+        db.logger.Debug("Created new session for datasource: %s", dsName)
+        return apiSession</span>
+}
+
+// SetLogger sets the logger for the DB object
+func (db *DB) SetLogger(logger Logger) <span class="cov8" title="1">{
+        db.mu.Lock()
+        defer db.mu.Unlock()
+        db.logger = logger
+}</span>
+
+// GetLogger returns the current logger
+func (db *DB) GetLogger() Logger <span class="cov8" title="1">{
+        db.mu.RLock()
+        defer db.mu.RUnlock()
+        return db.logger
+}</span>
+
+// ClearCache clears the entire query cache
+func (db *DB) ClearCache() <span class="cov8" title="1">{
+        if db.cache != nil </span><span class="cov8" title="1">{
+                db.cache.Clear()
+                db.logger.Debug("Query cache cleared")
+        }</span>
+}
+
+// ClearTableCache clears cache entries for a specific table
+func (db *DB) ClearTableCache(tableName string) <span class="cov8" title="1">{
+        if db.cache != nil </span><span class="cov8" title="1">{
+                db.cache.ClearTable(tableName)
+                db.logger.Debug("Query cache cleared for table: %s", tableName)
+        }</span>
+}
+
+// GetCacheStats returns statistics about the query cache
+func (db *DB) GetCacheStats() CacheStats <span class="cov8" title="1">{
+        if db.cache != nil </span><span class="cov8" title="1">{
+                return db.cache.Stats()
+        }</span>
+        <span class="cov0" title="0">return CacheStats{}</span>
+}
+
+// Close closes all datasources and releases resources
+func (db *DB) Close() error <span class="cov8" title="1">{
+        db.mu.Lock()
+        defer db.mu.Unlock()
+
+        var lastErr error
+        for name, ds := range db.dataSources </span><span class="cov8" title="1">{
+                if err := ds.Close(context.Background()); err != nil </span><span class="cov0" title="0">{
+                        lastErr = err
+                        db.logger.Error("Error closing datasource '%s': %v", name, err)
+                }</span>
+        }
+
+        <span class="cov8" title="1">db.dataSources = make(map[string]domain.DataSource)
+        if db.cache != nil </span><span class="cov8" title="1">{
+                db.cache.Clear()
+        }</span>
+        <span class="cov8" title="1">db.logger.Info("DB closed")
+
+        return lastErr</span>
+}
+
+// GetDataSourceNames returns a list of all registered datasource names
+func (db *DB) GetDataSourceNames() []string <span class="cov8" title="1">{
+        db.mu.RLock()
+        defer db.mu.RUnlock()
+
+        names := make([]string, 0, len(db.dataSources))
+        for name := range db.dataSources </span><span class="cov8" title="1">{
+                names = append(names, name)
+        }</span>
+        <span class="cov8" title="1">return names</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package api
+
+import (
+        "fmt"
+        "runtime"
+        "strings"
+)
+
+// Error 错误类型（带堆栈）
+type Error struct {
+        Code    ErrorCode
+        Message string
+        Stack   []string // 调用堆栈
+        Cause   error    // 原始错误
+}
+
+// ErrorCode 错误码
+type ErrorCode string
+
+const (
+        ErrCodeDSNotFound      ErrorCode = "DS_NOT_FOUND"
+        ErrCodeDSAlreadyExists ErrorCode = "DS_ALREADY_EXISTS"
+        ErrCodeTableNotFound   ErrorCode = "TABLE_NOT_FOUND"
+        ErrCodeColumnNotFound  ErrorCode = "COLUMN_NOT_FOUND"
+        ErrCodeSyntax          ErrorCode = "SYNTAX_ERROR"
+        ErrCodeConstraint       ErrorCode = "CONSTRAINT"
+        ErrCodeTransaction     ErrorCode = "TRANSACTION"
+        ErrCodeTimeout         ErrorCode = "TIMEOUT"
+        ErrCodeInvalidParam    ErrorCode = "INVALID_PARAM"
+        ErrCodeNotSupported    ErrorCode = "NOT_SUPPORTED"
+        ErrCodeClosed          ErrorCode = "CLOSED"
+        ErrCodeInternal         ErrorCode = "INTERNAL"
+)
+
+// Error 接口实现
+func (e *Error) Error() string <span class="cov8" title="1">{
+        if e.Cause != nil </span><span class="cov8" title="1">{
+                return fmt.Sprintf("[%s] %s: %v", e.Code, e.Message, e.Cause)
+        }</span>
+        <span class="cov8" title="1">return fmt.Sprintf("[%s] %s", e.Code, e.Message)</span>
+}
+
+// Unwrap 返回原始错误
+func (e *Error) Unwrap() error <span class="cov8" title="1">{
+        return e.Cause
+}</span>
+
+// StackTrace 返回调用堆栈
+func (e *Error) StackTrace() []string <span class="cov8" title="1">{
+        return e.Stack
+}</span>
+
+// NewError 创建错误
+func NewError(code ErrorCode, message string, cause error) *Error <span class="cov8" title="1">{
+        return &amp;Error{
+                Code:    code,
+                Message: message,
+                Stack:   captureStackTrace(),
+                Cause:   cause,
+        }
+}</span>
+
+// WrapError 包装错误
+func WrapError(err error, code ErrorCode, message string) *Error <span class="cov8" title="1">{
+        if err == nil </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+
+        // 如果已经是我们的错误类型，保留原有堆栈
+        <span class="cov8" title="1">if apiErr, ok := err.(*Error); ok </span><span class="cov8" title="1">{
+                return &amp;Error{
+                        Code:    code,
+                        Message: message,
+                        Stack:   apiErr.Stack,
+                        Cause:   apiErr,
+                }
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Error{
+                Code:    code,
+                Message: message,
+                Stack:   captureStackTrace(),
+                Cause:   err,
+        }</span>
+}
+
+// captureStackTrace 捕获调用堆栈
+func captureStackTrace() []string <span class="cov8" title="1">{
+        pc := make([]uintptr, 32)
+        n := runtime.Callers(3, pc) // 跳过前3层
+
+        if n == 0 </span><span class="cov0" title="0">{
+                return []string{}
+        }</span>
+
+        <span class="cov8" title="1">frames := runtime.CallersFrames(pc[:n])
+        stack := make([]string, 0, n)
+
+        for </span><span class="cov8" title="1">{
+                frame, more := frames.Next()
+                if !more </span><span class="cov8" title="1">{
+                        break</span>
+                }
+
+                // 格式化堆栈信息
+                <span class="cov8" title="1">fn := frame.Function
+                file := frame.File
+                line := frame.Line
+
+                // 简化文件路径
+                if idx := strings.LastIndex(file, "/"); idx != -1 </span><span class="cov8" title="1">{
+                        file = file[idx+1:]
+                }</span>
+
+                // 提取函数名（去掉包路径）
+                <span class="cov8" title="1">if idx := strings.LastIndex(fn, "/"); idx != -1 </span><span class="cov8" title="1">{
+                        fn = fn[idx+1:]
+                }</span>
+
+                <span class="cov8" title="1">stack = append(stack, fmt.Sprintf("  at %s (%s:%d)", fn, file, line))</span>
+        }
+
+        <span class="cov8" title="1">return stack</span>
+}
+
+// IsErrorCode 检查错误码
+func IsErrorCode(err error, code ErrorCode) bool <span class="cov8" title="1">{
+        if err == nil </span><span class="cov8" title="1">{
+                return false
+        }</span>
+
+        <span class="cov8" title="1">if apiErr, ok := err.(*Error); ok </span><span class="cov8" title="1">{
+                return apiErr.Code == code
+        }</span>
+
+        <span class="cov8" title="1">return false</span>
+}
+
+// GetErrorCode 获取错误码
+func GetErrorCode(err error) ErrorCode <span class="cov8" title="1">{
+        if err == nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+
+        <span class="cov8" title="1">if apiErr, ok := err.(*Error); ok </span><span class="cov8" title="1">{
+                return apiErr.Code
+        }</span>
+
+        <span class="cov8" title="1">return ""</span>
+}
+
+// GetErrorMessage 获取错误消息
+func GetErrorMessage(err error) string <span class="cov8" title="1">{
+        if err == nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+
+        <span class="cov8" title="1">return err.Error()</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package api
+
+import (
+        "fmt"
+        "io"
+        "os"
+        "sync"
+)
+
+// LogLevel 日志级别
+type LogLevel int
+
+const (
+        LogError LogLevel = iota
+        LogWarn
+        LogInfo
+        LogDebug
+)
+
+// String 返回日志级别字符串
+func (l LogLevel) String() string <span class="cov8" title="1">{
+        switch l </span>{
+        case LogError:<span class="cov8" title="1">
+                return "ERROR"</span>
+        case LogWarn:<span class="cov8" title="1">
+                return "WARN"</span>
+        case LogInfo:<span class="cov8" title="1">
+                return "INFO"</span>
+        case LogDebug:<span class="cov8" title="1">
+                return "DEBUG"</span>
+        default:<span class="cov0" title="0">
+                return "UNKNOWN"</span>
+        }
+}
+
+// Logger 日志接口
+type Logger interface {
+        Debug(format string, args ...interface{})
+        Info(format string, args ...interface{})
+        Warn(format string, args ...interface{})
+        Error(format string, args ...interface{})
+        SetLevel(level LogLevel)
+        GetLevel() LogLevel
+}
+
+// DefaultLogger 默认日志实现
+type DefaultLogger struct {
+        level  LogLevel
+        mu     sync.Mutex
+        output io.Writer
+}
+
+// NewDefaultLogger 创建默认日志
+func NewDefaultLogger(level LogLevel) *DefaultLogger <span class="cov8" title="1">{
+        return &amp;DefaultLogger{
+                level:  level,
+                output: os.Stdout,
+        }
+}</span>
+
+// NewDefaultLoggerWithOutput 创建带输出的默认日志
+func NewDefaultLoggerWithOutput(level LogLevel, output io.Writer) *DefaultLogger <span class="cov8" title="1">{
+        return &amp;DefaultLogger{
+                level:  level,
+                output: output,
+        }
+}</span>
+
+// SetLevel 设置日志级别
+func (l *DefaultLogger) SetLevel(level LogLevel) <span class="cov8" title="1">{
+        l.mu.Lock()
+        defer l.mu.Unlock()
+        l.level = level
+}</span>
+
+// GetLevel 获取日志级别
+func (l *DefaultLogger) GetLevel() LogLevel <span class="cov8" title="1">{
+        l.mu.Lock()
+        defer l.mu.Unlock()
+        return l.level
+}</span>
+
+// Debug 输出 DEBUG 级别日志
+func (l *DefaultLogger) Debug(format string, args ...interface{}) <span class="cov8" title="1">{
+        if !l.shouldLog(LogDebug) </span><span class="cov8" title="1">{
+                return
+        }</span>
+        <span class="cov8" title="1">l.log(LogDebug, format, args...)</span>
+}
+
+// Info 输出 INFO 级别日志
+func (l *DefaultLogger) Info(format string, args ...interface{}) <span class="cov8" title="1">{
+        if !l.shouldLog(LogInfo) </span><span class="cov8" title="1">{
+                return
+        }</span>
+        <span class="cov8" title="1">l.log(LogInfo, format, args...)</span>
+}
+
+// Warn 输出 WARN 级别日志
+func (l *DefaultLogger) Warn(format string, args ...interface{}) <span class="cov8" title="1">{
+        if !l.shouldLog(LogWarn) </span><span class="cov8" title="1">{
+                return
+        }</span>
+        <span class="cov8" title="1">l.log(LogWarn, format, args...)</span>
+}
+
+// Error 输出 ERROR 级别日志
+func (l *DefaultLogger) Error(format string, args ...interface{}) <span class="cov8" title="1">{
+        if !l.shouldLog(LogError) </span><span class="cov0" title="0">{
+                return
+        }</span>
+        <span class="cov8" title="1">l.log(LogError, format, args...)</span>
+}
+
+// shouldLog 判断是否应该输出日志
+func (l *DefaultLogger) shouldLog(level LogLevel) bool <span class="cov8" title="1">{
+        l.mu.Lock()
+        defer l.mu.Unlock()
+        return level &lt;= l.level
+}</span>
+
+// log 实际日志输出
+func (l *DefaultLogger) log(level LogLevel, format string, args ...interface{}) <span class="cov8" title="1">{
+        l.mu.Lock()
+        defer l.mu.Unlock()
+
+        message := fmt.Sprintf(format, args...)
+        fmt.Fprintf(l.output, "[%s] %s\n", level.String(), message)
+}</span>
+
+// NoOpLogger 空日志实现（用于禁用日志）
+type NoOpLogger struct{}
+
+// NewNoOpLogger 创建空日志
+func NewNoOpLogger() *NoOpLogger <span class="cov8" title="1">{
+        return &amp;NoOpLogger{}
+}</span>
+
+func (l *NoOpLogger) Debug(format string, args ...interface{}) {<span class="cov8" title="1">}</span>
+func (l *NoOpLogger) Info(format string, args ...interface{}) {<span class="cov8" title="1">}</span>
+func (l *NoOpLogger) Warn(format string, args ...interface{}) {<span class="cov8" title="1">}</span>
+func (l *NoOpLogger) Error(format string, args ...interface{}) {<span class="cov8" title="1">}</span>
+func (l *NoOpLogger) SetLevel(level LogLevel)                {<span class="cov8" title="1">}</span>
+func (l *NoOpLogger) GetLevel() LogLevel                       <span class="cov8" title="1">{ return LogInfo }</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package api
+
+import (
+        "context"
+
+        "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+)
+
+// Mock datasource for testing
+type mockDataSource struct {
+        domain.DataSource
+        closed    bool
+        tables    map[string]*domain.TableInfo
+        transactions int
+}
+
+func newMockDataSource() *mockDataSource <span class="cov8" title="1">{
+        return &amp;mockDataSource{
+                tables: make(map[string]*domain.TableInfo),
+        }
+}</span>
+
+func (m *mockDataSource) Close(ctx context.Context) error <span class="cov8" title="1">{
+        m.closed = true
+        return nil
+}</span>
+
+func (m *mockDataSource) CreateTable(ctx context.Context, info *domain.TableInfo) error <span class="cov8" title="1">{
+        m.tables[info.Name] = info
+        return nil
+}</span>
+
+func (m *mockDataSource) DropTable(ctx context.Context, name string) error <span class="cov0" title="0">{
+        delete(m.tables, name)
+        return nil
+}</span>
+
+func (m *mockDataSource) GetTableInfo(ctx context.Context, name string) (*domain.TableInfo, error) <span class="cov8" title="1">{
+        if info, ok := m.tables[name]; ok </span><span class="cov0" title="0">{
+                return info, nil
+        }</span>
+        <span class="cov8" title="1">return nil, NewError(ErrCodeTableNotFound, "table not found", nil)</span>
+}
+
+func (m *mockDataSource) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) <span class="cov0" title="0">{
+        if _, ok := m.tables[tableName]; !ok </span><span class="cov0" title="0">{
+                return nil, NewError(ErrCodeTableNotFound, "table not found", nil)
+        }</span>
+        <span class="cov0" title="0">return &amp;domain.QueryResult{
+                Columns: []domain.ColumnInfo{},
+                Rows:    []domain.Row{},
+                Total:   0,
+        }, nil</span>
+}
+
+func (m *mockDataSource) Insert(ctx context.Context, tableName string, rows []domain.Row, options *domain.InsertOptions) (int64, error) <span class="cov0" title="0">{
+        if _, ok := m.tables[tableName]; !ok </span><span class="cov0" title="0">{
+                return 0, NewError(ErrCodeTableNotFound, "table not found", nil)
+        }</span>
+        <span class="cov0" title="0">return int64(len(rows)), nil</span>
+}
+
+func (m *mockDataSource) Update(ctx context.Context, tableName string, filters []domain.Filter, updates domain.Row, options *domain.UpdateOptions) (int64, error) <span class="cov0" title="0">{
+        if _, ok := m.tables[tableName]; !ok </span><span class="cov0" title="0">{
+                return 0, NewError(ErrCodeTableNotFound, "table not found", nil)
+        }</span>
+        <span class="cov0" title="0">return 1, nil</span>
+}
+
+func (m *mockDataSource) Delete(ctx context.Context, tableName string, filters []domain.Filter, options *domain.DeleteOptions) (int64, error) <span class="cov0" title="0">{
+        if _, ok := m.tables[tableName]; !ok </span><span class="cov0" title="0">{
+                return 0, NewError(ErrCodeTableNotFound, "table not found", nil)
+        }</span>
+        <span class="cov0" title="0">return 1, nil</span>
+}
+
+func (m *mockDataSource) BeginTransaction(ctx context.Context, options *domain.TransactionOptions) (domain.Transaction, error) <span class="cov8" title="1">{
+        m.transactions++
+        return &amp;mockTransaction{ds: m, id: m.transactions}, nil
+}</span>
+
+// Mock transaction for testing
+type mockTransaction struct {
+        ds         *mockDataSource
+        id         int
+        commitErr   error
+        rollbackErr error
+}
+
+func newMockTransaction() *mockTransaction <span class="cov8" title="1">{
+        return &amp;mockTransaction{}
+}</span>
+
+func (m *mockTransaction) Commit(ctx context.Context) error <span class="cov8" title="1">{
+        if m.commitErr != nil </span><span class="cov0" title="0">{
+                return m.commitErr
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (m *mockTransaction) Rollback(ctx context.Context) error <span class="cov8" title="1">{
+        if m.rollbackErr != nil </span><span class="cov0" title="0">{
+                return m.rollbackErr
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (m *mockTransaction) Execute(ctx context.Context, sql string) (*domain.QueryResult, error) <span class="cov0" title="0">{
+        return &amp;domain.QueryResult{
+                Columns: []domain.ColumnInfo{},
+                Rows:    []domain.Row{},
+                Total:   0,
+        }, nil
+}</span>
+
+func (m *mockTransaction) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) <span class="cov8" title="1">{
+        return &amp;domain.QueryResult{
+                Columns: []domain.ColumnInfo{},
+                Rows:    []domain.Row{},
+                Total:   0,
+        }, nil
+}</span>
+
+func (m *mockTransaction) Insert(ctx context.Context, tableName string, rows []domain.Row, options *domain.InsertOptions) (int64, error) <span class="cov0" title="0">{
+        return int64(len(rows)), nil
+}</span>
+
+func (m *mockTransaction) Update(ctx context.Context, tableName string, filters []domain.Filter, updates domain.Row, options *domain.UpdateOptions) (int64, error) <span class="cov0" title="0">{
+        return 1, nil
+}</span>
+
+func (m *mockTransaction) Delete(ctx context.Context, tableName string, filters []domain.Filter, options *domain.DeleteOptions) (int64, error) <span class="cov0" title="0">{
+        return 1, nil
+}</span>
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package api
+
+import (
+        "fmt"
+        "reflect"
+        "sync"
+
+        "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+)
+
+// Query 查询结果对象
+type Query struct {
+        session  *Session
+        result   *domain.QueryResult
+        sql      string
+        params   []interface{}    // 查询参数（用于缓存键）
+        rowIndex int
+        closed   bool
+        mu       sync.RWMutex
+        err      error
+}
+
+// NewQuery 创建 Query
+func NewQuery(session *Session, result *domain.QueryResult, sql string, params []interface{}) *Query <span class="cov8" title="1">{
+        return &amp;Query{
+                session:  session,
+                result:   result,
+                sql:      sql,
+                params:   params,
+                rowIndex: -1,
+                closed:   false,
+        }
+}</span>
+
+// Err returns the error that occurred during query execution
+func (q *Query) Err() error <span class="cov8" title="1">{
+        return q.err
+}</span>
+
+// Next 移动到下一行
+func (q *Query) Next() bool <span class="cov8" title="1">{
+        q.mu.Lock()
+        defer q.mu.Unlock()
+
+        if q.closed </span><span class="cov8" title="1">{
+                return false
+        }</span>
+
+        <span class="cov8" title="1">q.rowIndex++
+        return q.rowIndex &lt; len(q.result.Rows)</span>
+}
+
+// Scan 扫描当前行到变量
+func (q *Query) Scan(dest ...interface{}) error <span class="cov8" title="1">{
+        q.mu.Lock()
+        defer q.mu.Unlock()
+
+        if q.closed </span><span class="cov8" title="1">{
+                return NewError(ErrCodeClosed, "Query is closed", nil)
+        }</span>
+
+        <span class="cov8" title="1">if q.rowIndex &lt; 0 </span><span class="cov8" title="1">{
+                return NewError(ErrCodeInvalidParam, "Next() must be called before Scan()", nil)
+        }</span>
+
+        <span class="cov8" title="1">if q.rowIndex &gt;= len(q.result.Rows) </span><span class="cov0" title="0">{
+                return fmt.Errorf("no more rows")
+        }</span>
+
+        <span class="cov8" title="1">row := q.result.Rows[q.rowIndex]
+
+        if len(dest) &gt; len(q.result.Columns) </span><span class="cov0" title="0">{
+                return fmt.Errorf("too many destination variables (%d), have %d columns",
+                        len(dest), len(q.result.Columns))
+        }</span>
+
+        // 按列顺序扫描
+        <span class="cov8" title="1">for i, colInfo := range q.result.Columns </span><span class="cov8" title="1">{
+                if i &gt;= len(dest) </span><span class="cov0" title="0">{
+                        break</span>
+                }
+
+                <span class="cov8" title="1">value, exists := row[colInfo.Name]
+                if !exists </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                // 反射设置值
+                <span class="cov8" title="1">if err := setValue(dest[i], value); err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("failed to scan column %s: %w", colInfo.Name, err)
+                }</span>
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// Row 获取当前行（map 形式）
+func (q *Query) Row() domain.Row <span class="cov8" title="1">{
+        q.mu.RLock()
+        defer q.mu.RUnlock()
+
+        if q.closed || q.rowIndex &lt; 0 || q.rowIndex &gt;= len(q.result.Rows) </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        // 返回行的深拷贝
+        <span class="cov8" title="1">row := q.result.Rows[q.rowIndex]
+        list := make(domain.Row, len(row))
+        for k, v := range row </span><span class="cov8" title="1">{
+                list[k] = v
+        }</span>
+
+        <span class="cov8" title="1">return list</span>
+}
+
+// RowsCount 获取总行数
+func (q *Query) RowsCount() int <span class="cov8" title="1">{
+        q.mu.RLock()
+        defer q.mu.RUnlock()
+
+        return len(q.result.Rows)
+}</span>
+
+// Columns 获取列信息
+func (q *Query) Columns() []domain.ColumnInfo <span class="cov8" title="1">{
+        q.mu.RLock()
+        defer q.mu.RUnlock()
+
+        if q.result == nil </span><span class="cov8" title="1">{
+                return []domain.ColumnInfo{}
+        }</span>
+
+        <span class="cov8" title="1">cols := make([]domain.ColumnInfo, len(q.result.Columns))
+        copy(cols, q.result.Columns)
+        return cols</span>
+}
+
+// Close 关闭查询
+func (q *Query) Close() error <span class="cov8" title="1">{
+        q.mu.Lock()
+        defer q.mu.Unlock()
+
+        if q.closed </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">q.closed = true
+        q.result = nil
+        return nil</span>
+}
+
+// Iter 遍历所有行（回调函数）
+func (q *Query) Iter(fn func(row domain.Row) error) error <span class="cov8" title="1">{
+        defer q.Close()
+
+        for q.Next() </span><span class="cov8" title="1">{
+                row := q.Row()
+                if err := fn(row); err != nil </span><span class="cov8" title="1">{
+                        return err
+                }</span>
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// setValue 设置值到目标变量
+func setValue(dest interface{}, value interface{}) error <span class="cov8" title="1">{
+        if dest == nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("destination is nil")
+        }</span>
+
+        // 使用反射设置值
+        <span class="cov8" title="1">destValue := reflect.ValueOf(dest)
+        if destValue.Kind() != reflect.Ptr </span><span class="cov8" title="1">{
+                return fmt.Errorf("destination must be a pointer")
+        }</span>
+
+        <span class="cov8" title="1">destValue = destValue.Elem()
+        if !destValue.CanSet() </span><span class="cov0" title="0">{
+                return fmt.Errorf("destination cannot be set")
+        }</span>
+
+        // 如果值是 nil，设置零值
+        <span class="cov8" title="1">if value == nil </span><span class="cov8" title="1">{
+                destValue.Set(reflect.Zero(destValue.Type()))
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">valValue := reflect.ValueOf(value)
+
+        // 类型转换
+        destType := destValue.Type()
+        valType := valValue.Type()
+
+        // 如果类型相同，直接赋值
+        if valType == destType </span><span class="cov8" title="1">{
+                destValue.Set(valValue)
+                return nil
+        }</span>
+
+        // 尝试类型转换
+        <span class="cov8" title="1">converted, err := convertValue(value, destType)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">destValue.Set(reflect.ValueOf(converted))
+        return nil</span>
+}
+
+// convertValue 转换值类型
+func convertValue(value interface{}, targetType reflect.Type) (interface{}, error) <span class="cov8" title="1">{
+        if value == nil </span><span class="cov8" title="1">{
+                return reflect.Zero(targetType).Interface(), nil
+        }</span>
+
+        <span class="cov8" title="1">valueType := reflect.TypeOf(value)
+
+        // 如果类型相同，直接返回
+        if valueType == targetType </span><span class="cov8" title="1">{
+                return value, nil
+        }</span>
+
+        // 目标类型是指针，解引用并返回指针
+        <span class="cov8" title="1">if targetType.Kind() == reflect.Ptr </span><span class="cov8" title="1">{
+                converted, err := convertValue(value, targetType.Elem())
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                // 创建一个新的指针值
+                <span class="cov8" title="1">ptr := reflect.New(targetType.Elem())
+                ptr.Elem().Set(reflect.ValueOf(converted))
+                return ptr.Interface(), nil</span>
+        }
+
+        // 处理 int64 到 int 的转换
+        <span class="cov8" title="1">if targetType.Kind() == reflect.Int &amp;&amp; valueType.Kind() == reflect.Int64 </span><span class="cov8" title="1">{
+                return int(value.(int64)), nil
+        }</span>
+
+        // 处理 int64 到 int8/int16/int32
+        <span class="cov8" title="1">switch targetType.Kind() </span>{
+        case reflect.Int8:<span class="cov8" title="1">
+                return int8(value.(int64)), nil</span>
+        case reflect.Int16:<span class="cov8" title="1">
+                return int16(value.(int64)), nil</span>
+        case reflect.Int32:<span class="cov8" title="1">
+                return int32(value.(int64)), nil</span>
+        }
+
+        // 处理 float64 到 float32
+        <span class="cov8" title="1">if targetType.Kind() == reflect.Float32 &amp;&amp; valueType.Kind() == reflect.Float64 </span><span class="cov8" title="1">{
+                return float32(value.(float64)), nil
+        }</span>
+
+        // 处理 string 到 []byte
+        <span class="cov8" title="1">if targetType.Kind() == reflect.Slice &amp;&amp; targetType.Elem().Kind() == reflect.Uint8 </span><span class="cov8" title="1">{
+                if str, ok := value.(string); ok </span><span class="cov8" title="1">{
+                        return []byte(str), nil
+                }</span>
+        }
+
+        // 默认：直接返回
+        <span class="cov0" title="0">return value, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package api
+
+import "fmt"
+
+// Result 命令执行结果
+type Result struct {
+        RowsAffected int64
+        LastInsertID int64
+        err          error
+}
+
+// NewResult 创建 Result
+func NewResult(rowsAffected, lastInsertID int64, err error) *Result <span class="cov8" title="1">{
+        return &amp;Result{
+                RowsAffected: rowsAffected,
+                LastInsertID: lastInsertID,
+                err:          err,
+        }
+}</span>
+
+// LastError 获取错误
+func (r *Result) Err() error <span class="cov8" title="1">{
+        return r.err
+}</span>
+
+// Error 实现 error 接口
+func (r *Result) Error() string <span class="cov8" title="1">{
+        if r.err == nil </span><span class="cov8" title="1">{
+                return fmt.Sprintf("Result: RowsAffected=%d, LastInsertID=%d",
+                        r.RowsAffected, r.LastInsertID)
+        }</span>
+        <span class="cov8" title="1">return r.err.Error()</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package api
+
+import (
+        "context"
+        "fmt"
+        "sync"
+        
+        "github.com/kasuganosora/sqlexec/pkg/parser"
+        "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+        "github.com/kasuganosora/sqlexec/pkg/session"
+)
+
+// IsolationLevel represents the transaction isolation level
+type IsolationLevel int
+
+const (
+        IsolationReadUncommitted IsolationLevel = iota
+        IsolationReadCommitted
+        IsolationRepeatableRead
+        IsolationSerializable
+)
+
+func (l IsolationLevel) String() string <span class="cov8" title="1">{
+        switch l </span>{
+        case IsolationReadUncommitted:<span class="cov8" title="1">
+                return "READ UNCOMMITTED"</span>
+        case IsolationReadCommitted:<span class="cov8" title="1">
+                return "READ COMMITTED"</span>
+        case IsolationRepeatableRead:<span class="cov8" title="1">
+                return "REPEATABLE READ"</span>
+        case IsolationSerializable:<span class="cov8" title="1">
+                return "SERIALIZABLE"</span>
+        default:<span class="cov0" title="0">
+                return "UNKNOWN"</span>
+        }
+}
+
+// SessionOptions contains configuration options for creating a session
+type SessionOptions struct {
+        DataSourceName string
+        Isolation      IsolationLevel
+        ReadOnly       bool
+        CacheEnabled   bool
+}
+
+// Session represents a database session (like a MySQL connection)
+// It is concurrent safe and can be used across multiple goroutines
+type Session struct {
+        db          *DB
+        coreSession *session.CoreSession
+        options     *SessionOptions
+        cacheEnabled bool
+        logger      Logger
+        mu          sync.RWMutex
+        err         error // Error state if session creation failed
+}
+
+// Session is created by DB.Session() or DB.SessionWithOptions()
+// It wraps CoreSession and provides higher-level functionality
+
+// Query executes a SELECT query and returns a Query object for iterating through results
+func (s *Session) Query(sql string, args ...interface{}) (*Query, error) <span class="cov8" title="1">{
+        s.mu.RLock()
+        if s.err != nil </span><span class="cov8" title="1">{
+                s.mu.RUnlock()
+                return nil, s.err
+        }</span>
+        <span class="cov8" title="1">s.mu.RUnlock()
+
+        s.logger.Debug("Query: %s", sql)
+
+        // Check cache if enabled
+        if s.cacheEnabled </span><span class="cov8" title="1">{
+                if result, found := s.db.cache.Get(sql, args); found </span><span class="cov0" title="0">{
+                        s.logger.Debug("Cache hit for query")
+                        return NewQuery(s, result, sql, args), nil
+                }</span>
+        }
+
+        // Parse and execute query
+        <span class="cov8" title="1">ctx := context.Background()
+
+        result, err := s.coreSession.ExecuteQuery(ctx, sql)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, WrapError(err, ErrCodeSyntax, "failed to execute query")
+        }</span>
+
+        // Cache the result
+        <span class="cov0" title="0">if s.cacheEnabled </span><span class="cov0" title="0">{
+                s.db.cache.Set(sql, args, result)
+        }</span>
+
+        <span class="cov0" title="0">return NewQuery(s, result, sql, args), nil</span>
+}
+
+// QueryAll executes a query and returns all rows at once
+func (s *Session) QueryAll(sql string, args ...interface{}) ([]domain.Row, error) <span class="cov8" title="1">{
+        query, err := s.Query(sql, args...)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">defer query.Close()
+
+        var rows []domain.Row
+        for query.Next() </span><span class="cov0" title="0">{
+                rows = append(rows, query.Row())
+        }</span>
+
+        <span class="cov0" title="0">if query.Err() != nil </span><span class="cov0" title="0">{
+                return nil, query.Err()
+        }</span>
+
+        <span class="cov0" title="0">return rows, nil</span>
+}
+
+// QueryOne executes a query and returns the first row only
+func (s *Session) QueryOne(sql string, args ...interface{}) (domain.Row, error) <span class="cov8" title="1">{
+        query, err := s.Query(sql, args...)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">defer query.Close()
+
+        if !query.Next() </span><span class="cov0" title="0">{
+                return nil, NewError(ErrCodeInternal, "no rows found", nil)
+        }</span>
+
+        <span class="cov0" title="0">return query.Row(), nil</span>
+}
+
+// Execute executes an INSERT, UPDATE, or DELETE statement and returns the number of affected rows
+func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) <span class="cov8" title="1">{
+        s.mu.RLock()
+        if s.err != nil </span><span class="cov8" title="1">{
+                s.mu.RUnlock()
+                return nil, s.err
+        }</span>
+        <span class="cov8" title="1">s.mu.RUnlock()
+
+        s.logger.Debug("Execute: %s", sql)
+
+        // Parse SQL to determine the statement type
+        parseResult, err := s.coreSession.GetAdapter().Parse(sql)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, WrapError(err, ErrCodeSyntax, "failed to parse SQL")
+        }</span>
+
+        <span class="cov8" title="1">if !parseResult.Success </span><span class="cov0" title="0">{
+                return nil, NewError(ErrCodeSyntax, "SQL parse error: "+parseResult.Error, nil)
+        }</span>
+
+        <span class="cov8" title="1">ctx := context.Background()
+        var result *domain.QueryResult
+
+        switch parseResult.Statement.Type </span>{
+        case parser.SQLTypeInsert:<span class="cov8" title="1">
+                result, err = s.coreSession.ExecuteInsert(ctx, sql, nil)</span>
+        case parser.SQLTypeUpdate:<span class="cov0" title="0">
+                result, err = s.coreSession.ExecuteUpdate(ctx, sql, nil, nil)</span>
+        case parser.SQLTypeDelete:<span class="cov0" title="0">
+                result, err = s.coreSession.ExecuteDelete(ctx, sql, nil)</span>
+        case parser.SQLTypeSelect:<span class="cov8" title="1">
+                return nil, NewError(ErrCodeInvalidParam, "use Query() method for SELECT statements", nil)</span>
+        default:<span class="cov8" title="1">
+                return nil, NewError(ErrCodeNotSupported, fmt.Sprintf("unsupported statement type: %v", parseResult.Statement.Type), nil)</span>
+        }
+
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                return nil, WrapError(err, ErrCodeInternal, "failed to execute statement")
+        }</span>
+
+        // Clear cache for the affected table
+        <span class="cov0" title="0">if s.cacheEnabled </span><span class="cov0" title="0">{
+                var tableName string
+                switch parseResult.Statement.Type </span>{
+                case parser.SQLTypeInsert:<span class="cov0" title="0">
+                        tableName = parseResult.Statement.Insert.Table</span>
+                case parser.SQLTypeUpdate:<span class="cov0" title="0">
+                        tableName = parseResult.Statement.Update.Table</span>
+                case parser.SQLTypeDelete:<span class="cov0" title="0">
+                        tableName = parseResult.Statement.Delete.Table</span>
+                }
+                <span class="cov0" title="0">if tableName != "" </span><span class="cov0" title="0">{
+                        s.db.cache.ClearTable(tableName)
+                }</span>
+        }
+
+        <span class="cov0" title="0">return NewResult(result.Total, 0, nil), nil</span>
+}
+
+// Begin starts a new transaction
+// If already in a transaction, returns the existing transaction (no nesting allowed)
+func (s *Session) Begin() (*Transaction, error) <span class="cov8" title="1">{
+        s.mu.Lock()
+        defer s.mu.Unlock()
+
+        if s.err != nil </span><span class="cov8" title="1">{
+                return nil, s.err
+        }</span>
+
+        // Check if already in transaction
+        <span class="cov8" title="1">if s.coreSession.InTx() </span><span class="cov8" title="1">{
+                return nil, NewError(ErrCodeTransaction, "nested transactions are not supported", nil)
+        }</span>
+
+        <span class="cov8" title="1">ctx := context.Background()
+        tx, err := s.coreSession.BeginTx(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, WrapError(err, ErrCodeTransaction, "failed to begin transaction")
+        }</span>
+
+        <span class="cov8" title="1">s.logger.Debug("Transaction started")
+
+        transaction := &amp;Transaction{
+                session: s,
+                tx:      tx,
+                active:  true,
+        }
+
+        return transaction, nil</span>
+}
+
+// InTransaction returns true if the session is currently in a transaction
+func (s *Session) InTransaction() bool <span class="cov8" title="1">{
+        return s.coreSession.InTx()
+}</span>
+
+// IsolationLevel returns the current transaction isolation level
+func (s *Session) IsolationLevel() IsolationLevel <span class="cov8" title="1">{
+        if s.options == nil </span><span class="cov0" title="0">{
+                return IsolationRepeatableRead
+        }</span>
+        <span class="cov8" title="1">return s.options.Isolation</span>
+}
+
+// SetIsolationLevel sets the transaction isolation level for new transactions
+func (s *Session) SetIsolationLevel(level IsolationLevel) <span class="cov8" title="1">{
+        s.mu.Lock()
+        defer s.mu.Unlock()
+
+        if s.options == nil </span><span class="cov0" title="0">{
+                s.options = &amp;SessionOptions{}
+        }</span>
+        <span class="cov8" title="1">s.options.Isolation = level
+
+        s.logger.Debug("Isolation level set to: %s", level.String())</span>
+}
+
+// CreateTempTable creates a temporary table in this session
+// Temporary tables are automatically dropped when the session is closed
+func (s *Session) CreateTempTable(name string, schema *domain.TableInfo) error <span class="cov8" title="1">{
+        if name == "" </span><span class="cov8" title="1">{
+                return NewError(ErrCodeInvalidParam, "table name cannot be empty", nil)
+        }</span>
+        <span class="cov8" title="1">if schema == nil </span><span class="cov8" title="1">{
+                return NewError(ErrCodeInvalidParam, "table schema cannot be nil", nil)
+        }</span>
+
+        <span class="cov8" title="1">s.mu.Lock()
+        defer s.mu.Unlock()
+
+        if s.err != nil </span><span class="cov8" title="1">{
+                return s.err
+        }</span>
+
+        <span class="cov8" title="1">schema.Temporary = true
+        schema.Name = name
+
+        ds := s.coreSession.GetDataSource()
+        if err := ds.CreateTable(context.Background(), schema); err != nil </span><span class="cov0" title="0">{
+                return WrapError(err, ErrCodeInternal, "failed to create temporary table")
+        }</span>
+
+        <span class="cov8" title="1">s.coreSession.AddTempTable(name)
+        s.logger.Debug("Created temporary table: %s", name)
+
+        return nil</span>
+}
+
+// GetDB returns the DB object that created this session
+func (s *Session) GetDB() *DB <span class="cov8" title="1">{
+        return s.db
+}</span>
+
+// Close closes the session and releases resources
+// Temporary tables created in this session are automatically dropped
+func (s *Session) Close() error <span class="cov8" title="1">{
+        s.mu.Lock()
+        defer s.mu.Unlock()
+
+        if s.coreSession == nil </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+
+        <span class="cov8" title="1">ctx := context.Background()
+        core := s.coreSession
+
+        // Rollback any active transaction
+        if core.InTx() </span><span class="cov0" title="0">{
+                s.logger.Warn("Rolling back uncommitted transaction")
+                if err := core.RollbackTx(ctx); err != nil </span><span class="cov0" title="0">{
+                        s.logger.Error("Failed to rollback transaction: %v", err)
+                }</span>
+        }
+
+        // Drop temporary tables
+        <span class="cov8" title="1">tempTables := core.GetTempTables()
+        ds := core.GetDataSource()
+        for _, tableName := range tempTables </span><span class="cov0" title="0">{
+                if err := ds.DropTable(ctx, tableName); err != nil </span><span class="cov0" title="0">{
+                        s.logger.Error("Failed to drop temporary table '%s': %v", tableName, err)
+                }</span>
+        }
+
+        // Close core session
+        <span class="cov8" title="1">if err := core.Close(ctx); err != nil </span><span class="cov0" title="0">{
+                return WrapError(err, ErrCodeInternal, "failed to close session")
+        }</span>
+
+        <span class="cov8" title="1">s.logger.Debug("Session closed")
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package api
+
+import (
+        "context"
+        "sync"
+
+        "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+)
+
+// Transaction 事务对象（不支持嵌套）
+type Transaction struct {
+        session *Session
+        tx      domain.Transaction
+        active  bool
+        mu      sync.Mutex
+}
+
+// NewTransaction 创建 Transaction
+func NewTransaction(session *Session, tx domain.Transaction) *Transaction <span class="cov8" title="1">{
+        return &amp;Transaction{
+                session: session,
+                tx:      tx,
+                active:  true,
+        }
+}</span>
+
+// Query 事务内查询
+func (t *Transaction) Query(sql string, args ...interface{}) (*Query, error) <span class="cov8" title="1">{
+        t.mu.Lock()
+        defer t.mu.Unlock()
+
+        if !t.active </span><span class="cov8" title="1">{
+                return nil, NewError(ErrCodeTransaction, "transaction is not active", nil)
+        }</span>
+
+        // 使用事务执行查询
+        // TODO: Parse SQL to get table name
+        <span class="cov8" title="1">result, err := t.tx.Query(context.Background(), "SELECT", &amp;domain.QueryOptions{})
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, WrapError(err, ErrCodeTransaction, "transaction query failed")
+        }</span>
+
+        <span class="cov8" title="1">return NewQuery(t.session, result, sql, args), nil</span>
+}
+
+// Execute 事务内执行命令
+func (t *Transaction) Execute(sql string, args ...interface{}) (*Result, error) <span class="cov8" title="1">{
+        t.mu.Lock()
+        defer t.mu.Unlock()
+
+        if !t.active </span><span class="cov8" title="1">{
+                return nil, NewError(ErrCodeTransaction, "transaction is not active", nil)
+        }</span>
+
+        // 解析 SQL 确定操作类型
+        // 简化实现：假设用户直接调用 DataSource 的方法
+        // 实际实现需要解析 SQL 并调用相应的方法
+
+        // TODO: 解析 SQL 并执行
+        // 这里需要完善：解析 SQL -&gt; 调用 Insert/Update/Delete 方法
+        // 临时返回错误
+        <span class="cov8" title="1">return nil, NewError(ErrCodeNotSupported, "transaction.Execute not fully implemented yet", nil)</span>
+}
+
+// Commit 提交事务
+func (t *Transaction) Commit() error <span class="cov8" title="1">{
+        t.mu.Lock()
+        defer t.mu.Unlock()
+
+        if !t.active </span><span class="cov8" title="1">{
+                return NewError(ErrCodeTransaction, "transaction is not active", nil)
+        }</span>
+
+        <span class="cov8" title="1">err := t.tx.Commit(context.Background())
+        if err != nil </span><span class="cov8" title="1">{
+                return WrapError(err, ErrCodeTransaction, "commit failed")
+        }</span>
+
+        <span class="cov8" title="1">t.active = false
+
+        if t.session.logger != nil </span><span class="cov8" title="1">{
+                t.session.logger.Debug("[TX] Transaction committed")
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// Rollback 回滚事务
+func (t *Transaction) Rollback() error <span class="cov8" title="1">{
+        t.mu.Lock()
+        defer t.mu.Unlock()
+
+        if !t.active </span><span class="cov8" title="1">{
+                return NewError(ErrCodeTransaction, "transaction is not active", nil)
+        }</span>
+
+        <span class="cov8" title="1">err := t.tx.Rollback(context.Background())
+        if err != nil </span><span class="cov8" title="1">{
+                return WrapError(err, ErrCodeTransaction, "rollback failed")
+        }</span>
+
+        <span class="cov8" title="1">t.active = false
+
+        if t.session.logger != nil </span><span class="cov8" title="1">{
+                t.session.logger.Warn("[TX] Transaction rolled back")
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// Close 关闭事务（等同于 Rollback）
+func (t *Transaction) Close() error <span class="cov8" title="1">{
+        if t.active </span><span class="cov8" title="1">{
+                return t.Rollback()
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// IsActive 检查事务是否活跃
+func (t *Transaction) IsActive() bool <span class="cov8" title="1">{
+        t.mu.Lock()
+        defer t.mu.Unlock()
+        return t.active
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

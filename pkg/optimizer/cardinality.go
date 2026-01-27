@@ -4,7 +4,7 @@ import (
 	"context"
 	"math"
 
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // TableStatistics 表统计信息
@@ -32,7 +32,7 @@ type CardinalityEstimator interface {
 	EstimateTableScan(tableName string) int64
 
 	// EstimateFilter 估算过滤后的基数
-	EstimateFilter(table string, filters []resource.Filter) int64
+	EstimateFilter(table string, filters []domain.Filter) int64
 
 	// EstimateJoin 估算JOIN的输出行数
 	EstimateJoin(left, right LogicalPlan, joinType JoinType) int64
@@ -71,7 +71,7 @@ func (e *SimpleCardinalityEstimator) EstimateTableScan(tableName string) int64 {
 }
 
 // EstimateFilter 估算过滤后的基数
-func (e *SimpleCardinalityEstimator) EstimateFilter(table string, filters []resource.Filter) int64 {
+func (e *SimpleCardinalityEstimator) EstimateFilter(table string, filters []domain.Filter) int64 {
 	baseRowCount := e.EstimateTableScan(table)
 	if len(filters) == 0 {
 		return baseRowCount
@@ -110,7 +110,7 @@ func (e *SimpleCardinalityEstimator) EstimateFilter(table string, filters []reso
 }
 
 // estimateFilterSelectivity 估算单个过滤器的选择率
-func (e *SimpleCardinalityEstimator) estimateFilterSelectivity(table string, filter resource.Filter) float64 {
+func (e *SimpleCardinalityEstimator) estimateFilterSelectivity(table string, filter domain.Filter) float64 {
 	// 处理逻辑组合
 	if filter.LogicOp == "AND" || filter.LogicOp == "OR" {
 		return e.estimateLogicSelectivity(table, filter)
@@ -164,7 +164,7 @@ func (e *SimpleCardinalityEstimator) estimateFilterSelectivity(table string, fil
 }
 
 // estimateLogicSelectivity 估算逻辑组合的选择率
-func (e *SimpleCardinalityEstimator) estimateLogicSelectivity(table string, filter resource.Filter) float64 {
+func (e *SimpleCardinalityEstimator) estimateLogicSelectivity(table string, filter domain.Filter) float64 {
 	if len(filter.SubFilters) == 0 {
 		return 1.0
 	}
@@ -316,9 +316,9 @@ func (e *SimpleCardinalityEstimator) estimateRowCount(plan LogicalPlan) int64 {
 			tableName := getTableName(selection.children[0])
 			conditions := selection.Conditions()
 			// 转换表达式到过滤器
-			filters := make([]resource.Filter, len(conditions))
+			filters := make([]domain.Filter, len(conditions))
 			for i, cond := range conditions {
-				filters[i] = resource.Filter{
+				filters[i] = domain.Filter{
 					Field:    expressionToString(cond),
 					Operator:  "=",
 					Value:     cond.Value,
@@ -378,9 +378,9 @@ func (e *SimpleCardinalityEstimator) EstimateDistinct(table string, columns []st
 }
 
 // CollectStatistics 从数据源收集统计信息（简化版）
-func CollectStatistics(dataSource resource.DataSource, tableName string) (*TableStatistics, error) {
+func CollectStatistics(dataSource domain.DataSource, tableName string) (*TableStatistics, error) {
 	// 执行查询获取所有数据
-	result, err := dataSource.Query(context.Background(), tableName, &resource.QueryOptions{})
+	result, err := dataSource.Query(context.Background(), tableName, &domain.QueryOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +400,7 @@ func CollectStatistics(dataSource resource.DataSource, tableName string) (*Table
 }
 
 // collectColumnStatistics 收集列的统计信息
-func collectColumnStatistics(rows []resource.Row, columnName, columnType string) *ColumnStatistics {
+func collectColumnStatistics(rows []domain.Row, columnName, columnType string) *ColumnStatistics {
 	stats := &ColumnStatistics{
 		Name:    columnName,
 		DataType: columnType,

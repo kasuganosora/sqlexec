@@ -5,18 +5,18 @@ import (
 	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // Optimizer 优化器
 type Optimizer struct {
 	rules      RuleSet
 	costModel  CostModel
-	dataSource resource.DataSource
+	dataSource domain.DataSource
 }
 
 // NewOptimizer 创建优化器
-func NewOptimizer(dataSource resource.DataSource) *Optimizer {
+func NewOptimizer(dataSource domain.DataSource) *Optimizer {
 	return &Optimizer{
 		rules:     DefaultRuleSet(),
 		costModel:  NewDefaultCostModel(),
@@ -38,7 +38,7 @@ func (o *Optimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (Ph
 	fmt.Println("  [DEBUG] Optimize: 步骤2 - 应用优化规则")
 	optCtx := &OptimizationContext{
 		DataSource: o.dataSource,
-		TableInfo: make(map[string]*resource.TableInfo),
+		TableInfo: make(map[string]*domain.TableInfo),
 		Stats:      make(map[string]*Statistics),
 		CostModel:  o.costModel,
 	}
@@ -189,8 +189,8 @@ func isWildcard(cols []parser.SelectColumn) bool {
 }
 
 // convertConditionsToFilters 将条件表达式转换为过滤器
-func (o *Optimizer) convertConditionsToFilters(conditions []*parser.Expression) []resource.Filter {
-	filters := []resource.Filter{}
+func (o *Optimizer) convertConditionsToFilters(conditions []*parser.Expression) []domain.Filter {
+	filters := []domain.Filter{}
 
 	for _, cond := range conditions {
 		if cond == nil {
@@ -208,7 +208,7 @@ func (o *Optimizer) convertConditionsToFilters(conditions []*parser.Expression) 
 }
 
 // convertExpressionToFilter 将表达式转换为过滤器
-func (o *Optimizer) convertExpressionToFilter(expr *parser.Expression) *resource.Filter {
+func (o *Optimizer) convertExpressionToFilter(expr *parser.Expression) *domain.Filter {
 	if expr == nil || expr.Type != parser.ExprTypeOperator {
 		return nil
 	}
@@ -221,7 +221,7 @@ func (o *Optimizer) convertExpressionToFilter(expr *parser.Expression) *resource
 				if expr.Right.Type == parser.ExprTypeValue {
 					// 映射操作符
 					operator := o.mapOperator(expr.Operator)
-					return &resource.Filter{
+					return &domain.Filter{
 						Field:    expr.Left.Column,
 						Operator:  operator,
 						Value:     expr.Right.Value,
@@ -245,9 +245,9 @@ func (o *Optimizer) convertExpressionToFilter(expr *parser.Expression) *resource
 	return nil
 }
 
-// mapOperator 映射parser操作符到resource.Filter操作符
+// mapOperator 映射parser操作符到domain.Filter操作符
 func (o *Optimizer) mapOperator(parserOp string) string {
-	// 转换parser操作符到resource.Filter操作符
+	// 转换parser操作符到domain.Filter操作符
 	switch parserOp {
 	case "gt":
 		return ">"
@@ -295,7 +295,7 @@ func (o *Optimizer) convertToPhysicalPlan(ctx context.Context, logicalPlan Logic
 		aliases := p.GetAliases()
 		fmt.Printf("  [DEBUG] convertToPhysicalPlan: Projection, 表达式数量: %d, 别名数量: %d\n", len(exprs), len(aliases))
 		for i, expr := range exprs {
-			fmt.Printf("  [DEBUG] convertToPhysicalPlan: 表达式%d: Type=%d, Column='%s'\n", i, expr.Type, expr.Column)
+			fmt.Printf("  [DEBUG] convertToPhysicalPlan: 表达式%d: Type=%v, Column='%s'\n", i, expr.Type, expr.Column)
 			if i < len(aliases) {
 				fmt.Printf("  [DEBUG] convertToPhysicalPlan: 别名%d: '%s'\n", i, aliases[i])
 			}

@@ -57,7 +57,7 @@ func (e *ExpressionEvaluator) Evaluate(expr *parser.Expression, row parser.Row) 
 		return e.evaluateFunction(expr, row)
 
 	default:
-		return nil, fmt.Errorf("unsupported expression type: %d", expr.Type)
+		return nil, fmt.Errorf("unsupported expression type: %v", expr.Type)
 	}
 }
 

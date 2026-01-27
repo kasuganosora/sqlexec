@@ -16,11 +16,14 @@ const (
 	SQLTypeDrop      SQLType = "DROP"
 	SQLTypeAlter     SQLType = "ALTER"
 	SQLTypeTruncate  SQLType = "TRUNCATE"
+	SQLTypeShow      SQLType = "SHOW"
+	SQLTypeDescribe  SQLType = "DESCRIBE"
 	SQLTypeBegin    SQLType = "BEGIN"
 	SQLTypeCommit   SQLType = "COMMIT"
 	SQLTypeRollback SQLType = "ROLLBACK"
+	SQLTypeUse      SQLType = "USE"
 	SQLTypeUnknown   SQLType = "UNKNOWN"
-	
+
 	// 排序方向
 	SortAsc  = "ASC"
 	SortDesc = "DESC"
@@ -37,9 +40,12 @@ type SQLStatement struct {
 	Create    *CreateStatement    `json:"create,omitempty"`
 	Drop      *DropStatement      `json:"drop,omitempty"`
 	Alter     *AlterStatement     `json:"alter,omitempty"`
+	Show      *ShowStatement      `json:"show,omitempty"`
+	Describe  *DescribeStatement  `json:"describe,omitempty"`
 	Begin     *TransactionStatement `json:"begin,omitempty"`
 	Commit    *TransactionStatement `json:"commit,omitempty"`
 	Rollback  *TransactionStatement `json:"rollback,omitempty"`
+	Use       *UseStatement       `json:"use,omitempty"`
 }
 
 // SelectStatement SELECT 语句
@@ -109,6 +115,25 @@ type AlterAction struct {
 	Column   *ColumnInfo       `json:"column,omitempty"`
 	OldName  string            `json:"old_name,omitempty"`
 	NewName  string            `json:"new_name,omitempty"`
+}
+
+// ShowStatement SHOW 语句
+type ShowStatement struct {
+	Type   string `json:"type"` // TABLES, DATABASES, COLUMNS, etc.
+	Table  string `json:"table,omitempty"`
+	Where  string `json:"where,omitempty"`
+	Like   string `json:"like,omitempty"`
+}
+
+// DescribeStatement DESCRIBE 语句
+type DescribeStatement struct {
+	Table  string `json:"table"`
+	Column string `json:"column,omitempty"`
+}
+
+// UseStatement USE 语句
+type UseStatement struct {
+	Database string `json:"database"` // 数据库名
 }
 
 // SelectColumn SELECT 列

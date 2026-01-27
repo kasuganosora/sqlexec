@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
 
@@ -48,7 +48,7 @@ func NewWindowOperator(child PhysicalPlan, windowFuncs []*parser.WindowExpressio
 }
 
 // Execute 执行窗口函数
-func (op *WindowOperator) Execute(ctx context.Context) (*resource.QueryResult, error) {
+func (op *WindowOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	op.ctx = ctx
 
 	// 1. 从子算子获取数据
@@ -73,14 +73,14 @@ func (op *WindowOperator) Execute(ctx context.Context) (*resource.QueryResult, e
 }
 
 // executeWindowFunction 执行单个窗口函数
-func (op *WindowOperator) executeWindowFunction(rows []resource.Row, wfDef *WindowFunctionDef) ([]resource.Row, error) {
+func (op *WindowOperator) executeWindowFunction(rows []domain.Row, wfDef *WindowFunctionDef) ([]domain.Row, error) {
 	wf := wfDef.Expr
 
 	// 3. 分区
 	partitions := op.partitionRows(rows, wf.Spec.PartitionBy)
 
 	// 4. 在每个分区内执行窗口函数
-	result := make([]resource.Row, 0, len(rows))
+	result := make([]domain.Row, 0, len(rows))
 	for _, partition := range partitions {
 		// 5. 排序
 		sortedPartition := op.sortRows(partition, wf.Spec.OrderBy)
@@ -88,7 +88,7 @@ func (op *WindowOperator) executeWindowFunction(rows []resource.Row, wfDef *Wind
 		// 6. 计算窗口函数值
 		for i, row := range sortedPartition {
 			// 克隆行
-			newRow := make(resource.Row)
+			newRow := make(domain.Row)
 			for k, v := range row {
 				newRow[k] = v
 			}
@@ -108,14 +108,14 @@ func (op *WindowOperator) executeWindowFunction(rows []resource.Row, wfDef *Wind
 }
 
 // partitionRows 根据分区表达式分割行
-func (op *WindowOperator) partitionRows(rows []resource.Row, partitionBy []parser.Expression) [][]resource.Row {
+func (op *WindowOperator) partitionRows(rows []domain.Row, partitionBy []parser.Expression) [][]domain.Row {
 	if len(partitionBy) == 0 {
 		// 无分区,所有行为一个分区
-		return [][]resource.Row{rows}
+		return [][]domain.Row{rows}
 	}
 
 	// 使用map分组
-	partitions := make(map[string][]resource.Row)
+	partitions := make(map[string][]domain.Row)
 
 	for _, row := range rows {
 		// 计算分区键
@@ -126,7 +126,7 @@ func (op *WindowOperator) partitionRows(rows []resource.Row, partitionBy []parse
 	}
 
 	// 转换为slice
-	result := make([][]resource.Row, 0, len(partitions))
+	result := make([][]domain.Row, 0, len(partitions))
 	for _, partition := range partitions {
 		result = append(result, partition)
 	}
@@ -135,7 +135,7 @@ func (op *WindowOperator) partitionRows(rows []resource.Row, partitionBy []parse
 }
 
 // computePartitionKey 计算分区键
-func (op *WindowOperator) computePartitionKey(row resource.Row, partitionBy []parser.Expression) string {
+func (op *WindowOperator) computePartitionKey(row domain.Row, partitionBy []parser.Expression) string {
 	keyParts := make([]interface{}, len(partitionBy))
 
 	for i, expr := range partitionBy {
@@ -151,13 +151,13 @@ func (op *WindowOperator) computePartitionKey(row resource.Row, partitionBy []pa
 }
 
 // sortRows 根据排序表达式排序行
-func (op *WindowOperator) sortRows(rows []resource.Row, orderBy []parser.OrderItem) []resource.Row {
+func (op *WindowOperator) sortRows(rows []domain.Row, orderBy []parser.OrderItem) []domain.Row {
 	if len(orderBy) == 0 {
 		return rows
 	}
 
 	// 克隆行,避免修改原始数据
-	sorted := make([]resource.Row, len(rows))
+	sorted := make([]domain.Row, len(rows))
 	copy(sorted, rows)
 
 	// 排序
@@ -169,7 +169,7 @@ func (op *WindowOperator) sortRows(rows []resource.Row, orderBy []parser.OrderIt
 }
 
 // compareRows 比较两行
-func (op *WindowOperator) compareRows(row1, row2 resource.Row, orderBy []parser.OrderItem) bool {
+func (op *WindowOperator) compareRows(row1, row2 domain.Row, orderBy []parser.OrderItem) bool {
 	for _, orderItem := range orderBy {
 		val1, err1 := op.evaluator.Evaluate(&orderItem.Expr, parser.Row(row1))
 		val2, err2 := op.evaluator.Evaluate(&orderItem.Expr, parser.Row(row2))
@@ -192,7 +192,7 @@ func (op *WindowOperator) compareRows(row1, row2 resource.Row, orderBy []parser.
 }
 
 // computeWindowValue 计算窗口函数值
-func (op *WindowOperator) computeWindowValue(rows []resource.Row, rowIndex int, wf *parser.WindowExpression) (interface{}, error) {
+func (op *WindowOperator) computeWindowValue(rows []domain.Row, rowIndex int, wf *parser.WindowExpression) (interface{}, error) {
 	switch wf.FuncName {
 	case "ROW_NUMBER":
 		return op.computeRowNumber(rowIndex), nil
@@ -223,7 +223,7 @@ func (op *WindowOperator) computeRowNumber(rowIndex int) int64 {
 }
 
 // RANK实现
-func (op *WindowOperator) computeRank(rows []resource.Row, rowIndex int) int64 {
+func (op *WindowOperator) computeRank(rows []domain.Row, rowIndex int) int64 {
 	if rowIndex == 0 {
 		return 1
 	}
@@ -241,7 +241,7 @@ func (op *WindowOperator) computeRank(rows []resource.Row, rowIndex int) int64 {
 }
 
 // DENSE_RANK实现
-func (op *WindowOperator) computeDenseRank(rows []resource.Row, rowIndex int) int64 {
+func (op *WindowOperator) computeDenseRank(rows []domain.Row, rowIndex int) int64 {
 	if rowIndex == 0 {
 		return 1
 	}
@@ -266,7 +266,7 @@ func (op *WindowOperator) computeDenseRank(rows []resource.Row, rowIndex int) in
 }
 
 // LAG实现
-func (op *WindowOperator) computeLag(rows []resource.Row, rowIndex int, args []parser.Expression) (interface{}, error) {
+func (op *WindowOperator) computeLag(rows []domain.Row, rowIndex int, args []parser.Expression) (interface{}, error) {
 	if len(args) == 0 {
 		return nil, fmt.Errorf("LAG() requires 1 argument")
 	}
@@ -295,7 +295,7 @@ func (op *WindowOperator) computeLag(rows []resource.Row, rowIndex int, args []p
 }
 
 // LEAD实现
-func (op *WindowOperator) computeLead(rows []resource.Row, rowIndex int, args []parser.Expression) (interface{}, error) {
+func (op *WindowOperator) computeLead(rows []domain.Row, rowIndex int, args []parser.Expression) (interface{}, error) {
 	if len(args) == 0 {
 		return nil, fmt.Errorf("LEAD() requires 1 argument")
 	}
@@ -324,7 +324,7 @@ func (op *WindowOperator) computeLead(rows []resource.Row, rowIndex int, args []
 }
 
 // 聚合窗口函数实现
-func (op *WindowOperator) computeAggregateWindow(rows []resource.Row, rowIndex int, wf *parser.WindowExpression) (interface{}, error) {
+func (op *WindowOperator) computeAggregateWindow(rows []domain.Row, rowIndex int, wf *parser.WindowExpression) (interface{}, error) {
 	// 确定窗口范围
 	start, end := op.getWindowBounds(rows, rowIndex, wf.Spec.Frame)
 
@@ -346,7 +346,7 @@ func (op *WindowOperator) computeAggregateWindow(rows []resource.Row, rowIndex i
 }
 
 // getWindowBounds 获取窗口边界
-func (op *WindowOperator) getWindowBounds(rows []resource.Row, rowIndex int, frame *parser.WindowFrame) (int, int) {
+func (op *WindowOperator) getWindowBounds(rows []domain.Row, rowIndex int, frame *parser.WindowFrame) (int, int) {
 	if frame == nil {
 		// 无帧定义,默认从第一行到当前行
 		return 0, rowIndex + 1
@@ -398,7 +398,7 @@ func (op *WindowOperator) getWindowBounds(rows []resource.Row, rowIndex int, fra
 }
 
 // getFrameOffset 获取帧偏移
-func (op *WindowOperator) getFrameOffset(row resource.Row, expr parser.Expression) (int, bool) {
+func (op *WindowOperator) getFrameOffset(row domain.Row, expr parser.Expression) (int, bool) {
 	val, err := op.evaluator.Evaluate(&expr, parser.Row(row))
 	if err != nil {
 		return 0, false
@@ -414,7 +414,7 @@ func (op *WindowOperator) getFrameOffset(row resource.Row, expr parser.Expressio
 // 辅助函数
 
 // isEqual 比较两行是否相等(根据ORDER BY列)
-func (op *WindowOperator) isEqual(row1, row2 resource.Row) bool {
+func (op *WindowOperator) isEqual(row1, row2 domain.Row) bool {
 	// 简化实现:比较所有列
 	// 实际应该只比较ORDER BY的列
 	for k, v1 := range row1 {
@@ -430,14 +430,14 @@ func (op *WindowOperator) isEqual(row1, row2 resource.Row) bool {
 }
 
 // getRowValue 获取行的指定列值
-func (op *WindowOperator) getRowValue(row resource.Row, expr parser.Expression) (interface{}, error) {
+func (op *WindowOperator) getRowValue(row domain.Row, expr parser.Expression) (interface{}, error) {
 	return op.evaluator.Evaluate(&expr, parser.Row(row))
 }
 
 // 聚合函数
 
 // computeCount 计数
-func (op *WindowOperator) computeCount(rows []resource.Row, start, end int) int64 {
+func (op *WindowOperator) computeCount(rows []domain.Row, start, end int) int64 {
 	count := int64(0)
 	for i := start; i < end; i++ {
 		if rows[i] != nil {
@@ -448,7 +448,7 @@ func (op *WindowOperator) computeCount(rows []resource.Row, start, end int) int6
 }
 
 // computeSum 求和
-func (op *WindowOperator) computeSum(rows []resource.Row, start, end int, expr parser.Expression) (interface{}, error) {
+func (op *WindowOperator) computeSum(rows []domain.Row, start, end int, expr parser.Expression) (interface{}, error) {
 	var sum float64
 	for i := start; i < end; i++ {
 		val, err := op.evaluator.Evaluate(&expr, parser.Row(rows[i]))
@@ -464,7 +464,7 @@ func (op *WindowOperator) computeSum(rows []resource.Row, start, end int, expr p
 }
 
 // computeAvg 平均值
-func (op *WindowOperator) computeAvg(rows []resource.Row, start, end int, expr parser.Expression) (interface{}, error) {
+func (op *WindowOperator) computeAvg(rows []domain.Row, start, end int, expr parser.Expression) (interface{}, error) {
 	sum, count := 0.0, 0
 
 	for i := start; i < end; i++ {
@@ -487,7 +487,7 @@ func (op *WindowOperator) computeAvg(rows []resource.Row, start, end int, expr p
 }
 
 // computeMin 最小值
-func (op *WindowOperator) computeMin(rows []resource.Row, start, end int, expr parser.Expression) (interface{}, error) {
+func (op *WindowOperator) computeMin(rows []domain.Row, start, end int, expr parser.Expression) (interface{}, error) {
 	minVal := interface{}(nil)
 
 	for i := start; i < end; i++ {
@@ -504,7 +504,7 @@ func (op *WindowOperator) computeMin(rows []resource.Row, start, end int, expr p
 }
 
 // computeMax 最大值
-func (op *WindowOperator) computeMax(rows []resource.Row, start, end int, expr parser.Expression) (interface{}, error) {
+func (op *WindowOperator) computeMax(rows []domain.Row, start, end int, expr parser.Expression) (interface{}, error) {
 	maxVal := interface{}(nil)
 
 	for i := start; i < end; i++ {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // LimitInfo Limit信息
@@ -17,7 +17,7 @@ type LimitInfo struct {
 type LogicalDataSource struct {
 	TableName   string
 	Columns     []ColumnInfo
-	TableInfo   *resource.TableInfo
+	TableInfo   *domain.TableInfo
 	Statistics  *Statistics
 	children    []LogicalPlan
 	pushedDownPredicates []*parser.Expression // 下推的谓词条件
@@ -25,7 +25,7 @@ type LogicalDataSource struct {
 }
 
 // NewLogicalDataSource 创建逻辑数据源
-func NewLogicalDataSource(tableName string, tableInfo *resource.TableInfo) *LogicalDataSource {
+func NewLogicalDataSource(tableName string, tableInfo *domain.TableInfo) *LogicalDataSource {
 	columns := make([]ColumnInfo, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		columns = append(columns, ColumnInfo{

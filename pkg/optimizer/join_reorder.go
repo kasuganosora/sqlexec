@@ -204,7 +204,7 @@ func (r *JoinReorderRule) rebuildJoinTree(
 
 		// 创建新的JOIN节点
 		newJoin := NewLogicalJoin(
-			rootJoin.JoinType(),
+			rootJoin.GetJoinType(),
 			currentPlan,
 			nextDataSource,
 			[]*JoinCondition{

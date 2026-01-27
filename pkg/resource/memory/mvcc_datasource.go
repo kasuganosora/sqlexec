@@ -10,6 +10,20 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/util"
 )
 
+// TransactionIDKey context key for transaction ID
+type TransactionIDKey struct{}
+
+// GetTransactionID 从context中获取事务ID
+func GetTransactionID(ctx context.Context) (int64, bool) {
+	txnID, ok := ctx.Value(TransactionIDKey{}).(int64)
+	return txnID, ok
+}
+
+// SetTransactionID 设置事务ID到context
+func SetTransactionID(ctx context.Context, txnID int64) context.Context {
+	return context.WithValue(ctx, TransactionIDKey{}, txnID)
+}
+
 // ==================== MVCC 数据源实现 ====================
 
 // MVCCDataSource 支持多版本并发控制的内存数据源
@@ -19,6 +33,10 @@ type MVCCDataSource struct {
 	connected bool
 	mu        sync.RWMutex
 
+	// 索引管理
+	indexManager *IndexManager
+	queryPlanner *QueryPlanner
+
 	// MVCC 相关
 	nextTxID    int64
 	currentVer  int64
@@ -27,6 +45,9 @@ type MVCCDataSource struct {
 
 	// 数据存储（按版本管理）
 	tables      map[string]*TableVersions
+
+	// 临时表（会话结束时自动删除）
+	tempTables  map[string]bool
 }
 
 // SupportsMVCC 实现IsMVCCable接口
@@ -49,11 +70,26 @@ type TableData struct {
 	rows      []domain.Row
 }
 
-// Snapshot 事务快照
+// COWTableSnapshot 写时复制的表快照
+type COWTableSnapshot struct {
+	tableName    string
+	copied       bool               // 是否已创建修改副本
+	baseData     *TableData          // 基础数据引用（未修改时）
+	modifiedData *TableData         // 修改后的数据
+	rowLocks     map[int64]bool     // 行级锁：跟踪哪些行被修改了
+	rowCopies    map[int64]domain.Row // 行级拷贝：存储修改后的行
+	deletedRows  map[int64]bool     // 行级删除：标记哪些行被删除了
+	mu           sync.RWMutex
+}
+
+// Snapshot 事务快照（写时复制）
 type Snapshot struct {
-	txnID      int64
-	startVer   int64
-	createdAt  time.Time
+	txnID        int64
+	startVer     int64
+	createdAt    time.Time
+	// 事务工作区：每张表的写时复制快照
+	// 在首次修改表时才拷贝数据
+	tableSnapshots map[string]*COWTableSnapshot
 }
 
 // Transaction 事务信息
@@ -73,14 +109,18 @@ func NewMVCCDataSource(config *domain.DataSourceConfig) *MVCCDataSource {
 		}
 	}
 
+	indexMgr := NewIndexManager()
 	return &MVCCDataSource{
-		config:     config,
-		connected:  false,
-		nextTxID:   1,
-		currentVer: 0,
-		snapshots:  make(map[int64]*Snapshot),
-		activeTxns: make(map[int64]*Transaction),
-		tables:     make(map[string]*TableVersions),
+		config:        config,
+		connected:     false,
+		indexManager:  indexMgr,
+		queryPlanner:  NewQueryPlanner(indexMgr),
+		nextTxID:       1,
+		currentVer:    0,
+		snapshots:     make(map[int64]*Snapshot),
+		activeTxns:    make(map[int64]*Transaction),
+		tables:        make(map[string]*TableVersions),
+		tempTables:    make(map[string]bool),
 	}
 }
 
@@ -99,11 +139,35 @@ func (m *MVCCDataSource) Close(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// 删除所有临时表
+	for tableName := range m.tempTables {
+		delete(m.tables, tableName)
+	}
+	m.tempTables = make(map[string]bool)
+
 	// 清理所有快照和事务
 	m.snapshots = make(map[int64]*Snapshot)
 	m.activeTxns = make(map[int64]*Transaction)
 	m.connected = false
 	return nil
+}
+
+// BeginTransaction 实现 TransactionalDataSource 接口
+func (m *MVCCDataSource) BeginTransaction(ctx context.Context, options *domain.TransactionOptions) (domain.Transaction, error) {
+	readOnly := false
+	if options != nil {
+		readOnly = options.ReadOnly
+	}
+
+	txnID, err := m.BeginTx(ctx, readOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MVCCTransaction{
+		ds:    m,
+		txnID: txnID,
+	}, nil
 }
 
 // IsConnected 检查是否已连接
@@ -123,7 +187,7 @@ func (m *MVCCDataSource) GetConfig() *domain.DataSourceConfig {
 
 // ==================== 事务管理 ====================
 
-// BeginTx 开始一个新事务
+// BeginTx 开始一个新事务（写时复制）
 func (m *MVCCDataSource) BeginTx(ctx context.Context, readOnly bool) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -131,10 +195,23 @@ func (m *MVCCDataSource) BeginTx(ctx context.Context, readOnly bool) (int64, err
 	txnID := m.nextTxID
 	m.nextTxID++
 
+	// 创建写时复制快照结构，不拷贝数据
+	tableSnapshots := make(map[string]*COWTableSnapshot)
+	for tableName := range m.tables {
+		// 只创建快照结构，引用基础数据
+		tableSnapshots[tableName] = &COWTableSnapshot{
+			tableName:    tableName,
+			copied:       false,
+			baseData:     nil,  // 访问时延迟加载
+			modifiedData: nil,
+		}
+	}
+
 	snapshot := &Snapshot{
-		txnID:     txnID,
-		startVer:  m.currentVer,
-		createdAt: time.Now(),
+		txnID:        txnID,
+		startVer:     m.currentVer,
+		createdAt:    time.Now(),
+		tableSnapshots: tableSnapshots,
 	}
 
 	txn := &Transaction{
@@ -149,7 +226,7 @@ func (m *MVCCDataSource) BeginTx(ctx context.Context, readOnly bool) (int64, err
 	return txnID, nil
 }
 
-// CommitTx 提交事务
+// CommitTx 提交事务（COW优化，支持行级COW）
 func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -159,6 +236,11 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 		return fmt.Errorf("transaction not found: %d", txnID)
 	}
 
+	snapshot, ok := m.snapshots[txnID]
+	if !ok {
+		return fmt.Errorf("transaction snapshot not found: %d", txnID)
+	}
+
 	if txn.readOnly {
 		// 只读事务直接结束
 		delete(m.activeTxns, txnID)
@@ -166,8 +248,79 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 		return nil
 	}
 
-	// 写事务提交时，创建新版本
-	m.currentVer++
+	// 写事务提交时，只提交已修改的表
+	for tableName, cowSnapshot := range snapshot.tableSnapshots {
+		tableVer := m.tables[tableName]
+		if tableVer != nil && cowSnapshot.copied {
+			cowSnapshot.mu.Lock()
+
+			// 检查是否有行级修改
+			if len(cowSnapshot.rowCopies) == 0 && len(cowSnapshot.deletedRows) == 0 {
+				// 没有行被修改，无需创建新版本
+				cowSnapshot.mu.Unlock()
+				continue
+			}
+
+			// 行级COW：合并基础数据和修改的行
+			tableVer.mu.Lock()
+			m.currentVer++
+
+			// 合并基础数据和行级修改
+			newRows := make([]domain.Row, 0, len(cowSnapshot.baseData.rows))
+			for i, row := range cowSnapshot.baseData.rows {
+				rowID := int64(i + 1)
+
+				// 检查此行是否被删除
+				if _, deleted := cowSnapshot.deletedRows[rowID]; deleted {
+					continue // 跳过已删除的行
+				}
+
+				// 检查此行是否被修改
+				if modifiedRow, ok := cowSnapshot.rowCopies[rowID]; ok {
+					// 使用修改后的行
+					newRows = append(newRows, modifiedRow)
+				} else {
+					// 使用原始行（需要深拷贝）
+					rowCopy := make(map[string]interface{}, len(row))
+					for k, v := range row {
+						rowCopy[k] = v
+					}
+					newRows = append(newRows, rowCopy)
+				}
+			}
+
+			// 处理新增的行（rowID超过基础数据行数的行）
+			baseRowsCount := len(cowSnapshot.baseData.rows)
+			for rowID, row := range cowSnapshot.rowCopies {
+				if rowID > int64(baseRowsCount) {
+					// 这是新插入的行
+					newRows = append(newRows, row)
+				}
+			}
+
+			// 创建新版本
+			cols := make([]domain.ColumnInfo, len(cowSnapshot.modifiedData.schema.Columns))
+			copy(cols, cowSnapshot.modifiedData.schema.Columns)
+
+			newVersionData := &TableData{
+				version:   m.currentVer,
+				createdAt: time.Now(),
+				schema: &domain.TableInfo{
+					Name:    cowSnapshot.modifiedData.schema.Name,
+					Schema:  cowSnapshot.modifiedData.schema.Schema,
+					Columns: cols,
+				},
+				rows: newRows,
+			}
+
+			tableVer.versions[m.currentVer] = newVersionData
+			tableVer.latest = m.currentVer
+			tableVer.mu.Unlock()
+
+			cowSnapshot.mu.Unlock()
+		}
+	}
+
 	delete(m.activeTxns, txnID)
 	delete(m.snapshots, txnID)
 
@@ -183,15 +336,108 @@ func (m *MVCCDataSource) RollbackTx(ctx context.Context, txnID int64) error {
 		return fmt.Errorf("transaction not found: %d", txnID)
 	}
 
+	// 写时复制下，回滚只需删除快照，无需释放数据
 	delete(m.activeTxns, txnID)
 	delete(m.snapshots, txnID)
 
 	return nil
 }
 
+// ensureTableCopied 确保表数据已拷贝到事务快照（写时复制）
+// 采用行级COW：只创建结构，不立即拷贝所有行
+func (s *COWTableSnapshot) ensureCopied(tableVer *TableVersions) error {
+	if s.copied {
+		return nil // 已创建副本
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// 再次检查，避免重复创建
+	if s.copied {
+		return nil
+	}
+
+	// 获取主版本数据
+	tableVer.mu.RLock()
+	baseData := tableVer.versions[tableVer.latest]
+	tableVer.mu.RUnlock()
+
+	if baseData == nil {
+		return fmt.Errorf("table %s not found", s.tableName)
+	}
+
+	// 拷贝schema
+	cols := make([]domain.ColumnInfo, len(baseData.schema.Columns))
+	copy(cols, baseData.schema.Columns)
+
+	// 创建修改后的数据结构，但不立即拷贝所有行
+	// 采用行级COW：只创建结构，行按需拷贝
+	s.modifiedData = &TableData{
+		version:   baseData.version,
+		createdAt: baseData.createdAt,
+		schema: &domain.TableInfo{
+			Name:    baseData.schema.Name,
+			Schema:  baseData.schema.Schema,
+			Columns: cols,
+		},
+		rows: nil, // 行数据延迟加载和拷贝
+	}
+
+	// 初始化行级跟踪结构
+	s.rowLocks = make(map[int64]bool)      // 跟踪修改的行
+	s.rowCopies = make(map[int64]domain.Row) // 存储修改后的行
+	s.deletedRows = make(map[int64]bool) // 标记删除的行
+
+	s.baseData = baseData
+	s.copied = true
+
+	return nil
+}
+
+// getTableData 从COW快照获取表数据（行级COW）
+func (s *COWTableSnapshot) getTableData(tableVer *TableVersions) *TableData {
+	if !s.copied {
+		// 未创建副本时，直接读取主版本
+		tableVer.mu.RLock()
+		data := tableVer.versions[tableVer.latest]
+		tableVer.mu.RUnlock()
+		return data
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// 已创建副本，需要合并基础数据和行级修改
+	if len(s.rowCopies) == 0 {
+		// 没有行被修改，返回基础数据
+		return s.baseData
+	}
+
+	// 合并基础数据和修改的行
+	mergedRows := make([]domain.Row, 0, len(s.baseData.rows))
+	for i, row := range s.baseData.rows {
+		rowID := int64(i + 1) // 行ID从1开始
+		if modifiedRow, ok := s.rowCopies[rowID]; ok {
+			// 使用修改后的行
+			mergedRows = append(mergedRows, modifiedRow)
+		} else {
+			// 使用原始行
+			mergedRows = append(mergedRows, row)
+		}
+	}
+
+	return &TableData{
+		version:   s.modifiedData.version,
+		createdAt: s.modifiedData.createdAt,
+		schema:    s.modifiedData.schema,
+		rows:      mergedRows,
+	}
+}
+
 // ==================== 表管理 ====================
 
-// GetTables 获取所有表
+// GetTables 获取所有表（不包括临时表）
 func (m *MVCCDataSource) GetTables(ctx context.Context) ([]string, error) {
 	if !m.connected {
 		return nil, domain.NewErrNotConnected("memory")
@@ -202,6 +448,41 @@ func (m *MVCCDataSource) GetTables(ctx context.Context) ([]string, error) {
 
 	tables := make([]string, 0, len(m.tables))
 	for name := range m.tables {
+		// 排除临时表
+		if !m.tempTables[name] {
+			tables = append(tables, name)
+		}
+	}
+	return tables, nil
+}
+
+// GetAllTables 获取所有表（包括临时表）
+func (m *MVCCDataSource) GetAllTables(ctx context.Context) ([]string, error) {
+	if !m.connected {
+		return nil, domain.NewErrNotConnected("memory")
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	tables := make([]string, 0, len(m.tables))
+	for name := range m.tables {
+		tables = append(tables, name)
+	}
+	return tables, nil
+}
+
+// GetTemporaryTables 获取所有临时表
+func (m *MVCCDataSource) GetTemporaryTables(ctx context.Context) ([]string, error) {
+	if !m.connected {
+		return nil, domain.NewErrNotConnected("memory")
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	tables := make([]string, 0, len(m.tempTables))
+	for name := range m.tempTables {
 		tables = append(tables, name)
 	}
 	return tables, nil
@@ -256,9 +537,10 @@ func (m *MVCCDataSource) CreateTable(ctx context.Context, tableInfo *domain.Tabl
 		version:   m.currentVer,
 		createdAt: time.Now(),
 		schema: &domain.TableInfo{
-			Name:    tableInfo.Name,
-			Schema:  tableInfo.Schema,
-			Columns: cols,
+			Name:       tableInfo.Name,
+			Schema:     tableInfo.Schema,
+			Columns:    cols,
+			Temporary:  tableInfo.Temporary,
 		},
 		rows: []domain.Row{},
 	}
@@ -268,6 +550,11 @@ func (m *MVCCDataSource) CreateTable(ctx context.Context, tableInfo *domain.Tabl
 			m.currentVer: versionData,
 		},
 		latest: m.currentVer,
+	}
+
+	// 如果是临时表，添加到临时表列表
+	if tableInfo.Temporary {
+		m.tempTables[tableInfo.Name] = true
 	}
 
 	return nil
@@ -283,6 +570,8 @@ func (m *MVCCDataSource) DropTable(ctx context.Context, tableName string) error 
 	}
 
 	delete(m.tables, tableName)
+	// 删除索引
+	_ = m.indexManager.DropTableIndexes(tableName)
 	return nil
 }
 
@@ -319,33 +608,98 @@ func (m *MVCCDataSource) TruncateTable(ctx context.Context, tableName string) er
 // Query 查询数据
 func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
 
 	tableVer, ok := m.tables[tableName]
 	if !ok {
+		m.mu.RUnlock()
 		return nil, domain.NewErrTableNotFound(tableName)
 	}
 
-	tableVer.mu.RLock()
-	defer tableVer.mu.RUnlock()
+	txnID, hasTxn := GetTransactionID(ctx)
+	var tableData *TableData
 
-	// 获取最新版本的数据
-	latest := tableVer.versions[tableVer.latest]
-	if latest == nil {
+	if hasTxn {
+		// 在事务中，从COW快照读取数据
+		snapshot, ok := m.snapshots[txnID]
+		if ok {
+			cowSnapshot, ok := snapshot.tableSnapshots[tableName]
+			if ok {
+				tableData = cowSnapshot.getTableData(tableVer)
+				m.mu.RUnlock()
+			} else {
+				m.mu.RUnlock()
+				tableVer.mu.RLock()
+				tableData = tableVer.versions[tableVer.latest]
+				tableVer.mu.RUnlock()
+			}
+		} else {
+			m.mu.RUnlock()
+			tableVer.mu.RLock()
+			tableData = tableVer.versions[tableVer.latest]
+			tableVer.mu.RUnlock()
+		}
+	} else {
+		// 非事务查询，从最新版本读取
+		m.mu.RUnlock()
+		tableVer.mu.RLock()
+		tableData = tableVer.versions[tableVer.latest]
+		tableVer.mu.RUnlock()
+	}
+
+	if tableData == nil {
 		return nil, domain.NewErrTableNotFound(tableName)
 	}
 
-	// 应用查询操作（过滤、排序、分页）
-	pagedRows := util.ApplyQueryOperations(latest.rows, options, &latest.schema.Columns)
+	// 使用查询优化器优化查询
+	var queryResult *domain.QueryResult
+	var err error
 
-	// Total应该是返回的行数
-	total := int64(len(pagedRows))
+	if options != nil && len(options.Filters) > 0 {
+		// 有过滤条件，使用查询优化器
+		plan, planErr := m.queryPlanner.PlanQuery(tableName, options.Filters, options)
+		if planErr != nil {
+			// 优化失败，使用全表扫描
+			pagedRows := util.ApplyQueryOperations(tableData.rows, options, &tableData.schema.Columns)
+			queryResult = &domain.QueryResult{
+				Columns: tableData.schema.Columns,
+				Rows:    pagedRows,
+				Total:   int64(len(pagedRows)),
+			}
+		} else {
+			// 执行优化后的查询计划
+			queryResult, err = m.queryPlanner.ExecutePlan(plan, tableData)
+				if err != nil {
+					// 执行失败，使用全表扫描
+					pagedRows := util.ApplyQueryOperations(tableData.rows, options, &tableData.schema.Columns)
+					queryResult = &domain.QueryResult{
+						Columns: tableData.schema.Columns,
+						Rows:    pagedRows,
+						Total:   int64(len(pagedRows)),
+					}
+				} else {
+					// 应用排序和分页
+					if options != nil {
+						if options.OrderBy != "" {
+							queryResult.Rows = util.ApplyOrder(queryResult.Rows, options)
+						}
+						if options.Limit > 0 || options.Offset > 0 {
+							queryResult.Rows = util.ApplyPagination(queryResult.Rows, int(options.Limit), int(options.Offset))
+						}
+					}
+					queryResult.Total = int64(len(queryResult.Rows))
+				}
+			}
+	} else {
+		// 无过滤条件，使用全表扫描
+		pagedRows := util.ApplyQueryOperations(tableData.rows, options, &tableData.schema.Columns)
+		queryResult = &domain.QueryResult{
+			Columns: tableData.schema.Columns,
+			Rows:    pagedRows,
+			Total:   int64(len(pagedRows)),
+		}
+	}
 
-	return &domain.QueryResult{
-		Columns: latest.schema.Columns,
-		Rows:    pagedRows,
-		Total:   total,
-	}, nil
+	return queryResult, nil
 }
 
 // ==================== 数据修改 ====================
@@ -356,32 +710,89 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 		return 0, domain.NewErrReadOnly(string(m.config.Type), "insert")
 	}
 
+	txnID, hasTxn := GetTransactionID(ctx)
+
+	// 先获取全局锁
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	tableVer, ok := m.tables[tableName]
 	if !ok {
+		m.mu.Unlock()
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
+	var sourceData *TableData
+	if hasTxn {
+		// 在事务中，使用COW快照
+		snapshot, ok := m.snapshots[txnID]
+		if !ok {
+			m.mu.Unlock()
+			return 0, fmt.Errorf("transaction not found: %d", txnID)
+		}
+
+		cowSnapshot, ok := snapshot.tableSnapshots[tableName]
+		if !ok {
+			m.mu.Unlock()
+			return 0, domain.NewErrTableNotFound(tableName)
+		}
+
+		// 确保数据已拷贝（写时复制，行级COW）
+		if err := cowSnapshot.ensureCopied(tableVer); err != nil {
+			m.mu.Unlock()
+			return 0, err
+		}
+
+		m.mu.Unlock()
+
+		// 行级COW：不直接拷贝整个表，只记录新插入的行
+		cowSnapshot.mu.Lock()
+
+		// 获取基础数据的行数
+		baseRowsCount := int64(len(cowSnapshot.baseData.rows))
+		inserted := int64(0)
+
+		for _, row := range rows {
+			// 每个新行使用递增的rowID（从基础数据行数+1开始）
+			rowID := baseRowsCount + inserted + 1
+			cowSnapshot.rowLocks[rowID] = true
+
+			// 深拷贝行数据
+			rowCopy := make(map[string]interface{}, len(row))
+			for k, v := range row {
+				rowCopy[k] = v
+			}
+			cowSnapshot.rowCopies[rowID] = rowCopy
+
+			inserted++
+		}
+
+		cowSnapshot.mu.Unlock()
+		return inserted, nil
+	}
+
+	// 非事务模式：在持有全局锁时，获取表版本锁
+	// 锁顺序：先全局锁，后表级锁（避免死锁）
 	tableVer.mu.Lock()
+	
+	// 现在可以安全地释放全局锁，因为已经持有表锁
+	m.mu.Unlock()
 	defer tableVer.mu.Unlock()
 
-	latest := tableVer.versions[tableVer.latest]
-	if latest == nil {
+	sourceData = tableVer.versions[tableVer.latest]
+	if sourceData == nil {
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
-	// 创建新版本
+	// 非事务插入，创建新版本
 	m.currentVer++
-	newRows := make([]domain.Row, len(latest.rows)+len(rows))
-	copy(newRows, latest.rows)
-	copy(newRows[len(latest.rows):], rows)
+	newRows := make([]domain.Row, len(sourceData.rows)+len(rows))
+	copy(newRows, sourceData.rows)
+	copy(newRows[len(sourceData.rows):], rows)
 
 	versionData := &TableData{
 		version:   m.currentVer,
 		createdAt: time.Now(),
-		schema:    latest.schema,
+		schema:    sourceData.schema,
 		rows:      newRows,
 	}
 
@@ -397,26 +808,90 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		return 0, domain.NewErrReadOnly(string(m.config.Type), "update")
 	}
 
+	txnID, hasTxn := GetTransactionID(ctx)
+
+	// 先获取全局锁
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	tableVer, ok := m.tables[tableName]
 	if !ok {
+		m.mu.Unlock()
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
+	var sourceData *TableData
+	if hasTxn {
+		// 在事务中，使用COW快照
+		snapshot, ok := m.snapshots[txnID]
+		if !ok {
+			m.mu.Unlock()
+			return 0, fmt.Errorf("transaction not found: %d", txnID)
+		}
+
+		cowSnapshot, ok := snapshot.tableSnapshots[tableName]
+		if !ok {
+			m.mu.Unlock()
+			return 0, domain.NewErrTableNotFound(tableName)
+		}
+
+		// 确保数据已拷贝（写时复制，行级COW）
+		if err := cowSnapshot.ensureCopied(tableVer); err != nil {
+			m.mu.Unlock()
+			return 0, err
+		}
+
+		m.mu.Unlock()
+
+		// 行级COW：遍历基础数据，对匹配的行进行拷贝和修改
+		cowSnapshot.mu.Lock()
+		defer cowSnapshot.mu.Unlock()
+
+		updated := int64(0)
+		for i, row := range cowSnapshot.baseData.rows {
+			rowID := int64(i + 1) // 行ID从1开始
+			if util.MatchesFilters(row, filters) {
+				// 行匹配过滤条件，需要进行修改
+				if _, alreadyModified := cowSnapshot.rowLocks[rowID]; !alreadyModified {
+					// 第一次修改此行，创建深拷贝
+					rowCopy := make(map[string]interface{}, len(row))
+					for k, v := range row {
+						rowCopy[k] = v
+					}
+					// 应用更新
+					for k, v := range updates {
+						rowCopy[k] = v
+					}
+					// 存储修改后的行
+					cowSnapshot.rowCopies[rowID] = rowCopy
+					cowSnapshot.rowLocks[rowID] = true
+				} else {
+					// 行已经修改过，直接更新已有副本
+					if existingRow, ok := cowSnapshot.rowCopies[rowID]; ok {
+						for k, v := range updates {
+							existingRow[k] = v
+						}
+					}
+				}
+				updated++
+			}
+		}
+		return updated, nil
+	}
+
+	// 非事务模式：锁顺序：先全局锁，后表级锁
 	tableVer.mu.Lock()
+	m.mu.Unlock()
 	defer tableVer.mu.Unlock()
 
-	latest := tableVer.versions[tableVer.latest]
-	if latest == nil {
+	sourceData = tableVer.versions[tableVer.latest]
+	if sourceData == nil {
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
-	// 创建新版本
+	// 非事务更新，创建新版本
 	m.currentVer++
-	newRows := make([]domain.Row, len(latest.rows))
-	copy(newRows, latest.rows)
+	newRows := make([]domain.Row, len(sourceData.rows))
+	copy(newRows, sourceData.rows)
 
 	updated := int64(0)
 	for i, row := range newRows {
@@ -431,7 +906,7 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 	versionData := &TableData{
 		version:   m.currentVer,
 		createdAt: time.Now(),
-		schema:    latest.schema,
+		schema:    sourceData.schema,
 		rows:      newRows,
 	}
 
@@ -447,28 +922,79 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		return 0, domain.NewErrReadOnly(string(m.config.Type), "delete")
 	}
 
+	txnID, hasTxn := GetTransactionID(ctx)
+
+	// 先获取全局锁
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	tableVer, ok := m.tables[tableName]
 	if !ok {
+		m.mu.Unlock()
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
+	var sourceData *TableData
+	if hasTxn {
+		// 在事务中，使用COW快照
+		snapshot, ok := m.snapshots[txnID]
+		if !ok {
+			m.mu.Unlock()
+			return 0, fmt.Errorf("transaction not found: %d", txnID)
+		}
+
+		cowSnapshot, ok := snapshot.tableSnapshots[tableName]
+		if !ok {
+			m.mu.Unlock()
+			return 0, domain.NewErrTableNotFound(tableName)
+		}
+
+		// 确保数据已拷贝（写时复制，行级COW）
+		if err := cowSnapshot.ensureCopied(tableVer); err != nil {
+			m.mu.Unlock()
+			return 0, err
+		}
+
+		m.mu.Unlock()
+
+		// 行级COW：标记要删除的行，不立即修改数据
+		cowSnapshot.mu.Lock()
+		defer cowSnapshot.mu.Unlock()
+
+		deleted := int64(0)
+		for i, row := range cowSnapshot.baseData.rows {
+			rowID := int64(i + 1) // 行ID从1开始
+
+			// 检查行是否匹配删除条件
+			if util.MatchesFilters(row, filters) {
+				// 如果此行已经被修改过，需要从rowCopies中移除
+				if _, alreadyModified := cowSnapshot.rowLocks[rowID]; alreadyModified {
+					delete(cowSnapshot.rowCopies, rowID)
+				}
+				// 标记为已删除
+				cowSnapshot.deletedRows[rowID] = true
+				delete(cowSnapshot.rowLocks, rowID)
+				deleted++
+			}
+		}
+		return deleted, nil
+	}
+
+	// 非事务模式：锁顺序：先全局锁，后表级锁
 	tableVer.mu.Lock()
+	m.mu.Unlock()
 	defer tableVer.mu.Unlock()
 
-	latest := tableVer.versions[tableVer.latest]
-	if latest == nil {
+	sourceData = tableVer.versions[tableVer.latest]
+	if sourceData == nil {
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
-	// 创建新版本
+	// 非事务删除，创建新版本
 	m.currentVer++
-	newRows := make([]domain.Row, 0, len(latest.rows))
+	newRows := make([]domain.Row, 0, len(sourceData.rows))
 
 	deleted := int64(0)
-	for _, row := range latest.rows {
+	for _, row := range sourceData.rows {
 		if !util.MatchesFilters(row, filters) {
 			newRows = append(newRows, row)
 		} else {
@@ -479,7 +1005,7 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 	versionData := &TableData{
 		version:   m.currentVer,
 		createdAt: time.Now(),
-		schema:    latest.schema,
+		schema:    sourceData.schema,
 		rows:      newRows,
 	}
 
@@ -533,6 +1059,9 @@ func (m *MVCCDataSource) LoadTable(tableName string, schema *domain.TableInfo, r
 			latest: m.currentVer,
 		}
 	}
+
+	// 重建索引
+	_ = m.indexManager.RebuildIndex(tableName, versionData.schema, rows)
 
 	return nil
 }

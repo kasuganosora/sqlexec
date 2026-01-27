@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // JoinEliminationRule JOIN消除规则
@@ -65,7 +65,7 @@ func (r *JoinEliminationRule) canEliminate(join *LogicalJoin) bool {
 	// 2. 连接条件包含等式
 	// 3. 右表（或左表）可以被推导
 
-	conditions := join.Conditions()
+	conditions := join.GetJoinConditions()
 	if len(conditions) == 0 {
 		return false // 没有连接条件，不能消除
 	}
@@ -78,8 +78,8 @@ func (r *JoinEliminationRule) canEliminate(join *LogicalJoin) bool {
 	}
 
 	// 检查是否为1:1关系
-	leftCardinality := r.cardinalityEstimator.EstimateFilter(getTableName(join.Children()[0]), []resource.Filter{})
-	rightCardinality := r.cardinalityEstimator.EstimateFilter(getTableName(join.Children()[1]), []resource.Filter{})
+	leftCardinality := r.cardinalityEstimator.EstimateFilter(getTableName(join.Children()[0]), []domain.Filter{})
+	rightCardinality := r.cardinalityEstimator.EstimateFilter(getTableName(join.Children()[1]), []domain.Filter{})
 
 	// 如果一边表很小（如1行），可以考虑消除
 	if leftCardinality <= 1 || rightCardinality <= 1 {
@@ -119,7 +119,7 @@ func (r *JoinEliminationRule) isForeignKeyPrimaryKeyJoin(join *LogicalJoin) bool
 	rightTable := rightTables[0]
 
 	// 检查连接条件
-	conditions := join.Conditions()
+	conditions := join.GetJoinConditions()
 	for _, cond := range conditions {
 		// 如果连接条件是 id = other_id，可能是外键主键关系
 		leftExpr := expressionToString(cond.Left)

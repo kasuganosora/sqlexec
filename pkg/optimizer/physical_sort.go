@@ -6,7 +6,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // PhysicalSort 物理排序
@@ -64,7 +64,7 @@ func (p *PhysicalSort) Cost() float64 {
 }
 
 // Execute 执行排序
-func (p *PhysicalSort) Execute(ctx context.Context) (*resource.QueryResult, error) {
+func (p *PhysicalSort) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	if len(p.children) == 0 {
 		return nil, fmt.Errorf("PhysicalSort has no child")
 	}
@@ -81,7 +81,7 @@ func (p *PhysicalSort) Execute(ctx context.Context) (*resource.QueryResult, erro
 	}
 
 	// 复制行以避免修改原始数据
-	rows := make([]resource.Row, len(input.Rows))
+	rows := make([]domain.Row, len(input.Rows))
 	copy(rows, input.Rows)
 
 	// 排序
@@ -104,7 +104,7 @@ func (p *PhysicalSort) Execute(ctx context.Context) (*resource.QueryResult, erro
 		return i < j
 	})
 
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Columns: input.Columns,
 		Rows:    rows,
 		Total:   input.Total,

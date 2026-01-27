@@ -5,23 +5,23 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kasuganosora/sqlexec/pkg/resource"
+	domain "github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // QueryBuilder 查询构建器
 type QueryBuilder struct {
-	dataSource resource.DataSource
+	dataSource domain.DataSource
 }
 
 // NewQueryBuilder 创建查询构建器
-func NewQueryBuilder(dataSource resource.DataSource) *QueryBuilder {
+func NewQueryBuilder(dataSource domain.DataSource) *QueryBuilder {
 	return &QueryBuilder{
 		dataSource: dataSource,
 	}
 }
 
 // BuildAndExecute 构建并执行 SQL 语句
-func (b *QueryBuilder) BuildAndExecute(ctx context.Context, sql string) (*resource.QueryResult, error) {
+func (b *QueryBuilder) BuildAndExecute(ctx context.Context, sql string) (*domain.QueryResult, error) {
 	adapter := NewSQLAdapter()
 	result, err := adapter.Parse(sql)
 	if err != nil {
@@ -36,7 +36,7 @@ func (b *QueryBuilder) BuildAndExecute(ctx context.Context, sql string) (*resour
 }
 
 // ExecuteStatement 执行解析后的语句
-func (b *QueryBuilder) ExecuteStatement(ctx context.Context, stmt *SQLStatement) (*resource.QueryResult, error) {
+func (b *QueryBuilder) ExecuteStatement(ctx context.Context, stmt *SQLStatement) (*domain.QueryResult, error) {
 	switch stmt.Type {
 	case SQLTypeSelect:
 		return b.executeSelect(ctx, stmt.Select)
@@ -58,9 +58,9 @@ func (b *QueryBuilder) ExecuteStatement(ctx context.Context, stmt *SQLStatement)
 }
 
 // executeSelect 执行 SELECT
-func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement) (*resource.QueryResult, error) {
+func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement) (*domain.QueryResult, error) {
 	// 构建 QueryOptions
-	options := &resource.QueryOptions{}
+	options := &domain.QueryOptions{}
 
 	// 检查是否是 select *
 	isSelectAll := false
@@ -103,9 +103,9 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 	if isSelectAll {
 		// 数据源层已经过滤了 _ttl 字段，这里再次确保
 		// 构建新的行数据，只包含列定义中的字段
-		filteredRows := make([]resource.Row, 0, len(result.Rows))
+		filteredRows := make([]domain.Row, 0, len(result.Rows))
 		for _, row := range result.Rows {
-			filteredRow := make(resource.Row)
+			filteredRow := make(domain.Row)
 			for _, col := range result.Columns {
 				if val, exists := row[col.Name]; exists {
 					filteredRow[col.Name] = val
@@ -134,7 +134,7 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 		}
 
 		// 构建新的列定义
-		newColumns := make([]resource.ColumnInfo, 0, len(selectedColumns))
+		newColumns := make([]domain.ColumnInfo, 0, len(selectedColumns))
 		for _, colName := range selectedColumns {
 			// 查找对应的列定义
 			found := false
@@ -147,7 +147,7 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 			}
 			// 如果没有找到列定义（比如 _ttl 这种隐藏字段），则创建一个基本的列定义
 			if !found {
-				newColumns = append(newColumns, resource.ColumnInfo{
+				newColumns = append(newColumns, domain.ColumnInfo{
 					Name:     colName,
 					Type:     "int64",
 					Nullable: true,
@@ -157,9 +157,9 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 		}
 
 		// 过滤行数据，只保留选择的列
-		filteredRows := make([]resource.Row, 0, len(result.Rows))
+		filteredRows := make([]domain.Row, 0, len(result.Rows))
 		for _, row := range result.Rows {
-			filteredRow := make(resource.Row)
+			filteredRow := make(domain.Row)
 			for _, colName := range selectedColumns {
 				if val, exists := row[colName]; exists {
 					filteredRow[colName] = val
@@ -182,16 +182,16 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 }
 
 // executeInsert 执行 INSERT
-func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement) (*resource.QueryResult, error) {
+func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement) (*domain.QueryResult, error) {
 	// 检查数据源是否可写
 	if !b.dataSource.IsWritable() {
 		return nil, fmt.Errorf("data source is read-only, INSERT operation not allowed")
 	}
 
 	// 转换值为行数据
-	rows := make([]resource.Row, 0, len(stmt.Values))
+	rows := make([]domain.Row, 0, len(stmt.Values))
 	for _, values := range stmt.Values {
-		row := make(resource.Row)
+		row := make(domain.Row)
 		for i, col := range stmt.Columns {
 			if i < len(values) {
 				row[col] = values[i]
@@ -200,7 +200,7 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 		rows = append(rows, row)
 	}
 
-	options := &resource.InsertOptions{
+	options := &domain.InsertOptions{
 		Replace: false,
 	}
 
@@ -209,31 +209,31 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 		return nil, fmt.Errorf("insert failed: %w", err)
 	}
 
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Total: affected,
 	}, nil
 }
 
 // executeUpdate 执行 UPDATE
-func (b *QueryBuilder) executeUpdate(ctx context.Context, stmt *UpdateStatement) (*resource.QueryResult, error) {
+func (b *QueryBuilder) executeUpdate(ctx context.Context, stmt *UpdateStatement) (*domain.QueryResult, error) {
 	// 检查数据源是否可写
 	if !b.dataSource.IsWritable() {
 		return nil, fmt.Errorf("data source is read-only, UPDATE operation not allowed")
 	}
 
 	// 转换 WHERE 条件
-	var filters []resource.Filter
+	var filters []domain.Filter
 	if stmt.Where != nil {
 		filters = b.convertExpressionToFilters(stmt.Where)
 	}
 
 	// 转换更新数据
-	updates := make(resource.Row)
+	updates := make(domain.Row)
 	for col, val := range stmt.Set {
 		updates[col] = val
 	}
 
-	options := &resource.UpdateOptions{
+	options := &domain.UpdateOptions{
 		Upsert: false,
 	}
 
@@ -242,25 +242,25 @@ func (b *QueryBuilder) executeUpdate(ctx context.Context, stmt *UpdateStatement)
 		return nil, fmt.Errorf("update failed: %w", err)
 	}
 
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Total: affected,
 	}, nil
 }
 
 // executeDelete 执行 DELETE
-func (b *QueryBuilder) executeDelete(ctx context.Context, stmt *DeleteStatement) (*resource.QueryResult, error) {
+func (b *QueryBuilder) executeDelete(ctx context.Context, stmt *DeleteStatement) (*domain.QueryResult, error) {
 	// 检查数据源是否可写
 	if !b.dataSource.IsWritable() {
 		return nil, fmt.Errorf("data source is read-only, DELETE operation not allowed")
 	}
 
 	// 转换 WHERE 条件
-	var filters []resource.Filter
+	var filters []domain.Filter
 	if stmt.Where != nil {
 		filters = b.convertExpressionToFilters(stmt.Where)
 	}
 
-	options := &resource.DeleteOptions{
+	options := &domain.DeleteOptions{
 		Force: false,
 	}
 
@@ -269,26 +269,26 @@ func (b *QueryBuilder) executeDelete(ctx context.Context, stmt *DeleteStatement)
 		return nil, fmt.Errorf("delete failed: %w", err)
 	}
 
-	return &resource.QueryResult{
+	return &domain.QueryResult{
 		Total: affected,
 	}, nil
 }
 
 // executeCreate 执行 CREATE
-func (b *QueryBuilder) executeCreate(ctx context.Context, stmt *CreateStatement) (*resource.QueryResult, error) {
+func (b *QueryBuilder) executeCreate(ctx context.Context, stmt *CreateStatement) (*domain.QueryResult, error) {
 	// 检查数据源是否可写
 	if !b.dataSource.IsWritable() {
 		return nil, fmt.Errorf("data source is read-only, CREATE operation not allowed")
 	}
 
 	if stmt.Type == "TABLE" {
-		tableInfo := &resource.TableInfo{
+		tableInfo := &domain.TableInfo{
 			Name:    stmt.Name,
-			Columns: make([]resource.ColumnInfo, 0, len(stmt.Columns)),
+			Columns: make([]domain.ColumnInfo, 0, len(stmt.Columns)),
 		}
 
 		for _, col := range stmt.Columns {
-			tableInfo.Columns = append(tableInfo.Columns, resource.ColumnInfo{
+			tableInfo.Columns = append(tableInfo.Columns, domain.ColumnInfo{
 				Name:     col.Name,
 				Type:     col.Type,
 				Nullable: col.Nullable,
@@ -302,7 +302,7 @@ func (b *QueryBuilder) executeCreate(ctx context.Context, stmt *CreateStatement)
 			return nil, fmt.Errorf("create table failed: %w", err)
 		}
 
-		return &resource.QueryResult{
+		return &domain.QueryResult{
 			Total: 0,
 		}, nil
 	}
@@ -311,7 +311,7 @@ func (b *QueryBuilder) executeCreate(ctx context.Context, stmt *CreateStatement)
 }
 
 // executeDrop 执行 DROP
-func (b *QueryBuilder) executeDrop(ctx context.Context, stmt *DropStatement) (*resource.QueryResult, error) {
+func (b *QueryBuilder) executeDrop(ctx context.Context, stmt *DropStatement) (*domain.QueryResult, error) {
 	// 检查数据源是否可写
 	if !b.dataSource.IsWritable() {
 		return nil, fmt.Errorf("data source is read-only, DROP operation not allowed")
@@ -323,7 +323,7 @@ func (b *QueryBuilder) executeDrop(ctx context.Context, stmt *DropStatement) (*r
 			return nil, fmt.Errorf("drop table failed: %w", err)
 		}
 
-		return &resource.QueryResult{
+		return &domain.QueryResult{
 			Total: 0,
 		}, nil
 	}
@@ -332,18 +332,18 @@ func (b *QueryBuilder) executeDrop(ctx context.Context, stmt *DropStatement) (*r
 }
 
 // executeAlter 执行 ALTER
-func (b *QueryBuilder) executeAlter(ctx context.Context, stmt *AlterStatement) (*resource.QueryResult, error) {
+func (b *QueryBuilder) executeAlter(ctx context.Context, stmt *AlterStatement) (*domain.QueryResult, error) {
 	return nil, fmt.Errorf("ALTER TABLE is not currently supported")
 }
 
 // convertExpressionToFilters 将表达式转换为过滤器列表
-func (b *QueryBuilder) convertExpressionToFilters(expr *Expression) []resource.Filter {
+func (b *QueryBuilder) convertExpressionToFilters(expr *Expression) []domain.Filter {
 	return b.convertExpressionToFiltersInternal(expr, false)
 }
 
 // convertExpressionToFiltersInternal 内部递归函数
-func (b *QueryBuilder) convertExpressionToFiltersInternal(expr *Expression, isInOr bool) []resource.Filter {
-	filters := make([]resource.Filter, 0)
+func (b *QueryBuilder) convertExpressionToFiltersInternal(expr *Expression, isInOr bool) []domain.Filter {
+	filters := make([]domain.Filter, 0)
 
 	if expr == nil {
 		return filters
@@ -358,7 +358,7 @@ func (b *QueryBuilder) convertExpressionToFiltersInternal(expr *Expression, isIn
 
 				if len(leftFilters) > 0 || len(rightFilters) > 0 {
 					logicOp := strings.ToUpper(expr.Operator)
-					filters = append(filters, resource.Filter{
+					filters = append(filters, domain.Filter{
 						LogicOp:    logicOp,
 						SubFilters: append(leftFilters, rightFilters...),
 					})
@@ -369,7 +369,7 @@ func (b *QueryBuilder) convertExpressionToFiltersInternal(expr *Expression, isIn
 			if expr.Left.Type == ExprTypeColumn && expr.Right.Type == ExprTypeValue {
 				operator := b.convertOperator(expr.Operator)
 				value := b.convertValue(expr.Right.Value)
-				filters = append(filters, resource.Filter{
+				filters = append(filters, domain.Filter{
 					Field:    expr.Left.Column,
 					Operator: operator,
 					Value:    value,
@@ -387,7 +387,7 @@ func (b *QueryBuilder) convertExpressionToFiltersInternal(expr *Expression, isIn
 						maxValue := b.extractExpressionValue(valueSlice[1])
 						if minValue != nil && maxValue != nil {
 							operator := expr.Operator
-							filters = append(filters, resource.Filter{
+							filters = append(filters, domain.Filter{
 								Field:    expr.Left.Column,
 								Operator: operator,
 								Value:    []interface{}{minValue, maxValue},
@@ -409,7 +409,7 @@ func (b *QueryBuilder) convertExpressionToFiltersInternal(expr *Expression, isIn
 							values = append(values, b.convertValue(expr.Args[i].Value))
 						}
 					}
-					filters = append(filters, resource.Filter{
+					filters = append(filters, domain.Filter{
 						Field:    expr.Args[0].Column,
 						Operator: "IN",
 						Value:    values,
@@ -421,7 +421,7 @@ func (b *QueryBuilder) convertExpressionToFiltersInternal(expr *Expression, isIn
 
 	case ExprTypeColumn:
 		if expr.Type == ExprTypeColumn {
-			filters = append(filters, resource.Filter{
+			filters = append(filters, domain.Filter{
 				Field:    expr.Column,
 				Operator: "=",
 				Value:    true,

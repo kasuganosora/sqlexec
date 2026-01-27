@@ -218,7 +218,7 @@ func (r *LimitPushDownRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 	// 如果子节点是 DataSource，下推到DataSource
 	if dataSource, ok := child.(*LogicalDataSource); ok {
 		// 标记Limit到DataSource
-		dataSource.PushDownLimit(limit.Limit(), limit.Offset())
+		dataSource.PushDownLimit(limit.GetLimit(), limit.GetOffset())
 		// 返回child，消除Limit节点（已下推）
 		return child, nil
 	}
@@ -226,7 +226,7 @@ func (r *LimitPushDownRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 	// 如果子节点是 Selection，可以下推到Selection的子节点
 	if selection, ok := child.(*LogicalSelection); ok {
 		// 创建新的 Selection，其子节点是新的 Limit
-		newLimit := NewLogicalLimit(limit.Limit(), limit.Offset(), selection.Children()[0])
+		newLimit := NewLogicalLimit(limit.GetLimit(), limit.GetOffset(), selection.Children()[0])
 		return NewLogicalSelection(selection.Conditions(), newLimit), nil
 	}
 

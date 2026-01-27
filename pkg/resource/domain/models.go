@@ -42,9 +42,10 @@ type DataSourceConfig struct {
 
 // TableInfo 表信息
 type TableInfo struct {
-	Name    string       `json:"name"`
-	Schema  string       `json:"schema,omitempty"`
-	Columns []ColumnInfo `json:"columns"`
+	Name       string       `json:"name"`
+	Schema     string       `json:"schema,omitempty"`
+	Columns    []ColumnInfo `json:"columns"`
+	Temporary  bool         `json:"temporary,omitempty"` // 是否是临时表
 }
 
 // ColumnInfo 列信息
@@ -132,8 +133,9 @@ const (
 type IndexType string
 
 const (
-	IndexTypeBTree IndexType = "btree"
-	IndexTypeHash  IndexType = "hash"
+	IndexTypeBTree    IndexType = "btree"
+	IndexTypeHash     IndexType = "hash"
+	IndexTypeFullText IndexType = "fulltext"
 )
 
 // ForeignKeyReference 外键引用信息

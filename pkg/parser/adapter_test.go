@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	_ "github.com/pingcap/tidb/pkg/parser/test_driver"
 )
 
@@ -280,5 +281,129 @@ func BenchmarkSQLAdapter_Parse(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func TestAdapter_ParseShowStatement(t *testing.T) {
+	adapter := NewSQLAdapter()
+
+	tests := []struct {
+		name     string
+		sql      string
+		expected string
+		table    string
+		wantErr  bool
+	}{
+		{
+			name:     "SHOW TABLES",
+			sql:      "SHOW TABLES",
+			expected: "TABLES",
+			wantErr:  false,
+		},
+		{
+			name:     "SHOW TABLES LIKE",
+			sql:      "SHOW TABLES LIKE 'user%'",
+			expected: "TABLES",
+			wantErr:  false,
+		},
+		{
+			name:     "SHOW DATABASES",
+			sql:      "SHOW DATABASES",
+			expected: "DATABASES",
+			wantErr:  false,
+		},
+		{
+			name:     "SHOW COLUMNS FROM table",
+			sql:      "SHOW COLUMNS FROM users",
+			expected: "COLUMNS",
+			table:    "users",
+			wantErr:  false,
+		},
+		{
+			name:     "SHOW CREATE TABLE",
+			sql:      "SHOW CREATE TABLE users",
+			expected: "CREATE_TABLE",
+			table:    "users",
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := adapter.Parse(tt.sql)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+		assert.NoError(t, err)
+		assert.True(t, result.Success)
+		assert.Equal(t, SQLTypeShow, result.Statement.Type)
+		assert.NotNil(t, result.Statement.Show)
+			assert.Equal(t, tt.expected, result.Statement.Show.Type)
+
+			if tt.table != "" {
+				assert.Equal(t, tt.table, result.Statement.Show.Table)
+			}
+		})
+	}
+}
+
+func TestAdapter_ParseDescribeStatement(t *testing.T) {
+	adapter := NewSQLAdapter()
+
+	tests := []struct {
+		name     string
+		sql      string
+		table    string
+		column   string
+		wantErr  bool
+	}{
+		{
+			name:    "DESCRIBE table",
+			sql:     "DESCRIBE users",
+			table:   "users",
+			wantErr: false,
+		},
+		{
+			name:    "DESC table",
+			sql:     "DESC users",
+			table:   "users",
+			wantErr: false,
+		},
+		{
+			name:    "DESCRIBE table column",
+			sql:     "DESCRIBE users name",
+			table:   "users",
+			column:  "name",
+			wantErr: false,
+		},
+		{
+			name:    "DESC table column",
+			sql:     "DESC users email",
+			table:   "users",
+			column:  "email",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := adapter.Parse(tt.sql)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+		assert.NoError(t, err)
+		assert.True(t, result.Success)
+		assert.Equal(t, SQLTypeDescribe, result.Statement.Type)
+		assert.NotNil(t, result.Statement.Describe)
+			assert.Equal(t, tt.table, result.Statement.Describe.Table)
+
+			if tt.column != "" {
+				assert.Equal(t, tt.column, result.Statement.Describe.Column)
+			}
+		})
 	}
 }
