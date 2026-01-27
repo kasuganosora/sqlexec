@@ -76,8 +76,9 @@ func TestDataSourceManager_IsTypeEnabled(t *testing.T) {
 		t.Errorf("Expected 'memory' type to be enabled")
 	}
 
-	if manager.IsTypeEnabled("memory") {
-		t.Errorf("Expected 'memory' type to be disabled")
+	// 验证未启用的类型
+	if manager.IsTypeEnabled("csv") {
+		t.Errorf("Expected 'csv' type to be disabled")
 	}
 }
 
@@ -326,8 +327,8 @@ func TestDataSourceManager_CreateFromConfig(t *testing.T) {
 func TestDataSourceManager_CreateFromConfig_TypeDisabled(t *testing.T) {
 	manager := NewDataSourceManager()
 
-	// 启用特定类型
-	manager.SetEnabledTypes([]domain.DataSourceType{"memory"})
+	// 只启用特定类型（不启用memory）
+	manager.SetEnabledTypes([]domain.DataSourceType{"csv"})
 
 	// 注册工厂
 	factory := &MockFactory{dsType: "memory", shouldErr: false}
@@ -335,7 +336,7 @@ func TestDataSourceManager_CreateFromConfig_TypeDisabled(t *testing.T) {
 		t.Errorf("Register() error = %v", err)
 	}
 
-	// 尝试创建禁用类型的数据源
+	// 尝试创建未启用类型的数据源
 	config := &domain.DataSourceConfig{
 		Type: "memory",
 		Name: "test-ds",
