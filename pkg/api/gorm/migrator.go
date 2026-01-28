@@ -106,7 +106,7 @@ func (m *Migrator) GetTables() (tableList []string, err error) {
 
 	result, err := m.Dialector.Session.Query(sql)
 	if err != nil {
-		return nil, err
+		return []string{}, err
 	}
 	defer result.Close()
 
@@ -114,11 +114,14 @@ func (m *Migrator) GetTables() (tableList []string, err error) {
 	for result.Next() {
 		var tableName string
 		if err := result.Scan(&tableName); err != nil {
-			return nil, err
+			continue
 		}
 		tables = append(tables, tableName)
 	}
 
+	if tables == nil {
+		return []string{}, nil
+	}
 	return tables, nil
 }
 
@@ -213,7 +216,8 @@ func (m *Migrator) CreateIndex(value interface{}, name string) error {
 
 // DropIndex 删除索引
 func (m *Migrator) DropIndex(value interface{}, name string) error {
-	sql := "DROP INDEX " + name
+	tableName := m.getTableName(value)
+	sql := "DROP INDEX " + name + " ON " + tableName
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }

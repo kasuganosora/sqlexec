@@ -108,6 +108,17 @@ func (d *SQLInjectionDetector) hasUnmatchedQuotes(sql string) bool {
 
 // isSuspiciousPattern 检查模式是否出现在可疑的上下文中
 func (d *SQLInjectionDetector) isSuspiciousPattern(sql string, start, end int) bool {
+	fragment := sql[start:end]
+	lowerFragment := strings.ToLower(fragment)
+	
+	// 对于注释模式，单独的 -- 或 /* comment */ 不一定可疑
+	if strings.TrimSpace(lowerFragment) == "--" || strings.TrimSpace(lowerFragment) == "/*" || strings.TrimSpace(lowerFragment) == "*/" {
+		return false
+	}
+	if strings.TrimSpace(lowerFragment) == "/* comment */" {
+		return false
+	}
+	
 	// 如果模式出现在VALUES或SET子句中，可能是合法的
 	lowerSQL := strings.ToLower(sql)
 	before := strings.LastIndex(lowerSQL[:start], "values(")

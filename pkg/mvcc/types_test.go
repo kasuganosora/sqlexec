@@ -10,9 +10,10 @@ func TestXIDOperations(t *testing.T) {
 	// Test XID generation
 	xid1 := NextXID(XIDBootstrap)
 	xid2 := NextXID(xid1)
-	
-	assert.Equal(t, XIDBootstrap+1, xid2)
-	
+
+	assert.Equal(t, XIDBootstrap+1, xid1)
+	assert.Equal(t, XIDBootstrap+2, xid2)
+
 	// Test XID comparison
 	assert.True(t, xid2 > xid1)
 	assert.False(t, xid1 > xid2)
