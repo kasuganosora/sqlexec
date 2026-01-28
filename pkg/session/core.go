@@ -185,6 +185,105 @@ func (s *CoreSession) ExecuteDelete(ctx context.Context, sql string, _ []domain.
 	return result, nil
 }
 
+// ExecuteCreate 执行 CREATE（底层实现）
+// 返回 *domain.QueryResult，其中 Total 字段是影响的行数（对于 DDL 通常为 0）
+func (s *CoreSession) ExecuteCreate(ctx context.Context, sql string) (*domain.QueryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return nil, fmt.Errorf("session is closed")
+	}
+
+	// 解析 SQL
+	parseResult, err := s.adapter.Parse(sql)
+	if err != nil {
+		return nil, fmt.Errorf("SQL parse failed: %w", err)
+	}
+
+	if !parseResult.Success {
+		return nil, fmt.Errorf("SQL parse error: %s", parseResult.Error)
+	}
+
+	if parseResult.Statement.Create == nil {
+		return nil, fmt.Errorf("not a CREATE statement")
+	}
+
+	// 使用 executor 执行 CREATE
+	result, err := s.executor.ExecuteCreate(ctx, parseResult.Statement.Create)
+	if err != nil {
+		return nil, fmt.Errorf("CREATE failed: %w", err)
+	}
+
+	return result, nil
+}
+
+// ExecuteDrop 执行 DROP（底层实现）
+// 返回 *domain.QueryResult，其中 Total 字段是影响的行数（对于 DDL 通常为 0）
+func (s *CoreSession) ExecuteDrop(ctx context.Context, sql string) (*domain.QueryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return nil, fmt.Errorf("session is closed")
+	}
+
+	// 解析 SQL
+	parseResult, err := s.adapter.Parse(sql)
+	if err != nil {
+		return nil, fmt.Errorf("SQL parse failed: %w", err)
+	}
+
+	if !parseResult.Success {
+		return nil, fmt.Errorf("SQL parse error: %s", parseResult.Error)
+	}
+
+	if parseResult.Statement.Drop == nil {
+		return nil, fmt.Errorf("not a DROP statement")
+	}
+
+	// 使用 executor 执行 DROP
+	result, err := s.executor.ExecuteDrop(ctx, parseResult.Statement.Drop)
+	if err != nil {
+		return nil, fmt.Errorf("DROP failed: %w", err)
+	}
+
+	return result, nil
+}
+
+// ExecuteAlter 执行 ALTER（底层实现）
+// 返回 *domain.QueryResult，其中 Total 字段是影响的行数（对于 DDL 通常为 0）
+func (s *CoreSession) ExecuteAlter(ctx context.Context, sql string) (*domain.QueryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return nil, fmt.Errorf("session is closed")
+	}
+
+	// 解析 SQL
+	parseResult, err := s.adapter.Parse(sql)
+	if err != nil {
+		return nil, fmt.Errorf("SQL parse failed: %w", err)
+	}
+
+	if !parseResult.Success {
+		return nil, fmt.Errorf("SQL parse error: %s", parseResult.Error)
+	}
+
+	if parseResult.Statement.Alter == nil {
+		return nil, fmt.Errorf("not an ALTER statement")
+	}
+
+	// 使用 executor 执行 ALTER
+	result, err := s.executor.ExecuteAlter(ctx, parseResult.Statement.Alter)
+	if err != nil {
+		return nil, fmt.Errorf("ALTER failed: %w", err)
+	}
+
+	return result, nil
+}
+
 // BeginTx 开始事务（底层实现）
 func (s *CoreSession) BeginTx(ctx context.Context) (domain.Transaction, error) {
 	s.txnMu.Lock()

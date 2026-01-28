@@ -4,8 +4,15 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kasuganosora/sqlexec/pkg/optimizer"
+	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
+
+// SelectStmt interface for accessing Select statement
+type SelectStmt interface {
+	GetFrom() string
+}
 
 // Query executes a SELECT, SHOW, or DESCRIBE query and returns a Query object for iterating through results
 // Supports parameter binding with ? placeholders
@@ -91,9 +98,10 @@ func (s *Session) QueryOne(sql string, args ...interface{}) (domain.Row, error) 
 	return query.Row(), nil
 }
 
-// Explain executes an EXPLAIN statement and returns the execution plan
+// Explain executes an EXPLAIN statement and returns execution plan
 // Supports parameter binding with ? placeholders
 // Example: session.Explain("SELECT * FROM users WHERE id = ?", 1)
+// This uses actual optimizer to generate execution plans
 func (s *Session) Explain(sql string, args ...interface{}) (string, error) {
 	s.mu.RLock()
 	if s.err != nil {
@@ -114,7 +122,7 @@ func (s *Session) Explain(sql string, args ...interface{}) (string, error) {
 
 	s.logger.Debug("Explain: %s", boundSQL)
 
-	// Parse SQL to verify it's an EXPLAIN statement
+	// Parse SQL
 	parseResult, err := s.coreSession.GetAdapter().Parse(boundSQL)
 	if err != nil {
 		return "", WrapError(err, ErrCodeSyntax, "failed to parse SQL")
@@ -124,65 +132,63 @@ func (s *Session) Explain(sql string, args ...interface{}) (string, error) {
 		return "", NewError(ErrCodeSyntax, "SQL parse error: "+parseResult.Error, nil)
 	}
 
-	// Check if it's an EXPLAIN statement
-	if parseResult.Statement.Type != "EXPLAIN" {
-		return "", NewError(ErrCodeInvalidParam, "expected EXPLAIN statement, got "+string(parseResult.Statement.Type), nil)
+	// Explain only works with SELECT statements
+	if parseResult.Statement.Type != parser.SQLTypeSelect || parseResult.Statement.Select == nil {
+		return "", NewError(ErrCodeSyntax, "EXPLAIN only supports SELECT statements", nil)
 	}
 
 	// Check cache if enabled
+	cacheKey := "EXPLAIN " + boundSQL
 	if s.cacheEnabled {
-		if explain, found := s.db.cache.GetExplain(boundSQL); found {
+		if explain, found := s.db.cache.GetExplain(cacheKey); found {
 			s.logger.Debug("Cache hit for explain")
 			return explain, nil
 		}
 	}
 
-	// Generate execution plan using optimizer
-	ctx := context.Background()
-
-	// Try to get execution plan from the result
-	result, err := s.coreSession.ExecuteQuery(ctx, boundSQL)
-	if err != nil {
-		return "", WrapError(err, ErrCodeInternal, "failed to execute explain")
+	// Get optimizer from executor
+	executor := s.coreSession.GetExecutor()
+	if executor == nil {
+		return "", NewError(ErrCodeInternal, "executor not available", nil)
 	}
 
-	// Generate explain output
-	explain := generateExplainOutput(result)
+	optimizerIntf := executor.GetOptimizer()
+	if optimizerIntf == nil {
+		return "", NewError(ErrCodeInternal, "optimizer not available", nil)
+	}
+
+	// Type assert to *optimizer.Optimizer
+	opt, ok := optimizerIntf.(*optimizer.Optimizer)
+	if !ok {
+		return "", NewError(ErrCodeInternal, "optimizer type assertion failed", nil)
+	}
+
+	// Build SQLStatement for optimizer
+	sqlStmt := &parser.SQLStatement{
+		Type:   parser.SQLTypeSelect,
+		Select: parseResult.Statement.Select,
+	}
+
+	// Optimize to get physical plan
+	ctx := context.Background()
+	physicalPlan, err := opt.Optimize(ctx, sqlStmt)
+	if err != nil {
+		return "", WrapError(err, ErrCodeInternal, "failed to generate execution plan")
+	}
+
+	if physicalPlan == nil {
+		return "", NewError(ErrCodeInternal, "generated physical plan is nil", nil)
+	}
+
+	// Generate execution plan using ExplainPlan
+	output := "Query Execution Plan\n====================\n\n"
+	output += fmt.Sprintf("SQL: %s\n\n", boundSQL)
+	output += optimizer.ExplainPlan(physicalPlan)
 
 	// Cache explain result
 	if s.cacheEnabled {
-		s.db.cache.SetExplain(boundSQL, explain)
+		s.db.cache.SetExplain(cacheKey, output)
 	}
 
-	return explain, nil
-}
-
-// generateExplainOutput generates formatted explain output
-func generateExplainOutput(result *domain.QueryResult) string {
-	// Generate basic explain output
-	output := "Query Execution Plan:\n"
-	output += "===================\n"
-	output += "\n"
-
-	// Add execution statistics
-	if result != nil {
-		output += "Execution Statistics:\n"
-		output += "-------------------\n"
-		output += fmt.Sprintf("Rows Returned: %d\n", result.Total)
-		if len(result.Columns) > 0 {
-			output += fmt.Sprintf("Columns: %d\n", len(result.Columns))
-			output += "Column Names: "
-			for i, col := range result.Columns {
-				if i > 0 {
-					output += ", "
-				}
-				output += col.Name
-			}
-			output += "\n"
-		}
-	} else {
-		output += "No execution statistics available\n"
-	}
-
-	return output
+	return output, nil
 }

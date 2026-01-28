@@ -57,6 +57,12 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 		result, err = s.coreSession.ExecuteUpdate(ctx, boundSQL, nil, nil)
 	case parser.SQLTypeDelete:
 		result, err = s.coreSession.ExecuteDelete(ctx, boundSQL, nil)
+	case parser.SQLTypeCreate:
+		result, err = s.coreSession.ExecuteCreate(ctx, boundSQL)
+	case parser.SQLTypeDrop:
+		result, err = s.coreSession.ExecuteDrop(ctx, boundSQL)
+	case parser.SQLTypeAlter:
+		result, err = s.coreSession.ExecuteAlter(ctx, boundSQL)
 	case parser.SQLTypeUse:
 		result, err = s.coreSession.ExecuteQuery(ctx, boundSQL)
 	case parser.SQLTypeSelect, parser.SQLTypeShow, parser.SQLTypeDescribe, parser.SQLTypeExplain:
@@ -79,6 +85,10 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 			tableName = parseResult.Statement.Update.Table
 		case parser.SQLTypeDelete:
 			tableName = parseResult.Statement.Delete.Table
+		case parser.SQLTypeCreate:
+			tableName = parseResult.Statement.Create.Name
+		case parser.SQLTypeDrop:
+			tableName = parseResult.Statement.Drop.Name
 		}
 		if tableName != "" {
 			s.db.cache.ClearTable(tableName)

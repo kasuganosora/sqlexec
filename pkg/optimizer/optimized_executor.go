@@ -51,6 +51,11 @@ func (e *OptimizedExecutor) GetQueryBuilder() interface{} {
 	return nil
 }
 
+// GetOptimizer 获取优化器
+func (e *OptimizedExecutor) GetOptimizer() interface{} {
+	return e.optimizer
+}
+
 // ExecuteSelect 执行 SELECT 查询（支持优化）
 func (e *OptimizedExecutor) ExecuteSelect(ctx context.Context, stmt *parser.SelectStatement) (*domain.QueryResult, error) {
 	// Check if this is an information_schema query
