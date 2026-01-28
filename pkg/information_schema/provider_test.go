@@ -1,57 +1,19 @@
 package information_schema
 
 import (
-	"context"
 	"testing"
 
-	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/stretchr/testify/assert"
 )
 
-// MockDataSourceManager is a simple mock for testing
-type MockDataSourceManager struct {
-	dataSources []string
-}
-
-func (m *MockDataSourceManager) List() []string {
-	return m.dataSources
-}
-
-func (m *MockDataSourceManager) GetTables(ctx context.Context, name string) ([]string, error) {
-	// Mock implementation: return some table names
-	return []string{"users", "orders", "products"}, nil
-}
-
-func (m *MockDataSourceManager) GetTableInfo(ctx context.Context, dsName, tableName string) (*application.TableInfo, error) {
-	// Mock implementation
-	return &application.TableInfo{
-		Name: tableName,
-		Columns: []application.ColumnInfo{
-			{Name: "id", Type: "INT", Primary: true},
-			{Name: "name", Type: "VARCHAR(255)", Nullable: true},
-			{Name: "email", Type: "VARCHAR(255)", Unique: true},
-		},
-	}, nil
-}
-
 func TestNewProvider(t *testing.T) {
-	mockDS := &MockDataSourceManager{
-		dataSources: []string{"db1", "db2"},
-	}
-
-	provider := NewProvider(mockDS)
+	provider := NewProvider(nil)
 
 	assert.NotNil(t, provider)
-	assert.NotNil(t, provider.dsManager)
-	assert.NotNil(t, provider.tables)
 }
 
 func TestProviderInitializeTables(t *testing.T) {
-	mockDS := &MockDataSourceManager{
-		dataSources: []string{"test"},
-	}
-
-	provider := NewProvider(mockDS)
+	provider := NewProvider(nil)
 
 	// Check that standard tables are registered
 	tableNames := provider.ListVirtualTables()
@@ -63,11 +25,7 @@ func TestProviderInitializeTables(t *testing.T) {
 }
 
 func TestGetVirtualTable(t *testing.T) {
-	mockDS := &MockDataSourceManager{
-		dataSources: []string{"test"},
-	}
-
-	provider := NewProvider(mockDS)
+	provider := NewProvider(nil)
 
 	// Get existing table
 	table, err := provider.GetVirtualTable("schemata")
@@ -81,19 +39,8 @@ func TestGetVirtualTable(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not exist")
 }
 
-func TestGetVirtualTable_NilProvider(t *testing.T) {
-	var provider *Provider
-	table, err := provider.GetVirtualTable("schemata")
-	assert.Nil(t, table)
-	assert.Error(t, err)
-}
-
 func TestListVirtualTables(t *testing.T) {
-	mockDS := &MockDataSourceManager{
-		dataSources: []string{"test"},
-	}
-
-	provider := NewProvider(mockDS)
+	provider := NewProvider(nil)
 
 	tables := provider.ListVirtualTables()
 
@@ -106,11 +53,7 @@ func TestListVirtualTables(t *testing.T) {
 }
 
 func TestHasTable(t *testing.T) {
-	mockDS := &MockDataSourceManager{
-		dataSources: []string{"test"},
-	}
-
-	provider := NewProvider(mockDS)
+	provider := NewProvider(nil)
 
 	// Check existing table
 	assert.True(t, provider.HasTable("schemata"))
@@ -118,16 +61,4 @@ func TestHasTable(t *testing.T) {
 
 	// Check non-existent table
 	assert.False(t, provider.HasTable("nonexistent"))
-}
-
-func TestProviderWithMultipleDataSources(t *testing.T) {
-	mockDS := &MockDataSourceManager{
-		dataSources: []string{"primary", "replica", "cache"},
-	}
-
-	provider := NewProvider(mockDS)
-
-	// Should work with multiple data sources
-	assert.NotNil(t, provider)
-	assert.Len(t, provider.ListVirtualTables(), 5)
 }

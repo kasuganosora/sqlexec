@@ -21,13 +21,15 @@ func NewSQLInjectionDetector() *SQLInjectionDetector {
 		// 检测AND注入（检测数字比较，如 1 AND 1=1）
 		regexp.MustCompile(`(?i)\s+and\s+["']?\d+["']?\s*(=|<|>)\s*["']?\d+["']?`),
 		// 检测注释注入（末尾的注释或注释后的其他语句）
-		regexp.MustCompile(`(?i)(--[^a-zA-Z0-9]|/\*[^*]*\*/)`),
+		regexp.MustCompile(`(?i)(--\s|--\s*$|/\*[^*]*\*/)`),
 		// 检测堆叠查询（分号后有SQL关键字）
-		regexp.MustCompile(`;\s*(select|insert|update|delete|drop|alter|create|exec|execute|waitfor)\b`),
+		regexp.MustCompile(`;\s*(select|insert|update|delete|drop|alter|create|exec|execute|waitfor|truncate)\b`),
 		// 检测EXEC注入
 		regexp.MustCompile(`(?i)\bexec(ute)?\s*\(?(\s*(xp_\w+|sp_\w+))`),
 		// 检测XP_开头的存储过程（常见于SQL Server注入）
 		regexp.MustCompile(`(?i)\bxp_\w+\b`),
+		// 检测延迟注入
+		regexp.MustCompile(`(?i)\bwaitfor\s+delay\b`),
 		// 检测十六进制编码（十六进制字符串，至少3个字符）
 		regexp.MustCompile(`(?i)0x[0-9a-f]{3,}`),
 	}
