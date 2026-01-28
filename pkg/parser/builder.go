@@ -47,8 +47,16 @@ func (b *QueryBuilder) ExecuteStatement(ctx context.Context, stmt *SQLStatement)
 	case SQLTypeDelete:
 		return b.executeDelete(ctx, stmt.Delete)
 	case SQLTypeCreate:
+		// 优先处理 CREATE INDEX
+		if stmt.CreateIndex != nil {
+			return b.executeCreateIndex(ctx, stmt.CreateIndex)
+		}
 		return b.executeCreate(ctx, stmt.Create)
 	case SQLTypeDrop:
+		// 优先处理 DROP INDEX
+		if stmt.DropIndex != nil {
+			return b.executeDropIndex(ctx, stmt.DropIndex)
+		}
 		return b.executeDrop(ctx, stmt.Drop)
 	case SQLTypeAlter:
 		return b.executeAlter(ctx, stmt.Alter)
@@ -334,6 +342,71 @@ func (b *QueryBuilder) executeDrop(ctx context.Context, stmt *DropStatement) (*d
 // executeAlter 执行 ALTER
 func (b *QueryBuilder) executeAlter(ctx context.Context, stmt *AlterStatement) (*domain.QueryResult, error) {
 	return nil, fmt.Errorf("ALTER TABLE is not currently supported")
+}
+
+// executeCreateIndex 执行 CREATE INDEX
+func (b *QueryBuilder) executeCreateIndex(ctx context.Context, stmt *CreateIndexStatement) (*domain.QueryResult, error) {
+	// 检查数据源是否可写
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is read-only, CREATE INDEX operation not allowed")
+	}
+
+	// 检查数据源是否支持索引操作
+	indexManager, ok := b.dataSource.(interface {
+		CreateIndex(tableName, columnName string, indexType string, unique bool) error
+	})
+	if !ok {
+		return nil, fmt.Errorf("data source does not support CREATE INDEX")
+	}
+
+	// 转换索引类型
+	var idxType string
+	switch strings.ToUpper(stmt.IndexType) {
+	case "BTREE", "B-TREE":
+		idxType = "btree"
+	case "HASH":
+		idxType = "hash"
+	case "FULLTEXT", "FULL-TEXT":
+		idxType = "fulltext"
+	default:
+		idxType = "btree" // 默认使用 btree
+	}
+
+	// 调用数据源的 CreateIndex 方法
+	err := indexManager.CreateIndex(stmt.TableName, stmt.ColumnName, idxType, stmt.Unique)
+	if err != nil {
+		return nil, fmt.Errorf("create index failed: %w", err)
+	}
+
+	return &domain.QueryResult{
+		Total: 0,
+	}, nil
+}
+
+// executeDropIndex 执行 DROP INDEX
+func (b *QueryBuilder) executeDropIndex(ctx context.Context, stmt *DropIndexStatement) (*domain.QueryResult, error) {
+	// 检查数据源是否可写
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is read-only, DROP INDEX operation not allowed")
+	}
+
+	// 检查数据源是否支持索引操作
+	indexManager, ok := b.dataSource.(interface {
+		DropIndex(tableName, indexName string) error
+	})
+	if !ok {
+		return nil, fmt.Errorf("data source does not support DROP INDEX")
+	}
+
+	// 调用数据源的 DropIndex 方法
+	err := indexManager.DropIndex(stmt.TableName, stmt.IndexName)
+	if err != nil {
+		return nil, fmt.Errorf("drop index failed: %w", err)
+	}
+
+	return &domain.QueryResult{
+		Total: 0,
+	}, nil
 }
 
 // convertExpressionToFilters 将表达式转换为过滤器列表

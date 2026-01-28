@@ -238,6 +238,24 @@ func (e *OptimizedExecutor) ExecuteAlter(ctx context.Context, stmt *parser.Alter
 	})
 }
 
+// ExecuteCreateIndex 执行 CREATE INDEX
+func (e *OptimizedExecutor) ExecuteCreateIndex(ctx context.Context, stmt *parser.CreateIndexStatement) (*domain.QueryResult, error) {
+	builder := parser.NewQueryBuilder(e.dataSource)
+	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
+		Type:       parser.SQLTypeCreate,
+		CreateIndex: stmt,
+	})
+}
+
+// ExecuteDropIndex 执行 DROP INDEX
+func (e *OptimizedExecutor) ExecuteDropIndex(ctx context.Context, stmt *parser.DropIndexStatement) (*domain.QueryResult, error) {
+	builder := parser.NewQueryBuilder(e.dataSource)
+	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
+		Type:     parser.SQLTypeDrop,
+		DropIndex: stmt,
+	})
+}
+
 // filterColumns 过滤列信息
 func filterColumns(columns []domain.ColumnInfo, selectCols []parser.SelectColumn) []domain.ColumnInfo {
 	result := make([]domain.ColumnInfo, 0, len(selectCols))

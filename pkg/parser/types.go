@@ -32,22 +32,24 @@ const (
 
 // SQLStatement SQL 语句
 type SQLStatement struct {
-	Type      SQLType             `json:"type"`
-	RawSQL    string              `json:"raw_sql"`
-	Select    *SelectStatement    `json:"select,omitempty"`
-	Insert    *InsertStatement    `json:"insert,omitempty"`
-	Update    *UpdateStatement    `json:"update,omitempty"`
-	Delete    *DeleteStatement    `json:"delete,omitempty"`
-	Create    *CreateStatement    `json:"create,omitempty"`
-	Drop      *DropStatement      `json:"drop,omitempty"`
-	Alter     *AlterStatement     `json:"alter,omitempty"`
-	Show      *ShowStatement      `json:"show,omitempty"`
-	Describe  *DescribeStatement  `json:"describe,omitempty"`
-	Explain   *ExplainStatement   `json:"explain,omitempty"`
-	Begin     *TransactionStatement `json:"begin,omitempty"`
-	Commit    *TransactionStatement `json:"commit,omitempty"`
-	Rollback  *TransactionStatement `json:"rollback,omitempty"`
-	Use       *UseStatement       `json:"use,omitempty"`
+	Type       SQLType               `json:"type"`
+	RawSQL     string                `json:"raw_sql"`
+	Select     *SelectStatement       `json:"select,omitempty"`
+	Insert     *InsertStatement       `json:"insert,omitempty"`
+	Update     *UpdateStatement       `json:"update,omitempty"`
+	Delete     *DeleteStatement       `json:"delete,omitempty"`
+	Create     *CreateStatement       `json:"create,omitempty"`
+	Drop       *DropStatement         `json:"drop,omitempty"`
+	Alter      *AlterStatement        `json:"alter,omitempty"`
+	CreateIndex *CreateIndexStatement `json:"create_index,omitempty"`
+	DropIndex   *DropIndexStatement   `json:"drop_index,omitempty"`
+	Show       *ShowStatement        `json:"show,omitempty"`
+	Describe   *DescribeStatement    `json:"describe,omitempty"`
+	Explain    *ExplainStatement     `json:"explain,omitempty"`
+	Begin      *TransactionStatement `json:"begin,omitempty"`
+	Commit     *TransactionStatement `json:"commit,omitempty"`
+	Rollback   *TransactionStatement `json:"rollback,omitempty"`
+	Use        *UseStatement        `json:"use,omitempty"`
 }
 
 // SelectStatement SELECT 语句
@@ -117,6 +119,23 @@ type AlterAction struct {
 	Column   *ColumnInfo       `json:"column,omitempty"`
 	OldName  string            `json:"old_name,omitempty"`
 	NewName  string            `json:"new_name,omitempty"`
+}
+
+// CreateIndexStatement CREATE INDEX 语句
+type CreateIndexStatement struct {
+	IndexName  string   `json:"index_name"`
+	TableName  string   `json:"table_name"`
+	ColumnName string   `json:"column_name"`
+	IndexType  string   `json:"index_type"` // BTREE, HASH, FULLTEXT
+	Unique     bool     `json:"unique"`
+	IfExists   bool     `json:"if_exists"`
+}
+
+// DropIndexStatement DROP INDEX 语句
+type DropIndexStatement struct {
+	IndexName string `json:"index_name"`
+	TableName string `json:"table_name"`
+	IfExists  bool   `json:"if_exists"`
 }
 
 // ShowStatement SHOW 语句

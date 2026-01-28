@@ -284,6 +284,72 @@ func (s *CoreSession) ExecuteAlter(ctx context.Context, sql string) (*domain.Que
 	return result, nil
 }
 
+// ExecuteCreateIndex 执行 CREATE INDEX（底层实现）
+// 返回 *domain.QueryResult，其中 Total 字段是影响的行数（对于 DDL 通常为 0）
+func (s *CoreSession) ExecuteCreateIndex(ctx context.Context, sql string) (*domain.QueryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return nil, fmt.Errorf("session is closed")
+	}
+
+	// 解析 SQL
+	parseResult, err := s.adapter.Parse(sql)
+	if err != nil {
+		return nil, fmt.Errorf("SQL parse failed: %w", err)
+	}
+
+	if !parseResult.Success {
+		return nil, fmt.Errorf("SQL parse error: %s", parseResult.Error)
+	}
+
+	if parseResult.Statement.CreateIndex == nil {
+		return nil, fmt.Errorf("not a CREATE INDEX statement")
+	}
+
+	// 使用 executor 执行 CREATE INDEX
+	result, err := s.executor.ExecuteCreateIndex(ctx, parseResult.Statement.CreateIndex)
+	if err != nil {
+		return nil, fmt.Errorf("CREATE INDEX failed: %w", err)
+	}
+
+	return result, nil
+}
+
+// ExecuteDropIndex 执行 DROP INDEX（底层实现）
+// 返回 *domain.QueryResult，其中 Total 字段是影响的行数（对于 DDL 通常为 0）
+func (s *CoreSession) ExecuteDropIndex(ctx context.Context, sql string) (*domain.QueryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return nil, fmt.Errorf("session is closed")
+	}
+
+	// 解析 SQL
+	parseResult, err := s.adapter.Parse(sql)
+	if err != nil {
+		return nil, fmt.Errorf("SQL parse failed: %w", err)
+	}
+
+	if !parseResult.Success {
+		return nil, fmt.Errorf("SQL parse error: %s", parseResult.Error)
+	}
+
+	if parseResult.Statement.DropIndex == nil {
+		return nil, fmt.Errorf("not a DROP INDEX statement")
+	}
+
+	// 使用 executor 执行 DROP INDEX
+	result, err := s.executor.ExecuteDropIndex(ctx, parseResult.Statement.DropIndex)
+	if err != nil {
+		return nil, fmt.Errorf("DROP INDEX failed: %w", err)
+	}
+
+	return result, nil
+}
+
 // BeginTx 开始事务（底层实现）
 func (s *CoreSession) BeginTx(ctx context.Context) (domain.Transaction, error) {
 	s.txnMu.Lock()

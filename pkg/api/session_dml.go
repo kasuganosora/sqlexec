@@ -58,9 +58,19 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 	case parser.SQLTypeDelete:
 		result, err = s.coreSession.ExecuteDelete(ctx, boundSQL, nil)
 	case parser.SQLTypeCreate:
-		result, err = s.coreSession.ExecuteCreate(ctx, boundSQL)
+		// 优先处理 CREATE INDEX
+		if parseResult.Statement.CreateIndex != nil {
+			result, err = s.coreSession.ExecuteCreateIndex(ctx, boundSQL)
+		} else {
+			result, err = s.coreSession.ExecuteCreate(ctx, boundSQL)
+		}
 	case parser.SQLTypeDrop:
-		result, err = s.coreSession.ExecuteDrop(ctx, boundSQL)
+		// 优先处理 DROP INDEX
+		if parseResult.Statement.DropIndex != nil {
+			result, err = s.coreSession.ExecuteDropIndex(ctx, boundSQL)
+		} else {
+			result, err = s.coreSession.ExecuteDrop(ctx, boundSQL)
+		}
 	case parser.SQLTypeAlter:
 		result, err = s.coreSession.ExecuteAlter(ctx, boundSQL)
 	case parser.SQLTypeUse:
@@ -86,9 +96,17 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 		case parser.SQLTypeDelete:
 			tableName = parseResult.Statement.Delete.Table
 		case parser.SQLTypeCreate:
-			tableName = parseResult.Statement.Create.Name
+			if parseResult.Statement.CreateIndex != nil {
+				tableName = parseResult.Statement.CreateIndex.TableName
+			} else {
+				tableName = parseResult.Statement.Create.Name
+			}
 		case parser.SQLTypeDrop:
-			tableName = parseResult.Statement.Drop.Name
+			if parseResult.Statement.DropIndex != nil {
+				tableName = parseResult.Statement.DropIndex.TableName
+			} else {
+				tableName = parseResult.Statement.Drop.Name
+			}
 		}
 		if tableName != "" {
 			s.db.cache.ClearTable(tableName)

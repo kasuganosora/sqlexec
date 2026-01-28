@@ -603,6 +603,40 @@ func (m *MVCCDataSource) TruncateTable(ctx context.Context, tableName string) er
 	return nil
 }
 
+// CreateIndex 创建索引
+func (m *MVCCDataSource) CreateIndex(tableName, columnName, indexType string, unique bool) error {
+	// 转换索引类型
+	var idxType IndexType
+	switch indexType {
+	case "btree":
+		idxType = IndexTypeBTree
+	case "hash":
+		idxType = IndexTypeHash
+	case "fulltext":
+		idxType = IndexTypeFullText
+	default:
+		idxType = IndexTypeBTree // 默认
+	}
+
+	// 创建索引
+	_, err := m.indexManager.CreateIndex(tableName, columnName, idxType, unique)
+	if err != nil {
+		return fmt.Errorf("create index failed: %w", err)
+	}
+
+	return nil
+}
+
+// DropIndex 删除索引
+func (m *MVCCDataSource) DropIndex(tableName, indexName string) error {
+	err := m.indexManager.DropIndex(tableName, indexName)
+	if err != nil {
+		return fmt.Errorf("drop index failed: %w", err)
+	}
+
+	return nil
+}
+
 // ==================== 数据查询 ====================
 
 // Query 查询数据

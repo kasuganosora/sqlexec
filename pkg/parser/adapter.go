@@ -151,6 +151,22 @@ func (a *SQLAdapter) convertToStatement(node ast.StmtNode) (*SQLStatement, error
 		}
 		stmt.Alter = alterStmt
 
+	case *ast.CreateIndexStmt:
+		stmt.Type = SQLTypeCreate
+		createIndexStmt, err := a.convertCreateIndexStmt(stmtNode)
+		if err != nil {
+			return nil, err
+		}
+		stmt.CreateIndex = createIndexStmt
+
+	case *ast.DropIndexStmt:
+		stmt.Type = SQLTypeDrop
+		dropIndexStmt, err := a.convertDropIndexStmt(stmtNode)
+		if err != nil {
+			return nil, err
+		}
+		stmt.DropIndex = dropIndexStmt
+
 	case *ast.UseStmt:
 		stmt.Type = SQLTypeUse
 		useStmt := a.convertUseStmt(stmtNode)
@@ -837,4 +853,54 @@ func (a *SQLAdapter) convertUseStmt(stmt *ast.UseStmt) *UseStatement {
 		Database: dbName,
 	}
 	return useStmt
+}
+
+// convertCreateIndexStmt 转换 CREATE INDEX 语句
+func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateIndexStatement, error) {
+	createIndexStmt := &CreateIndexStatement{
+		IndexName: stmt.IndexName,
+		IfExists:  stmt.IfNotExists,
+		Unique:    stmt.KeyType == ast.IndexKeyTypeUnique,
+	}
+
+	// 获取表名
+	if stmt.Table != nil {
+		createIndexStmt.TableName = stmt.Table.Name.String()
+	}
+
+	// 获取索引类型（BTREE, HASH, FULLTEXT）
+	// 默认为 BTREE
+	if stmt.IndexOption != nil {
+		createIndexStmt.IndexType = "BTREE" // 默认值
+		// 注意：TiDB 的 IndexOption 可能包含索引类型信息
+		// 这里简化处理，实际可能需要更复杂的解析
+	} else {
+		createIndexStmt.IndexType = "BTREE"
+	}
+
+	// 获取列名（从 IndexPartSpecifications）
+	if len(stmt.IndexPartSpecifications) > 0 {
+		// 获取第一个列名（简化处理，不支持多列索引）
+		spec := stmt.IndexPartSpecifications[0]
+		if spec.Column != nil {
+			createIndexStmt.ColumnName = spec.Column.Name.String()
+		}
+	}
+
+	return createIndexStmt, nil
+}
+
+// convertDropIndexStmt 转换 DROP INDEX 语句
+func (a *SQLAdapter) convertDropIndexStmt(stmt *ast.DropIndexStmt) (*DropIndexStatement, error) {
+	dropIndexStmt := &DropIndexStatement{
+		IndexName: stmt.IndexName,
+		IfExists:  stmt.IfExists,
+	}
+
+	// 获取表名
+	if stmt.Table != nil {
+		dropIndexStmt.TableName = stmt.Table.Name.String()
+	}
+
+	return dropIndexStmt, nil
 }
