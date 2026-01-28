@@ -2,6 +2,7 @@ package virtual
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -32,6 +33,21 @@ func (m *mockTable) Query(ctx context.Context, filters []domain.Filter, options 
 	}, nil
 }
 
+func (m *mockTable) ListVirtualTables() []string {
+	return []string{"mock_table"}
+}
+
+func (m *mockTable) GetVirtualTable(name string) (VirtualTable, error) {
+	if name == "mock_table" {
+		return m, nil
+	}
+	return nil, fmt.Errorf("table %s not found", name)
+}
+
+func (m *mockTable) HasTable(name string) bool {
+	return name == "mock_table"
+}
+
 func TestNewVirtualDataSource(t *testing.T) {
 	table := &mockTable{}
 	ds := NewVirtualDataSource(table)
@@ -56,7 +72,7 @@ func TestVirtualDataSourceGetConfig(t *testing.T) {
 
 	config := ds.GetConfig()
 	assert.NotNil(t, config)
-	assert.Equal(t, "virtual", config.Type)
+	assert.Equal(t, "virtual", string(config.Type))
 }
 
 func TestVirtualDataSourceGetTables(t *testing.T) {

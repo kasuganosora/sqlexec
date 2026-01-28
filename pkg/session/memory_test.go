@@ -363,9 +363,10 @@ func TestMemoryDriver_SetThreadId(t *testing.T) {
 	threadIdValue, ok := driver.Values["thread_id"]
 	assert.True(t, ok)
 	assert.NotNil(t, threadIdValue)
+	// threadIdValue 应该是 map[string]any 类型
 	threadMap, ok := threadIdValue.(map[string]any)
 	assert.True(t, ok)
-	retrievedSess, ok := threadMap["123"]
+	retrievedSess, ok := threadMap["123"].(*Session)
 	assert.True(t, ok)
 	assert.Equal(t, sess, retrievedSess)
 }
