@@ -74,8 +74,10 @@ func TestDetectAndSanitize(t *testing.T) {
 		expectErr bool
 	}{
 		{"Safe SQL", "SELECT * FROM users", false},
-		{"SQL with injection", "SELECT * FROM users WHERE id = '1' OR '1'='1'", false},
-		{"Comment injection", "SELECT * FROM users--", false},
+		{"SQL with injection", "SELECT * FROM users WHERE id = '1' OR '1'='1'", true},
+		{"Comment injection", "SELECT * FROM users--", true},
+		{"Tautology injection", "SELECT * FROM users WHERE id = 1 OR 1=1", true},
+		{"UNION injection", "SELECT * FROM users UNION SELECT * FROM admin", true},
 	}
 
 	for _, tt := range tests {

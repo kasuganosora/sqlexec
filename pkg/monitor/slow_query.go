@@ -132,7 +132,8 @@ func (s *SlowQueryAnalyzer) GetSlowQueriesByTimeRange(start, end time.Time) []*S
 
 	result := []*SlowQueryLog{}
 	for _, log := range s.slowQueries {
-		if log.Timestamp.After(start) && log.Timestamp.Before(end) {
+		// 包含边界：时间 >= start 且 <= end
+		if !log.Timestamp.Before(start) && !log.Timestamp.After(end) {
 			result = append(result, log)
 		}
 	}

@@ -196,28 +196,33 @@ func TestGetSlowQueriesByTable(t *testing.T) {
 func TestGetSlowQueriesByTimeRange(t *testing.T) {
 	analyzer := NewSlowQueryAnalyzer(1*time.Second, 100)
 
-	// 记录不同时间的查询（实际记录时间是自动的）
+	// 记录查询前获取时间
+	beforeRecord := time.Now()
+	time.Sleep(10 * time.Millisecond) // 确保时间差
+
+	// 记录查询
 	analyzer.RecordSlowQuery("SELECT 1", 2*time.Second, "test", 100)
 	analyzer.RecordSlowQuery("SELECT 2", 2*time.Second, "test", 100)
 	analyzer.RecordSlowQuery("SELECT 3", 2*time.Second, "test", 100)
 
-	// 记录后获取当前时间
-	now := time.Now()
-	oneHourAgo := now.Add(-1 * time.Hour)
+	time.Sleep(10 * time.Millisecond)
+	afterRecord := time.Now()
 
-	// 获取最近一小时内的查询
-	queries := analyzer.GetSlowQueriesByTimeRange(oneHourAgo, now)
-	if len(queries) == 0 {
-		t.Error("Should find queries in time range")
+	// 获取时间范围内的查询（包含边界）
+	queries := analyzer.GetSlowQueriesByTimeRange(beforeRecord, afterRecord)
+	if len(queries) != 3 {
+		t.Errorf("Got %d queries, want 3", len(queries))
 	}
 }
 
 func TestGetSlowQueriesAfter(t *testing.T) {
 	analyzer := NewSlowQueryAnalyzer(1*time.Second, 100)
 
-	// 先记录一个很早的时间戳
-	beforeTime := time.Now().Add(-24 * time.Hour)
+	// 记录查询前获取时间
+	beforeTime := time.Now()
+	time.Sleep(10 * time.Millisecond) // 确保时间差
 
+	// 记录查询
 	analyzer.RecordSlowQuery("SELECT 1", 2*time.Second, "test", 100)
 	analyzer.RecordSlowQuery("SELECT 2", 2*time.Second, "test", 100)
 
@@ -227,7 +232,7 @@ func TestGetSlowQueriesAfter(t *testing.T) {
 		t.Errorf("Expected 2 recorded queries, got %d", len(allQueries))
 	}
 
-	// 使用很早的时间点来查询，确保能查到所有记录
+	// 获取beforeTime之后的查询
 	queries := analyzer.GetSlowQueriesAfter(beforeTime)
 	if len(queries) != 2 {
 		t.Errorf("Got %d queries, want 2", len(queries))
