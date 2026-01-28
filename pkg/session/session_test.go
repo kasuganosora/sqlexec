@@ -242,7 +242,8 @@ func TestNewSessionMgr(t *testing.T) {
 }
 
 func TestSessionMgr_CreateSession(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	driver := NewMockSessionDriver()
 	mgr := NewSessionMgr(ctx, driver)
 
@@ -259,7 +260,8 @@ func TestSessionMgr_CreateSession(t *testing.T) {
 }
 
 func TestSessionMgr_GetOrCreateSession_NewSession(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	driver := NewMockSessionDriver()
 	mgr := NewSessionMgr(ctx, driver)
 
@@ -271,7 +273,8 @@ func TestSessionMgr_GetOrCreateSession_NewSession(t *testing.T) {
 }
 
 func TestSessionMgr_GetOrCreateSession_ExistingSession(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	driver := NewMockSessionDriver()
 	mgr := NewSessionMgr(ctx, driver)
 
@@ -288,7 +291,8 @@ func TestSessionMgr_GetOrCreateSession_ExistingSession(t *testing.T) {
 }
 
 func TestSessionMgr_GetSession(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	driver := NewMockSessionDriver()
 	mgr := NewSessionMgr(ctx, driver)
 
@@ -305,7 +309,8 @@ func TestSessionMgr_GetSession(t *testing.T) {
 }
 
 func TestSessionMgr_GetSession_NotFound(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	driver := NewMockSessionDriver()
 	mgr := NewSessionMgr(ctx, driver)
 
@@ -317,7 +322,8 @@ func TestSessionMgr_GetSession_NotFound(t *testing.T) {
 }
 
 func TestSessionMgr_DeleteSession(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	driver := NewMockSessionDriver()
 	mgr := NewSessionMgr(ctx, driver)
 
@@ -336,7 +342,8 @@ func TestSessionMgr_DeleteSession(t *testing.T) {
 }
 
 func TestSessionMgr_GetSessions(t *testing.T) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	driver := NewMockSessionDriver()
 	mgr := NewSessionMgr(ctx, driver)
 

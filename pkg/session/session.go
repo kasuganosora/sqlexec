@@ -95,8 +95,8 @@ func (m *SessionMgr) GenerateSessionID(addr string, port string) string {
 
 func (m *SessionMgr) GetThreadId(ctx context.Context) uint32 {
 	// 先生成一个随机数
+	randId := uint32(1)
 	for {
-		randId := uint32(1)
 		// 看看这个随机数是否存在
 		_, err := m.driver.GetThreadId(ctx, randId)
 		if err != nil {

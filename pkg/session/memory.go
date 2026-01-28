@@ -118,15 +118,15 @@ func (d *MemoryDriver) GetThreadId(ctx context.Context, threadID uint32) (uint32
 	defer d.Mutex.Unlock()
 	threadIdMap, ok := d.Values["thread_id"]
 	if !ok {
-		d.Values["thread_id"] = make(map[string]any)
+		return 0, errors.New("thread id not found")
 	}
 
 	threadIdStr := strconv.FormatUint(uint64(threadID), 10)
-	threadId, ok := threadIdMap[threadIdStr]
+	_, ok = threadIdMap[threadIdStr]
 	if !ok {
 		return 0, errors.New("thread id not found")
 	}
-	return threadId.(uint32), nil
+	return threadID, nil
 }
 
 func (d *MemoryDriver) SetThreadId(ctx context.Context, threadID uint32, sess *Session) error {
@@ -135,6 +135,7 @@ func (d *MemoryDriver) SetThreadId(ctx context.Context, threadID uint32, sess *S
 	threadIdMap, ok := d.Values["thread_id"]
 	if !ok {
 		d.Values["thread_id"] = make(map[string]any)
+		threadIdMap = d.Values["thread_id"]
 	}
 	threadIdMap[strconv.FormatUint(uint64(threadID), 10)] = sess
 	return nil

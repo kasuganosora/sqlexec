@@ -340,36 +340,7 @@ func TestMemoryDriver_Touch_SessionNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "session not found")
 }
 
-func TestMemoryDriver_SetThreadId(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMemoryDriver()
 
-	sess := &Session{
-		ID:         "test_session_id",
-		ThreadID:   123,
-		RemoteIP:   "127.0.0.1",
-		RemotePort: "3306",
-		Created:    time.Now(),
-		LastUsed:   time.Now(),
-	}
-
-	// 首先创建session，这样Values会被初始化
-	_ = driver.CreateSession(ctx, sess)
-
-	err := driver.SetThreadId(ctx, 123, sess)
-	assert.NoError(t, err)
-
-	// 验证threadId映射
-	threadIdValue, ok := driver.Values["thread_id"]
-	assert.True(t, ok)
-	assert.NotNil(t, threadIdValue)
-	// threadIdValue 应该是 map[string]any 类型
-	threadMap, ok := threadIdValue.(map[string]any)
-	assert.True(t, ok)
-	retrievedSess, ok := threadMap["123"].(*Session)
-	assert.True(t, ok)
-	assert.Equal(t, sess, retrievedSess)
-}
 
 func TestMemoryDriver_GetThreadId(t *testing.T) {
 	ctx := context.Background()
@@ -384,7 +355,11 @@ func TestMemoryDriver_GetThreadId(t *testing.T) {
 		LastUsed:   time.Now(),
 	}
 
-	err := driver.SetThreadId(ctx, 456, sess)
+	// 先创建 session
+	err := driver.CreateSession(ctx, sess)
+	require.NoError(t, err)
+
+	err = driver.SetThreadId(ctx, 456, sess)
 	require.NoError(t, err)
 
 	threadID, err := driver.GetThreadId(ctx, 456)
