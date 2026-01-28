@@ -117,6 +117,12 @@ func (m *IndexManager) DropIndex(tableName, indexName string) error {
 		}
 	}
 
+	// 重要：只删除索引元数据，不应该影响表数据
+	// 确保不会删除表本身
+	if _, ok := m.tables[tableName]; !ok {
+		return fmt.Errorf("unexpected: table %s was deleted", tableName)
+	}
+
 	return nil
 }
 

@@ -884,7 +884,13 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 		spec := stmt.IndexPartSpecifications[0]
 		if spec.Column != nil {
 			createIndexStmt.ColumnName = spec.Column.Name.String()
+		} else {
+			// 如果 Column 为 nil，可能是表达式索引或其他情况
+			return nil, fmt.Errorf("invalid index specification: column is required")
 		}
+	} else {
+		// 如果没有 IndexPartSpecifications，返回错误
+		return nil, fmt.Errorf("CREATE INDEX requires at least one column")
 	}
 
 	return createIndexStmt, nil
