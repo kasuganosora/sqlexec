@@ -8,99 +8,49 @@ func Set(bj BinaryJSON, path string, value interface{}) (BinaryJSON, error) {
 // Insert inserts a value at the specified path
 // Only creates new paths, doesn't modify existing ones
 func Insert(bj BinaryJSON, path string, value interface{}) (BinaryJSON, error) {
-	parsed, err := ParsePath(path)
-	if err != nil {
-		return BinaryJSON{}, err
-	}
-
-	// Check if path exists
-	results, err := parsed.Evaluate(bj)
-	if err != nil {
-		return BinaryJSON{}, err
-	}
-
-	// If path exists, don't insert (per JSON_INSERT semantics)
-	if len(results) > 0 {
-		return bj, nil
-	}
-
-	// Path doesn't exist, insert it
-	return bj.Set(path, value)
+	return bj.Insert(path, value)
 }
 
 // Replace replaces a value at the specified path
 // Only modifies existing paths
 func Replace(bj BinaryJSON, path string, value interface{}) (BinaryJSON, error) {
-	parsed, err := ParsePath(path)
-	if err != nil {
-		return BinaryJSON{}, err
-	}
-
-	// Check if path exists
-	results, err := parsed.Evaluate(bj)
-	if err != nil {
-		return BinaryJSON{}, err
-	}
-
-	// If path doesn't exist, don't replace (per JSON_REPLACE semantics)
-	if len(results) == 0 {
-		return bj, nil
-	}
-
-	// Path exists, replace it
-	parsedValue, err := NewBinaryJSON(value)
-	if err != nil {
-		return BinaryJSON{}, err
-	}
-	return applyPath(bj, parsed, parsedValue, 0)
+	return bj.Replace(path, value)
 }
 
 // Remove removes values at the specified paths
 func Remove(bj BinaryJSON, paths ...string) (BinaryJSON, error) {
-	current := bj
-
-	for _, path := range paths {
-		current, err = applyRemovePath(current, path)
-		if err != nil {
-			return BinaryJSON{}, err
-		}
-	}
-
-	return current, nil
+	return applyRemove(bj, paths...)
 }
 
-// applyRemovePath removes a single path
+// applyRemovePath applies a single path removal
 func applyRemovePath(bj BinaryJSON, pathStr string) (BinaryJSON, error) {
-	parsed, err := ParsePath(pathStr)
-	if err != nil {
-		return BinaryJSON{}, err
+	parsed, parseErr := ParsePath(pathStr)
+	if parseErr != nil {
+		return BinaryJSON{}, parseErr
 	}
 
 	// Get parent path
-	// Remove the last leg to get parent
+	// Remove last leg to get parent
 	if len(parsed.Legs) == 0 {
 		return bj, nil
 	}
 
 	parentPath := &Path{Legs: parsed.Legs[:len(parsed.Legs)-1]}
-	results, err := parentPath.Evaluate(bj)
-	if err != nil {
-		return BinaryJSON{}, err
+	results, evalErr := parentPath.Evaluate(bj)
+	if evalErr != nil {
+		return BinaryJSON{}, evalErr
 	}
 
 	if len(results) == 0 {
 		return BinaryJSON{}, nil
 	}
 
-	// Remove the key/index at parent level
+	// Remove key/index at parent level
 	lastLeg := parsed.Legs[len(parsed.Legs)-1]
 
-	parent := results[0]
 	var newParent interface{}
-
-	switch parent.TypeCode {
-	case TypeObject:
-		obj, _ := parent.GetObject()
+	if bj.IsObject() {
+		obj, _ := bj.GetObject()
 		if leg, ok := lastLeg.(*KeyLeg); ok {
 			newObj := make(map[string]interface{})
 			for k, v := range obj {
@@ -110,14 +60,14 @@ func applyRemovePath(bj BinaryJSON, pathStr string) (BinaryJSON, error) {
 			}
 			newParent = newObj
 		}
-	case TypeArray:
-		arr, _ := parent.GetArray()
+	} else if bj.IsArray() {
+		arr, _ := bj.GetArray()
 		if leg, ok := lastLeg.(*ArrayLeg); ok {
 			idx := leg.Index
 			if leg.Last {
 				idx = len(arr) - 1
 			}
-			newArr := make([]interface{}, 0)
+			newArr := make([]interface{}, 0, len(arr))
 			for i, v := range arr {
 				if i != idx {
 					newArr = append(newArr, v)
@@ -125,9 +75,8 @@ func applyRemovePath(bj BinaryJSON, pathStr string) (BinaryJSON, error) {
 			}
 			newParent = newArr
 		} else if leg, ok := lastLeg.(*RangeLeg); ok {
-			// Remove range
-			_ = leg
-			newParent = []interface{}{}  // Empty array
+			// Remove range - set to empty
+			newParent = []interface{}{}
 		}
 	}
 
@@ -149,13 +98,13 @@ func MergePreserve(values ...interface{}) (BinaryJSON, error) {
 
 	// Merge each subsequent value
 	for i := 1; i < len(values); i++ {
-		val, err := NewBinaryJSON(values[i])
-		if err != nil {
-			return BinaryJSON{}, err
+		val, parseErr := NewBinaryJSON(values[i])
+		if parseErr != nil {
+			return BinaryJSON{}, parseErr
 		}
-		result, err = mergeTwo(result, val)
-		if err != nil {
-			return BinaryJSON{}, err
+		result, mergeErr := mergeTwo(result, val)
+		if mergeErr != nil {
+			return BinaryJSON{}, mergeErr
 		}
 	}
 
@@ -176,13 +125,13 @@ func MergePatch(values ...interface{}) (BinaryJSON, error) {
 
 	// Patch each subsequent value
 	for i := 1; i < len(values); i++ {
-		patch, err := NewBinaryJSON(values[i])
-		if err != nil {
-			return BinaryJSON{}, err
+		patch, parseErr := NewBinaryJSON(values[i])
+		if parseErr != nil {
+			return BinaryJSON{}, parseErr
 		}
-		result, err = patchOne(result, patch)
-		if err != nil {
-			return BinaryJSON{}, err
+		result, mergeErr := patchOne(result, patch)
+		if mergeErr != nil {
+			return BinaryJSON{}, mergeErr
 		}
 	}
 
@@ -209,7 +158,8 @@ func mergeTwo(a, b BinaryJSON) (BinaryJSON, error) {
 		for k, v := range objB {
 			merged[k] = v
 		}
-		return NewBinaryJSON(merged)
+		result, _ := NewBinaryJSON(merged)
+		return result, nil
 	}
 
 	// Both arrays: concatenate
@@ -217,7 +167,8 @@ func mergeTwo(a, b BinaryJSON) (BinaryJSON, error) {
 		arrA, _ := a.GetArray()
 		arrB, _ := b.GetArray()
 		merged := append(arrA, arrB...)
-		return NewBinaryJSON(merged)
+		result, _ := NewBinaryJSON(merged)
+		return result, nil
 	}
 
 	// Different types or scalars: b replaces a
