@@ -1,5 +1,9 @@
 package json
 
+import (
+	"fmt"
+)
+
 // ArrayAppend appends values to an array at the specified path
 func ArrayAppend(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
 	if len(args) == 0 || len(args)%2 != 0 {

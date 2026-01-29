@@ -4,9 +4,6 @@ import (
 	"encoding/json"
 )
 
-// LiteralNull represents JSON null value
-const LiteralNull interface{} = nil
-
 // unmarshalJSON wraps encoding/json.Unmarshal
 func unmarshalJSON(data []byte, value *interface{}) error {
 	return json.Unmarshal(data, value)
@@ -16,3 +13,4 @@ func unmarshalJSON(data []byte, value *interface{}) error {
 func marshalJSON(value interface{}) ([]byte, error) {
 	return json.Marshal(value)
 }
+
