@@ -17,6 +17,7 @@ func GetAllCategories() []string {
 		"math",
 		"string",
 		"date",
+		"json",
 		"aggregate",
 	}
 }
