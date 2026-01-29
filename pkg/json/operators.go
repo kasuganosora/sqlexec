@@ -1,323 +1,269 @@
 package json
 
-import (
-	"fmt"
-	"strings"
-
-	"github.com/kasuganosora/sqlexec/pkg/builtin"
-)
-
 // Set replaces or inserts a value at the specified path
-// Multiple (path, value) pairs can be specified
-// Returns the modified JSON
-func Set(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
-	if len(args) == 0 || len(args)%2 != 0 {
-		return BinaryJSON{}, &JSONError{Code: ErrInvalidParam, Message: "JSON_SET requires even number of arguments"}
-	}
-	
-	current := bj
-	
-	// Process each (path, value) pair
-	for i := 0; i < len(args); i += 2 {
-		pathStr := builtin.ToString(args[i])
-		value := args[i+1]
-		
-		// Apply operation
-		var err error
-		current, err = current.Set(pathStr, value)
-		if err != nil {
-			return BinaryJSON{}, err
-		}
-	}
-	
-	return current, nil
+func Set(bj BinaryJSON, path string, value interface{}) (BinaryJSON, error) {
+	return bj.Set(path, value)
 }
 
 // Insert inserts a value at the specified path
 // Only creates new paths, doesn't modify existing ones
-// Multiple (path, value) pairs can be specified
-// Returns the modified JSON
-func Insert(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
-	if len(args) == 0 || len(args)%2 != 0 {
-		return BinaryJSON{}, &JSONError{Code: ErrInvalidParam, Message: "JSON_INSERT requires even number of arguments"}
+func Insert(bj BinaryJSON, path string, value interface{}) (BinaryJSON, error) {
+	parsed, err := ParsePath(path)
+	if err != nil {
+		return BinaryJSON{}, err
 	}
-	
-	current := bj
-	
-	// Process each (path, value) pair
-	for i := 0; i < len(args); i += 2 {
-		pathStr := builtin.ToString(args[i])
-		value := args[i+1]
-		
-		// Apply operation
-		var err error
-		current, err = current.Insert(pathStr, value)
-		if err != nil {
-			return BinaryJSON{}, err
-		}
+
+	// Check if path exists
+	results, err := parsed.Evaluate(bj)
+	if err != nil {
+		return BinaryJSON{}, err
 	}
-	
-	return current, nil
+
+	// If path exists, don't insert (per JSON_INSERT semantics)
+	if len(results) > 0 {
+		return bj, nil
+	}
+
+	// Path doesn't exist, insert it
+	return bj.Set(path, value)
 }
 
 // Replace replaces a value at the specified path
 // Only modifies existing paths
-// Multiple (path, value) pairs can be specified
-// Returns the modified JSON
-func Replace(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
-	if len(args) == 0 || len(args)%2 != 0 {
-		return BinaryJSON{}, &JSONError{Code: ErrInvalidParam, Message: "JSON_REPLACE requires even number of arguments"}
+func Replace(bj BinaryJSON, path string, value interface{}) (BinaryJSON, error) {
+	parsed, err := ParsePath(path)
+	if err != nil {
+		return BinaryJSON{}, err
 	}
-	
-	current := bj
-	
-	// Process each (path, value) pair
-	for i := 0; i < len(args); i += 2 {
-		pathStr := builtin.ToString(args[i])
-		value := args[i+1]
-		
-		// Apply operation
-		var err error
-		current, err = current.Replace(pathStr, value)
-		if err != nil {
-			return BinaryJSON{}, err
-		}
+
+	// Check if path exists
+	results, err := parsed.Evaluate(bj)
+	if err != nil {
+		return BinaryJSON{}, err
 	}
-	
-	return current, nil
+
+	// If path doesn't exist, don't replace (per JSON_REPLACE semantics)
+	if len(results) == 0 {
+		return bj, nil
+	}
+
+	// Path exists, replace it
+	parsedValue, err := NewBinaryJSON(value)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+	return applyPath(bj, parsed, parsedValue, 0)
 }
 
 // Remove removes values at the specified paths
-// Multiple paths can be specified
-// Returns the modified JSON
-func Remove(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
-	if len(args) == 0 {
-		return BinaryJSON{}, &JSONError{Code: ErrInvalidParam, Message: "JSON_REMOVE requires at least one argument"}
-	}
-	
+func Remove(bj BinaryJSON, paths ...string) (BinaryJSON, error) {
 	current := bj
-	
-	// Process each path
-	for _, arg := range args {
-		pathStr := builtin.ToString(arg)
-		
-		// Apply operation
-		var err error
-		current, err = current.Remove(pathStr)
+
+	for _, path := range paths {
+		current, err = applyRemovePath(current, path)
 		if err != nil {
 			return BinaryJSON{}, err
 		}
 	}
-	
+
 	return current, nil
 }
 
+// applyRemovePath removes a single path
+func applyRemovePath(bj BinaryJSON, pathStr string) (BinaryJSON, error) {
+	parsed, err := ParsePath(pathStr)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	// Get parent path
+	// Remove the last leg to get parent
+	if len(parsed.Legs) == 0 {
+		return bj, nil
+	}
+
+	parentPath := &Path{Legs: parsed.Legs[:len(parsed.Legs)-1]}
+	results, err := parentPath.Evaluate(bj)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	if len(results) == 0 {
+		return BinaryJSON{}, nil
+	}
+
+	// Remove the key/index at parent level
+	lastLeg := parsed.Legs[len(parsed.Legs)-1]
+
+	parent := results[0]
+	var newParent interface{}
+
+	switch parent.TypeCode {
+	case TypeObject:
+		obj, _ := parent.GetObject()
+		if leg, ok := lastLeg.(*KeyLeg); ok {
+			newObj := make(map[string]interface{})
+			for k, v := range obj {
+				if k != leg.Key {
+					newObj[k] = v
+				}
+			}
+			newParent = newObj
+		}
+	case TypeArray:
+		arr, _ := parent.GetArray()
+		if leg, ok := lastLeg.(*ArrayLeg); ok {
+			idx := leg.Index
+			if leg.Last {
+				idx = len(arr) - 1
+			}
+			newArr := make([]interface{}, 0)
+			for i, v := range arr {
+				if i != idx {
+					newArr = append(newArr, v)
+				}
+			}
+			newParent = newArr
+		} else if leg, ok := lastLeg.(*RangeLeg); ok {
+			// Remove range
+			_ = leg
+			newParent = []interface{}{}  // Empty array
+		}
+	}
+
+	result, _ := NewBinaryJSON(newParent)
+	return result, nil
+}
+
 // MergePreserve merges multiple JSON values (JSON_MERGE_PRESERVE)
-// For objects: merges all key-value pairs
-// For arrays: concatenates arrays
-// Returns the merged JSON
-func MergePreserve(args ...interface{}) (BinaryJSON, error) {
-	if len(args) == 0 {
-		return BinaryJSON{TypeCode: TypeLiteral, Value: LiteralNull}, nil
+func MergePreserve(values ...interface{}) (BinaryJSON, error) {
+	if len(values) == 0 {
+		return BinaryJSON{}, &JSONError{Code: ErrInvalidParam, Message: "MERGE_PRESERVE requires at least one argument"}
 	}
-	
-	// Parse all arguments
-	parsedArgs := make([]BinaryJSON, 0, len(args))
-	for i, arg := range args {
-		parsed, err := NewBinaryJSON(arg)
+
+	// Start with first value
+	result, err := NewBinaryJSON(values[0])
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	// Merge each subsequent value
+	for i := 1; i < len(values); i++ {
+		val, err := NewBinaryJSON(values[i])
 		if err != nil {
 			return BinaryJSON{}, err
 		}
-		parsedArgs[i] = parsed
-	}
-	
-	// Start with first argument
-	result := parsedArgs[0]
-	
-	// Merge each subsequent argument
-	for i := 1; i < len(parsedArgs); i++ {
-		var err error
-		result, err = result.Merge(parsedArgs[i])
+		result, err = mergeTwo(result, val)
 		if err != nil {
 			return BinaryJSON{}, err
 		}
 	}
-	
+
 	return result, nil
 }
 
 // MergePatch merges JSON values using RFC 7396 (JSON_MERGE_PATCH)
-// For objects: replaces recursively, null removes key
-// For arrays: replaces completely
-// Returns the patched JSON
-func MergePatch(args ...interface{}) (BinaryJSON, error) {
-	if len(args) == 0 {
-		return BinaryJSON{TypeCode: TypeLiteral, Value: LiteralNull}, nil
+func MergePatch(values ...interface{}) (BinaryJSON, error) {
+	if len(values) == 0 {
+		return BinaryJSON{}, &JSONError{Code: ErrInvalidParam, Message: "MERGE_PATCH requires at least one argument"}
 	}
-	
-	// Parse all arguments
-	parsedArgs := make([]BinaryJSON, 0, len(args))
-	for i, arg := range args {
-		parsed, err := NewBinaryJSON(arg)
+
+	// Start with first value
+	result, err := NewBinaryJSON(values[0])
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	// Patch each subsequent value
+	for i := 1; i < len(values); i++ {
+		patch, err := NewBinaryJSON(values[i])
 		if err != nil {
 			return BinaryJSON{}, err
 		}
-		parsedArgs[i] = parsed
-	}
-	
-	// Start with first argument
-	result := parsedArgs[0]
-	
-	// Patch each subsequent argument
-	for i := 1; i < len(parsedArgs); i++ {
-		var err error
-		result, err = result.MergePatchWithOne(parsedArgs[i])
+		result, err = patchOne(result, patch)
 		if err != nil {
 			return BinaryJSON{}, err
 		}
 	}
-	
+
 	return result, nil
 }
 
-// MergePatchWithOne patches the JSON with one other value
-func (bj BinaryJSON) MergePatchWithOne(other BinaryJSON) (BinaryJSON, error) {
-	// If other is null, result is null
-	if other.IsNull() {
-		return bj, nil
+// mergeTwo merges two JSON values (for MERGE_PRESERVE)
+func mergeTwo(a, b BinaryJSON) (BinaryJSON, error) {
+	if a.IsNull() {
+		return b, nil
 	}
-	
-	// If bj is not an object, just replace with other
-	if !bj.IsObject() {
-		return other, nil
+	if b.IsNull() {
+		return a, nil
 	}
-	
-	// If other is not an object, bj remains unchanged
-	if !other.IsObject() {
-		return bj, nil
+
+	// Both objects: merge all key-value pairs
+	if a.IsObject() && b.IsObject() {
+		objA, _ := a.GetObject()
+		objB, _ := b.GetObject()
+		merged := make(map[string]interface{})
+		for k, v := range objA {
+			merged[k] = v
+		}
+		for k, v := range objB {
+			merged[k] = v
+		}
+		return NewBinaryJSON(merged)
 	}
-	
-	// Both are objects, perform RFC 7396 merge
-	return bj.MergePatchObject(other)
+
+	// Both arrays: concatenate
+	if a.IsArray() && b.IsArray() {
+		arrA, _ := a.GetArray()
+		arrB, _ := b.GetArray()
+		merged := append(arrA, arrB...)
+		return NewBinaryJSON(merged)
+	}
+
+	// Different types or scalars: b replaces a
+	return b, nil
 }
 
-// MergePatchObject performs RFC 7396 merge on two objects
-func (bj BinaryJSON) MergePatchObject(other BinaryJSON) (BinaryJSON, error) {
-	obj, _ := bj.GetObject()
-	otherObj, _ := other.GetObject()
-	
-	// Create new merged object
+// patchOne patches JSON with another value (RFC 7396)
+func patchOne(target, patch BinaryJSON) (BinaryJSON, error) {
+	// If patch is null, result is null
+	if patch.IsNull() {
+		return BinaryJSON{}, nil
+	}
+
+	// If target is not an object, replace completely
+	if !target.IsObject() {
+		return patch, nil
+	}
+
+	// If patch is not an object, target remains unchanged
+	if !patch.IsObject() {
+		return target, nil
+	}
+
+	// Both are objects - perform RFC 7396 merge
+	return patchObject(target, patch)
+}
+
+// patchObject patches an object with another object
+func patchObject(target, patch BinaryJSON) (BinaryJSON, error) {
+	targetObj, _ := target.GetObject()
+	patchObj, _ := patch.GetObject()
+
 	merged := make(map[string]interface{})
-	
-	// Copy all keys from bj
-	for k, v := range obj {
+	for k, v := range targetObj {
 		merged[k] = v
 	}
-	
-	// Merge keys from other, overriding bj's values
-	for k, v := range otherObj {
+
+	for k, v := range patchObj {
 		if v.IsNull() {
 			// null removes the key
 			delete(merged, k)
-		} else if _, exists := merged[k]; !exists {
-			// New key, just add it
-			merged[k] = v
 		} else {
-			// Existing key, replace with other's value
-			// Check if we need to recursively merge
-			if shouldMergeValues(merged[k], v) {
-				// Recursively merge
-				bjValue, _ := NewBinaryJSON(merged[k])
-				otherValue, _ := NewBinaryJSON(v)
-				mergedValue, err := bjValue.MergePatchWithOne(otherValue)
-				if err != nil {
-					return BinaryJSON{}, err
-				}
-				merged[k] = mergedValue.GetInterface()
-			} else {
-				// Replace with other's value
-				merged[k] = v
-			}
+			merged[k] = v
 		}
 	}
-	
-	return NewBinaryJSON(merged), nil
-}
 
-// shouldMergeValues determines if two values should be recursively merged
-func shouldMergeValues(a, b interface{}) bool {
-	// Both objects: merge
-	objA, okA := a.(map[string]interface{})
-	objB, okB := b.(map[string]interface{})
-	if okA && okB {
-		return true
-	}
-	
-	// Both arrays: replace (not merge in patch mode)
-	arrA, okA := a.([]interface{})
-	arrB, okB := b.([]interface{})
-	if okA && okB {
-		return false
-	}
-	
-	// Otherwise: don't recursively merge
-	return false
-}
-
-// MemberOf checks if a value is a member of an array or object
-// Returns 1 or 0 (for boolean context)
-func MemberOf(target, container interface{}) (bool, error) {
-	parsedTarget, err := NewBinaryJSON(target)
-	if err != nil {
-		return false, err
-	}
-	
-	parsedContainer, err := NewBinaryJSON(container)
-	if err != nil {
-		return false, err
-	}
-	
-	return containsValue(parsedContainer, parsedTarget)
-}
-
-// Overlaps checks if two JSON arrays have overlapping elements
-// Returns 1 or 0 (for boolean context)
-func Overlaps(a, b interface{}) (bool, error) {
-	parsedA, err := NewBinaryJSON(a)
-	if err != nil {
-		return false, err
-	}
-	
-	parsedB, err := NewBinaryJSON(b)
-	if err != nil {
-		return false, err
-	}
-	
-	// Both must be arrays
-	if !parsedA.IsArray() || !parsedB.IsArray() {
-		return false, nil
-	}
-	
-	return checkArrayOverlap(parsedA, parsedB)
-}
-
-// checkArrayOverlap checks if two arrays have common elements
-func checkArrayOverlap(a, b BinaryJSON) bool {
-	arrA, _ := a.GetArray()
-	arrB, _ := b.GetArray()
-	
-	// Create a set for elements in A
-	setA := make(map[interface{}]bool)
-	for _, elem := range arrA {
-		setA[elem] = true
-	}
-	
-	// Check if any element in B exists in A
-	for _, elem := range arrB {
-		if setA[elem] {
-			return true
-		}
-	}
-	
-	return false
+	result, _ := NewBinaryJSON(merged)
+	return result, nil
 }
