@@ -84,7 +84,7 @@ func ArrayInsert(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
 		default:
 			return BinaryJSON{}, &JSONError{Code: ErrInvalidParam, Message: "position must be a number"}
 		}
-		valueArg := args[2]
+		valueArg = args[2]
 	} else {
 		// Format: (path, value) - insert at end
 		valueArg = args[1]
