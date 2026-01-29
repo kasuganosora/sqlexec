@@ -1,9 +1,5 @@
 package json
 
-import (
-	"fmt"
-)
-
 // Extract extracts a value from JSON using a path expression
 func (bj BinaryJSON) Extract(pathStr string) (BinaryJSON, error) {
 	if pathStr == "" {
@@ -184,4 +180,262 @@ func getRangeIndices(r *RangeLeg, arrLen int) (int, int) {
 	}
 
 	return start, end
+}
+
+// Insert inserts a value at the specified path (only if path doesn't exist)
+func (bj BinaryJSON) Insert(pathStr string, value interface{}) (BinaryJSON, error) {
+	_, err := ParsePath(pathStr)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	// Check if path exists
+	_, err = bj.Extract(pathStr)
+	if err == nil {
+		return BinaryJSON{}, &JSONError{Code: ErrPathExists, Message: "path already exists"}
+	}
+
+	// Use Set for insertion
+	parsedValue, err := NewBinaryJSON(value)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	return bj.Set(pathStr, parsedValue.Value)
+}
+
+// Replace replaces a value at the specified path (only if path exists)
+func (bj BinaryJSON) Replace(pathStr string, value interface{}) (BinaryJSON, error) {
+	// Check if path exists
+	_, err := bj.Extract(pathStr)
+	if err != nil {
+		return BinaryJSON{}, &JSONError{Code: ErrPathNotFound, Message: "path does not exist"}
+	}
+
+	// Use Set for replacement
+	return bj.Set(pathStr, value)
+}
+
+// Remove removes values at the specified paths
+func (bj BinaryJSON) Remove(paths ...string) (BinaryJSON, error) {
+	if len(paths) == 0 {
+		return bj, nil
+	}
+
+	result := bj
+	for _, pathStr := range paths {
+		path, err := ParsePath(pathStr)
+		if err != nil {
+			return BinaryJSON{}, err
+		}
+		result, err = removePath(result, path, 0)
+		if err != nil {
+			return BinaryJSON{}, err
+		}
+	}
+	return result, nil
+}
+
+// removePath removes a path recursively
+func removePath(bj BinaryJSON, path *Path, depth int) (BinaryJSON, error) {
+	if depth >= len(path.Legs) {
+		return bj, nil
+	}
+
+	leg := path.Legs[depth]
+
+	// If this is the last leg, remove the element
+	if depth == len(path.Legs)-1 {
+		if bj.IsObject() {
+			obj, _ := bj.GetObject()
+			if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard {
+				delete(obj, keyLeg.Key)
+				return NewBinaryJSON(obj)
+			}
+		} else if bj.IsArray() {
+			arr, _ := bj.GetArray()
+			if arrayLeg, ok := leg.(*ArrayLeg); ok && !arrayLeg.Wildcard {
+				idx := arrayLeg.Index
+				if arrayLeg.Last {
+					idx = len(arr) - 1
+				}
+				if idx >= 0 && idx < len(arr) {
+					newArr := make([]interface{}, 0, len(arr)-1)
+					newArr = append(newArr, arr[:idx]...)
+					newArr = append(newArr, arr[idx+1:]...)
+					return NewBinaryJSON(newArr)
+				}
+			}
+		}
+		return bj, nil
+	}
+
+	// Continue recursively
+	results, err := leg.Apply(bj)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	if len(results) == 0 {
+		return bj, nil
+	}
+
+	// Apply removal to all matched elements
+	if bj.IsObject() {
+		obj, _ := bj.GetObject()
+		newObj := make(map[string]interface{})
+		for k, v := range obj {
+			newObj[k] = v
+		}
+		for _, result := range results {
+			remainingPath := &Path{Legs: path.Legs[depth+1:]}
+			newValue, err := removePath(result, remainingPath, depth+1)
+			if err != nil {
+				return BinaryJSON{}, err
+			}
+			// Update the object with new value
+			if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard && len(results) == 1 {
+				newObj[keyLeg.Key] = newValue.GetInterface()
+			}
+		}
+		return NewBinaryJSON(newObj)
+	} else if bj.IsArray() {
+		arr, _ := bj.GetArray()
+		newArr := make([]interface{}, len(arr))
+		copy(newArr, arr)
+		for _, result := range results {
+			remainingPath := &Path{Legs: path.Legs[depth+1:]}
+			newValue, err := removePath(result, remainingPath, depth+1)
+			if err != nil {
+				return BinaryJSON{}, err
+			}
+			if arrayLeg, ok := leg.(*ArrayLeg); ok && !arrayLeg.Wildcard {
+				idx := arrayLeg.Index
+				if arrayLeg.Last {
+					idx = len(arr) - 1
+				}
+				if idx >= 0 && idx < len(arr) {
+					newArr[idx] = newValue.GetInterface()
+				}
+			}
+		}
+		return NewBinaryJSON(newArr)
+	}
+
+	return bj, nil
+}
+
+// Merge merges another JSON value (JSON_MERGE_PRESERVE)
+func (bj BinaryJSON) Merge(value interface{}) (BinaryJSON, error) {
+	other, err := NewBinaryJSON(value)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	// If bj is null, return other
+	if bj.IsNull() {
+		return other, nil
+	}
+
+	// If other is null, return bj
+	if other.IsNull() {
+		return bj, nil
+	}
+
+	// If both are objects, merge them
+	if bj.IsObject() && other.IsObject() {
+		obj1, _ := bj.GetObject()
+		obj2, _ := other.GetObject()
+		merged := make(map[string]interface{})
+		for k, v := range obj1 {
+			merged[k] = v
+		}
+		for k, v := range obj2 {
+			merged[k] = v
+		}
+		return NewBinaryJSON(merged)
+	}
+
+	// If bj is array, append other to it
+	if bj.IsArray() {
+		arr, _ := bj.GetArray()
+		if other.IsArray() {
+			arr2, _ := other.GetArray()
+			merged := make([]interface{}, 0, len(arr)+len(arr2))
+			merged = append(merged, arr...)
+			merged = append(merged, arr2...)
+			return NewBinaryJSON(merged)
+		}
+		merged := make([]interface{}, 0, len(arr)+1)
+		merged = append(merged, arr...)
+		merged = append(merged, other.GetInterface())
+		return NewBinaryJSON(merged)
+	}
+
+	// If other is array, wrap bj in array and append
+	if other.IsArray() {
+		merged := make([]interface{}, 0, 1+len(other.GetInterface().([]interface{})))
+		merged = append(merged, bj.GetInterface())
+		merged = append(merged, other.GetInterface().([]interface{})...)
+		return NewBinaryJSON(merged)
+	}
+
+	// Otherwise, wrap both in array
+	return NewBinaryJSON([]interface{}{bj.GetInterface(), other.GetInterface()})
+}
+
+// Patch patches with another JSON value (RFC 7396 JSON_MERGE_PATCH)
+func (bj BinaryJSON) Patch(value interface{}) (BinaryJSON, error) {
+	other, err := NewBinaryJSON(value)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	// If other is null, delete bj (return null)
+	if other.IsNull() {
+		return BinaryJSON{TypeCode: TypeLiteral, Value: nil}, nil
+	}
+
+	// If bj is not an object, replace with other
+	if !bj.IsObject() {
+		return other, nil
+	}
+
+	// If other is not an object, replace bj with other
+	if !other.IsObject() {
+		return other, nil
+	}
+
+	// Both are objects - recursively patch
+	obj1, _ := bj.GetObject()
+	obj2, _ := other.GetObject()
+	patched := make(map[string]interface{})
+
+	// Copy all keys from bj first
+	for k, v := range obj1 {
+		patched[k] = v
+	}
+
+	// Apply patches from obj2
+	for k, v := range obj2 {
+		if v == nil {
+			// Null value means delete the key
+			delete(patched, k)
+		} else {
+			// Recursive patch for nested objects
+			if existing, ok := patched[k]; ok {
+				existingBJ, _ := NewBinaryJSON(existing)
+				patchBJ, _ := NewBinaryJSON(v)
+				merged, err := existingBJ.Patch(patchBJ.GetInterface())
+				if err != nil {
+					return BinaryJSON{}, err
+				}
+				patched[k] = merged.GetInterface()
+			} else {
+				patched[k] = v
+			}
+		}
+	}
+
+	return NewBinaryJSON(patched)
 }

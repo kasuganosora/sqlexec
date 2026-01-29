@@ -11,6 +11,7 @@ const (
 	ErrTypeMismatch
 	ErrInvalidPath
 	ErrPathNotFound
+	ErrPathExists
 	ErrInvalidIndex
 	ErrInvalidKey
 	ErrOverflow

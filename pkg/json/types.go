@@ -1,5 +1,10 @@
 package json
 
+import "fmt"
+
+// LiteralNull represents JSON null value (use nil literal in code)
+// const LiteralNull = nil // nil cannot be used as a constant in Go
+
 // TypeCode represents JSON type constants
 type TypeCode byte
 
@@ -22,17 +27,35 @@ type BinaryJSON struct {
 // NewBinaryJSON creates a new BinaryJSON from a value
 func NewBinaryJSON(value interface{}) (BinaryJSON, error) {
 	if value == nil {
-		return BinaryJSON{TypeCode: TypeLiteral, Value: LiteralNull}, nil
+		return BinaryJSON{TypeCode: TypeLiteral, Value: nil}, nil
 	}
 
 	switch v := value.(type) {
 	case string:
 		return BinaryJSON{TypeCode: TypeString, Value: v}, nil
-	case int, int8, int16, int32, int64:
-		return BinaryJSON{TypeCode: TypeInteger, Value: v}, nil
-	case uint, uint8, uint16, uint32, uint64:
+	case int:
 		return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
-	case float32, float64:
+	case int8:
+		return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
+	case int16:
+		return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
+	case int32:
+		return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
+	case int64:
+		return BinaryJSON{TypeCode: TypeInteger, Value: v}, nil
+	case uint:
+		return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
+	case uint8:
+		return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
+	case uint16:
+		return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
+	case uint32:
+		return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
+	case uint64:
+		return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
+	case float32:
+		return BinaryJSON{TypeCode: TypeDouble, Value: float64(v)}, nil
+	case float64:
 		return BinaryJSON{TypeCode: TypeDouble, Value: v}, nil
 	case bool:
 		return BinaryJSON{TypeCode: TypeLiteral, Value: v}, nil
@@ -85,7 +108,7 @@ func (bj BinaryJSON) String() string {
 
 // IsNull checks if value is null
 func (bj BinaryJSON) IsNull() bool {
-	return bj.TypeCode == TypeLiteral && bj.Value == LiteralNull
+	return bj.TypeCode == TypeLiteral && bj.Value == nil
 }
 
 // IsBoolean checks if value is boolean
@@ -165,9 +188,25 @@ func (bj BinaryJSON) GetFloat64() (float64, error) {
 		return v, nil
 	case float32:
 		return float64(v), nil
-	case int, int8, int16, int32, int64:
+	case int:
 		return float64(v), nil
-	case uint, uint8, uint16, uint32, uint64:
+	case int8:
+		return float64(v), nil
+	case int16:
+		return float64(v), nil
+	case int32:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case uint:
+		return float64(v), nil
+	case uint8:
+		return float64(v), nil
+	case uint16:
+		return float64(v), nil
+	case uint32:
+		return float64(v), nil
+	case uint64:
 		return float64(v), nil
 	default:
 		return 0, &JSONError{Code: ErrInvalidType, Message: "invalid number value"}
@@ -180,9 +219,25 @@ func (bj BinaryJSON) GetInt64() (int64, error) {
 		return 0, &JSONError{Code: ErrTypeMismatch, Message: "value is not a number"}
 	}
 	switch v := bj.Value.(type) {
-	case int, int8, int16, int32, int64:
+	case int:
+		return int64(v), nil
+	case int8:
+		return int64(v), nil
+	case int16:
+		return int64(v), nil
+	case int32:
+		return int64(v), nil
+	case int64:
 		return v, nil
-	case uint, uint8, uint16, uint32, uint64:
+	case uint:
+		return int64(v), nil
+	case uint8:
+		return int64(v), nil
+	case uint16:
+		return int64(v), nil
+	case uint32:
+		return int64(v), nil
+	case uint64:
 		return int64(v), nil
 	case float64:
 		return int64(v), nil

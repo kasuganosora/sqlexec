@@ -70,12 +70,12 @@ func ParsePath(pathExpr string) (*Path, error) {
 // parseArrayLeg parses [index], [*], [last], [0 to 2], etc.
 func parseArrayLeg(pathExpr string) (PathLeg, string, error) {
 	if len(pathExpr) == 0 || pathExpr[0] != '[' {
-		return nil, fmt.Errorf("expected '['")
+		return nil, "", fmt.Errorf("expected '['")
 	}
 
 	closeIdx := strings.IndexByte(pathExpr, ']')
 	if closeIdx == -1 {
-		return nil, fmt.Errorf("missing closing ']'")
+		return nil, "", fmt.Errorf("missing closing ']'")
 	}
 
 	content := pathExpr[1:closeIdx]
@@ -95,7 +95,7 @@ func parseArrayLeg(pathExpr string) (PathLeg, string, error) {
 	if strings.Contains(content, " to ") {
 		parts := strings.Split(content, " to ")
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid range format")
+			return nil, "", fmt.Errorf("invalid range format")
 		}
 		startStr := strings.TrimSpace(parts[0])
 		endStr := strings.TrimSpace(parts[1])
@@ -126,7 +126,7 @@ func parseArrayLeg(pathExpr string) (PathLeg, string, error) {
 	// Parse as integer index
 	idx, err := strconv.Atoi(content)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	return &ArrayLeg{Index: idx}, remaining, nil
@@ -147,7 +147,7 @@ func parseKeyLeg(pathExpr string) (PathLeg, string, error) {
 	}
 
 	if end == 0 {
-		return nil, fmt.Errorf("empty key")
+		return nil, "", fmt.Errorf("empty key")
 	}
 
 	key := pathExpr[:end]

@@ -71,6 +71,7 @@ func ArrayInsert(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
 	var position int
 
 	// Parse arguments
+	var valueArg interface{}
 	if len(args) == 3 {
 		// Format: (path, position, value)
 		posArg := args[1]
