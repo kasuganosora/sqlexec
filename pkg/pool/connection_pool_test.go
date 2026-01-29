@@ -1,16 +1,25 @@
 package pool
 
 import (
+	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	_ "modernc.org/sqlite"
 )
 
-func TestNewSQLConnectionPool(t *testing.T) {
+func getTestDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
+	return db
+}
+
+func TestNewSQLConnectionPool(t *testing.T) {
+	db := getTestDB(t)
 
 	pool := NewSQLConnectionPool(db, 10, 5)
 
@@ -108,18 +117,28 @@ func TestConnectionManager_ConcurrentAccess(t *testing.T) {
 	manager := NewConnectionManager()
 
 	done := make(chan bool)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
 	for i := 0; i < 10; i++ {
 		go func(i int) {
 			db, err := sql.Open("sqlite", ":memory:")
-			require.NoError(t, err)
+			if err != nil {
+				t.Errorf("Failed to open db: %v", err)
+				return
+			}
 			manager.RegisterPool("pool"+string(rune('0'+i)), db, 10, 5)
 			done <- true
 		}(i)
 	}
 
-	// 等待所有注册完成
+	// 等待所有注册完成或超时
 	for i := 0; i < 10; i++ {
-		<-done
+		select {
+		case <-done:
+		case <-ctx.Done():
+			t.Fatal("Test timed out")
+		}
 	}
 
 	// 验证所有池都已注册

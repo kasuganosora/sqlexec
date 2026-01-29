@@ -121,7 +121,7 @@ func (p *ObjectPool) Put(obj interface{}) error {
 	delete(p.active, obj)
 	p.releaseCount++
 
-	// 检查空闲队列是否已满
+	// 检查空闲队列是否已满（如果放回后会超过 maxIdle，就销毁）
 	if len(p.idle) >= p.maxIdle {
 		// 销毁对象
 		if p.destroy != nil {
@@ -182,6 +182,8 @@ type GoroutinePool struct {
 	workerCount int
 	maxWorkers  int
 	wg          sync.WaitGroup
+	closed      bool
+	mu          sync.RWMutex
 	ctx         context.Context
 	cancel      context.CancelFunc
 }
@@ -210,6 +212,13 @@ func NewGoroutinePool(maxWorkers int, queueSize int) *GoroutinePool {
 
 // Submit 提交任务
 func (p *GoroutinePool) Submit(task func()) error {
+	p.mu.RLock()
+	if p.closed {
+		p.mu.RUnlock()
+		return ErrPoolClosed
+	}
+	p.mu.RUnlock()
+
 	select {
 	case p.taskQueue <- task:
 		return nil
@@ -242,8 +251,22 @@ func (p *GoroutinePool) Stats() PoolStats {
 
 // Close 关闭池
 func (p *GoroutinePool) Close() error {
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return nil
+	}
+	p.closed = true
+	p.mu.Unlock()
+
 	p.cancel()
 	p.wg.Wait()
+	// 等待 worker 退出后再关闭通道
+	select {
+	case <-p.taskQueue:
+		// 清空队列
+	default:
+	}
 	close(p.taskQueue)
 	return nil
 }

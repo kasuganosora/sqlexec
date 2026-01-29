@@ -1,0 +1,9 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-01-29T15:06:15.835Z
+provider: 
+---
+
+禁止使用像 sed， python, go 等非 tools 之外的工具修改文件
