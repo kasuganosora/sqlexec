@@ -69,6 +69,10 @@ func NewBackupManager(backupDir string) *BackupManager {
 
 // Backup 备份数据
 func (bm *BackupManager) Backup(backupType BackupType, tables []string, data interface{}) (string, error) {
+	if data == nil {
+		return "", errors.New("backup data cannot be nil")
+	}
+
 	metadata := &BackupMetadata{
 		ID:        generateBackupID(),
 		Type:      backupType,
@@ -283,6 +287,14 @@ func (bm *BackupManager) CleanOldBackups(olderThan time.Duration, keepCount int)
 				os.Remove(metadata.FilePath)
 			}
 			delete(bm.metadata, id)
+
+			// 从列表中移除
+			for i, backupID := range bm.backups {
+				if backupID == id {
+					bm.backups = append(bm.backups[:i], bm.backups[i+1:]...)
+					break
+				}
+			}
 		}
 	}
 

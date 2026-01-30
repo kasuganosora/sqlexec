@@ -149,6 +149,7 @@ func (m *ErrorRecoveryManager) ExecuteWithFallback(errorType ErrorType, primary,
 			})
 			return nil
 		}
+		return err
 	}
 
 	// 执行主方案

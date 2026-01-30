@@ -40,6 +40,7 @@ type FailoverManager struct {
 	checkInterval  time.Duration
 	failureTimeout time.Duration
 	stopChan       chan struct{}
+	stopped        bool
 	mu             sync.RWMutex
 }
 
@@ -51,6 +52,7 @@ func NewFailoverManager(checker HealthChecker, checkInterval, failureTimeout tim
 		checkInterval:  checkInterval,
 		failureTimeout: failureTimeout,
 		stopChan:       make(chan struct{}),
+		stopped:        false,
 	}
 }
 
@@ -78,6 +80,9 @@ func (fm *FailoverManager) AddNode(id, address string, weight int) error {
 
 	// 如果没有活跃节点，设置这个为活跃节点
 	if fm.activeNode == nil {
+		fm.activeNode = node
+	} else if node.Weight > fm.activeNode.Weight && node.Status == NodeStatusHealthy {
+		// 如果新节点权重更高且健康，切换到新节点
 		fm.activeNode = node
 	}
 
@@ -139,6 +144,14 @@ func (fm *FailoverManager) Start() {
 
 // Stop 停止故障转移管理器
 func (fm *FailoverManager) Stop() {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+
+	if fm.stopped {
+		return
+	}
+
+	fm.stopped = true
 	close(fm.stopChan)
 }
 
