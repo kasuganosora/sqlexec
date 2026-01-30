@@ -294,7 +294,7 @@ func deepEqual(a, b interface{}) bool {
 			return false
 		}
 		for k, v := range av {
-			if bv[k] != v {
+			if !deepEqual(v, bv[k]) {
 				return false
 			}
 		}
@@ -305,7 +305,7 @@ func deepEqual(a, b interface{}) bool {
 			return false
 		}
 		for i := range av {
-			if av[i] != bv[i] {
+			if !deepEqual(av[i], bv[i]) {
 				return false
 			}
 		}

@@ -4,6 +4,15 @@ import (
 	"strings"
 )
 
+// parseJSONValue parses a value that can be either a JSON string or a Go interface{}
+// This unifies parameter handling for JSON functions
+func parseJSONValue(value interface{}) (BinaryJSON, error) {
+	if str, ok := value.(string); ok {
+		return ParseJSON(str)
+	}
+	return NewBinaryJSON(value)
+}
+
 // Length returns the length of JSON value
 func Length(bj BinaryJSON) (int, error) {
 	if bj.IsNull() {
@@ -95,36 +104,14 @@ func Extract(bj BinaryJSON, path string) (BinaryJSON, error) {
 
 // Contains checks if target JSON is contained in source JSON
 func Contains(source, target interface{}) (bool, error) {
-	// Parse source if it's a JSON string
-	var parsedSource BinaryJSON
-	if str, ok := source.(string); ok {
-		bj, err := ParseJSON(str)
-		if err != nil {
-			return false, err
-		}
-		parsedSource = bj
-	} else {
-		var err error
-		parsedSource, err = NewBinaryJSON(source)
-		if err != nil {
-			return false, err
-		}
+	parsedSource, err := parseJSONValue(source)
+	if err != nil {
+		return false, err
 	}
 
-	// Parse target if it's a JSON string
-	var parsedTarget BinaryJSON
-	if str, ok := target.(string); ok {
-		bj, err := ParseJSON(str)
-		if err != nil {
-			return false, err
-		}
-		parsedTarget = bj
-	} else {
-		var err error
-		parsedTarget, err = NewBinaryJSON(target)
-		if err != nil {
-			return false, err
-		}
+	parsedTarget, err := parseJSONValue(target)
+	if err != nil {
+		return false, err
 	}
 
 	return containsValue(parsedSource, parsedTarget), nil
@@ -348,36 +335,14 @@ func Unquote(str string) (string, error) {
 
 // MemberOf checks if a value is a member of an array or object
 func MemberOf(target, container interface{}) (bool, error) {
-	// Parse target if it's a JSON string
-	var parsedTarget BinaryJSON
-	if str, ok := target.(string); ok {
-		bj, err := ParseJSON(str)
-		if err != nil {
-			return false, err
-		}
-		parsedTarget = bj
-	} else {
-		var err error
-		parsedTarget, err = NewBinaryJSON(target)
-		if err != nil {
-			return false, err
-		}
+	parsedTarget, err := parseJSONValue(target)
+	if err != nil {
+		return false, err
 	}
 
-	// Parse container if it's a JSON string
-	var parsedContainer BinaryJSON
-	if str, ok := container.(string); ok {
-		bj, err := ParseJSON(str)
-		if err != nil {
-			return false, err
-		}
-		parsedContainer = bj
-	} else {
-		var err error
-		parsedContainer, err = NewBinaryJSON(container)
-		if err != nil {
-			return false, err
-		}
+	parsedContainer, err := parseJSONValue(container)
+	if err != nil {
+		return false, err
 	}
 
 	return containsValue(parsedContainer, parsedTarget), nil
@@ -385,36 +350,14 @@ func MemberOf(target, container interface{}) (bool, error) {
 
 // Overlaps checks if two JSON arrays have overlapping elements
 func Overlaps(a, b interface{}) (bool, error) {
-	// Parse a if it's a JSON string
-	var parsedA BinaryJSON
-	if str, ok := a.(string); ok {
-		bj, err := ParseJSON(str)
-		if err != nil {
-			return false, err
-		}
-		parsedA = bj
-	} else {
-		var err error
-		parsedA, err = NewBinaryJSON(a)
-		if err != nil {
-			return false, err
-		}
+	parsedA, err := parseJSONValue(a)
+	if err != nil {
+		return false, err
 	}
 
-	// Parse b if it's a JSON string
-	var parsedB BinaryJSON
-	if str, ok := b.(string); ok {
-		bj, err := ParseJSON(str)
-		if err != nil {
-			return false, err
-		}
-		parsedB = bj
-	} else {
-		var err error
-		parsedB, err = NewBinaryJSON(b)
-		if err != nil {
-			return false, err
-		}
+	parsedB, err := parseJSONValue(b)
+	if err != nil {
+		return false, err
 	}
 
 	if !parsedA.IsArray() || !parsedB.IsArray() {

@@ -174,7 +174,7 @@ func setRecursive(bj BinaryJSON, legs []PathLeg, value BinaryJSON, depth int) (B
 }
 
 // reconstructObject reconstructs an object after applying a path leg
-func reconstructObject(obj map[string]interface{}, results []BinaryJSON, leg PathLeg) map[string]interface{} {
+func reconstructObject(obj map[string]interface{}, value interface{}, leg PathLeg) map[string]interface{} {
 	newObj := make(map[string]interface{})
 
 	// Copy all non-modified keys
@@ -188,51 +188,15 @@ func reconstructObject(obj map[string]interface{}, results []BinaryJSON, leg Pat
 		keyLeg := l
 		if keyLeg.Wildcard {
 			// Wildcard - apply to all keys
-			if len(results) >= 1 {
+			if value != nil {
 				for k := range obj {
-					newObj[k] = results[0].GetInterface()
+					newObj[k] = value
 				}
 			}
 		} else {
 			// Set specific key
-			if len(results) > 0 {
-				newObj[keyLeg.Key] = results[0].GetInterface()
-			} else {
-				delete(newObj, keyLeg.Key)
-			}
-		}
-	default:
-		// For other leg types, just return original
-		return obj
-	}
-
-	return newObj
-}
-
-// reconstructObjectForSet reconstructs an object after applying a path leg for Set operation
-func reconstructObjectForSet(obj map[string]interface{}, results []interface{}, leg PathLeg) map[string]interface{} {
-	newObj := make(map[string]interface{})
-
-	// Copy all non-modified keys
-	for k, v := range obj {
-		newObj[k] = v
-	}
-
-	// Apply modifications
-	switch l := leg.(type) {
-	case *KeyLeg:
-		keyLeg := l
-		if keyLeg.Wildcard {
-			// Wildcard - apply to all keys
-			if len(results) >= 1 {
-				for k := range obj {
-					newObj[k] = results[0]
-				}
-			}
-		} else {
-			// Set specific key
-			if len(results) > 0 {
-				newObj[keyLeg.Key] = results[0]
+			if value != nil {
+				newObj[keyLeg.Key] = value
 			} else {
 				delete(newObj, keyLeg.Key)
 			}
@@ -247,7 +211,7 @@ func reconstructObjectForSet(obj map[string]interface{}, results []interface{}, 
 
 
 // reconstructArray reconstructs an array after applying a path leg
-func reconstructArray(arr []interface{}, results []BinaryJSON, leg PathLeg) []interface{} {
+func reconstructArray(arr []interface{}, value interface{}, leg PathLeg) []interface{} {
 	newArr := make([]interface{}, len(arr))
 	copy(newArr, arr)
 
@@ -257,9 +221,9 @@ func reconstructArray(arr []interface{}, results []BinaryJSON, leg PathLeg) []in
 		arrayLeg := l
 		if arrayLeg.Wildcard {
 			// Wildcard - apply to all elements
-			for i := range arr {
-				if len(results) > 0 {
-					newArr[i] = results[0].GetInterface()
+			if value != nil {
+				for i := range arr {
+					newArr[i] = value
 				}
 			}
 		} else {
@@ -270,8 +234,8 @@ func reconstructArray(arr []interface{}, results []BinaryJSON, leg PathLeg) []in
 			}
 
 			if idx >= 0 && idx < len(arr) {
-				if len(results) > 0 {
-					newArr[idx] = results[0].GetInterface()
+				if value != nil {
+					newArr[idx] = value
 				}
 			}
 		}
@@ -279,53 +243,8 @@ func reconstructArray(arr []interface{}, results []BinaryJSON, leg PathLeg) []in
 		rangeLeg := l
 		start, end := getRangeIndices(rangeLeg, len(arr))
 		for i := start; i <= end; i++ {
-			if i >= 0 && i < len(arr) && len(results) > 0 {
-				newArr[i] = results[0].GetInterface()
-			}
-		}
-	default:
-		// For other leg types, just return original
-		return arr
-	}
-
-	return newArr
-}
-
-// reconstructArrayForSet reconstructs an array after applying a path leg for Set operation
-func reconstructArrayForSet(arr []interface{}, results []interface{}, leg PathLeg) []interface{} {
-	newArr := make([]interface{}, len(arr))
-	copy(newArr, arr)
-
-	// Apply modifications
-	switch l := leg.(type) {
-	case *ArrayLeg:
-		arrayLeg := l
-		if arrayLeg.Wildcard {
-			// Wildcard - apply to all elements
-			for i := range arr {
-				if len(results) > 0 {
-					newArr[i] = results[0]
-				}
-			}
-		} else {
-			// Set specific index
-			idx := arrayLeg.Index
-			if arrayLeg.Last {
-				idx = len(arr) - 1
-			}
-
-			if idx >= 0 && idx < len(arr) {
-				if len(results) > 0 {
-					newArr[idx] = results[0]
-				}
-			}
-		}
-	case *RangeLeg:
-		rangeLeg := l
-		start, end := getRangeIndices(rangeLeg, len(arr))
-		for i := start; i <= end; i++ {
-			if i >= 0 && i < len(arr) && len(results) > 0 {
-				newArr[i] = results[0]
+			if i >= 0 && i < len(arr) && value != nil {
+				newArr[i] = value
 			}
 		}
 	default:
