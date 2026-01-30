@@ -95,14 +95,36 @@ func Extract(bj BinaryJSON, path string) (BinaryJSON, error) {
 
 // Contains checks if target JSON is contained in source JSON
 func Contains(source, target interface{}) (bool, error) {
-	parsedSource, err := NewBinaryJSON(source)
-	if err != nil {
-		return false, err
+	// Parse source if it's a JSON string
+	var parsedSource BinaryJSON
+	if str, ok := source.(string); ok {
+		bj, err := ParseJSON(str)
+		if err != nil {
+			return false, err
+		}
+		parsedSource = bj
+	} else {
+		var err error
+		parsedSource, err = NewBinaryJSON(source)
+		if err != nil {
+			return false, err
+		}
 	}
 
-	parsedTarget, err := NewBinaryJSON(target)
-	if err != nil {
-		return false, err
+	// Parse target if it's a JSON string
+	var parsedTarget BinaryJSON
+	if str, ok := target.(string); ok {
+		bj, err := ParseJSON(str)
+		if err != nil {
+			return false, err
+		}
+		parsedTarget = bj
+	} else {
+		var err error
+		parsedTarget, err = NewBinaryJSON(target)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	return containsValue(parsedSource, parsedTarget), nil
@@ -126,9 +148,32 @@ func containsValue(source, target BinaryJSON) bool {
 		return false
 	}
 
-	// Object: check if target is a subset of source
+	// Object: check if target is a subset of source OR target is a key or value
 	if source.IsObject() {
-		return containsObject(source, target)
+		// First, check if target is a subset (for JSON_CONTAINS semantics)
+		if target.IsObject() {
+			if containsObject(source, target) {
+				return true
+			}
+		}
+
+		// Then check if target is a key or value (for JSON_MEMBER_OF semantics)
+		obj, _ := source.GetObject()
+		for key, value := range obj {
+			// Check if target equals a key (for string targets)
+			if target.IsString() {
+				keyJSON, _ := NewBinaryJSON(key)
+				if keyJSON.Equals(target) {
+					return true
+				}
+			}
+			// Check if target equals a value
+			valueJSON, _ := NewBinaryJSON(value)
+			if valueJSON.Equals(target) {
+				return true
+			}
+		}
+		return false
 	}
 
 	// Primitive: direct equality
@@ -303,14 +348,36 @@ func Unquote(str string) (string, error) {
 
 // MemberOf checks if a value is a member of an array or object
 func MemberOf(target, container interface{}) (bool, error) {
-	parsedTarget, err := NewBinaryJSON(target)
-	if err != nil {
-		return false, err
+	// Parse target if it's a JSON string
+	var parsedTarget BinaryJSON
+	if str, ok := target.(string); ok {
+		bj, err := ParseJSON(str)
+		if err != nil {
+			return false, err
+		}
+		parsedTarget = bj
+	} else {
+		var err error
+		parsedTarget, err = NewBinaryJSON(target)
+		if err != nil {
+			return false, err
+		}
 	}
 
-	parsedContainer, err := NewBinaryJSON(container)
-	if err != nil {
-		return false, err
+	// Parse container if it's a JSON string
+	var parsedContainer BinaryJSON
+	if str, ok := container.(string); ok {
+		bj, err := ParseJSON(str)
+		if err != nil {
+			return false, err
+		}
+		parsedContainer = bj
+	} else {
+		var err error
+		parsedContainer, err = NewBinaryJSON(container)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	return containsValue(parsedContainer, parsedTarget), nil
@@ -318,14 +385,36 @@ func MemberOf(target, container interface{}) (bool, error) {
 
 // Overlaps checks if two JSON arrays have overlapping elements
 func Overlaps(a, b interface{}) (bool, error) {
-	parsedA, err := NewBinaryJSON(a)
-	if err != nil {
-		return false, err
+	// Parse a if it's a JSON string
+	var parsedA BinaryJSON
+	if str, ok := a.(string); ok {
+		bj, err := ParseJSON(str)
+		if err != nil {
+			return false, err
+		}
+		parsedA = bj
+	} else {
+		var err error
+		parsedA, err = NewBinaryJSON(a)
+		if err != nil {
+			return false, err
+		}
 	}
 
-	parsedB, err := NewBinaryJSON(b)
-	if err != nil {
-		return false, err
+	// Parse b if it's a JSON string
+	var parsedB BinaryJSON
+	if str, ok := b.(string); ok {
+		bj, err := ParseJSON(str)
+		if err != nil {
+			return false, err
+		}
+		parsedB = bj
+	} else {
+		var err error
+		parsedB, err = NewBinaryJSON(b)
+		if err != nil {
+			return false, err
+		}
 	}
 
 	if !parsedA.IsArray() || !parsedB.IsArray() {
