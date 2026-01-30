@@ -289,20 +289,19 @@ func (r *RangeLeg) Apply(bj BinaryJSON) ([]BinaryJSON, error) {
 	}
 
 	// Validate range
-	if start < 0 || start >= arrLen || end < 0 || end >= arrLen {
+	if start < 0 || start >= arrLen || end < 0 || end >= arrLen || start > end {
 		return nil, NewIndexError(start)
 	}
 
 	result := make([]BinaryJSON, 0, end-start+1)
 	for i := start; i <= end; i++ {
-		if i >= 0 && i < arrLen {
-			parsed, _ := NewBinaryJSON(arr[i])
-			result[i-start] = parsed
-		}
+		parsed, _ := NewBinaryJSON(arr[i])
+		result = append(result, parsed)
 	}
 
 	return result, nil
 }
+
 
 // String returns string representation
 func (r *RangeLeg) String() string {
