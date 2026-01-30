@@ -39,51 +39,138 @@ func (bj BinaryJSON) Set(pathStr string, value interface{}) (BinaryJSON, error) 
 		return BinaryJSON{}, err
 	}
 
-	// Apply path recursively
-	return applyPath(bj, path, parsedValue, 0)
+	// Use simplified recursive logic
+	return setRecursive(bj, path.Legs, parsedValue, 0)
 }
 
-// applyPath applies a path recursively
+// ensurePathExists ensures all intermediate paths in the path exist, creating them if necessary
+func ensurePathExists(bj BinaryJSON, path *Path) (BinaryJSON, error) {
+	result := bj
+	current := bj
+
+	for i := 0; i < len(path.Legs)-1; i++ {
+		leg := path.Legs[i]
+		results, err := leg.Apply(current)
+
+		if err != nil {
+			if jsonErr, ok := err.(*JSONError); ok && jsonErr.Code == ErrPathNotFound {
+				// Path doesn't exist, create it
+				if current.IsObject() {
+					obj, _ := current.GetObject()
+					if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard {
+						// Create empty object
+						newObj := make(map[string]interface{})
+						obj[keyLeg.Key] = newObj
+						current, _ = NewBinaryJSON(newObj)
+						result, _ = NewBinaryJSON(obj)
+					} else {
+						return bj, err
+					}
+				} else {
+					return bj, err
+				}
+			} else {
+				return bj, err
+			}
+		} else if len(results) > 0 {
+			// Path exists, move to the next level
+			current = results[0]
+		}
+	}
+
+	return result, nil
+}
+
+// applyPath is a legacy function kept for compatibility, but not used by Set
 func applyPath(bj BinaryJSON, path *Path, value BinaryJSON, depth int) (BinaryJSON, error) {
-	if depth >= len(path.Legs) {
+	return bj, nil
+}
+
+// setRecursive is a recursive helper that takes legs array directly
+func setRecursive(bj BinaryJSON, legs []PathLeg, value BinaryJSON, depth int) (BinaryJSON, error) {
+	if depth >= len(legs) {
 		return value, nil
 	}
 
-	leg := path.Legs[depth]
+	leg := legs[depth]
+	isLast := (depth == len(legs)-1)
+
+	if isLast {
+		// Last leg - set the value
+		if bj.IsObject() {
+			obj, _ := bj.GetObject()
+			if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard {
+				obj[keyLeg.Key] = value.GetInterface()
+				return NewBinaryJSON(obj)
+			}
+		} else if bj.IsArray() {
+			arr, _ := bj.GetArray()
+			if arrayLeg, ok := leg.(*ArrayLeg); ok && !arrayLeg.Wildcard {
+				idx := arrayLeg.Index
+				if arrayLeg.Last {
+					idx = len(arr) - 1
+				}
+				if idx >= 0 && idx < len(arr) {
+					arr[idx] = value.GetInterface()
+					return NewBinaryJSON(arr)
+				}
+			}
+		}
+		return BinaryJSON{}, &JSONError{Code: ErrTypeMismatch, Message: "cannot set value at path"}
+	}
+
+	// Not last - navigate or create
 	results, err := leg.Apply(bj)
 	if err != nil {
+		if jsonErr, ok := err.(*JSONError); ok && jsonErr.Code == ErrPathNotFound {
+			// Path doesn't exist, create it
+			if bj.IsObject() {
+				obj, _ := bj.GetObject()
+				if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard {
+					// Create nested object
+					newObj := make(map[string]interface{})
+					obj[keyLeg.Key] = newObj
+					newBj, _ := NewBinaryJSON(newObj)
+					// Recurse into the new object with remaining legs
+					return setRecursive(newBj, legs, value, depth+1)
+				}
+			}
+		}
 		return BinaryJSON{}, err
 	}
 
 	if len(results) == 0 {
-		return BinaryJSON{}, NewNotFoundError(path.String())
+		return BinaryJSON{}, NewNotFoundError("path not found")
 	}
 
-	// Multiple matches - need to apply to all
-	newResults := make([]interface{}, 0, len(results))
-	for i, result := range results {
-		remainingPath := &Path{Legs: path.Legs[depth+1:]}
-		newValue, err := applyPath(result, remainingPath, value, depth+1)
-		if err != nil {
-			return BinaryJSON{}, err
-		}
-		newResults[i] = newValue.GetInterface()
+	// Path exists, recurse into the first result
+	newResult, err := setRecursive(results[0], legs, value, depth+1)
+	if err != nil {
+		return BinaryJSON{}, err
 	}
 
-	// Reconstruct based on type
-	var parent interface{}
+	// Reconstruct the parent with the modified child
 	if bj.IsObject() {
 		obj, _ := bj.GetObject()
-		parent = reconstructObject(obj, results, leg)
+		if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard {
+			obj[keyLeg.Key] = newResult.GetInterface()
+		}
+		return NewBinaryJSON(obj)
 	} else if bj.IsArray() {
 		arr, _ := bj.GetArray()
-		parent = reconstructArray(arr, results, leg)
-	} else {
-		return BinaryJSON{}, &JSONError{Code: ErrTypeMismatch, Message: "can only set path in objects or arrays"}
+		if arrayLeg, ok := leg.(*ArrayLeg); ok && !arrayLeg.Wildcard {
+			idx := arrayLeg.Index
+			if arrayLeg.Last {
+				idx = len(arr) - 1
+			}
+			if idx >= 0 && idx < len(arr) {
+				arr[idx] = newResult.GetInterface()
+			}
+		}
+		return NewBinaryJSON(arr)
 	}
 
-	result, _ := NewBinaryJSON(parent)
-	return result, nil
+	return bj, nil
 }
 
 // reconstructObject reconstructs an object after applying a path leg
@@ -110,6 +197,42 @@ func reconstructObject(obj map[string]interface{}, results []BinaryJSON, leg Pat
 			// Set specific key
 			if len(results) > 0 {
 				newObj[keyLeg.Key] = results[0].GetInterface()
+			} else {
+				delete(newObj, keyLeg.Key)
+			}
+		}
+	default:
+		// For other leg types, just return original
+		return obj
+	}
+
+	return newObj
+}
+
+// reconstructObjectForSet reconstructs an object after applying a path leg for Set operation
+func reconstructObjectForSet(obj map[string]interface{}, results []interface{}, leg PathLeg) map[string]interface{} {
+	newObj := make(map[string]interface{})
+
+	// Copy all non-modified keys
+	for k, v := range obj {
+		newObj[k] = v
+	}
+
+	// Apply modifications
+	switch l := leg.(type) {
+	case *KeyLeg:
+		keyLeg := l
+		if keyLeg.Wildcard {
+			// Wildcard - apply to all keys
+			if len(results) >= 1 {
+				for k := range obj {
+					newObj[k] = results[0]
+				}
+			}
+		} else {
+			// Set specific key
+			if len(results) > 0 {
+				newObj[keyLeg.Key] = results[0]
 			} else {
 				delete(newObj, keyLeg.Key)
 			}
@@ -158,6 +281,51 @@ func reconstructArray(arr []interface{}, results []BinaryJSON, leg PathLeg) []in
 		for i := start; i <= end; i++ {
 			if i >= 0 && i < len(arr) && len(results) > 0 {
 				newArr[i] = results[0].GetInterface()
+			}
+		}
+	default:
+		// For other leg types, just return original
+		return arr
+	}
+
+	return newArr
+}
+
+// reconstructArrayForSet reconstructs an array after applying a path leg for Set operation
+func reconstructArrayForSet(arr []interface{}, results []interface{}, leg PathLeg) []interface{} {
+	newArr := make([]interface{}, len(arr))
+	copy(newArr, arr)
+
+	// Apply modifications
+	switch l := leg.(type) {
+	case *ArrayLeg:
+		arrayLeg := l
+		if arrayLeg.Wildcard {
+			// Wildcard - apply to all elements
+			for i := range arr {
+				if len(results) > 0 {
+					newArr[i] = results[0]
+				}
+			}
+		} else {
+			// Set specific index
+			idx := arrayLeg.Index
+			if arrayLeg.Last {
+				idx = len(arr) - 1
+			}
+
+			if idx >= 0 && idx < len(arr) {
+				if len(results) > 0 {
+					newArr[idx] = results[0]
+				}
+			}
+		}
+	case *RangeLeg:
+		rangeLeg := l
+		start, end := getRangeIndices(rangeLeg, len(arr))
+		for i := start; i <= end; i++ {
+			if i >= 0 && i < len(arr) && len(results) > 0 {
+				newArr[i] = results[0]
 			}
 		}
 	default:

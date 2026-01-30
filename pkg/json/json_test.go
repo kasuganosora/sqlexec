@@ -768,6 +768,18 @@ func equalJSON(a, b interface{}) bool {
 		if bVal, ok := b.(float64); ok {
 			return aVal == bVal
 		}
+		// Also compare with int types (JSON numbers may be float64 or int64)
+		if bVal, ok := b.(int64); ok {
+			return float64(bVal) == aVal
+		}
+	case int64:
+		if bVal, ok := b.(int64); ok {
+			return aVal == bVal
+		}
+		// Also compare with float64 (JSON numbers may be float64 or int64)
+		if bVal, ok := b.(float64); ok {
+			return aVal == int64(bVal)
+		}
 	case string:
 		if bVal, ok := b.(string); ok {
 			return aVal == bVal
