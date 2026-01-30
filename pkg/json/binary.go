@@ -405,89 +405,115 @@ func (bj BinaryJSON) Remove(paths ...string) (BinaryJSON, error) {
 	return result, nil
 }
 
-// removePath removes a path recursively
+// deepCopy creates a deep copy of a value
+func deepCopy(value interface{}) interface{} {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		newMap := make(map[string]interface{})
+		for k, val := range v {
+			newMap[k] = deepCopy(val)
+		}
+		return newMap
+	case []interface{}:
+		newArr := make([]interface{}, len(v))
+		for i, val := range v {
+			newArr[i] = deepCopy(val)
+		}
+		return newArr
+	default:
+		return v
+	}
+}
+
+// removePath removes a path recursively - simplified version
 func removePath(bj BinaryJSON, path *Path, depth int) (BinaryJSON, error) {
 	if depth >= len(path.Legs) {
 		return bj, nil
 	}
 
-	leg := path.Legs[depth]
+	currentLeg := path.Legs[depth]
+	isLastLeg := (depth == len(path.Legs)-1)
 
-	// If this is the last leg, remove the element
-	if depth == len(path.Legs)-1 {
-		if bj.IsObject() {
-			obj, _ := bj.GetObject()
-			if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard {
-				delete(obj, keyLeg.Key)
-				return NewBinaryJSON(obj)
-			}
-		} else if bj.IsArray() {
-			arr, _ := bj.GetArray()
-			if arrayLeg, ok := leg.(*ArrayLeg); ok && !arrayLeg.Wildcard {
-				idx := arrayLeg.Index
-				if arrayLeg.Last {
-					idx = len(arr) - 1
-				}
-				if idx >= 0 && idx < len(arr) {
-					newArr := make([]interface{}, 0, len(arr)-1)
-					newArr = append(newArr, arr[:idx]...)
-					newArr = append(newArr, arr[idx+1:]...)
-					return NewBinaryJSON(newArr)
-				}
-			}
-		}
-		return bj, nil
-	}
-
-	// Continue recursively
-	results, err := leg.Apply(bj)
-	if err != nil {
-		return BinaryJSON{}, err
-	}
-
-	if len(results) == 0 {
-		return bj, nil
-	}
-
-	// Apply removal to all matched elements
+	// Handle object
 	if bj.IsObject() {
 		obj, _ := bj.GetObject()
+		keyLeg, ok := currentLeg.(*KeyLeg)
+		if !ok || keyLeg.Wildcard {
+			return bj, nil
+		}
+
+		// Check if key exists
+		if _, exists := obj[keyLeg.Key]; !exists {
+			return bj, nil
+		}
+
+		if isLastLeg {
+			// Delete the key
+			newObj := make(map[string]interface{})
+			for k, v := range obj {
+				if k != keyLeg.Key {
+					newObj[k] = deepCopy(v)
+				}
+			}
+			return NewBinaryJSON(newObj)
+		}
+
+		// Not last leg - recurse into the value
+		value := obj[keyLeg.Key]
+		valueBj, _ := NewBinaryJSON(value)
+		newValueBj, err := removePath(valueBj, path, depth+1)
+		if err != nil {
+			return BinaryJSON{}, err
+		}
+
+		// Rebuild the object with the new value
 		newObj := make(map[string]interface{})
 		for k, v := range obj {
-			newObj[k] = v
+			newObj[k] = deepCopy(v)
 		}
-		for _, result := range results {
-			remainingPath := &Path{Legs: path.Legs[depth+1:]}
-			newValue, err := removePath(result, remainingPath, depth+1)
-			if err != nil {
-				return BinaryJSON{}, err
-			}
-			// Update the object with new value
-			if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard && len(results) == 1 {
-				newObj[keyLeg.Key] = newValue.GetInterface()
-			}
-		}
+		newObj[keyLeg.Key] = newValueBj.GetInterface()
 		return NewBinaryJSON(newObj)
-	} else if bj.IsArray() {
+	}
+
+	// Handle array
+	if bj.IsArray() {
 		arr, _ := bj.GetArray()
-		newArr := make([]interface{}, len(arr))
-		copy(newArr, arr)
-		for _, result := range results {
-			remainingPath := &Path{Legs: path.Legs[depth+1:]}
-			newValue, err := removePath(result, remainingPath, depth+1)
-			if err != nil {
-				return BinaryJSON{}, err
-			}
-			if arrayLeg, ok := leg.(*ArrayLeg); ok && !arrayLeg.Wildcard {
-				idx := arrayLeg.Index
-				if arrayLeg.Last {
-					idx = len(arr) - 1
-				}
-				if idx >= 0 && idx < len(arr) {
-					newArr[idx] = newValue.GetInterface()
-				}
-			}
+		arrayLeg, ok := currentLeg.(*ArrayLeg)
+		if !ok || arrayLeg.Wildcard {
+			return bj, nil
 		}
+
+		idx := arrayLeg.Index
+		if arrayLeg.Last {
+			idx = len(arr) - 1
+		}
+
+		if idx < 0 || idx >= len(arr) {
+			return bj, nil
+		}
+
+		if isLastLeg {
+			// Remove the element
+			newArr := make([]interface{}, 0, len(arr)-1)
+			newArr = append(newArr, arr[:idx]...)
+			newArr = append(newArr, arr[idx+1:]...)
+			return NewBinaryJSON(newArr)
+		}
+
+		// Not last leg - recurse into the element
+		value := arr[idx]
+		valueBj, _ := NewBinaryJSON(value)
+		newValueBj, err := removePath(valueBj, path, depth+1)
+		if err != nil {
+			return BinaryJSON{}, err
+		}
+
+		// Rebuild the array with the new value
+		newArr := make([]interface{}, len(arr))
+		for i, v := range arr {
+			newArr[i] = deepCopy(v)
+		}
+		newArr[idx] = newValueBj.GetInterface()
 		return NewBinaryJSON(newArr)
 	}
 
