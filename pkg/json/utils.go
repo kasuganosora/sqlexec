@@ -1,8 +1,39 @@
 package json
 
 import (
+	"sort"
 	"strings"
 )
+
+// sortedKeys returns sorted keys from a map
+func sortedKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// deepCopy creates a deep copy of a value
+func deepCopy(value interface{}) interface{} {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		newMap := make(map[string]interface{})
+		for k, val := range v {
+			newMap[k] = deepCopy(val)
+		}
+		return newMap
+	case []interface{}:
+		newArr := make([]interface{}, len(v))
+		for i, val := range v {
+			newArr[i] = deepCopy(val)
+		}
+		return newArr
+	default:
+		return v
+	}
+}
 
 // parseJSONValue parses a value that can be either a JSON string or a Go interface{}
 // This unifies parameter handling for JSON functions

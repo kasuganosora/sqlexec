@@ -329,23 +329,6 @@ func (r *RangeLeg) String() string {
 	return fmt.Sprintf("[%s to %s]", startStr, endStr)
 }
 
-// sortedKeys returns sorted keys from a map
-func sortedKeys(m map[string]interface{}) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	// Simple sort
-	for i := 0; i < len(keys); i++ {
-		for j := i + 1; j < len(keys); j++ {
-			if keys[i] > keys[j] {
-				keys[i], keys[j] = keys[j], keys[i]
-			}
-		}
-	}
-	return keys
-}
-
 // Evaluate evaluates the path against a JSON value
 func (p *Path) Evaluate(bj BinaryJSON) ([]BinaryJSON, error) {
 	results := []BinaryJSON{bj}

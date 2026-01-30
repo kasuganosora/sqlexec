@@ -20,26 +20,6 @@ func (bj BinaryJSON) Remove(paths ...string) (BinaryJSON, error) {
 	return result, nil
 }
 
-// deepCopy creates a deep copy of a value
-func deepCopy(value interface{}) interface{} {
-	switch v := value.(type) {
-	case map[string]interface{}:
-		newMap := make(map[string]interface{})
-		for k, val := range v {
-			newMap[k] = deepCopy(val)
-		}
-		return newMap
-	case []interface{}:
-		newArr := make([]interface{}, len(v))
-		for i, val := range v {
-			newArr[i] = deepCopy(val)
-		}
-		return newArr
-	default:
-		return v
-	}
-}
-
 // removePath removes a path recursively - simplified version
 func removePath(bj BinaryJSON, path *Path, depth int) (BinaryJSON, error) {
 	if depth >= len(path.Legs) {
