@@ -124,6 +124,17 @@ func parseArrayLeg(pathExpr string) (PathLeg, string, error) {
 	}
 
 	// Parse as integer index
+	var idx int
+	var lastOffset int
+
+	// Check for negative index
+	if strings.HasPrefix(content, "-") {
+		if offset, err := strconv.Atoi(content[1:]); err == nil {
+			lastOffset = -offset
+			return &ArrayLeg{Index: -1, LastOffset: lastOffset}, remaining, nil
+		}
+	}
+
 	idx, err := strconv.Atoi(content)
 	if err != nil {
 		return nil, "", err
@@ -366,6 +377,16 @@ func (p *Path) Extract(bj BinaryJSON) (BinaryJSON, error) {
 
 	if len(results) == 0 {
 		return BinaryJSON{}, NewNotFoundError(p.String())
+	}
+
+	// If multiple results (from wildcard), wrap them in an array
+	if len(results) > 1 {
+		arrayResult := make([]interface{}, len(results))
+		for i, result := range results {
+			arrayResult[i] = result.GetInterface()
+		}
+		wrapped, _ := NewBinaryJSON(arrayResult)
+		return wrapped, nil
 	}
 
 	return results[0], nil

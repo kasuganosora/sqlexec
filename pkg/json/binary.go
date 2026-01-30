@@ -101,8 +101,8 @@ func reconstructObject(obj map[string]interface{}, results []BinaryJSON, leg Pat
 		keyLeg := l
 		if keyLeg.Wildcard {
 			// Wildcard - apply to all keys
-			for k := range obj {
-				if len(results) > 0 {
+			if len(results) >= 1 {
+				for k := range obj {
 					newObj[k] = results[0].GetInterface()
 				}
 			}
@@ -121,6 +121,7 @@ func reconstructObject(obj map[string]interface{}, results []BinaryJSON, leg Pat
 
 	return newObj
 }
+
 
 // reconstructArray reconstructs an array after applying a path leg
 func reconstructArray(arr []interface{}, results []BinaryJSON, leg PathLeg) []interface{} {
