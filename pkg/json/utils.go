@@ -28,7 +28,7 @@ func Length(bj BinaryJSON) (int, error) {
 // Depth returns the maximum depth of JSON value
 func Depth(bj BinaryJSON) (int, error) {
 	if bj.IsNull() {
-		return 0, nil
+		return 1, nil
 	}
 	return calculateDepth(bj.Value, 1)
 }

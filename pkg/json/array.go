@@ -5,60 +5,79 @@ import (
 )
 
 // ArrayAppend appends values to an array at the specified path
+// Usage: ArrayAppend(bj, path, value1, value2, ...)
 func ArrayAppend(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
-	if len(args) == 0 || len(args)%2 != 0 {
-		return BinaryJSON{}, &JSONError{Code: ErrInvalidParam, Message: "ARRAY_APPEND requires even number of arguments"}
+	if len(args) < 2 {
+		return BinaryJSON{}, &JSONError{Code: ErrInvalidParam, Message: "ARRAY_APPEND requires at least 2 arguments (path and at least one value)"}
 	}
 
-	current := bj
+	pathStr := toString(args[0])
+	values := args[1:]
 
-	// Process each (path, value) pair
-	for i := 0; i < len(args); i += 2 {
-		pathStr := toString(args[i])
-		value := args[i+1]
+	// Parse path
+	parsed, err := ParsePath(pathStr)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
 
-		parsed, err := ParsePath(pathStr)
+	// Get the array to append to
+	var arr []interface{}
+	var parentBj BinaryJSON
+	var lastLeg PathLeg
+
+	if len(parsed.Legs) == 0 {
+		// No path, treat entire bj as array
+		if !bj.IsArray() {
+			return BinaryJSON{}, &JSONError{Code: ErrTypeMismatch, Message: "value is not an array"}
+		}
+		arr, _ = bj.GetArray()
+		parentBj = bj
+	} else {
+		// Get array at path
+		// Extract parent path and last leg
+		parentPath := &Path{Legs: parsed.Legs[:len(parsed.Legs)-1]}
+		lastLeg = parsed.Legs[len(parsed.Legs)-1]
+
+		parentBj, err = parentPath.Extract(bj)
 		if err != nil {
 			return BinaryJSON{}, err
 		}
 
-		// Get array to append to
-		if len(parsed.Legs) == 0 {
-			// No path, treat entire bj as array
-			if !current.IsArray() {
-				return BinaryJSON{}, &JSONError{Code: ErrTypeMismatch, Message: "value is not an array"}
-			}
-		} else {
-			// Get array at path
-			target, err := current.Extract(pathStr)
-			if err != nil {
-				return BinaryJSON{}, err
-			}
-			if !target.IsArray() {
-				return BinaryJSON{}, &JSONError{Code: ErrTypeMismatch, Message: "target is not an array"}
-			}
-			current = target
+		// Get the array
+		arrBj, err := lastLeg.Apply(parentBj)
+		if err != nil {
+			return BinaryJSON{}, err
 		}
+		if len(arrBj) != 1 || !arrBj[0].IsArray() {
+			return BinaryJSON{}, &JSONError{Code: ErrTypeMismatch, Message: "target is not an array"}
+		}
+		arr, _ = arrBj[0].GetArray()
+	}
 
-		// Parse value to append
+	// Append all values
+	newArr := make([]interface{}, len(arr))
+	copy(newArr, arr)
+	for _, value := range values {
 		parsedValue, err := NewBinaryJSON(value)
 		if err != nil {
 			return BinaryJSON{}, err
 		}
-
-		// Append to array
-		if !current.IsArray() {
-			return BinaryJSON{}, &JSONError{Code: ErrTypeMismatch, Message: "cannot append to non-array"}
-		}
-
-		arr, _ := current.GetArray()
-		newArr := append(arr, parsedValue.Value)
-
-		// Create new BinaryJSON with appended array
-		current, _ = NewBinaryJSON(newArr)
+		newArr = append(newArr, parsedValue.Value)
 	}
 
-	return current, nil
+	// Create new array BinaryJSON
+	newArrBj, err := NewBinaryJSON(newArr)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	// If no path or path is just "$", return the array directly
+	if len(parsed.Legs) == 0 {
+		return newArrBj, nil
+	}
+
+	// Otherwise, reconstruct the object with the updated array
+	return setRecursive(bj, parsed.Legs, newArrBj, 0)
 }
 
 // ArrayInsert inserts a value into an array at the specified path and position
@@ -126,7 +145,7 @@ func ArrayInsert(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
 	}
 
 	// Insert value
-	newArr := make([]interface{}, 0, len(arr)+1)
+	newArr := make([]interface{}, len(arr)+1)
 	copy(newArr[:position], arr[:position])
 	newArr[position] = parsedValue.Value
 	copy(newArr[position+1:], arr[position:])

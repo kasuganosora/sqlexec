@@ -522,6 +522,15 @@ func removePath(bj BinaryJSON, path *Path, depth int) (BinaryJSON, error) {
 
 // Merge merges another JSON value (JSON_MERGE_PRESERVE)
 func (bj BinaryJSON) Merge(value interface{}) (BinaryJSON, error) {
+	// If value is a string, parse it as JSON
+	if str, ok := value.(string); ok {
+		parsed, err := ParseJSON(str)
+		if err != nil {
+			return BinaryJSON{}, err
+		}
+		return bj.Merge(parsed.GetInterface())
+	}
+	
 	other, err := NewBinaryJSON(value)
 	if err != nil {
 		return BinaryJSON{}, err
@@ -537,15 +546,17 @@ func (bj BinaryJSON) Merge(value interface{}) (BinaryJSON, error) {
 		return bj, nil
 	}
 
-	// If both are objects, merge them
+	// If both are objects, merge them (preserve values from first object)
 	if bj.IsObject() && other.IsObject() {
 		obj1, _ := bj.GetObject()
 		obj2, _ := other.GetObject()
 		merged := make(map[string]interface{})
-		for k, v := range obj1 {
+		// Copy obj2 first
+		for k, v := range obj2 {
 			merged[k] = v
 		}
-		for k, v := range obj2 {
+		// Then copy obj1 to preserve its values (overwriting obj2's values)
+		for k, v := range obj1 {
 			merged[k] = v
 		}
 		return NewBinaryJSON(merged)
@@ -581,6 +592,15 @@ func (bj BinaryJSON) Merge(value interface{}) (BinaryJSON, error) {
 
 // Patch patches with another JSON value (RFC 7396 JSON_MERGE_PATCH)
 func (bj BinaryJSON) Patch(value interface{}) (BinaryJSON, error) {
+	// If value is a string, parse it as JSON first
+	if str, ok := value.(string); ok {
+		parsed, err := ParseJSON(str)
+		if err != nil {
+			return BinaryJSON{}, err
+		}
+		return bj.Patch(parsed.GetInterface())
+	}
+	
 	other, err := NewBinaryJSON(value)
 	if err != nil {
 		return BinaryJSON{}, err
