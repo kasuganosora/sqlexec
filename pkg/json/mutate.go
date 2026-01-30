@@ -1,6 +1,6 @@
 package json
 
-// Set sets a value at the specified path
+// Set sets a value at specified path
 func (bj BinaryJSON) Set(pathStr string, value interface{}) (BinaryJSON, error) {
 	path, err := ParsePath(pathStr)
 	if err != nil {
@@ -27,25 +27,15 @@ func setRecursive(bj BinaryJSON, legs []PathLeg, value BinaryJSON, depth int) (B
 	isLast := (depth == len(legs)-1)
 
 	if isLast {
-		// Last leg - set the value
+		// Last leg - set value using helper functions
 		if bj.IsObject() {
 			obj, _ := bj.GetObject()
-			if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard {
-				obj[keyLeg.Key] = value.GetInterface()
-				return NewBinaryJSON(obj)
-			}
+			newObj := reconstructObject(obj, value.GetInterface(), leg)
+			return NewBinaryJSON(newObj)
 		} else if bj.IsArray() {
 			arr, _ := bj.GetArray()
-			if arrayLeg, ok := leg.(*ArrayLeg); ok && !arrayLeg.Wildcard {
-				idx := arrayLeg.Index
-				if arrayLeg.Last {
-					idx = len(arr) - 1
-				}
-				if idx >= 0 && idx < len(arr) {
-					arr[idx] = value.GetInterface()
-					return NewBinaryJSON(arr)
-				}
-			}
+			newArr := reconstructArray(arr, value.GetInterface(), leg)
+			return NewBinaryJSON(newArr)
 		}
 		return BinaryJSON{}, &JSONError{Code: ErrTypeMismatch, Message: "cannot set value at path"}
 	}
@@ -62,7 +52,7 @@ func setRecursive(bj BinaryJSON, legs []PathLeg, value BinaryJSON, depth int) (B
 					newObj := make(map[string]interface{})
 					obj[keyLeg.Key] = newObj
 					newBj, _ := NewBinaryJSON(newObj)
-					// Recurse into the new object with remaining legs
+					// Recurse into new object with remaining legs
 					return setRecursive(newBj, legs, value, depth+1)
 				}
 			}
@@ -74,37 +64,27 @@ func setRecursive(bj BinaryJSON, legs []PathLeg, value BinaryJSON, depth int) (B
 		return BinaryJSON{}, NewNotFoundError("path not found")
 	}
 
-	// Path exists, recurse into the first result
+	// Path exists, recurse into first result
 	newResult, err := setRecursive(results[0], legs, value, depth+1)
 	if err != nil {
 		return BinaryJSON{}, err
 	}
 
-	// Reconstruct the parent with the modified child
+	// Reconstruct parent with modified child using helper functions
 	if bj.IsObject() {
 		obj, _ := bj.GetObject()
-		if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard {
-			obj[keyLeg.Key] = newResult.GetInterface()
-		}
-		return NewBinaryJSON(obj)
+		newObj := reconstructObject(obj, newResult.GetInterface(), leg)
+		return NewBinaryJSON(newObj)
 	} else if bj.IsArray() {
 		arr, _ := bj.GetArray()
-		if arrayLeg, ok := leg.(*ArrayLeg); ok && !arrayLeg.Wildcard {
-			idx := arrayLeg.Index
-			if arrayLeg.Last {
-				idx = len(arr) - 1
-			}
-			if idx >= 0 && idx < len(arr) {
-				arr[idx] = newResult.GetInterface()
-			}
-		}
-		return NewBinaryJSON(arr)
+		newArr := reconstructArray(arr, newResult.GetInterface(), leg)
+		return NewBinaryJSON(newArr)
 	}
 
 	return bj, nil
 }
 
-// Insert inserts a value at the specified path (only if path doesn't exist)
+// Insert inserts a value at specified path (only if path doesn't exist)
 func (bj BinaryJSON) Insert(pathStr string, value interface{}) (BinaryJSON, error) {
 	_, err := ParsePath(pathStr)
 	if err != nil {
@@ -126,7 +106,7 @@ func (bj BinaryJSON) Insert(pathStr string, value interface{}) (BinaryJSON, erro
 	return bj.Set(pathStr, parsedValue.Value)
 }
 
-// Replace replaces a value at the specified path (only if path exists)
+// Replace replaces a value at specified path (only if path exists)
 func (bj BinaryJSON) Replace(pathStr string, value interface{}) (BinaryJSON, error) {
 	// Check if path exists
 	_, err := bj.Extract(pathStr)
