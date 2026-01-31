@@ -2074,17 +2074,19 @@ func (p *BinaryRowDataPacket) readBinaryBlob(reader *bufio.Reader, lengthBytes i
 		return data, err
 		
 	case 3:
-		length, err := ReadNumber[uint32](reader, 3)
-		if err != nil {
-			return nil, err
+		lengthBytesData := make([]byte, 3)
+		_, readErr := io.ReadFull(reader, lengthBytesData)
+		if readErr != nil {
+			return nil, readErr
 		}
+		length := uint32(lengthBytesData[0]) | uint32(lengthBytesData[1])<<8 | uint32(lengthBytesData[2])<<16
 		if length == 0xfbfbfb {
 			// 空 blob
 			return []byte{}, nil
 		}
 		data := make([]byte, length)
-		_, err = io.ReadFull(reader, data)
-		return data, err
+		_, readErr = io.ReadFull(reader, data)
+		return data, readErr
 		
 	case 4:
 		length, err := ReadNumber[uint32](reader, 4)
