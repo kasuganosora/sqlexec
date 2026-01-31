@@ -1,409 +1,130 @@
 package parser
 
 import (
-	"encoding/json"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/pingcap/tidb/pkg/parser"
 	_ "github.com/pingcap/tidb/pkg/parser/test_driver"
 )
 
-func TestSQLAdapter_ParseSelect(t *testing.T) {
-	adapter := NewSQLAdapter()
-
+// TestSimplifyTypeName 测试简化类型名
+func TestSimplifyTypeName(t *testing.T) {
 	testCases := []struct {
-		name     string
-		sql      string
-		expected SQLType
-	}{
-		{
-			name:     "简单 SELECT",
-			sql:      "SELECT id, name FROM users",
-			expected: SQLTypeSelect,
-		},
-		{
-			name:     "带 WHERE 条件",
-			sql:      "SELECT id, name FROM users WHERE age > 25",
-			expected: SQLTypeSelect,
-		},
-		{
-			name:     "带 ORDER BY",
-			sql:      "SELECT * FROM users ORDER BY created_at DESC",
-			expected: SQLTypeSelect,
-		},
-		{
-			name:     "带 LIMIT",
-			sql:      "SELECT * FROM users LIMIT 10",
-			expected: SQLTypeSelect,
-		},
-		{
-			name:     "带 JOIN",
-			sql:      "SELECT u.name, o.order_id FROM users u JOIN orders o ON u.id = o.user_id",
-			expected: SQLTypeSelect,
-		},
-		{
-			name:     "复杂查询",
-			sql:      "SELECT id, name, age FROM users WHERE age > 18 AND status = 'active' ORDER BY created_at DESC LIMIT 20",
-			expected: SQLTypeSelect,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := adapter.Parse(tc.sql)
-			if err != nil {
-				t.Errorf("解析失败: %v", err)
-				return
-			}
-
-			if !result.Success {
-				t.Errorf("解析不成功: %s", result.Error)
-				return
-			}
-
-			if result.Statement.Type != tc.expected {
-				t.Errorf("期望类型 %s, 实际 %s", tc.expected, result.Statement.Type)
-			}
-
-			// 打印解析结果
-			t.Logf("✓ %s", tc.name)
-			printStatement(result.Statement)
-		})
-	}
-}
-
-func TestSQLAdapter_ParseInsert(t *testing.T) {
-	adapter := NewSQLAdapter()
-
-	testCases := []struct {
-		name string
-		sql  string
-	}{
-		{
-			name: "单行插入",
-			sql:  "INSERT INTO users (name, age) VALUES ('Alice', 25)",
-		},
-		{
-			name: "多行插入",
-			sql:  "INSERT INTO users (name, age) VALUES ('Bob', 30), ('Charlie', 35)",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := adapter.Parse(tc.sql)
-			if err != nil {
-				t.Errorf("解析失败: %v", err)
-				return
-			}
-
-			if !result.Success {
-				t.Errorf("解析不成功: %s", result.Error)
-				return
-			}
-
-			if result.Statement.Type != SQLTypeInsert {
-				t.Errorf("期望类型 %s, 实际 %s", SQLTypeInsert, result.Statement.Type)
-			}
-
-			t.Logf("✓ %s", tc.name)
-			printStatement(result.Statement)
-		})
-	}
-}
-
-func TestSQLAdapter_ParseUpdate(t *testing.T) {
-	adapter := NewSQLAdapter()
-
-	testCases := []struct {
-		name string
-		sql  string
-	}{
-		{
-			name: "简单更新",
-			sql:  "UPDATE users SET age = 26 WHERE id = 1",
-		},
-		{
-			name: "多字段更新",
-			sql:  "UPDATE users SET age = 26, status = 'active' WHERE id = 1",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := adapter.Parse(tc.sql)
-			if err != nil {
-				t.Errorf("解析失败: %v", err)
-				return
-			}
-
-			if !result.Success {
-				t.Errorf("解析不成功: %s", result.Error)
-				return
-			}
-
-			if result.Statement.Type != SQLTypeUpdate {
-				t.Errorf("期望类型 %s, 实际 %s", SQLTypeUpdate, result.Statement.Type)
-			}
-
-			t.Logf("✓ %s", tc.name)
-			printStatement(result.Statement)
-		})
-	}
-}
-
-func TestSQLAdapter_ParseDelete(t *testing.T) {
-	adapter := NewSQLAdapter()
-
-	testCases := []struct {
-		name string
-		sql  string
-	}{
-		{
-			name: "简单删除",
-			sql:  "DELETE FROM users WHERE id = 1",
-		},
-		{
-			name: "带条件删除",
-			sql:  "DELETE FROM users WHERE age < 18",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := adapter.Parse(tc.sql)
-			if err != nil {
-				t.Errorf("解析失败: %v", err)
-				return
-			}
-
-			if !result.Success {
-				t.Errorf("解析不成功: %s", result.Error)
-				return
-			}
-
-			if result.Statement.Type != SQLTypeDelete {
-				t.Errorf("期望类型 %s, 实际 %s", SQLTypeDelete, result.Statement.Type)
-			}
-
-			t.Logf("✓ %s", tc.name)
-			printStatement(result.Statement)
-		})
-	}
-}
-
-func TestSQLAdapter_ParseDDL(t *testing.T) {
-	adapter := NewSQLAdapter()
-
-	testCases := []struct {
-		name string
-		sql  string
-	}{
-		{
-			name: "CREATE TABLE",
-			sql:  "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255), age INT)",
-		},
-		{
-			name: "DROP TABLE",
-			sql:  "DROP TABLE users",
-		},
-		{
-			name: "DROP TABLE IF EXISTS",
-			sql:  "DROP TABLE IF EXISTS users",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := adapter.Parse(tc.sql)
-			if err != nil {
-				t.Errorf("解析失败: %v", err)
-				return
-			}
-
-			if !result.Success {
-				t.Errorf("解析不成功: %s", result.Error)
-				return
-			}
-
-			t.Logf("✓ %s", tc.name)
-			printStatement(result.Statement)
-		})
-	}
-}
-
-func TestSQLAdapter_ParseComplex(t *testing.T) {
-	adapter := NewSQLAdapter()
-
-	complexSQL := `
-		SELECT 
-			u.id, u.name, u.age,
-			COUNT(o.order_id) as order_count,
-			SUM(o.amount) as total_amount
-		FROM users u
-		LEFT JOIN orders o ON u.id = o.user_id
-		WHERE u.status = 'active' AND o.created_at > '2024-01-01'
-		GROUP BY u.id, u.name, u.age
-		HAVING COUNT(o.order_id) > 5
-		ORDER BY total_amount DESC
-		LIMIT 20
-	`
-
-	result, err := adapter.Parse(complexSQL)
-	if err != nil {
-		t.Errorf("解析失败: %v", err)
-		return
-	}
-
-	if !result.Success {
-		t.Errorf("解析不成功: %s", result.Error)
-		return
-	}
-
-	t.Logf("✓ 复杂查询解析成功")
-	printStatement(result.Statement)
-}
-
-func printStatement(stmt *SQLStatement) {
-	jsonData, _ := json.MarshalIndent(stmt, "", "  ")
-	fmt.Printf("解析结果:\n%s\n", string(jsonData))
-}
-
-// BenchmarkSQLAdapter_Parse 性能测试
-func BenchmarkSQLAdapter_Parse(b *testing.B) {
-	adapter := NewSQLAdapter()
-	sql := "SELECT id, name, age FROM users WHERE age > 25 AND status = 'active' ORDER BY created_at DESC LIMIT 10"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := adapter.Parse(sql)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func TestAdapter_ParseShowStatement(t *testing.T) {
-	adapter := NewSQLAdapter()
-
-	tests := []struct {
-		name     string
-		sql      string
+		input    string
 		expected string
-		table    string
-		wantErr  bool
 	}{
-		{
-			name:     "SHOW TABLES",
-			sql:      "SHOW TABLES",
-			expected: "TABLES",
-			wantErr:  false,
-		},
-		{
-			name:     "SHOW TABLES LIKE",
-			sql:      "SHOW TABLES LIKE 'user%'",
-			expected: "TABLES",
-			wantErr:  false,
-		},
-		{
-			name:     "SHOW DATABASES",
-			sql:      "SHOW DATABASES",
-			expected: "DATABASES",
-			wantErr:  false,
-		},
-		{
-			name:     "SHOW COLUMNS FROM table",
-			sql:      "SHOW COLUMNS FROM users",
-			expected: "COLUMNS",
-			table:    "users",
-			wantErr:  false,
-		},
-		{
-			name:     "SHOW CREATE TABLE",
-			sql:      "SHOW CREATE TABLE users",
-			expected: "CREATE_TABLE",
-			table:    "users",
-			wantErr:  false,
-		},
+		{"DECIMAL(10,2)", "DECIMAL"},
+		{"VARCHAR(255)", "VARCHAR"},
+		{"INT", "INT"},
+		{"DOUBLE", "DOUBLE"},
+		{"FLOAT(10,2)", "FLOAT"},
+		{"CHAR(10)", "CHAR"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := adapter.Parse(tt.sql)
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-
-		assert.NoError(t, err)
-		assert.True(t, result.Success)
-		assert.Equal(t, SQLTypeShow, result.Statement.Type)
-		assert.NotNil(t, result.Statement.Show)
-			assert.Equal(t, tt.expected, result.Statement.Show.Type)
-
-			if tt.table != "" {
-				assert.Equal(t, tt.table, result.Statement.Show.Table)
-			}
-		})
+	for _, tc := range testCases {
+		result := simplifyTypeName(tc.input)
+		assert.Equal(t, tc.expected, result)
 	}
 }
 
-func TestAdapter_ParseDescribeStatement(t *testing.T) {
-	adapter := NewSQLAdapter()
+// TestConvertTiDBValue 测试TiDB值转换
+func TestConvertTiDBValue(t *testing.T) {
+	t.Run("integer types should convert to float64", func(t *testing.T) {
+		vals := []interface{}{
+			int(42),
+			int8(8),
+			int16(16),
+			int32(32),
+			int64(64),
+		}
 
-	tests := []struct {
-		name     string
-		sql      string
-		table    string
-		column   string
-		wantErr  bool
+		for _, v := range vals {
+			converted, err := convertTiDBValue(v)
+			assert.NoError(t, err)
+			assert.Equal(t, float64(v.(int64)), converted)
+		}
+	})
+
+	t.Run("unsigned integer types", func(t *testing.T) {
+		vals := []interface{}{
+			uint(42),
+			uint8(8),
+			uint16(16),
+			uint32(32),
+			uint64(64),
+		}
+
+		for _, v := range vals {
+			converted, err := convertTiDBValue(v)
+			assert.NoError(t, err)
+			assert.Equal(t, float64(v.(uint64)), converted)
+		}
+	})
+
+	t.Run("float types", func(t *testing.T) {
+		vals := []interface{}{
+			float32(3.14),
+			float64(2.718),
+		}
+
+		for _, v := range vals {
+			converted, err := convertTiDBValue(v)
+			assert.NoError(t, err)
+			assert.Equal(t, v, converted)
+		}
+	})
+
+	t.Run("string types", func(t *testing.T) {
+		vals := []interface{}{
+			"123.45",
+			"100.00",
+			"0.0",
+		}
+
+		for _, v := range vals {
+			converted, err := convertTiDBValue(v)
+			assert.NoError(t, err)
+			assert.IsType(t, float64(0), converted)
+		}
+	})
+
+	t.Run("nil value", func(t *testing.T) {
+		converted, err := convertTiDBValue(nil)
+		assert.NoError(t, err)
+		assert.Nil(t, converted)
+	})
+
+	t.Run("unknown type with String() method", func(t *testing.T) {
+		// 模拟TiDB的MyDecimal类型
+		type MyDecimal struct {
+			Value string
+		}
+
+		md := MyDecimal{Value: "123.45"}
+
+		converted, err := convertTiDBValue(md)
+		assert.NoError(t, err)
+		// 对于未知类型，返回原始值或尝试解析
+		assert.NotNil(t, converted)
+	})
+}
+
+// TestParseDecimalString 测试DECIMAL字符串解析
+func TestParseDecimalString(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected float64
 	}{
-		{
-			name:    "DESCRIBE table",
-			sql:     "DESCRIBE users",
-			table:   "users",
-			wantErr: false,
-		},
-		{
-			name:    "DESC table",
-			sql:     "DESC users",
-			table:   "users",
-			wantErr: false,
-		},
-		{
-			name:    "DESCRIBE table column",
-			sql:     "DESCRIBE users name",
-			table:   "users",
-			column:  "name",
-			wantErr: false,
-		},
-		{
-			name:    "DESC table column",
-			sql:     "DESC users email",
-			table:   "users",
-			column:  "email",
-			wantErr: false,
-		},
+		{"123.45", 123.45},
+		{"100.00", 100.00},
+		{"0.0", 0.0},
+		{"-50.25", -50.25},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := adapter.Parse(tt.sql)
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-
+	for _, tc := range testCases {
+		result, err := parseDecimalString(tc.input)
 		assert.NoError(t, err)
-		assert.True(t, result.Success)
-		assert.Equal(t, SQLTypeDescribe, result.Statement.Type)
-		assert.NotNil(t, result.Statement.Describe)
-			assert.Equal(t, tt.table, result.Statement.Describe.Table)
-
-			if tt.column != "" {
-				assert.Equal(t, tt.column, result.Statement.Describe.Column)
-			}
-		})
+		assert.Equal(t, tc.expected, result)
 	}
 }

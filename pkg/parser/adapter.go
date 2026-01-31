@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/parser"
@@ -12,6 +13,16 @@ import (
 // SQLAdapter SQL 解析适配器
 type SQLAdapter struct {
 	parser *parser.Parser
+}
+
+// simplifyTypeName 简化类型名，移除长度和精度说明
+// 例如: DECIMAL(10,2) -> DECIMAL, VARCHAR(255) -> VARCHAR
+func simplifyTypeName(fullType string) string {
+	// 查找第一个括号
+	if idx := strings.Index(fullType, "("); idx != -1 {
+		return fullType[:idx]
+	}
+	return fullType
 }
 
 // NewSQLAdapter 创建 SQL 适配器
@@ -610,7 +621,7 @@ func (a *SQLAdapter) convertCreateTableStmt(stmt *ast.CreateTableStmt) (*CreateS
 	for _, col := range stmt.Cols {
 		colInfo := ColumnInfo{
 			Name:     col.Name.Name.String(),
-			Type:     col.Tp.String(),
+			Type:     simplifyTypeName(col.Tp.String()),
 			Nullable: true, // 默认可空
 			Default:  nil,
 		}
@@ -799,12 +810,76 @@ func (a *SQLAdapter) extractValue(node ast.ExprNode) (interface{}, error) {
 
 	// 尝试转换为ValueExpr
 	if valExpr, ok := node.(ast.ValueExpr); ok {
-		return valExpr.GetValue(), nil
+		val := valExpr.GetValue()
+
+		// 处理TiDB的特殊类型（如MyDecimal）
+		if val != nil {
+			convertedVal, err := convertTiDBValue(val)
+			if err == nil {
+				return convertedVal, nil
+			}
+			// 如果转换失败，返回原始值
+			return val, nil
+		}
+
+		return val, nil
 	}
 
 	// 如果不是ValueExpr，可能是其他表达式类型
 	// 对于LIMIT，我们可能需要使用不同的方法
 	return nil, fmt.Errorf("not a value expression: %T", node)
+}
+
+// convertTiDBValue 转换TiDB的内部类型为标准Go类型
+func convertTiDBValue(val interface{}) (interface{}, error) {
+	if val == nil {
+		return nil, nil
+	}
+
+	// 首先尝试类型断言
+	switch v := val.(type) {
+	case float32:
+		return float64(v), nil
+	case float64:
+		return v, nil
+	case int, int8, int16, int32, int64:
+		// 整数类型保持原样，由后续的类型转换处理
+		return v, nil
+	case uint, uint8, uint16, uint32, uint64:
+		// 无符号整数类型保持原样
+		return v, nil
+	case string:
+		// 尝试解析为float64（针对DECIMAL字符串）
+		if f, err := parseDecimalString(v); err == nil {
+			return f, nil
+		}
+		return v, nil
+	default:
+		// 如果标准类型断言失败，尝试通过String()方法处理
+		// 这处理TiDB的特殊类型如MyDecimal
+		type Stringer interface {
+			String() string
+		}
+		if stringer, ok := val.(Stringer); ok {
+			strVal := stringer.String()
+			// 尝试将字符串解析为float64
+			if f, err := parseDecimalString(strVal); err == nil {
+				return f, nil
+			}
+			// 如果解析失败，返回原始值
+			return val, nil
+		}
+
+		// 无法转换，返回原始值
+		return val, nil
+	}
+}
+
+// parseDecimalString 尝试解析DECIMAL字符串为float64
+func parseDecimalString(s string) (float64, error) {
+	// 使用Go的strconv解析
+	f, err := strconv.ParseFloat(s, 64)
+	return f, err
 }
 
 // extractColumnNames 从表达式中提取列名
