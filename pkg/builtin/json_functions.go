@@ -509,6 +509,14 @@ func jsonContains(args []interface{}) (interface{}, error) {
 		}
 	}
 
+	// For objects, check if candidate is a subset (JSON_CONTAINS semantics)
+	if target.IsObject() && candidate.IsObject() {
+		contains, _ := jsonpkg.Contains(target.GetInterface(), candidate.GetInterface())
+		if contains {
+			return int64(1), nil
+		}
+	}
+
 	return int64(0), nil
 }
 

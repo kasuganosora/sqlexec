@@ -64,6 +64,11 @@ func NewManager(cfg *Config) *Manager {
 		cfg = DefaultConfig()
 	}
 	
+	// Ensure GCInterval is not zero
+	if cfg.GCInterval <= 0 {
+		cfg.GCInterval = DefaultConfig().GCInterval
+	}
+	
 	m := &Manager{
 		config:       cfg,
 		xid:          XIDBootstrap,
@@ -352,7 +357,7 @@ func (m *Manager) CurrentXID() XID {
 func (m *Manager) gcLoop() {
 	ticker := time.NewTicker(m.config.GCInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:

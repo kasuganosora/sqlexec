@@ -24,6 +24,27 @@ type BinaryJSON struct {
 	Value    interface{}
 }
 
+// isInfOrNaN checks if a float64 is infinity or NaN
+func isInfOrNaN(f float64) bool {
+	return isInf(f, 0) || isNaN(f)
+}
+
+// isInf checks if float64 is infinity (using math.IsInf)
+func isInf(f float64, sign int) bool {
+	if sign == 0 {
+		return f > 1.7976931348623157e+308 || f < -1.7976931348623157e+308
+	}
+	if sign > 0 {
+		return f > 1.7976931348623157e+308
+	}
+	return f < -1.7976931348623157e+308
+}
+
+// isNaN checks if float64 is NaN
+func isNaN(f float64) bool {
+	return f != f
+}
+
 // NewBinaryJSON creates a new BinaryJSON from a value
 func NewBinaryJSON(value interface{}) (BinaryJSON, error) {
 	if value == nil {
@@ -56,6 +77,10 @@ func NewBinaryJSON(value interface{}) (BinaryJSON, error) {
 	case float32:
 		return BinaryJSON{TypeCode: TypeDouble, Value: float64(v)}, nil
 	case float64:
+		// Check if float64 is actually an integer (from JSON parsing)
+		if v == float64(int64(v)) && !isInfOrNaN(v) {
+			return BinaryJSON{TypeCode: TypeInteger, Value: int64(v)}, nil
+		}
 		return BinaryJSON{TypeCode: TypeDouble, Value: v}, nil
 	case bool:
 		return BinaryJSON{TypeCode: TypeLiteral, Value: v}, nil
