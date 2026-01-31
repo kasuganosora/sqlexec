@@ -11,7 +11,10 @@ import (
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/server/protocol"
+	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/config"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/kasuganosora/sqlexec/pkg/session"
 )
 
@@ -20,37 +23,96 @@ type Server struct {
 	listener   net.Listener
 	sessionMgr *session.SessionMgr
 	config     *config.Config
+	db         *api.DB
 }
 
 func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *Server {
 	if cfg == nil {
 		cfg = config.DefaultConfig()
 	}
+
+	// 初始化 API DB
+	db, err := api.NewDB(&api.DBConfig{
+		CacheEnabled:  true,
+		CacheSize:     1000,
+		CacheTTL:      300,
+		DebugMode:     false,
+	})
+	if err != nil {
+		log.Printf("初始化 API DB 失败: %v", err)
+	}
+
+	// 创建并注册 MVCC 数据源
+	memoryDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Name:     "default",
+		Writable: true,
+	})
+
+	if db != nil {
+		// 连接数据源
+		if err := memoryDS.Connect(ctx); err != nil {
+			log.Printf("连接内存数据源失败: %v", err)
+		}
+
+		// 注册数据源到 API DB
+		if err := db.RegisterDataSource("default", memoryDS); err != nil {
+			log.Printf("注册数据源失败: %v", err)
+		} else {
+			log.Printf("已注册数据源: default")
+		}
+	}
+
 	s := &Server{
 		listener:   listener,
 		ctx:        ctx,
 		sessionMgr: session.NewSessionMgr(ctx, session.NewMemoryDriver()),
 		config:     cfg,
+		db:         db,
 	}
 	return s
 }
 
 func (s *Server) Start() (err error) {
-	for {
-		if s.ctx.Err() != nil {
-			return s.ctx.Err()
-		}
-		conn, err := s.listener.Accept()
-		if err != nil {
-			return err
-		}
-		go func(ctx context.Context, conn net.Conn) {
-			err := s.Handle(ctx, conn)
+	acceptChan := make(chan net.Conn)
+	errChan := make(chan error, 1)
+
+	// 启动 goroutine 接受连接
+	go func() {
+		for {
+			conn, err := s.listener.Accept()
 			if err != nil {
-				log.Printf("handle error: %+v\n", err)
-				conn.Close()
+				select {
+				case errChan <- err:
+				default:
+				}
+				return
 			}
-		}(s.ctx, conn)
+			select {
+			case acceptChan <- conn:
+			case <-s.ctx.Done():
+				conn.Close()
+				return
+			}
+		}
+	}()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			s.listener.Close()
+			return s.ctx.Err()
+		case err := <-errChan:
+			return err
+		case conn := <-acceptChan:
+			go func(ctx context.Context, conn net.Conn) {
+				err := s.Handle(ctx, conn)
+				if err != nil {
+					log.Printf("handle error: %+v\n", err)
+				}
+				conn.Close()
+			}(s.ctx, conn)
+		}
 	}
 }
 
@@ -65,6 +127,13 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
 
 	log.Printf("新连接来自: %s:%s, SessionID: %s, ThreadID: %d", addr, port, sess.ID, sess.ThreadID)
 	sess.ResetSequenceID()
+
+	// 创建 API Session 并关联到协议 Session
+	if s.db != nil && sess.GetAPISession() == nil {
+		apiSess := s.db.Session()
+		sess.SetAPISession(apiSess)
+		log.Printf("已为连接创建 API Session")
+	}
 
 	if len(sess.User) == 0 {
 		err = s.handleHandshake(ctx, conn, sess)
@@ -84,10 +153,12 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
 		if err != nil {
 			if err == io.EOF {
 				log.Printf("客户端正常断开连接")
+				sess.CloseAPISession()
 				return nil
 			}
 			log.Printf("读取包失败: %v", err)
 			s.sendError(conn, err, sess.GetNextSequenceID())
+			sess.CloseAPISession()
 			return err
 		}
 
@@ -131,12 +202,12 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
 			commandPack = &protocol.ComDebugPacket{}
 		case protocol.COM_SHUTDOWN:
 			commandPack = &protocol.ComShutdownPacket{}
-		default:
-			errMsg := fmt.Sprintf("不支持的命令类型: %s (0x%02x)", commandName, commandType)
-			log.Printf(errMsg)
-			s.sendError(conn, fmt.Errorf(errMsg), sess.GetNextSequenceID())
-			continue
-		}
+	default:
+		errMsg := fmt.Sprintf("不支持的命令类型: %s (0x%02x)", commandName, commandType)
+		log.Printf("%s", errMsg)
+		s.sendError(conn, fmt.Errorf("不支持的命令类型: %s (0x%02x)", commandName, commandType), sess.GetNextSequenceID())
+		continue
+	}
 
 		if err := s.unmarshalPacket(commandPack, packetContent); err != nil {
 			log.Printf("解析包失败: %v", err)
@@ -245,10 +316,17 @@ func (s *Server) readMySQLPacket(conn net.Conn) ([]byte, error) {
 
 	packetLength := uint32(header[0]) | uint32(header[1])<<8 | uint32(header[2])<<16
 
+	// 验证包长度，避免内存耗尽攻击
+	if packetLength > 0xffffff {
+		return nil, fmt.Errorf("包长度超出限制: %d", packetLength)
+	}
+
 	packetBody := make([]byte, packetLength)
-	_, err = io.ReadFull(conn, packetBody)
-	if err != nil {
-		return nil, err
+	if packetLength > 0 {
+		_, err = io.ReadFull(conn, packetBody)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	fullPacket := make([]byte, 4+packetLength)
@@ -348,8 +426,143 @@ func (s *Server) sendError(conn net.Conn, err error, sequenceID uint8) {
 	errPacket.ErrorInPacket.SqlState = "42000"
 	errPacket.ErrorInPacket.ErrorMessage = err.Error()
 
-	packetBytes, _ := errPacket.Marshal()
-	conn.Write(packetBytes)
+	packetBytes, marshalErr := errPacket.Marshal()
+	if marshalErr != nil {
+		log.Printf("序列化错误包失败: %v", marshalErr)
+		return
+	}
+	if _, writeErr := conn.Write(packetBytes); writeErr != nil {
+		log.Printf("发送错误包失败: %v", writeErr)
+	}
+}
+
+// mapMySQLType 将数据源类型映射为 MySQL 协议类型
+func (s *Server) mapMySQLType(typeStr string) byte {
+	switch {
+	case typeStr == "int", typeStr == "integer":
+		return protocol.MYSQL_TYPE_LONG
+	case typeStr == "tinyint":
+		return protocol.MYSQL_TYPE_TINY
+	case typeStr == "smallint":
+		return protocol.MYSQL_TYPE_SHORT
+	case typeStr == "bigint":
+		return protocol.MYSQL_TYPE_LONGLONG
+	case typeStr == "float":
+		return protocol.MYSQL_TYPE_FLOAT
+	case typeStr == "double":
+		return protocol.MYSQL_TYPE_DOUBLE
+	case typeStr == "decimal", typeStr == "numeric":
+		return protocol.MYSQL_TYPE_DECIMAL
+	case typeStr == "date":
+		return protocol.MYSQL_TYPE_DATE
+	case typeStr == "datetime":
+		return protocol.MYSQL_TYPE_DATETIME
+	case typeStr == "timestamp":
+		return protocol.MYSQL_TYPE_TIMESTAMP
+	case typeStr == "time":
+		return protocol.MYSQL_TYPE_TIME
+	case typeStr == "year":
+		return protocol.MYSQL_TYPE_YEAR
+	case typeStr == "text":
+		return protocol.MYSQL_TYPE_BLOB
+	case typeStr == "blob":
+		return protocol.MYSQL_TYPE_BLOB
+	case typeStr == "boolean", typeStr == "bool":
+		return protocol.MYSQL_TYPE_TINY
+	default:
+		return protocol.MYSQL_TYPE_VAR_STRING
+	}
+}
+
+// columnToFieldMeta 将 domain.ColumnInfo 转换为 protocol.FieldMeta
+func (s *Server) columnToFieldMeta(col domain.ColumnInfo, schema string, table string) protocol.FieldMeta {
+	mysqlType := s.mapMySQLType(col.Type)
+	columnLength := uint32(255)
+
+	return protocol.FieldMeta{
+		Catalog:                   "def",
+		Schema:                    schema,
+		Table:                     table,
+		OrgTable:                  table,
+		Name:                      col.Name,
+		OrgName:                   col.Name,
+		LengthOfFixedLengthFields: 12,
+		CharacterSet:              33,
+		ColumnLength:              columnLength,
+		Type:                      mysqlType,
+		Flags:                     s.getColumnFlags(col),
+		Decimals:                  0,
+		Reserved:                  "\x00\x00",
+	}
+}
+
+// getColumnFlags 根据列属性返回标志位
+func (s *Server) getColumnFlags(col domain.ColumnInfo) uint16 {
+	var flags uint16 = 0
+	if !col.Nullable {
+		flags |= protocol.NOT_NULL_FLAG
+	}
+	if col.Primary {
+		flags |= protocol.PRI_KEY_FLAG
+	}
+	if col.AutoIncrement {
+		flags |= protocol.AUTO_INCREMENT_FLAG
+	}
+	if col.Unique {
+		flags |= protocol.UNIQUE_KEY_FLAG
+	}
+	return flags
+}
+
+// formatRowValue 将行值格式化为字符串
+func (s *Server) formatRowValue(value interface{}) string {
+	if value == nil {
+		return "NULL"
+	}
+	switch v := value.(type) {
+	case string:
+		return v
+	case int, int8, int16, int32, int64:
+		return fmt.Sprintf("%d", value)
+	case uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprintf("%d", value)
+	case float32, float64:
+		return fmt.Sprintf("%f", value)
+	case bool:
+		if v {
+			return "1"
+		}
+		return "0"
+	case []byte:
+		return string(v)
+	default:
+		return fmt.Sprintf("%v", value)
+	}
+}
+
+// sendQueryResult 发送查询结果（从 domain.QueryResult 转换为 MySQL 协议格式）
+func (s *Server) sendQueryResult(conn net.Conn, sess *session.Session, result *domain.QueryResult, schema string, table string) error {
+	// 转换列定义
+	columns := make([]protocol.FieldMeta, len(result.Columns))
+	for i, col := range result.Columns {
+		columns[i] = s.columnToFieldMeta(col, schema, table)
+	}
+
+	// 转换行数据
+	rows := make([][]string, len(result.Rows))
+	for i, row := range result.Rows {
+		rowData := make([]string, len(result.Columns))
+		for j, col := range result.Columns {
+			if val, exists := row[col.Name]; exists {
+				rowData[j] = s.formatRowValue(val)
+			} else {
+				rowData[j] = "NULL"
+			}
+		}
+		rows[i] = rowData
+	}
+
+	return s.sendResultSet(conn, sess, columns, rows)
 }
 
 func (s *Server) sendOK(conn net.Conn, sequenceID uint8) error {
@@ -407,23 +620,81 @@ func (s *Server) handleSelect(sess *session.Session, conn net.Conn, query string
 		return s.handleVariableSelect(sess, conn, query)
 	}
 
-	return s.sendResultSet(conn, sess, []protocol.FieldMeta{
-		{
-			Catalog:                   "def",
-			Schema:                    "test",
-			Table:                     "test_table",
-			OrgTable:                  "test_table",
-			Name:                      "id",
-			OrgName:                   "id",
-			LengthOfFixedLengthFields: 12,
-			CharacterSet:              33,
-			ColumnLength:              11,
-			Type:                      protocol.MYSQL_TYPE_LONG,
-			Flags:                     protocol.NOT_NULL_FLAG | protocol.PRI_KEY_FLAG,
-			Decimals:                  0,
-			Reserved:                  "\x00\x00",
-		},
-	}, [][]string{{"1"}})
+	// 使用 API Session 执行查询
+	apiSessIntf := sess.GetAPISession()
+	if apiSessIntf == nil {
+		log.Printf("API Session 未初始化")
+		err := fmt.Errorf("database not initialized")
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+
+	apiSess, ok := apiSessIntf.(*api.Session)
+	if !ok {
+		log.Printf("API Session 类型断言失败")
+		err := fmt.Errorf("invalid session type")
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+
+	queryObj, err := apiSess.Query(query)
+	if err != nil {
+		log.Printf("查询失败: %v", err)
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	defer queryObj.Close()
+
+	// 获取列信息
+	columns := queryObj.Columns()
+	if len(columns) == 0 {
+		// 使用空结果集
+		emptyResult := &domain.QueryResult{
+			Columns: []domain.ColumnInfo{},
+			Rows:    []domain.Row{},
+		}
+		return s.sendQueryResult(conn, sess, emptyResult, "", "")
+	}
+
+	// 收集所有行数据
+	var rows []domain.Row
+	for queryObj.Next() {
+		rows = append(rows, queryObj.Row())
+	}
+
+	if queryObj.Err() != nil {
+		log.Printf("遍历结果集失败: %v", queryObj.Err())
+		s.sendError(conn, queryObj.Err(), sess.GetNextSequenceID())
+		return queryObj.Err()
+	}
+
+	// 构建 QueryResult
+	result := &domain.QueryResult{
+		Columns: columns,
+		Rows:    rows,
+	}
+
+	// 从 SQL 解析表名
+	schema := ""
+	table := ""
+	if strings.Contains(strings.ToLower(query), "from") {
+		fromParts := strings.Split(strings.ToLower(query), "from")
+		if len(fromParts) > 1 {
+			tableParts := strings.Fields(fromParts[1])
+			if len(tableParts) > 0 {
+				table = strings.Trim(tableParts[0], "` ")
+				if strings.Contains(table, ".") {
+					parts := strings.Split(table, ".")
+					if len(parts) == 2 {
+						schema = parts[0]
+						table = parts[1]
+					}
+				}
+			}
+		}
+	}
+
+	return s.sendQueryResult(conn, sess, result, schema, table)
 }
 
 func (s *Server) handleVariableSelect(sess *session.Session, conn net.Conn, query string) error {
@@ -539,12 +810,77 @@ func (s *Server) handleUse(sess *session.Session, conn net.Conn, query string) e
 	dbName := strings.TrimSpace(query[3:])
 	log.Printf("切换数据库: %s", dbName)
 	sess.Set("current_database", dbName)
+
+	// API Session 执行 USE 语句
+	apiSessIntf := sess.GetAPISession()
+	if apiSessIntf != nil {
+		if apiSess, ok := apiSessIntf.(*api.Session); ok {
+			_, err := apiSess.Query(query)
+			if err != nil {
+				log.Printf("API Session 切换数据库失败: %v", err)
+				// 不返回错误，因为可能是数据库不存在
+			}
+		}
+	}
+
 	return s.sendOK(conn, sess.GetNextSequenceID())
 }
 
 func (s *Server) handleDML(sess *session.Session, conn net.Conn, query string) error {
 	log.Printf("处理 DML 查询: %s", query)
-	return s.sendOK(conn, sess.GetNextSequenceID())
+
+	// 使用 API Session 执行 DML
+	apiSessIntf := sess.GetAPISession()
+	if apiSessIntf == nil {
+		log.Printf("API Session 未初始化")
+		err := fmt.Errorf("database not initialized")
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+
+	apiSess, ok := apiSessIntf.(*api.Session)
+	if !ok {
+		log.Printf("API Session 类型断言失败")
+		err := fmt.Errorf("invalid session type")
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+
+	result, err := apiSess.Execute(query)
+	if err != nil {
+		log.Printf("DML 执行失败: %v", err)
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+
+	if result.Err() != nil {
+		log.Printf("DML 结果错误: %v", result.Err())
+		s.sendError(conn, result.Err(), sess.GetNextSequenceID())
+		return result.Err()
+	}
+
+	// 发送 OK 包
+	okPacket := &protocol.OkPacket{}
+	okPacket.SequenceID = sess.GetNextSequenceID()
+	okPacket.OkInPacket.Header = 0x00
+	okPacket.OkInPacket.AffectedRows = uint64(result.RowsAffected)
+	okPacket.OkInPacket.LastInsertId = uint64(result.LastInsertID)
+	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
+	okPacket.OkInPacket.Warnings = 0
+
+	packetBytes, err := okPacket.Marshal()
+	if err != nil {
+		log.Printf("序列化 OK 包失败: %v", err)
+		return err
+	}
+
+	_, err = conn.Write(packetBytes)
+	if err != nil {
+		log.Printf("发送 OK 包失败: %v", err)
+		return err
+	}
+
+	return nil
 }
 
 func (s *Server) handleComInitDB(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComInitDBPacket) error {
@@ -649,9 +985,20 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 
 	columnCount := s.analyzeColumns(query.(string))
 
-	columnCountData := []byte{0x01, 0x00, 0x00, sess.GetNextSequenceID()}
-	_, err := conn.Write(columnCountData)
+	columnCountPacket := &protocol.ColumnCountPacket{
+		Packet: protocol.Packet{
+			SequenceID: sess.GetNextSequenceID(),
+		},
+		ColumnCount: uint64(columnCount),
+	}
+	columnCountData, err := columnCountPacket.MarshalDefault()
 	if err != nil {
+		log.Printf("序列化列数包失败: %v", err)
+		return err
+	}
+	_, err = conn.Write(columnCountData)
+	if err != nil {
+		log.Printf("发送列数包失败: %v", err)
 		return err
 	}
 
@@ -679,9 +1026,11 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 		}
 		fieldMetaData, err := fieldMeta.MarshalDefault()
 		if err != nil {
+			log.Printf("序列化字段元数据失败: %v", err)
 			return err
 		}
 		if _, err := conn.Write(fieldMetaData); err != nil {
+			log.Printf("发送字段元数据失败: %v", err)
 			return err
 		}
 	}
@@ -689,9 +1038,11 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 	eofPacket := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
 	eofData, err := eofPacket.Marshal()
 	if err != nil {
+		log.Printf("序列化EOF包失败: %v", err)
 		return err
 	}
 	if _, err := conn.Write(eofData); err != nil {
+		log.Printf("发送EOF包失败: %v", err)
 		return err
 	}
 
@@ -703,18 +1054,22 @@ func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session
 	}
 	rowDataBytes, err := rowData.Marshal()
 	if err != nil {
+		log.Printf("序列化行数据失败: %v", err)
 		return err
 	}
 	if _, err := conn.Write(rowDataBytes); err != nil {
+		log.Printf("发送行数据失败: %v", err)
 		return err
 	}
 
 	finalEof := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
 	finalEofData, err := finalEof.Marshal()
 	if err != nil {
+		log.Printf("序列化最终EOF包失败: %v", err)
 		return err
 	}
 	if _, err := conn.Write(finalEofData); err != nil {
+		log.Printf("发送最终EOF包失败: %v", err)
 		return err
 	}
 
@@ -756,7 +1111,10 @@ func (s *Server) handleComRefresh(ctx context.Context, sess *session.Session, co
 func (s *Server) handleComStatistics(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStatisticsPacket) error {
 	log.Printf("处理 COM_STATISTICS")
 	stats := "Uptime: 3600  Threads: 1  Questions: 10  Slow queries: 0  Opens: 5  Flush tables: 1  Open tables: 4  Queries per second avg: 0.003"
-	conn.Write([]byte(stats))
+	if _, err := conn.Write([]byte(stats)); err != nil {
+		log.Printf("发送统计信息失败: %v", err)
+		return err
+	}
 	return nil
 }
 

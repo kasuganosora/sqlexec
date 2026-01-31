@@ -14,7 +14,7 @@ func main() {
 	// 加载配置
 	cfg := config.LoadConfigOrDefault()
 
-	listener, err := net.Listen("tcp", cfg.GetListenAddress())
+	listener, err := net.Listen("tcp4", cfg.GetListenAddress())
 	if err != nil {
 		log.Fatal("监听端口失败:", err)
 		return
@@ -34,6 +34,12 @@ func main() {
 	// 启动服务器
 	if err := srv.Start(ctx, listener); err != nil {
 		log.Fatal("服务器启动失败:", err)
+	}
+
+	// 阻塞主 goroutine
+	select {
+	case <-ctx.Done():
+		log.Println("服务器停止")
 	}
 }
 

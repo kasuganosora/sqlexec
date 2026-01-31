@@ -170,6 +170,7 @@ type Session struct {
 	RemoteIP   string    `json:"remote_ip"`
 	RemotePort string    `json:"remote_port"`
 	SequenceID uint8     `json:"sequence_id"` // 添加序列号字段
+	APISession interface{} `json:"api_session"` // API 层会话（避免循环导入）
 }
 
 // Get 获取会话值
@@ -251,6 +252,27 @@ func (s *Session) GetNextSequenceID() uint8 {
 // ResetSequenceID 重置序列号为0
 func (s *Session) ResetSequenceID() {
 	s.SequenceID = 0
+}
+
+// SetAPISession 设置 API 层会话
+func (s *Session) SetAPISession(apiSess interface{}) {
+	s.APISession = apiSess
+}
+
+// GetAPISession 获取 API 层会话
+func (s *Session) GetAPISession() interface{} {
+	return s.APISession
+}
+
+// CloseAPISession 关闭 API 层会话
+func (s *Session) CloseAPISession() error {
+	if s.APISession != nil {
+		// 通过类型断言来调用 Close 方法
+		if closer, ok := s.APISession.(interface{ Close() error }); ok {
+			return closer.Close()
+		}
+	}
+	return nil
 }
 
 type SessionDriver interface {
