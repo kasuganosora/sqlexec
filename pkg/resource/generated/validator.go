@@ -41,8 +41,13 @@ func (v *GeneratedColumnValidator) BuildDependencyGraph(tableInfo *domain.TableI
 
 	// 为每个生成列构建依赖边
 	for _, col := range tableInfo.Columns {
-		if col.IsGenerated && len(col.GeneratedDepends) > 0 {
-			graph[col.Name] = col.GeneratedDepends
+		if col.IsGenerated {
+			if len(col.GeneratedDepends) > 0 {
+				graph[col.Name] = col.GeneratedDepends
+			} else {
+				// 即使没有依赖，也要添加空边，确保所有生成列都在图中
+				graph[col.Name] = []string{}
+			}
 		}
 	}
 

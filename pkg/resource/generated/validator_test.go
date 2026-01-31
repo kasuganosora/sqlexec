@@ -31,7 +31,6 @@ func TestBuildDependencyGraph(t *testing.T) {
 }
 
 func TestCheckCyclicDependency_NoCycle(t *testing.T) {
-	t.Skip("暂时跳过，简化版的拓扑排序不支持级联依赖")
 	validator := &GeneratedColumnValidator{}
 
 	tableInfo := &domain.TableInfo{
@@ -45,6 +44,72 @@ func TestCheckCyclicDependency_NoCycle(t *testing.T) {
 
 	err := validator.CheckCyclicDependency(tableInfo)
 	assert.NoError(t, err)
+}
+
+// TestCheckCyclicDependency_NoGeneratedColumns 测试没有生成列的情况
+func TestCheckCyclicDependency_NoGeneratedColumns(t *testing.T) {
+	validator := &GeneratedColumnValidator{}
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "col1", Type: "INT", Nullable: true},
+			{Name: "col2", Type: "INT", Nullable: true},
+		},
+	}
+
+	err := validator.CheckCyclicDependency(tableInfo)
+	assert.NoError(t, err)
+}
+
+// TestCheckCyclicDependency_SimpleNoCycle 测试简单的无循环依赖
+func TestCheckCyclicDependency_SimpleNoCycle(t *testing.T) {
+	validator := &GeneratedColumnValidator{}
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "col1", Type: "INT", Nullable: true},
+			{Name: "col2", Type: "INT", Nullable: true, IsGenerated: true, GeneratedExpr: "col1 * 2", GeneratedDepends: []string{"col1"}},
+		},
+	}
+
+	err := validator.CheckCyclicDependency(tableInfo)
+	assert.NoError(t, err)
+}
+
+// TestCheckCyclicDependency_ComplexCycle 测试复杂循环依赖
+func TestCheckCyclicDependency_ComplexCycle(t *testing.T) {
+	validator := &GeneratedColumnValidator{}
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "col1", Type: "INT", Nullable: true, IsGenerated: true, GeneratedExpr: "col2 + 1", GeneratedDepends: []string{"col2"}},
+			{Name: "col2", Type: "INT", Nullable: true, IsGenerated: true, GeneratedExpr: "col3 + 1", GeneratedDepends: []string{"col3"}},
+			{Name: "col3", Type: "INT", Nullable: true, IsGenerated: true, GeneratedExpr: "col1 + 1", GeneratedDepends: []string{"col1"}},
+		},
+	}
+
+	err := validator.CheckCyclicDependency(tableInfo)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cyclic dependency")
+}
+
+// TestCheckCyclicDependency_SelfLoop 测试自循环
+func TestCheckCyclicDependency_SelfLoop(t *testing.T) {
+	validator := &GeneratedColumnValidator{}
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "col1", Type: "INT", Nullable: true, IsGenerated: true, GeneratedExpr: "col1 + 1", GeneratedDepends: []string{"col1"}},
+		},
+	}
+
+	err := validator.CheckCyclicDependency(tableInfo)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cyclic dependency")
 }
 
 func TestCheckCyclicDependency_WithCycle(t *testing.T) {
@@ -265,4 +330,56 @@ func TestContains(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestBuildDependencyGraph_NoGenerated 测试没有生成列的情况
+func TestBuildDependencyGraph_NoGenerated(t *testing.T) {
+	validator := &GeneratedColumnValidator{}
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "col1", Type: "INT", Nullable: true},
+			{Name: "col2", Type: "INT", Nullable: true},
+		},
+	}
+
+	graph := validator.BuildDependencyGraph(tableInfo)
+	assert.Equal(t, 0, len(graph))
+}
+
+// TestBuildDependencyGraph_DependOnNonGenerated 测试依赖非生成列
+func TestBuildDependencyGraph_DependOnNonGenerated(t *testing.T) {
+	validator := &GeneratedColumnValidator{}
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "base1", Type: "INT", Nullable: true},
+			{Name: "base2", Type: "INT", Nullable: true},
+			{Name: "generated", Type: "INT", Nullable: true, IsGenerated: true, GeneratedExpr: "base1 + base2", GeneratedDepends: []string{"base1", "base2"}},
+		},
+	}
+
+	graph := validator.BuildDependencyGraph(tableInfo)
+	assert.Equal(t, 1, len(graph))
+	assert.Contains(t, graph, "generated")
+	assert.Equal(t, []string{"base1", "base2"}, graph["generated"])
+}
+
+// TestValidateSchema_AutoIncrement 测试 AUTO_INCREMENT 列引用
+func TestValidateSchema_AutoIncrement(t *testing.T) {
+	validator := &GeneratedColumnValidator{}
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Nullable: false, AutoIncrement: true},
+			{Name: "calc", Type: "INT", Nullable: true, IsGenerated: true, GeneratedExpr: "id * 2", GeneratedDepends: []string{"id"}},
+		},
+	}
+
+	err := validator.CheckAutoIncrementReference(tableInfo)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "AUTO_INCREMENT")
 }

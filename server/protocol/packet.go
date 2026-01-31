@@ -3162,7 +3162,7 @@ func (p *ProgressReportPacket) Unmarshal(r io.Reader) error {
 
 	p.Stage, _ = ReadNumber[uint8](reader, 1)
 	p.MaxStage, _ = ReadNumber[uint8](reader, 1)
-	p.Progress, _ = ReadNumber[uint32](reader, 3)
+	p.Progress, _ = ReadNumber[uint32](reader, 4)
 	p.Info, _ = ReadStringByNullEndFromReader(reader)
 	
 	return nil
@@ -3178,10 +3178,8 @@ func (p *ProgressReportPacket) Marshal() ([]byte, error) {
 	// 写入阶段信息
 	WriteNumber(buf, p.Stage, 1)
 	WriteNumber(buf, p.MaxStage, 1)
-	// 写入进度值（3字节小端）
-	buf.WriteByte(byte(p.Progress))
-	buf.WriteByte(byte(p.Progress >> 8))
-	buf.WriteByte(byte(p.Progress >> 16))
+	// 写入进度值（4字节小端）
+	WriteNumber(buf, p.Progress, 4)
 	// 写入进度信息
 	WriteStringByNullEnd(buf, p.Info)
 

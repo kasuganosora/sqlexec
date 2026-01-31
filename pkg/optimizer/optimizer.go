@@ -197,13 +197,40 @@ func (o *Optimizer) convertConditionsToFilters(conditions []*parser.Expression) 
 			continue
 		}
 
-		filter := o.convertExpressionToFilter(cond)
-		if filter != nil {
-			filters = append(filters, *filter)
-		}
+		// 提取 AND 条件中的所有独立条件
+		conditionFilters := o.extractFiltersFromCondition(cond)
+		filters = append(filters, conditionFilters...)
 	}
 
 	fmt.Println("  [DEBUG] convertConditionsToFilters: 生成的过滤器数量:", len(filters))
+	return filters
+}
+
+// extractFiltersFromCondition 从条件中提取所有过滤器（处理 AND 表达式）
+func (o *Optimizer) extractFiltersFromCondition(expr *parser.Expression) []domain.Filter {
+	filters := []domain.Filter{}
+	
+	if expr == nil {
+		return filters
+	}
+
+	// 如果是 AND 操作符，递归处理两边
+	if expr.Type == parser.ExprTypeOperator && expr.Operator == "and" {
+		if expr.Left != nil {
+			filters = append(filters, o.extractFiltersFromCondition(expr.Left)...)
+		}
+		if expr.Right != nil {
+			filters = append(filters, o.extractFiltersFromCondition(expr.Right)...)
+		}
+		return filters
+	}
+
+	// 否则，转换为单个过滤器
+	filter := o.convertExpressionToFilter(expr)
+	if filter != nil {
+		filters = append(filters, *filter)
+	}
+
 	return filters
 }
 

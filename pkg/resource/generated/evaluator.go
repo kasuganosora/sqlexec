@@ -65,6 +65,7 @@ func (e *GeneratedColumnEvaluator) EvaluateAll(
 	schema *domain.TableInfo,
 ) (domain.Row, error) {
 	// 获取生成列计算顺序（拓扑排序）
+	// 注意：只计算 STORED 类型的生成列，VIRTUAL 列在查询时动态计算
 	order, err := e.GetEvaluationOrder(schema)
 	if err != nil {
 		// 计算失败时返回错误
@@ -80,6 +81,11 @@ func (e *GeneratedColumnEvaluator) EvaluateAll(
 	for _, colName := range order {
 		colInfo := e.getColumnInfo(colName, schema)
 		if colInfo == nil || !colInfo.IsGenerated {
+			continue
+		}
+
+		// 只计算 STORED 类型的生成列，跳过 VIRTUAL 列
+		if colInfo.GeneratedType == "VIRTUAL" {
 			continue
 		}
 
@@ -147,11 +153,10 @@ func (e *GeneratedColumnEvaluator) GetEvaluationOrder(
 		}
 
 		// 减少依赖此节点的其他节点的入度
+		// 注意：不要修改原始 graph，而是使用单独的 tracking
 		for otherName, deps := range graph {
-			for i, dep := range deps {
+			for _, dep := range deps {
 				if dep == node {
-					deps = append(deps[:i], deps[i+1:]...)
-					graph[otherName] = deps
 					inDegree[otherName]--
 					break
 				}
@@ -169,7 +174,28 @@ func (e *GeneratedColumnEvaluator) GetEvaluationOrder(
 	}
 
 	// 检查是否存在循环依赖
-	if len(order) != countGeneratedColumns(schema) {
+	storedColCount := 0
+	orderCount := 0
+	for _, col := range schema.Columns {
+		if col.IsGenerated && col.GeneratedType != "VIRTUAL" {
+			storedColCount++
+		}
+	}
+
+	// 统计实际被添加到order的STORED列
+	for _, colName := range order {
+		colInfo := e.getColumnInfo(colName, schema)
+		if colInfo != nil && colInfo.IsGenerated && colInfo.GeneratedType != "VIRTUAL" {
+			orderCount++
+		}
+	}
+
+	// 如果没有 STORED 列需要计算，直接返回空列表
+	if storedColCount == 0 {
+		return []string{}, nil
+	}
+
+	if orderCount != storedColCount {
 		return nil, fmt.Errorf("cyclic dependency detected in generated columns")
 	}
 
@@ -200,6 +226,24 @@ func (e *GeneratedColumnEvaluator) evaluateSimpleExpression(expr string, row dom
 		return false, nil
 	}
 
+	// 处理括号（最高优先级）
+	if strings.HasPrefix(expr, "(") && strings.HasSuffix(expr, ")") {
+		// 验证括号是否匹配
+		if e.isBalancedParentheses(expr) {
+			// 去掉最外层括号，递归计算
+			innerExpr := strings.TrimSpace(expr[1 : len(expr)-1])
+			return e.evaluateSimpleExpression(innerExpr, row)
+		}
+	}
+
+	// 处理函数调用
+	if strings.Contains(expr, "(") && strings.Contains(expr, ")") {
+		// 确保不是括号表达式
+		if !strings.HasPrefix(expr, "(") {
+			return e.evaluateFunctionCall(expr, row)
+		}
+	}
+
 	// 处理比较运算（优先级高，先处理）
 	if strings.Contains(expr, "=") && !strings.Contains(expr, "!=") && !strings.Contains(expr, "<=") && !strings.Contains(expr, ">=") {
 		return e.evaluateBinaryOp(expr, row, "=")
@@ -221,27 +265,17 @@ func (e *GeneratedColumnEvaluator) evaluateSimpleExpression(expr string, row dom
 	}
 
 	// 处理乘除模运算（优先级高于加减）
-	if strings.Contains(expr, "/") {
-		return e.evaluateBinaryOp(expr, row, "/")
-	}
-	if strings.Contains(expr, "%") {
-		return e.evaluateBinaryOp(expr, row, "%")
-	}
-	if strings.Contains(expr, "*") {
-		return e.evaluateBinaryOp(expr, row, "*")
+	// 先计算所有乘除，从左到右
+	// 只有在没有加减运算符时才进入这里
+	// 如果同时存在 * 和 +，应该由 evaluateAddSub 处理（因为 + 优先级更低）
+	if (strings.Contains(expr, "*") || strings.Contains(expr, "/") || strings.Contains(expr, "%")) &&
+		!strings.Contains(expr, "+") && !strings.Contains(expr, "-") {
+		return e.evaluateMulDiv(expr, row, "*")
 	}
 
 	// 处理加减运算（优先级较低）
-	if strings.Contains(expr, "+") {
-		return e.evaluateBinaryOp(expr, row, "+")
-	}
-	if strings.Contains(expr, "-") {
-		return e.evaluateBinaryOp(expr, row, "-")
-	}
-
-	// 处理函数调用
-	if strings.Contains(expr, "(") && strings.Contains(expr, ")") {
-		return e.evaluateFunctionCall(expr, row)
+	if strings.Contains(expr, "+") || strings.Contains(expr, "-") {
+		return e.evaluateAddSub(expr, row, "+")
 	}
 
 	// 如果包含冒号且不是函数调用，可能是列引用（如 price:10），直接尝试获取
@@ -252,6 +286,154 @@ func (e *GeneratedColumnEvaluator) evaluateSimpleExpression(expr string, row dom
 	}
 
 	return nil, fmt.Errorf("unsupported expression: %s", expr)
+}
+
+// evaluateMulDiv 评估乘除运算（递归处理）
+func (e *GeneratedColumnEvaluator) evaluateMulDiv(expr string, row domain.Row, targetOp string) (interface{}, error) {
+	// 找到不在括号内的运算符（* / %）
+	opIndex := -1
+	parenDepth := 0
+	
+	for i := 0; i < len(expr); i++ {
+		ch := expr[i]
+		if ch == '(' {
+			parenDepth++
+		} else if ch == ')' {
+			parenDepth--
+		} else if parenDepth == 0 {
+			// 检查是否是 * / %
+			if ch == '*' || ch == '/' || ch == '%' {
+				opIndex = i
+				break
+			}
+		}
+	}
+	
+	if opIndex == -1 {
+		// 没有乘除运算，直接返回简单表达式
+		return e.evaluateSimpleExpression(expr, row)
+	}
+	
+	op := string(expr[opIndex])
+	left := strings.TrimSpace(expr[:opIndex])
+	right := strings.TrimSpace(expr[opIndex+1:])
+	
+	// 递归评估左操作数（可能包含同级运算符）
+	leftVal, err := e.evaluateMulDiv(left, row, "*")
+	if err != nil {
+		leftVal, err = e.evaluateSimpleExpression(left, row)
+		if err != nil {
+			return nil, err
+		}
+	}
+	
+	// 递归评估右操作数（可能包含同级运算符）
+	rightVal, err := e.evaluateMulDiv(right, row, "*")
+	if err != nil {
+		rightVal, err = e.evaluateSimpleExpression(right, row)
+		if err != nil {
+			return nil, err
+		}
+	}
+	
+	// 执行运算
+	return e.performBinaryOp(leftVal, rightVal, op)
+}
+
+// evaluateAddSub 评估加减运算（递归处理）
+func (e *GeneratedColumnEvaluator) evaluateAddSub(expr string, row domain.Row, op string) (interface{}, error) {
+	// 找到不在括号内的运算符（+ -）
+	opIndex := -1
+	parenDepth := 0
+	
+	for i := 0; i < len(expr); i++ {
+		ch := expr[i]
+		if ch == '(' {
+			parenDepth++
+		} else if ch == ')' {
+			parenDepth--
+		} else if parenDepth == 0 {
+			// 检查是否是 + -（避免负号）
+			if ch == '+' || ch == '-' {
+				// 确保不是负号的一部分
+				if i == 0 || expr[i-1] == ' ' || expr[i-1] == '*' || expr[i-1] == '/' {
+					opIndex = i
+					break
+				}
+			}
+		}
+	}
+	
+	if opIndex == -1 {
+		// 没有加减运算，尝试处理乘除
+		return e.evaluateMulDiv(expr, row, "*")
+	}
+	
+	opChar := string(expr[opIndex])
+	left := strings.TrimSpace(expr[:opIndex])
+	right := strings.TrimSpace(expr[opIndex+1:])
+	
+	// 递归评估左操作数（先处理乘除）
+	leftVal, err := e.evaluateMulDiv(left, row, "*")
+	if err != nil {
+		leftVal, err = e.evaluateSimpleExpression(left, row)
+		if err != nil {
+			return nil, err
+		}
+	}
+	
+	// 递归评估右操作数（先处理乘除）
+	rightVal, err := e.evaluateMulDiv(right, row, "*")
+	if err != nil {
+		rightVal, err = e.evaluateSimpleExpression(right, row)
+		if err != nil {
+			return nil, err
+		}
+	}
+	
+	// 执行运算
+	return e.performBinaryOp(leftVal, rightVal, opChar)
+}
+
+// isBalancedParentheses 检查括号是否平衡且匹配
+func (e *GeneratedColumnEvaluator) isBalancedParentheses(expr string) bool {
+	count := 0
+	for _, ch := range expr {
+		if ch == '(' {
+			count++
+		} else if ch == ')' {
+			count--
+			if count < 0 {
+				return false
+			}
+		}
+	}
+	return count == 0
+}
+
+// findOperatorOutsideParentheses 查找不在括号内的运算符位置
+func (e *GeneratedColumnEvaluator) findOperatorOutsideParentheses(expr, op string) int {
+	parenDepth := 0
+	
+	for i := 0; i < len(expr); i++ {
+		ch := expr[i]
+		if ch == '(' {
+			parenDepth++
+		} else if ch == ')' {
+			parenDepth--
+		} else if parenDepth == 0 {
+			// 检查是否匹配运算符
+			if i+len(op) <= len(expr) && expr[i:i+len(op)] == op {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// hasOperatorOutsideParentheses 检查是否有不在括号内的运算符
+func (e *GeneratedColumnEvaluator) hasOperatorOutsideParentheses(expr, op string) bool {
+	return e.findOperatorOutsideParentheses(expr, op) != -1
 }
 
 // isNumericLiteral 检查是否为数字字面量

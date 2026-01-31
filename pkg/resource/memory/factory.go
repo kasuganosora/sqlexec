@@ -23,12 +23,16 @@ func (f *MemoryFactory) GetType() domain.DataSourceType {
 func (f *MemoryFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	// 内存数据源默认可写
 	writable := true
+	name := "memory"
 	if config != nil {
 		writable = config.Writable
+		if config.Name != "" {
+			name = config.Name
+		}
 	}
 	return NewMVCCDataSource(&domain.DataSourceConfig{
 		Type:     domain.DataSourceTypeMemory,
-		Name:     config.Name,
+		Name:     name,
 		Writable: writable,
 	}), nil
 }

@@ -58,7 +58,14 @@ func (v *VirtualCalculator) CalculateColumn(
 		return nil, err
 	}
 
-	return result, nil
+	// 类型转换到列的目标类型
+	castedResult, castErr := CastToType(result, col.Type)
+	if castErr != nil {
+		// 类型转换失败时返回 NULL 和错误
+		return nil, castErr
+	}
+
+	return castedResult, nil
 }
 
 // CalculateRowVirtuals 计算行中所有 VIRTUAL 列的值
@@ -73,21 +80,21 @@ func (v *VirtualCalculator) CalculateRowVirtuals(
 		result[k] = val
 	}
 
-	// 获取所有生成列的计算顺序（包括 STORED 和 VIRTUAL）
-	order, err := v.getEvaluationOrder(schema)
+	// 获取所有 VIRTUAL 列的计算顺序（只包括 VIRTUAL）
+	order, err := v.getVirtualColumnOrder(schema)
 	if err != nil {
 		// 如果获取顺序失败，返回原始行
 		return result, nil
 	}
 
-	// 逐个计算所有生成列
+	// 逐个计算所有 VIRTUAL 列
 	for _, colName := range order {
 		colInfo := v.getColumnInfo(colName, schema)
 		if colInfo == nil || !colInfo.IsGenerated {
 			continue
 		}
 
-		// 只计算 VIRTUAL 列（STORED 列由其他逻辑处理）
+		// 只计算 VIRTUAL 列
 		if colInfo.GeneratedType != "VIRTUAL" {
 			continue
 		}
@@ -156,6 +163,95 @@ func (v *VirtualCalculator) getEvaluationOrder(schema *domain.TableInfo) ([]stri
 	evaluator := NewGeneratedColumnEvaluator()
 	order, err := evaluator.GetEvaluationOrder(schema)
 	return order, err
+}
+
+// getVirtualColumnOrder 获取 VIRTUAL 列的计算顺序
+func (v *VirtualCalculator) getVirtualColumnOrder(schema *domain.TableInfo) ([]string, error) {
+	// 收集所有 VIRTUAL 列
+	virtualCols := make([]string, 0)
+	for _, col := range schema.Columns {
+		if col.IsGenerated && col.GeneratedType == "VIRTUAL" {
+			virtualCols = append(virtualCols, col.Name)
+		}
+	}
+
+	// 对 VIRTUAL 列进行拓扑排序（基于依赖关系）
+	validator := &GeneratedColumnValidator{}
+	graph := validator.BuildDependencyGraph(schema)
+
+	order := make([]string, 0)
+	inDegree := make(map[string]int)
+	visited := make(map[string]bool)
+
+	// 初始化入度
+	for _, colName := range virtualCols {
+		inDegree[colName] = 0
+	}
+
+	// 计算入度（仅考虑 VIRTUAL 列之间的依赖）
+	for _, colName := range virtualCols {
+		if deps, ok := graph[colName]; ok {
+			// 只计算依赖也是 VIRTUAL 列的依赖
+			virtualDeps := make([]string, 0)
+			for _, dep := range deps {
+				// 检查依赖是否是 VIRTUAL 列
+				for _, col := range schema.Columns {
+					if col.Name == dep && col.IsGenerated && col.GeneratedType == "VIRTUAL" {
+						virtualDeps = append(virtualDeps, dep)
+						break
+					}
+				}
+			}
+			inDegree[colName] = len(virtualDeps)
+		}
+	}
+
+	// 拓扑排序
+	queue := make([]string, 0)
+	for _, colName := range virtualCols {
+		if inDegree[colName] == 0 {
+			queue = append(queue, colName)
+			visited[colName] = true
+		}
+	}
+
+	for len(queue) > 0 {
+		node := queue[0]
+		queue = queue[1:]
+		order = append(order, node)
+
+		// 减少入度
+		for _, colName := range virtualCols {
+			if !visited[colName] {
+				if deps, ok := graph[colName]; ok {
+					for _, dep := range deps {
+						// 只处理 VIRTUAL 依赖
+						isVirtualDep := false
+						for _, col := range schema.Columns {
+							if col.Name == dep && col.IsGenerated && col.GeneratedType == "VIRTUAL" {
+								isVirtualDep = true
+								break
+							}
+						}
+						if isVirtualDep && dep == node {
+							inDegree[colName]--
+							break
+						}
+					}
+				}
+			}
+		}
+
+		// 将入度为0的节点加入队列
+		for _, colName := range virtualCols {
+			if !visited[colName] && inDegree[colName] == 0 {
+				queue = append(queue, colName)
+				visited[colName] = true
+			}
+		}
+	}
+
+	return order, nil
 }
 
 // IsVirtualColumn 检查列是否为 VIRTUAL 类型

@@ -750,6 +750,16 @@ func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *d
 			Rows:    pagedRows,
 			Total:   int64(len(pagedRows)),
 		}
+		// 第二阶段：处理 VIRTUAL 列的动态计算
+		virtualCalc := generated.NewVirtualCalculator()
+		if virtualCalc.HasVirtualColumns(tableData.schema) {
+			// 动态计算所有 VIRTUAL 列
+			calculatedRows, calcErr := virtualCalc.CalculateBatchVirtuals(queryResult.Rows, tableData.schema)
+			if calcErr == nil {
+				queryResult.Rows = calculatedRows
+			}
+			// 如果计算失败，使用原始行数据（VIRTUAL 列为 NULL）
+		}
 	}
 
 	return queryResult, nil
@@ -782,33 +792,50 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	processedRows := make([]domain.Row, 0, len(rows))
 	evaluator := generated.NewGeneratedColumnEvaluator()
 
-	for i, row := range rows {
-		// 调试：打印原始行数据
-		fmt.Printf("DEBUG Insert: Original row %d: %+v\n", i, row)
-		
+	for _, row := range rows {
 		// 1. 过滤生成列的显式插入值（不允许显式插入）
 		filteredRow := generated.FilterGeneratedColumns(row, schema)
-		fmt.Printf("DEBUG Insert: Filtered row %d: %+v\n", i, filteredRow)
 
 		// 2. 区分 STORED 和 VIRTUAL 列
 		// STORED 列：计算并存储
 		// VIRTUAL 列：不存储到表数据中
 		var storedRow domain.Row
-		
+
 		// 检查表是否包含 VIRTUAL 列
-		hasVirtualCols := generated.IsVirtualColumn("", schema)
-		
+		hasVirtualCols := false
+		for _, col := range schema.Columns {
+			if col.IsGenerated && col.GeneratedType == "VIRTUAL" {
+				hasVirtualCols = true
+				break
+			}
+		}
+
 		if hasVirtualCols {
 			// 计算所有 STORED 生成列（不包括 VIRTUAL）
+			// 注意：EvaluateAll 会计算所有生成列，但我们只保存 STORED 列
 			computedRow, err := evaluator.EvaluateAll(filteredRow, schema)
-			fmt.Printf("DEBUG Insert: Computed row %d: %+v (err: %v)\n", i, computedRow, err)
 			if err != nil {
 				// 计算失败，将生成列设为 NULL
 				computedRow = generated.SetGeneratedColumnsToNULL(filteredRow, schema)
 			}
-			
+
 			// 移除 VIRTUAL 列（不存储）
 			storedRow = m.removeVirtualColumns(computedRow, schema)
+			// 确保只保留基础列和 STORED 生成列
+			storedRow = make(map[string]interface{})
+			for k, v := range computedRow {
+				// 只保留非生成列或 STORED 类型
+				keep := true
+				for _, col := range schema.Columns {
+					if col.Name == k && col.IsGenerated && col.GeneratedType == "VIRTUAL" {
+						keep = false
+						break
+					}
+				}
+				if keep {
+					storedRow[k] = v
+				}
+			}
 		} else {
 			// 没有 VIRTUAL 列，保持原有逻辑
 			computedRow, err := evaluator.EvaluateAll(filteredRow, schema)
@@ -822,14 +849,6 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	}
 
 	// 替换原始行为处理后的行
-	// 调试：打印处理后的行
-	for i, r := range processedRows {
-		_ = i // 忽略未使用的变量
-		for k, v := range r {
-			_ = k
-			_ = v
-		}
-	}
 	rows = processedRows
 
 	if hasTxn {
@@ -1295,9 +1314,9 @@ func (m *MVCCDataSource) GetCurrentVersion() int64 {
 
 // getColumnInfo 获取列信息
 func getColumnInfo(name string, schema *domain.TableInfo) *domain.ColumnInfo {
-	for _, col := range schema.Columns {
+	for i, col := range schema.Columns {
 		if col.Name == name {
-			return &col
+			return &schema.Columns[i]
 		}
 	}
 	return nil

@@ -123,45 +123,42 @@ func CastToType(value interface{}, targetType string) (interface{}, error) {
 func castToInt(value interface{}) (interface{}, error) {
 	switch v := value.(type) {
 	case int:
-		return v, nil
+		return int64(v), nil
 	case int8:
-		return int(v), nil
+		return int64(v), nil
 	case int16:
-		return int(v), nil
+		return int64(v), nil
 	case int32:
-		return int(v), nil
+		return int64(v), nil
 	case int64:
-		return int(v), nil
+		return v, nil
 	case uint:
-		return int(v), nil
+		return int64(v), nil
 	case uint8:
-		return int(v), nil
+		return int64(v), nil
 	case uint16:
-		return int(v), nil
+		return int64(v), nil
 	case uint32:
-		return int(v), nil
+		return int64(v), nil
 	case uint64:
-		return int(v), nil
+		return int64(v), nil
 	case float32:
-		return int(v), nil
+		return int64(v), nil
 	case float64:
-		return int(v), nil
+		return int64(v), nil
+	case string:
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return i, nil
+		}
+		return nil, fmt.Errorf("cannot convert string '%s' to int", v)
 	case bool:
 		if v {
-			return 1, nil
+			return int64(1), nil
+		} else {
+			return int64(0), nil
 		}
-		return 0, nil
-	case string:
-		if v == "" {
-			return 0, nil
-		}
-		i, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("cannot convert %q to int", v)
-		}
-		return int(i), nil
 	default:
-		return nil, fmt.Errorf("unsupported type for int conversion: %T", value)
+		return nil, fmt.Errorf("unsupported type for int conversion: %T", v)
 	}
 }
 

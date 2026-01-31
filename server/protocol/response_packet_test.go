@@ -84,22 +84,29 @@ func TestProgressReportPacket(t *testing.T) {
 
 // TestProgressReportPacketUnmarshal 测试进度报告包反序列化
 func TestProgressReportPacketUnmarshal(t *testing.T) {
-	// FF FF FF 01 03 F4 01 00 00 43 6f 70 79 69 6e 67 20 64 61 74 61 2e 2e 2e 00
+	// 包头 (3字节长度 + 1字节序列号) + 载荷
+	// 载荷: FF FF FF 01 03 F4 01 00 00 43 6f 70 79 69 6e 67 20 64 61 74 61 2e 2e 2e 00
 	// Header: 0xFF
 	// Error Code: 0xFFFF (进度报告标记）
 	// Stage: 1
 	// Max Stage: 3
-	// Progress: 0x0001F4 = 500
+	// Progress: 0x000001F4 = 500 (4字节小端)
 	// Info: "Copying data...\0"
-	testData := []byte{
+	payload := []byte{
 		0xFF, // Header
 		0xFF, 0xFF, // Error Code 0xFFFF
 		0x01,       // Stage: 1
 		0x03,       // Max Stage: 3
-		0xF4, 0x01, 0x00, // Progress: 500 (小端，3字节）
+		0xF4, 0x01, 0x00, 0x00, // Progress: 500 (小端，4字节)
 		'C', 'o', 'p', 'y', 'i', 'n', 'g', ' ', 'd', 'a', 't', 'a', '.', '.', '.',
 		0x00, // NULL 终止符
 	}
+	
+	testData := []byte{
+		byte(len(payload)), byte(len(payload)>>8), byte(len(payload)>>16), // Payload length (3字节)
+		0x00, // Sequence ID
+	}
+	testData = append(testData, payload...)
 
 	packet := &ProgressReportPacket{}
 	err := packet.Unmarshal(bytes.NewReader(testData))
