@@ -842,12 +842,26 @@ func convertTiDBValue(val interface{}) (interface{}, error) {
 		return float64(v), nil
 	case float64:
 		return v, nil
-	case int, int8, int16, int32, int64:
-		// 整数类型保持原样，由后续的类型转换处理
-		return v, nil
-	case uint, uint8, uint16, uint32, uint64:
-		// 无符号整数类型保持原样
-		return v, nil
+	case int:
+		return float64(v), nil
+	case int8:
+		return float64(v), nil
+	case int16:
+		return float64(v), nil
+	case int32:
+		return float64(v), nil
+	case int64:
+		return float64(v), nil
+	case uint:
+		return float64(v), nil
+	case uint8:
+		return float64(v), nil
+	case uint16:
+		return float64(v), nil
+	case uint32:
+		return float64(v), nil
+	case uint64:
+		return float64(v), nil
 	case string:
 		// 尝试解析为float64（针对DECIMAL字符串）
 		if f, err := parseDecimalString(v); err == nil {

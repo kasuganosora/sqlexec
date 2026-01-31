@@ -32,25 +32,11 @@ func NewGeneratedColumnEvaluatorWithCache(cache *ExpressionCache) *GeneratedColu
 }
 
 // Evaluate 评估单个生成列表达式
-// 第二阶段支持：完整的 SQL 表达式，包括 CASE WHEN、子查询、复杂函数等
-// 第一阶段MVP支持：算术、比较、逻辑运算和基本函数
 func (e *GeneratedColumnEvaluator) Evaluate(
 	expr string,
 	row domain.Row,
 	schema *domain.TableInfo,
 ) (interface{}, error) {
-	// 第二阶段：完整表达式支持（使用字符串解析，待集成 TiDB Expression）
-	// 当前保持第一阶段逻辑，后续可替换为 TiDB Expression 包
-	// 支持的表达式：
-	// 1. 算术运算：+, -, *, /, %
-	// 2. 比较运算：=, !=, >, <, >=, <=
-	// 3. 逻辑运算：AND, OR, NOT
-	// 4. 字符串操作：CONCAT
-	// 5. 基本函数：UPPER, LOWER, SUBSTRING, TRIM
-	// 6. 内置函数（通过 builtin.FunctionAPI）
-	// 7. 用户自定义函数（UDF）
-
-	// 表达式解析并计算
 	result, err := e.evaluateExpression(expr, row)
 	if err != nil {
 		return nil, err
@@ -59,20 +45,16 @@ func (e *GeneratedColumnEvaluator) Evaluate(
 	return result, nil
 }
 
-// EvaluateAll 递归计算所有生成列（级联更新）
+// EvaluateAll 递归计算所有生成列
 func (e *GeneratedColumnEvaluator) EvaluateAll(
 	row domain.Row,
 	schema *domain.TableInfo,
 ) (domain.Row, error) {
-	// 获取生成列计算顺序（拓扑排序）
-	// 注意：只计算 STORED 类型的生成列，VIRTUAL 列在查询时动态计算
 	order, err := e.GetEvaluationOrder(schema)
 	if err != nil {
-		// 计算失败时返回错误
 		return nil, err
 	}
 
-	// 按顺序计算生成列
 	result := make(domain.Row)
 	for k, v := range row {
 		result[k] = v
@@ -84,19 +66,16 @@ func (e *GeneratedColumnEvaluator) EvaluateAll(
 			continue
 		}
 
-		// 只计算 STORED 类型的生成列，跳过 VIRTUAL 列
 		if colInfo.GeneratedType == "VIRTUAL" {
 			continue
 		}
 
 		val, evalErr := e.Evaluate(colInfo.GeneratedExpr, result, schema)
 		if evalErr != nil {
-			// 计算失败时设为 NULL，继续下一个
 			result[colName] = nil
 			continue
 		}
 
-		// 类型转换
 		castedVal, castErr := CastToType(val, colInfo.Type)
 		if castErr != nil {
 			result[colName] = nil
@@ -116,23 +95,19 @@ func (e *GeneratedColumnEvaluator) GetEvaluationOrder(
 	validator := &GeneratedColumnValidator{}
 	graph := validator.BuildDependencyGraph(schema)
 
-	// 拓扑排序
 	inDegree := make(map[string]int)
 	visited := make(map[string]bool)
 	order := make([]string, 0)
 
-	// 初始化入度
 	for _, col := range schema.Columns {
 		colName := col.Name
 		inDegree[colName] = 0
 	}
 
-	// 计算入度
 	for from, deps := range graph {
 		inDegree[from] = len(deps)
 	}
 
-	// 找到入度为0的节点
 	for {
 		found := false
 		for colName := range inDegree {
@@ -141,7 +116,6 @@ func (e *GeneratedColumnEvaluator) GetEvaluationOrder(
 				order = append(order, colName)
 				found = true
 
-				// 更新依赖此节点的其他节点的入度
 				for other, deps := range graph {
 					for _, dep := range deps {
 						if dep == colName {
@@ -157,9 +131,7 @@ func (e *GeneratedColumnEvaluator) GetEvaluationOrder(
 		}
 	}
 
-	// 检查是否有环
 	if len(order) != len(schema.Columns) {
-		// 存在循环依赖
 		return nil, fmt.Errorf("circular dependency detected in generated columns")
 	}
 
@@ -187,24 +159,34 @@ func (e *GeneratedColumnEvaluator) getColumnInfo(colName string, schema *domain.
 }
 
 // evaluateExpression 表达式求值（主入口）
-// 运算符优先级（从高到低）：
-// 1. 括号 ()
-// 2. 乘除模 */%
-// 3. 加减 +-
-// 4. 比较运算 =, !=, <, <=, >, >=
 func (e *GeneratedColumnEvaluator) evaluateExpression(expr string, row domain.Row) (interface{}, error) {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return nil, fmt.Errorf("empty expression")
 	}
 
-	// 1. 处理括号（最高优先级）
+	// 1. 处理完整的括号表达式（以(开头以)结尾）
 	if expr[0] == '(' {
-		return e.evaluateParentheses(expr, row)
+		parenDepth := 0
+		matchIndex := -1
+		for i, ch := range expr {
+			if ch == '(' {
+				parenDepth++
+			} else if ch == ')' {
+				parenDepth--
+				if parenDepth == 0 {
+					matchIndex = i
+					break
+				}
+			}
+		}
+		
+		if matchIndex == len(expr)-1 {
+			return e.evaluateParentheses(expr, row)
+		}
 	}
 
-	// 2. 处理比较运算（优先级最低，最后处理）
-	// 先检查是否有比较运算符
+	// 2. 处理比较运算（优先级最低）
 	if idx := e.findOperator(expr, "="); idx >= 0 && !strings.Contains(expr, "!=") &&
 		!strings.Contains(expr, "<=") && !strings.Contains(expr, ">=") {
 		return e.evaluateComparison(expr, "=", idx, row)
@@ -225,7 +207,8 @@ func (e *GeneratedColumnEvaluator) evaluateExpression(expr string, row domain.Ro
 		return e.evaluateComparison(expr, ">", idx, row)
 	}
 
-	// 3. 处理加减运算（优先级低，先处理）
+	// 3. 处理加减运算（优先级低于乘除）
+	// 找到最右边的加减运算符
 	if idx := e.findOperator(expr, "+-"); idx >= 0 {
 		op := string(expr[idx])
 		left := strings.TrimSpace(expr[:idx])
@@ -261,7 +244,7 @@ func (e *GeneratedColumnEvaluator) evaluateExpression(expr string, row domain.Ro
 		return e.performBinaryOp(leftVal, rightVal, op)
 	}
 
-	// 5. 处理函数调用（形如: func_name(arg1, arg2)）
+	// 5. 处理函数调用
 	if idx := strings.Index(expr, "("); idx > 0 {
 		return e.evaluateFunctionCall(expr, row)
 	}
@@ -289,12 +272,10 @@ func (e *GeneratedColumnEvaluator) evaluateExpression(expr string, row domain.Ro
 
 // evaluateParentheses 求值括号表达式
 func (e *GeneratedColumnEvaluator) evaluateParentheses(expr string, row domain.Row) (interface{}, error) {
-	// 检查括号是否匹配
 	if !e.isBalancedParentheses(expr) {
 		return nil, fmt.Errorf("unbalanced parentheses: %s", expr)
 	}
 
-	// 去掉最外层括号
 	inner := strings.TrimSpace(expr[1 : len(expr)-1])
 	return e.evaluateExpression(inner, row)
 }
@@ -325,7 +306,6 @@ func (e *GeneratedColumnEvaluator) evaluateComparison(expr string, op string, op
 
 // evaluateFunctionCall 求值函数调用
 func (e *GeneratedColumnEvaluator) evaluateFunctionCall(expr string, row domain.Row) (interface{}, error) {
-	// 查找函数名和参数
 	idx := strings.Index(expr, "(")
 	if idx <= 0 {
 		return nil, fmt.Errorf("invalid function call: %s", expr)
@@ -334,7 +314,6 @@ func (e *GeneratedColumnEvaluator) evaluateFunctionCall(expr string, row domain.
 	funcName := strings.TrimSpace(expr[:idx])
 	paramsStr := strings.TrimSpace(expr[idx+1 : len(expr)-1])
 
-	// 解析参数
 	var params []interface{}
 	if paramsStr != "" {
 		paramExprs := e.splitByComma(paramsStr)
@@ -347,7 +326,6 @@ func (e *GeneratedColumnEvaluator) evaluateFunctionCall(expr string, row domain.
 		}
 	}
 
-	// 调用函数API
 	function, err := e.functionAPI.GetFunction(funcName)
 	if err != nil {
 		return nil, fmt.Errorf("function %s error: %w", funcName, err)
@@ -364,20 +342,15 @@ func (e *GeneratedColumnEvaluator) evaluateFunctionCall(expr string, row domain.
 
 // performBinaryOp 执行二元运算
 func (e *GeneratedColumnEvaluator) performBinaryOp(left, right interface{}, op string) (interface{}, error) {
-	// 处理NULL值
 	if left == nil || right == nil {
-		// 对于NULL的运算规则，大多数情况返回NULL
-		// 比较运算除外
 		switch op {
 		case "=", "!=", "<", "<=", ">", ">=":
-			// 比较运算中，NULL的比较返回NULL
 			return nil, nil
 		default:
 			return nil, nil
 		}
 	}
 
-	// 类型转换
 	leftVal := e.toFloat64(left)
 	rightVal := e.toFloat64(right)
 
@@ -448,13 +421,11 @@ func (e *GeneratedColumnEvaluator) toFloat64(val interface{}) float64 {
 		}
 		return 0.0
 	case string:
-		// 尝试解析字符串为数字
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
 		}
 		return 0.0
 	default:
-		// 尝试类型断言
 		if fv, ok := val.(float64); ok {
 			return fv
 		}
@@ -462,7 +433,7 @@ func (e *GeneratedColumnEvaluator) toFloat64(val interface{}) float64 {
 	}
 }
 
-// findOperator 查找不在括号内的运算符
+// findOperator 查找不在括号内的运算符（从左到右）
 func (e *GeneratedColumnEvaluator) findOperator(expr, operators string) int {
 	parenDepth := 0
 

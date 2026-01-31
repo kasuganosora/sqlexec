@@ -41,7 +41,21 @@ func TestConvertTiDBValue(t *testing.T) {
 		for _, v := range vals {
 			converted, err := convertTiDBValue(v)
 			assert.NoError(t, err)
-			assert.Equal(t, float64(v.(int64)), converted)
+			// 使用类型断言而不是类型转换
+			var expected float64
+			switch val := v.(type) {
+			case int:
+				expected = float64(val)
+			case int8:
+				expected = float64(val)
+			case int16:
+				expected = float64(val)
+			case int32:
+				expected = float64(val)
+			case int64:
+				expected = float64(val)
+			}
+			assert.Equal(t, expected, converted)
 		}
 	})
 
@@ -57,20 +71,37 @@ func TestConvertTiDBValue(t *testing.T) {
 		for _, v := range vals {
 			converted, err := convertTiDBValue(v)
 			assert.NoError(t, err)
-			assert.Equal(t, float64(v.(uint64)), converted)
+			// 使用类型断言而不是类型转换
+			var expected float64
+			switch val := v.(type) {
+			case uint:
+				expected = float64(val)
+			case uint8:
+				expected = float64(val)
+			case uint16:
+				expected = float64(val)
+			case uint32:
+				expected = float64(val)
+			case uint64:
+				expected = float64(val)
+			}
+			assert.Equal(t, expected, converted)
 		}
 	})
 
 	t.Run("float types", func(t *testing.T) {
-		vals := []interface{}{
-			float32(3.14),
-			float64(2.718),
+		vals := []struct {
+			input    interface{}
+			expected interface{}
+		}{
+			{float32(3.14), float64(3.140000104904175)},
+			{float64(2.718), float64(2.718)},
 		}
 
-		for _, v := range vals {
-			converted, err := convertTiDBValue(v)
+		for _, tc := range vals {
+			converted, err := convertTiDBValue(tc.input)
 			assert.NoError(t, err)
-			assert.Equal(t, v, converted)
+			assert.Equal(t, tc.expected, converted)
 		}
 	})
 
