@@ -57,7 +57,13 @@ type ColumnInfo struct {
 	Default      string           `json:"default,omitempty"`
 	Unique       bool             `json:"unique,omitempty"`          // 唯一约束
 	AutoIncrement bool            `json:"auto_increment,omitempty"` // 自动递增
-	ForeignKey   *ForeignKeyInfo  `json:"foreign_key,omitempty"`    // 外键约束
+	ForeignKey   *ForeignKeyInfo  `json:"foreign_key,omitempty"`   // 外键约束
+	
+	// Generated Columns 支持
+	IsGenerated      bool     `json:"is_generated,omitempty"`    // 是否为生成列
+	GeneratedType    string   `json:"generated_type,omitempty"`    // "STORED" (第一阶段) 或 "VIRTUAL" (第二阶段)
+	GeneratedExpr    string   `json:"generated_expr,omitempty"`     // 表达式字符串
+	GeneratedDepends []string `json:"generated_depends,omitempty"` // 依赖的列名
 }
 
 // ForeignKeyInfo 外键信息

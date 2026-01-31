@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	domain "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/generated"
 )
 
 // QueryBuilder 查询构建器
@@ -196,7 +197,13 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 		return nil, fmt.Errorf("data source is read-only, INSERT operation not allowed")
 	}
 
-	// 转换值为行数据
+	// 获取表信息（用于过滤生成列）
+	tableInfo, err := b.dataSource.GetTableInfo(ctx, stmt.Table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get table info: %w", err)
+	}
+
+	// 转换值为行数据，并过滤生成列
 	rows := make([]domain.Row, 0, len(stmt.Values))
 	for _, values := range stmt.Values {
 		row := make(domain.Row)
@@ -205,7 +212,9 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 				row[col] = values[i]
 			}
 		}
-		rows = append(rows, row)
+		// 过滤生成列（不允许显式插入）
+		filteredRow := generated.FilterGeneratedColumns(row, tableInfo)
+		rows = append(rows, filteredRow)
 	}
 
 	options := &domain.InsertOptions{
@@ -229,23 +238,31 @@ func (b *QueryBuilder) executeUpdate(ctx context.Context, stmt *UpdateStatement)
 		return nil, fmt.Errorf("data source is read-only, UPDATE operation not allowed")
 	}
 
+	// 获取表信息（用于过滤生成列）
+	tableInfo, err := b.dataSource.GetTableInfo(ctx, stmt.Table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get table info: %w", err)
+	}
+
 	// 转换 WHERE 条件
 	var filters []domain.Filter
 	if stmt.Where != nil {
 		filters = b.convertExpressionToFilters(stmt.Where)
 	}
 
-	// 转换更新数据
+	// 转换更新数据，并过滤生成列
 	updates := make(domain.Row)
 	for col, val := range stmt.Set {
 		updates[col] = val
 	}
+	// 过滤生成列（不允许显式更新）
+	filteredUpdates := generated.FilterGeneratedColumns(updates, tableInfo)
 
 	options := &domain.UpdateOptions{
 		Upsert: false,
 	}
 
-	affected, err := b.dataSource.Update(ctx, stmt.Table, filters, updates, options)
+	affected, err := b.dataSource.Update(ctx, stmt.Table, filters, filteredUpdates, options)
 	if err != nil {
 		return nil, fmt.Errorf("update failed: %w", err)
 	}

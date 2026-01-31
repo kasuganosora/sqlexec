@@ -630,6 +630,25 @@ func (a *SQLAdapter) convertCreateTableStmt(stmt *ast.CreateTableStmt) (*CreateS
 				colInfo.AutoInc = true
 			case ast.ColumnOptionUniqKey:
 				colInfo.Unique = true
+		case ast.ColumnOptionGenerated:
+			// 解析生成列
+			colInfo.IsGenerated = true
+
+			// 根据 Stored 字段判断生成列类型
+			// Stored == true 表示 STORED 类型，false 表示 VIRTUAL 类型（默认）
+			if opt.Stored {
+				colInfo.GeneratedType = "STORED"
+			} else {
+				colInfo.GeneratedType = "VIRTUAL"
+			}
+
+			// 提取表达式字符串
+			if opt.Expr != nil {
+				colInfo.GeneratedExpr = opt.Expr.Text()
+
+				// 提取依赖的列名
+				colInfo.GeneratedDepends = a.extractColumnNames(opt.Expr)
+			}
 			}
 		}
 
@@ -786,6 +805,70 @@ func (a *SQLAdapter) extractValue(node ast.ExprNode) (interface{}, error) {
 	// 如果不是ValueExpr，可能是其他表达式类型
 	// 对于LIMIT，我们可能需要使用不同的方法
 	return nil, fmt.Errorf("not a value expression: %T", node)
+}
+
+// extractColumnNames 从表达式中提取列名
+func (a *SQLAdapter) extractColumnNames(expr ast.ExprNode) []string {
+	names := make(map[string]bool)
+	a.collectColumnNames(expr, names)
+
+	result := make([]string, 0, len(names))
+	for name := range names {
+		result = append(result, name)
+	}
+	return result
+}
+
+// collectColumnNames 递归收集表达式中的列名
+func (a *SQLAdapter) collectColumnNames(expr ast.ExprNode, names map[string]bool) {
+	if expr == nil {
+		return
+	}
+
+	switch n := expr.(type) {
+	case *ast.ColumnNameExpr:
+		// 列名表达式
+		colName := n.Name.Name.String()
+		names[colName] = true
+
+	case *ast.BinaryOperationExpr:
+		// 二元运算表达式，递归处理左右操作数
+		a.collectColumnNames(n.L, names)
+		a.collectColumnNames(n.R, names)
+
+	case *ast.UnaryOperationExpr:
+		// 一元运算表达式，递归处理操作数
+		a.collectColumnNames(n.V, names)
+
+	case *ast.FuncCallExpr:
+		// 函数调用表达式，递归处理所有参数
+		for _, arg := range n.Args {
+			a.collectColumnNames(arg, names)
+		}
+
+	case *ast.ParenthesesExpr:
+		// 括号表达式，递归处理内部表达式
+		a.collectColumnNames(n.Expr, names)
+
+	case *ast.PatternLikeOrIlikeExpr:
+		// LIKE 表达式，递归处理
+		a.collectColumnNames(n.Expr, names)
+		a.collectColumnNames(n.Pattern, names)
+
+	case *ast.BetweenExpr:
+		// BETWEEN 表达式，递归处理
+		a.collectColumnNames(n.Expr, names)
+		a.collectColumnNames(n.Left, names)
+		a.collectColumnNames(n.Right, names)
+
+	case *ast.CaseExpr:
+		// CASE 表达式，递归处理
+		for _, item := range n.WhenClauses {
+			a.collectColumnNames(item.Expr, names)
+			a.collectColumnNames(item.Result, names)
+		}
+		a.collectColumnNames(n.ElseClause, names)
+	}
 }
 
 // convertShowStmt 转换 SHOW 语句

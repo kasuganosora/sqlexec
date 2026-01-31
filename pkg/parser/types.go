@@ -24,8 +24,10 @@ const (
 	SQLTypeRollback  SQLType = "ROLLBACK"
 	SQLTypeUse       SQLType = "USE"
 	SQLTypeUnknown   SQLType = "UNKNOWN"
+)
 
-	// 排序方向
+// 排序方向
+const (
 	SortAsc  = "ASC"
 	SortDesc = "DESC"
 )
@@ -128,7 +130,7 @@ type CreateIndexStatement struct {
 	ColumnName string   `json:"column_name"`
 	IndexType  string   `json:"index_type"` // BTREE, HASH, FULLTEXT
 	Unique     bool     `json:"unique"`
-	IfExists   bool     `json:"if_exists"`
+	IfExists   bool   `json:"if_exists"`
 }
 
 // DropIndexStatement DROP INDEX 语句
@@ -142,7 +144,7 @@ type DropIndexStatement struct {
 type ShowStatement struct {
 	Type   string `json:"type"` // TABLES, DATABASES, COLUMNS, etc.
 	Table  string `json:"table,omitempty"`
-	Where  string `json:"where,omitempty"`
+	Where string `json:"where,omitempty"`
 	Like   string `json:"like,omitempty"`
 }
 
@@ -157,7 +159,7 @@ type ExplainStatement struct {
 	Query      *SelectStatement `json:"query,omitempty"`      // The query to explain
 	TargetSQL  string          `json:"target_sql,omitempty"` // Raw SQL string
 	Format     string          `json:"format,omitempty"`    // Format type (e.g., "TREE", "JSON")
-	Analyze    bool            `json:"analyze,omitempty"`   // EXPLAIN ANALYZE
+	Analyze    bool            `json:"analyze,omitempty"` // EXPLAIN ANALYZE
 }
 
 // UseStatement USE 语句
@@ -167,9 +169,9 @@ type UseStatement struct {
 
 // SelectColumn SELECT 列
 type SelectColumn struct {
-	Name      string      `json:"name"`
-	Alias     string      `json:"alias,omitempty"`
-	Table     string      `json:"table,omitempty"`
+	Name      string `json:"name"`
+	Alias     string `json:"alias,omitempty"`
+	Table     string `json:"table,omitempty"`
 	Expr      *Expression `json:"expr,omitempty"`
 	IsWildcard bool       `json:"is_wildcard"` // 是否是 *
 }
@@ -177,8 +179,8 @@ type SelectColumn struct {
 // JoinInfo JOIN 信息
 type JoinInfo struct {
 	Type      JoinType   `json:"type"`
-	Table     string     `json:"table"`
-	Alias     string     `json:"alias,omitempty"`
+	Table     string `json:"table"`
+	Alias     string `json:"alias,omitempty"`
 	Condition *Expression `json:"condition,omitempty"`
 }
 
@@ -227,16 +229,31 @@ type OrderByItem struct {
 	Direction string `json:"direction"` // ASC, DESC
 }
 
+// ForeignKeyInfo 外键信息
+type ForeignKeyInfo struct {
+	RefTable    string `json:"ref_table"`
+	RefColumn   string `json:"ref_column"`
+	OnDelete    string `json:"on_delete,omitempty"`
+	OnUpdate    string `json:"on_update,omitempty"`
+}
+
 // ColumnInfo 列信息（用于 DDL）
 type ColumnInfo struct {
-	Name      string      `json:"name"`
-	Type      string      `json:"type"`
-	Nullable  bool        `json:"nullable"`
-	Primary   bool        `json:"primary"`
-	Default   interface{} `json:"default,omitempty"`
-	AutoInc   bool        `json:"auto_increment"`
-	Unique    bool        `json:"unique"`
-	Comment   string      `json:"comment,omitempty"`
+	Name         string           `json:"name"`
+	Type         string           `json:"type"`
+	Nullable     bool             `json:"nullable"`
+	Primary      bool             `json:"primary"`
+	Default      interface{}      `json:"default,omitempty"`
+	Unique       bool             `json:"unique,omitempty"`
+	AutoInc      bool             `json:"auto_increment,omitempty"`
+	ForeignKey   *ForeignKeyInfo  `json:"foreign_key,omitempty"`
+	Comment      string           `json:"comment,omitempty"`
+	
+	// Generated Columns 支持
+	IsGenerated      bool     `json:"is_generated,omitempty"`    // 是否为生成列
+	GeneratedType    string   `json:"generated_type,omitempty"`    // "STORED" (第一阶段) 或 "VIRTUAL" (第二阶段)
+	GeneratedExpr    string   `json:"generated_expr,omitempty"`      // 表达式字符串
+	GeneratedDepends []string `json:"generated_depends,omitempty"` // 依赖的列名
 }
 
 // ParseResult 解析结果

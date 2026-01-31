@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/generated"
 	"github.com/kasuganosora/sqlexec/pkg/resource/util"
 )
 
@@ -527,6 +528,12 @@ func (m *MVCCDataSource) CreateTable(ctx context.Context, tableInfo *domain.Tabl
 		return fmt.Errorf("table %s already exists", tableInfo.Name)
 	}
 
+	// 验证生成列定义（如果有）
+	validator := &generated.GeneratedColumnValidator{}
+	if err := validator.ValidateSchema(tableInfo); err != nil {
+		return fmt.Errorf("generated column validation failed: %w", err)
+	}
+
 	// 深拷贝表信息
 	cols := make([]domain.ColumnInfo, len(tableInfo.Columns))
 	copy(cols, tableInfo.Columns)
@@ -702,19 +709,31 @@ func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *d
 		} else {
 			// 执行优化后的查询计划
 			queryResult, err = m.queryPlanner.ExecutePlan(plan, tableData)
-				if err != nil {
-					// 执行失败，使用全表扫描
-					pagedRows := util.ApplyQueryOperations(tableData.rows, options, &tableData.schema.Columns)
-					queryResult = &domain.QueryResult{
-						Columns: tableData.schema.Columns,
-						Rows:    pagedRows,
-						Total:   int64(len(pagedRows)),
+			if err != nil {
+				// 执行失败，使用全表扫描
+				pagedRows := util.ApplyQueryOperations(tableData.rows, options, &tableData.schema.Columns)
+				queryResult = &domain.QueryResult{
+					Columns: tableData.schema.Columns,
+					Rows:    pagedRows,
+					Total:   int64(len(pagedRows)),
+				}
+			} else {
+				// 第二阶段：处理 VIRTUAL 列的动态计算
+				// 检查表是否包含 VIRTUAL 列
+				virtualCalc := generated.NewVirtualCalculator()
+				if virtualCalc.HasVirtualColumns(tableData.schema) {
+					// 动态计算所有 VIRTUAL 列
+					calculatedRows, calcErr := virtualCalc.CalculateBatchVirtuals(queryResult.Rows, tableData.schema)
+					if calcErr == nil {
+						queryResult.Rows = calculatedRows
 					}
-				} else {
-					// 应用排序和分页
-					if options != nil {
-						if options.OrderBy != "" {
-							queryResult.Rows = util.ApplyOrder(queryResult.Rows, options)
+					// 如果计算失败，使用原始行数据（VIRTUAL 列为 NULL）
+				}
+
+				// 应用排序和分页
+				if options != nil {
+					if options.OrderBy != "" {
+						queryResult.Rows = util.ApplyOrder(queryResult.Rows, options)
 						}
 						if options.Limit > 0 || options.Offset > 0 {
 							queryResult.Rows = util.ApplyPagination(queryResult.Rows, int(options.Limit), int(options.Offset))
@@ -755,7 +774,64 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
-	var sourceData *TableData
+	// 获取表schema
+	sourceData := tableVer.versions[tableVer.latest]
+	schema := sourceData.schema
+
+	// 处理生成列：区分 STORED 和 VIRTUAL 类型
+	processedRows := make([]domain.Row, 0, len(rows))
+	evaluator := generated.NewGeneratedColumnEvaluator()
+
+	for i, row := range rows {
+		// 调试：打印原始行数据
+		fmt.Printf("DEBUG Insert: Original row %d: %+v\n", i, row)
+		
+		// 1. 过滤生成列的显式插入值（不允许显式插入）
+		filteredRow := generated.FilterGeneratedColumns(row, schema)
+		fmt.Printf("DEBUG Insert: Filtered row %d: %+v\n", i, filteredRow)
+
+		// 2. 区分 STORED 和 VIRTUAL 列
+		// STORED 列：计算并存储
+		// VIRTUAL 列：不存储到表数据中
+		var storedRow domain.Row
+		
+		// 检查表是否包含 VIRTUAL 列
+		hasVirtualCols := generated.IsVirtualColumn("", schema)
+		
+		if hasVirtualCols {
+			// 计算所有 STORED 生成列（不包括 VIRTUAL）
+			computedRow, err := evaluator.EvaluateAll(filteredRow, schema)
+			fmt.Printf("DEBUG Insert: Computed row %d: %+v (err: %v)\n", i, computedRow, err)
+			if err != nil {
+				// 计算失败，将生成列设为 NULL
+				computedRow = generated.SetGeneratedColumnsToNULL(filteredRow, schema)
+			}
+			
+			// 移除 VIRTUAL 列（不存储）
+			storedRow = m.removeVirtualColumns(computedRow, schema)
+		} else {
+			// 没有 VIRTUAL 列，保持原有逻辑
+			computedRow, err := evaluator.EvaluateAll(filteredRow, schema)
+			if err != nil {
+				computedRow = generated.SetGeneratedColumnsToNULL(filteredRow, schema)
+			}
+			storedRow = computedRow
+		}
+
+		processedRows = append(processedRows, storedRow)
+	}
+
+	// 替换原始行为处理后的行
+	// 调试：打印处理后的行
+	for i, r := range processedRows {
+		_ = i // 忽略未使用的变量
+		for k, v := range r {
+			_ = k
+			_ = v
+		}
+	}
+	rows = processedRows
+
 	if hasTxn {
 		// 在事务中，使用COW快照
 		snapshot, ok := m.snapshots[txnID]
@@ -807,26 +883,50 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	// 非事务模式：在持有全局锁时，获取表版本锁
 	// 锁顺序：先全局锁，后表级锁（避免死锁）
 	tableVer.mu.Lock()
-	
+
 	// 现在可以安全地释放全局锁，因为已经持有表锁
 	m.mu.Unlock()
 	defer tableVer.mu.Unlock()
 
-	sourceData = tableVer.versions[tableVer.latest]
-	if sourceData == nil {
+	latestData := tableVer.versions[tableVer.latest]
+	if latestData == nil {
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
 	// 非事务插入，创建新版本
 	m.currentVer++
-	newRows := make([]domain.Row, len(sourceData.rows)+len(rows))
-	copy(newRows, sourceData.rows)
-	copy(newRows[len(sourceData.rows):], rows)
+	
+	// 深拷贝 schema
+	cols := make([]domain.ColumnInfo, len(latestData.schema.Columns))
+	for i := range latestData.schema.Columns {
+		cols[i] = domain.ColumnInfo{
+			Name:           latestData.schema.Columns[i].Name,
+			Type:           latestData.schema.Columns[i].Type,
+			Nullable:       latestData.schema.Columns[i].Nullable,
+			Primary:        latestData.schema.Columns[i].Primary,
+			Default:        latestData.schema.Columns[i].Default,
+			Unique:         latestData.schema.Columns[i].Unique,
+			AutoIncrement:   latestData.schema.Columns[i].AutoIncrement,
+			ForeignKey:      latestData.schema.Columns[i].ForeignKey,
+			IsGenerated:     latestData.schema.Columns[i].IsGenerated,
+			GeneratedType:   latestData.schema.Columns[i].GeneratedType,
+			GeneratedExpr:   latestData.schema.Columns[i].GeneratedExpr,
+			GeneratedDepends: latestData.schema.Columns[i].GeneratedDepends,
+		}
+	}
+	
+	newRows := make([]domain.Row, len(latestData.rows)+len(rows))
+	copy(newRows, latestData.rows)
+	copy(newRows[len(latestData.rows):], rows)
 
 	versionData := &TableData{
 		version:   m.currentVer,
 		createdAt: time.Now(),
-		schema:    sourceData.schema,
+		schema: &domain.TableInfo{
+			Name:    latestData.schema.Name,
+			Schema:  latestData.schema.Schema,
+			Columns: cols,
+		},
 		rows:      newRows,
 	}
 
@@ -853,7 +953,20 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
-	var sourceData *TableData
+	// 获取表schema
+	sourceData := tableVer.versions[tableVer.latest]
+	schema := sourceData.schema
+
+	// 过滤生成列的更新值（不允许显式更新）
+	filteredUpdates := generated.FilterGeneratedColumns(updates, schema)
+
+	// 获取受影响的生成列（递归）
+	updatedCols := make([]string, 0, len(filteredUpdates))
+	for k := range filteredUpdates {
+		updatedCols = append(updatedCols, k)
+	}
+	affectedGeneratedCols := generated.GetAffectedGeneratedColumns(updatedCols, schema)
+
 	if hasTxn {
 		// 在事务中，使用COW快照
 		snapshot, ok := m.snapshots[txnID]
@@ -876,6 +989,9 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 
 		m.mu.Unlock()
 
+		// 创建求值器
+		evaluator := generated.NewGeneratedColumnEvaluator()
+
 		// 行级COW：遍历基础数据，对匹配的行进行拷贝和修改
 		cowSnapshot.mu.Lock()
 		defer cowSnapshot.mu.Unlock()
@@ -892,8 +1008,19 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 						rowCopy[k] = v
 					}
 					// 应用更新
-					for k, v := range updates {
+					for k, v := range filteredUpdates {
 						rowCopy[k] = v
+					}
+					// 计算受影响的生成列
+					for _, genColName := range affectedGeneratedCols {
+						colInfo := getColumnInfo(genColName, schema)
+						if colInfo != nil && colInfo.IsGenerated {
+							val, err := evaluator.Evaluate(colInfo.GeneratedExpr, rowCopy, schema)
+							if err != nil {
+								val = nil // 计算失败设为 NULL
+							}
+							rowCopy[genColName] = val
+						}
 					}
 					// 存储修改后的行
 					cowSnapshot.rowCopies[rowID] = rowCopy
@@ -901,8 +1028,19 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 				} else {
 					// 行已经修改过，直接更新已有副本
 					if existingRow, ok := cowSnapshot.rowCopies[rowID]; ok {
-						for k, v := range updates {
+						for k, v := range filteredUpdates {
 							existingRow[k] = v
+						}
+						// 计算受影响的生成列
+						for _, genColName := range affectedGeneratedCols {
+							colInfo := getColumnInfo(genColName, schema)
+							if colInfo != nil && colInfo.IsGenerated {
+								val, err := evaluator.Evaluate(colInfo.GeneratedExpr, existingRow, schema)
+								if err != nil {
+									val = nil // 计算失败设为 NULL
+								}
+								existingRow[genColName] = val
+							}
 						}
 					}
 				}
@@ -922,6 +1060,9 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
+	// 创建求值器
+	evaluator := generated.NewGeneratedColumnEvaluator()
+
 	// 非事务更新，创建新版本
 	m.currentVer++
 	newRows := make([]domain.Row, len(sourceData.rows))
@@ -930,8 +1071,20 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 	updated := int64(0)
 	for i, row := range newRows {
 		if util.MatchesFilters(row, filters) {
-			for k, v := range updates {
+			// 应用更新
+			for k, v := range filteredUpdates {
 				newRows[i][k] = v
+			}
+			// 计算受影响的生成列
+			for _, genColName := range affectedGeneratedCols {
+				colInfo := getColumnInfo(genColName, schema)
+				if colInfo != nil && colInfo.IsGenerated {
+					val, err := evaluator.Evaluate(colInfo.GeneratedExpr, newRows[i], schema)
+					if err != nil {
+						val = nil // 计算失败设为 NULL
+					}
+					newRows[i][genColName] = val
+				}
 			}
 			updated++
 		}
@@ -1055,6 +1208,18 @@ func (m *MVCCDataSource) Execute(ctx context.Context, sql string) (*domain.Query
 	return nil, domain.NewErrUnsupportedOperation(string(m.config.Type), "execute SQL")
 }
 
+// removeVirtualColumns 从行中移除 VIRTUAL 列（不存储）
+func (m *MVCCDataSource) removeVirtualColumns(row domain.Row, schema *domain.TableInfo) domain.Row {
+	result := make(domain.Row)
+	for k, v := range row {
+		// 只保留非 VIRTUAL 列
+		if !generated.IsVirtualColumn(k, schema) {
+			result[k] = v
+		}
+	}
+	return result
+}
+
 // ==================== 适配器接口 ====================
 
 // LoadTable 加载表数据到内存（供外部数据源适配器使用）
@@ -1126,4 +1291,14 @@ func (m *MVCCDataSource) GetCurrentVersion() int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.currentVer
+}
+
+// getColumnInfo 获取列信息
+func getColumnInfo(name string, schema *domain.TableInfo) *domain.ColumnInfo {
+	for _, col := range schema.Columns {
+		if col.Name == name {
+			return &col
+		}
+	}
+	return nil
 }

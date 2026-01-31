@@ -1296,3 +1296,400 @@ func TestMVCCDataSource_LoadTable_ExistingTable(t *testing.T) {
 		t.Errorf("Expected 'Updated', got %v", result.Rows[0]["value"])
 	}
 }
+
+// TestMVCCDataSource_GeneratedColumn_CreateTable 测试创建带生成列的表
+func TestMVCCDataSource_GeneratedColumn_CreateTable(t *testing.T) {
+	ds := NewMVCCDataSource(nil)
+	ctx := context.Background()
+
+	// 先连接
+	if err := ds.Connect(ctx); err != nil {
+		t.Errorf("Connect() error = %v", err)
+	}
+
+	// 创建带生成列的表
+	tableInfo := &domain.TableInfo{
+		Name: "test_generated",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "a", Type: "int64"},
+			{Name: "b", Type: "int64"},
+			{Name: "sum", Type: "int64", IsGenerated: true, GeneratedExpr: "a+b", GeneratedDepends: []string{"a", "b"}},
+		},
+	}
+
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		t.Errorf("CreateTable() with generated columns error = %v", err)
+	}
+
+	// 验证表已创建
+	tables, err := ds.GetTables(ctx)
+	if err != nil {
+		t.Errorf("GetTables() error = %v", err)
+	}
+	if len(tables) != 1 || tables[0] != "test_generated" {
+		t.Errorf("Expected table 'test_generated', got %v", tables)
+	}
+}
+
+// TestMVCCDataSource_GeneratedColumn_Insert 测试插入并计算生成列
+func TestMVCCDataSource_GeneratedColumn_Insert(t *testing.T) {
+	ds := NewMVCCDataSource(nil)
+	ctx := context.Background()
+
+	// 先连接
+	if err := ds.Connect(ctx); err != nil {
+		t.Errorf("Connect() error = %v", err)
+	}
+
+	// 创建表
+	tableInfo := &domain.TableInfo{
+		Name: "calc_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "price", Type: "int64"},
+			{Name: "quantity", Type: "int64"},
+			{Name: "total", Type: "int64", IsGenerated: true, GeneratedExpr: "price*quantity", GeneratedDepends: []string{"price", "quantity"}},
+		},
+	}
+
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatalf("CreateTable() error = %v", err)
+	}
+
+	// 插入数据（不包含生成列）
+	rows := []domain.Row{
+		{"id": 1, "price": 10, "quantity": 5},
+		{"id": 2, "price": 20, "quantity": 3},
+	}
+
+	inserted, err := ds.Insert(ctx, "calc_test", rows, nil)
+	if err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+	if inserted != 2 {
+		t.Fatalf("Expected to insert 2 rows, got %d", inserted)
+	}
+
+	// 查询验证生成列已计算
+	result, err := ds.Query(ctx, "calc_test", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 2 {
+		t.Fatalf("Expected 2 rows, got %d", len(result.Rows))
+	}
+
+	// 打印调试信息
+	t.Logf("Row 0: %+v", result.Rows[0])
+	t.Logf("Row 1: %+v", result.Rows[1])
+	t.Logf("Columns: %+v", result.Columns)
+
+	// 验证第一行的 total = 10*5 = 50（可能是 int64 或 float64）
+	total1 := result.Rows[0]["total"]
+	if total1 == nil {
+		t.Fatalf("Row 0 total is nil: %+v", result.Rows[0])
+	}
+	var val1 float64
+	switch v := total1.(type) {
+	case int64:
+		val1 = float64(v)
+	case float64:
+		val1 = v
+	default:
+		t.Fatalf("Expected total to be int64 or float64, got %T", total1)
+	}
+	if val1 != 50.0 {
+		t.Errorf("Expected total 50.0, got %v (type: %T)", total1, total1)
+	}
+
+	// 验证第二行的 total = 20*3 = 60
+	total2 := result.Rows[1]["total"]
+	if total2 == nil {
+		t.Fatalf("Row 1 total is nil: %+v", result.Rows[1])
+	}
+	var val2 float64
+	switch v := total2.(type) {
+	case int64:
+		val2 = float64(v)
+	case float64:
+		val2 = v
+	default:
+		t.Fatalf("Expected total to be int64 or float64, got %T", total2)
+	}
+	if val2 != 60.0 {
+		t.Errorf("Expected total 60.0, got %v (type: %T)", total2, total2)
+	}
+}
+
+// TestMVCCDataSource_GeneratedColumn_InsertWithExplicitValue 测试插入包含生成列显式值（应被过滤）
+func TestMVCCDataSource_GeneratedColumn_InsertWithExplicitValue(t *testing.T) {
+	ds := NewMVCCDataSource(nil)
+	ctx := context.Background()
+
+	// 先连接
+	if err := ds.Connect(ctx); err != nil {
+		t.Errorf("Connect() error = %v", err)
+	}
+
+	tableInfo := &domain.TableInfo{
+		Name: "filter_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "value", Type: "int64"},
+			{Name: "doubled", Type: "int64", IsGenerated: true, GeneratedExpr: "value*2", GeneratedDepends: []string{"value"}},
+		},
+	}
+
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatalf("CreateTable() error = %v", err)
+	}
+
+	// 尝试插入包含生成列的数据（显式值应被忽略）
+	rows := []domain.Row{
+		{"id": 1, "value": 5, "doubled": 999}, // doubled 的显式值应该被忽略
+	}
+
+	inserted, err := ds.Insert(ctx, "filter_test", rows, nil)
+	if err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+	if inserted != 1 {
+		t.Fatalf("Expected to insert 1 row, got %d", inserted)
+	}
+
+	// 查询验证生成列已按表达式计算
+	result, err := ds.Query(ctx, "filter_test", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 1 {
+		t.Fatalf("Expected 1 row, got %d", len(result.Rows))
+	}
+
+	// 验证 doubled = 5*2 = 10（不是 999）
+	if val, ok := result.Rows[0]["doubled"].(float64); !ok || val != 10.0 {
+		t.Errorf("Expected doubled 10.0 (not 999), got %v", result.Rows[0]["doubled"])
+	}
+}
+
+// TestMVCCDataSource_GeneratedColumn_Update 测试更新并级联更新生成列
+func TestMVCCDataSource_GeneratedColumn_Update(t *testing.T) {
+	ds := NewMVCCDataSource(nil)
+	ctx := context.Background()
+
+	// 先连接
+	if err := ds.Connect(ctx); err != nil {
+		t.Errorf("Connect() error = %v", err)
+	}
+
+	tableInfo := &domain.TableInfo{
+		Name: "update_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "base", Type: "int64"},
+			{Name: "calculated", Type: "int64", IsGenerated: true, GeneratedExpr: "base*10", GeneratedDepends: []string{"base"}},
+		},
+	}
+
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatalf("CreateTable() error = %v", err)
+	}
+
+	// 插入初始数据
+	rows := []domain.Row{
+		{"id": 1, "base": 5},
+	}
+
+	if _, err := ds.Insert(ctx, "update_test", rows, nil); err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+
+	// 更新 base 列
+	updated, err := ds.Update(ctx, "update_test",
+		[]domain.Filter{{Field: "id", Operator: "=", Value: int64(1)}},
+		domain.Row{"base": 8},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated != 1 {
+		t.Fatalf("Expected to update 1 row, got %d", updated)
+	}
+
+	// 查询验证生成列已重新计算
+	result, err := ds.Query(ctx, "update_test", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+	if len(result.Rows) != 1 {
+		t.Fatalf("Expected 1 row, got %d", len(result.Rows))
+	}
+
+	// 验证 calculated = 8*10 = 80（原为 5*10=50）
+	calculated := result.Rows[0]["calculated"]
+	var val float64
+	switch v := calculated.(type) {
+	case int64:
+		val = float64(v)
+	case float64:
+		val = v
+	default:
+		t.Fatalf("Expected calculated to be int64 or float64, got %T", calculated)
+	}
+	if val != 80.0 {
+		t.Errorf("Expected calculated 80.0, got %v", calculated)
+	}
+}
+
+// TestMVCCDataSource_GeneratedColumn_UpdateWithExplicitValue 测试更新生成列（应被过滤）
+func TestMVCCDataSource_GeneratedColumn_UpdateWithExplicitValue(t *testing.T) {
+	ds := NewMVCCDataSource(nil)
+	ctx := context.Background()
+
+	// 先连接
+	if err := ds.Connect(ctx); err != nil {
+		t.Errorf("Connect() error = %v", err)
+	}
+
+	tableInfo := &domain.TableInfo{
+		Name: "update_filter_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "val", Type: "int64"},
+			{Name: "result", Type: "int64", IsGenerated: true, GeneratedExpr: "val+100", GeneratedDepends: []string{"val"}},
+		},
+	}
+
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatalf("CreateTable() error = %v", err)
+	}
+
+	// 插入初始数据
+	rows := []domain.Row{
+		{"id": 1, "val": 10},
+	}
+
+	if _, err := ds.Insert(ctx, "update_filter_test", rows, nil); err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+
+	// 尝试更新生成列（应该被忽略）
+	updated, err := ds.Update(ctx, "update_filter_test",
+		[]domain.Filter{{Field: "id", Operator: "=", Value: int64(1)}},
+		domain.Row{"result": 999}, // result 是生成列，更新应该被忽略
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated != 1 {
+		t.Fatalf("Expected to update 1 row, got %d", updated)
+	}
+
+	// 查询验证生成列未改变（仍为 10+100=110）
+	result, err := ds.Query(ctx, "update_filter_test", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+
+	res := result.Rows[0]["result"]
+	var val float64
+	switch v := res.(type) {
+	case int64:
+		val = float64(v)
+	case float64:
+		val = v
+	default:
+		t.Fatalf("Expected result to be int64 or float64, got %T", res)
+	}
+	if val != 110.0 {
+		t.Errorf("Expected result 110.0 (not 999), got %v", res)
+	}
+}
+
+// TestMVCCDataSource_GeneratedColumn_NullPropagation 测试 NULL 值传播
+func TestMVCCDataSource_GeneratedColumn_NullPropagation(t *testing.T) {
+	ds := NewMVCCDataSource(nil)
+	ctx := context.Background()
+
+	// 先连接
+	if err := ds.Connect(ctx); err != nil {
+		t.Errorf("Connect() error = %v", err)
+	}
+
+	tableInfo := &domain.TableInfo{
+		Name: "null_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "col", Type: "int64"},
+			{Name: "result", Type: "int64", IsGenerated: true, GeneratedExpr: "col+1", GeneratedDepends: []string{"col"}},
+		},
+	}
+
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatalf("CreateTable() error = %v", err)
+	}
+
+	// 插入包含 NULL 的数据
+	rows := []domain.Row{
+		{"id": 1, "col": nil},
+	}
+
+	if _, err := ds.Insert(ctx, "null_test", rows, nil); err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+
+	// 查询验证生成列为 NULL
+	result, err := ds.Query(ctx, "null_test", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatalf("Query() error = %v", err)
+	}
+
+	if result.Rows[0]["result"] != nil {
+		t.Errorf("Expected result to be NULL, got %v", result.Rows[0]["result"])
+	}
+}
+
+// TestMVCCDataSource_GeneratedColumn_InvalidDependency 测试创建包含无效依赖的生成列表
+func TestMVCCDataSource_GeneratedColumn_InvalidDependency(t *testing.T) {
+	ds := NewMVCCDataSource(nil)
+	ctx := context.Background()
+
+	// 创建包含不存在依赖列的表（应该失败）
+	tableInfo := &domain.TableInfo{
+		Name: "invalid_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "result", Type: "int64", IsGenerated: true, GeneratedExpr: "nonexistent+1", GeneratedDepends: []string{"nonexistent"}},
+		},
+	}
+
+	err := ds.CreateTable(ctx, tableInfo)
+	if err == nil {
+		t.Error("Expected error when creating table with non-existent dependency")
+	}
+}
+
+// TestMVCCDataSource_GeneratedColumn_CyclicDependency 测试循环依赖检测
+func TestMVCCDataSource_GeneratedColumn_CyclicDependency(t *testing.T) {
+	ds := NewMVCCDataSource(nil)
+	ctx := context.Background()
+
+	// 创建包含循环依赖的表（应该失败）
+	tableInfo := &domain.TableInfo{
+		Name: "cyclic_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Primary: true},
+			{Name: "col1", Type: "int64", IsGenerated: true, GeneratedExpr: "col2+1", GeneratedDepends: []string{"col2"}},
+			{Name: "col2", Type: "int64", IsGenerated: true, GeneratedExpr: "col1+1", GeneratedDepends: []string{"col1"}},
+		},
+	}
+
+	err := ds.CreateTable(ctx, tableInfo)
+	if err == nil {
+		t.Error("Expected error when creating table with cyclic dependency")
+	}
+}
+
