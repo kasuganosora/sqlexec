@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/pingcap/tidb/pkg/parser"
 	_ "github.com/pingcap/tidb/pkg/parser/test_driver"
 )
 
