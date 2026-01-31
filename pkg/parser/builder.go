@@ -314,11 +314,18 @@ func (b *QueryBuilder) executeCreate(ctx context.Context, stmt *CreateStatement)
 
 		for _, col := range stmt.Columns {
 			tableInfo.Columns = append(tableInfo.Columns, domain.ColumnInfo{
-				Name:     col.Name,
-				Type:     col.Type,
-				Nullable: col.Nullable,
-				Primary:  col.Primary,
-				Default:  fmt.Sprintf("%v", col.Default),
+				Name:         col.Name,
+				Type:         col.Type,
+				Nullable:     col.Nullable,
+				Primary:      col.Primary,
+				Default:      fmt.Sprintf("%v", col.Default),
+				Unique:       col.Unique,
+				AutoIncrement: col.AutoInc,
+				// Generated column support
+				IsGenerated:      col.IsGenerated,
+				GeneratedType:    col.GeneratedType,
+				GeneratedExpr:    col.GeneratedExpr,
+				GeneratedDepends: col.GeneratedDepends,
 			})
 		}
 
