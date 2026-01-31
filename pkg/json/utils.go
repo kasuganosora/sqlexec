@@ -281,46 +281,67 @@ func prettyPrintJSON(data []byte) string {
 	var builder strings.Builder
 	indent := 0
 	inString := false
+	escape := false
 
 	for i := 0; i < len(data); i++ {
 		ch := data[i]
 
+		// Handle escape sequences
+		if escape {
+			builder.WriteByte(ch)
+			escape = false
+			continue
+		}
+
+		// Check for escape character inside string
+		if inString && ch == '\\' {
+			escape = true
+			builder.WriteByte(ch)
+			continue
+		}
+
+		// Toggle string state
 		if ch == '"' {
-			if inString {
-				builder.WriteByte('\\')
-			}
+			inString = !inString
 			builder.WriteByte(ch)
-			inString = true
 			continue
 		}
 
-		if ch == '\\' && i+1 < len(data) {
+		// Only format when not inside string
+		if inString {
 			builder.WriteByte(ch)
-			next := data[i+1]
-			if next == 'n' || next == 'r' || next == 't' || next == 'b' || next == 'f' || next == '"' || next == '\\' {
-				builder.WriteByte(next)
-				i++
-			} else {
-				builder.WriteByte('\n')
-				for j := 0; j < indent; j++ {
-					builder.WriteByte(' ')
-				}
-				builder.WriteByte(ch)
-			}
 			continue
 		}
 
-		inString = false
-		builder.WriteByte(ch)
-
+		// Handle formatting characters
 		switch ch {
 		case '{', '[':
+			builder.WriteByte(ch)
+			builder.WriteByte('\n')
 			indent += 2
-		case '}', ']':
-			indent -= 2
-		case '\n':
 			for j := 0; j < indent; j++ {
 				builder.WriteByte(' ')
+			}
+		case '}', ']':
+			builder.WriteByte('\n')
+			indent -= 2
+			for j := 0; j < indent; j++ {
+				builder.WriteByte(' ')
+			}
+			builder.WriteByte(ch)
+		case ',':
+			builder.WriteByte(ch)
+			builder.WriteByte('\n')
+			for j := 0; j < indent; j++ {
+				builder.WriteByte(' ')
+			}
+		case ':':
+			builder.WriteByte(ch)
+			builder.WriteByte(' ')
+		default:
+			// Skip whitespace, but keep other characters
+			if ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r' {
+				builder.WriteByte(ch)
 			}
 		}
 	}

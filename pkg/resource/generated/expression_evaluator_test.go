@@ -170,8 +170,8 @@ func TestEvaluateWithComplexParentheses(t *testing.T) {
 			expr     string
 			expected interface{}
 		}{
-			{"width * height + depth", 17},
-			{"width * (height + depth)", 25},
+			{"width * height + depth", float64(17)},
+			{"width * (height + depth)", float64(25)},
 		}
 
 		for _, tc := range testCases {

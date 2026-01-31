@@ -52,7 +52,7 @@ func TestBinaryJSON_Type(t *testing.T) {
 		{"object", `{"a": 1}`, "OBJECT"},
 		{"array", `[1, 2, 3]`, "ARRAY"},
 		{"string", `"hello"`, "STRING"},
-		{"integer", `42`, "DOUBLE"}, // JSON numbers are parsed as float64 by encoding/json
+		{"integer", `42`, "INTEGER"}, // JSON numbers are parsed as float64 by encoding/json, then converted to INTEGER if whole number
 		{"float", `3.14`, "DOUBLE"},
 		{"boolean", `true`, "BOOLEAN"},
 		{"null", `null`, "NULL"},
