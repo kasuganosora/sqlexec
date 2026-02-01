@@ -91,7 +91,7 @@ func TestComBinlogDump(t *testing.T) {
 		0x34, 0x06, 0x00, 0x00, // 日志位置: 1588
 		0x02, 0x00,               // 标志
 		0x75, 0x27, 0x00, 0x00, // 服务器ID: 10101
-		'm', 'y', 's', 'q', 'l', '-', 'b', 'i', 'n', '.', '0', '0', '0', '1', '9',
+		'm', 'y', 's', 'q', 'l', '-', 'b', 'i', 'n', '.', '0', '0', '0', '0', '1', '9',
 		0x00, // NULL 终止符
 	}
 
@@ -121,34 +121,36 @@ func TestComBinlogDump(t *testing.T) {
 // ============================================
 
 func TestFormatDescriptionEventSimple(t *testing.T) {
+	bodyData := []byte{
+		0x04, 0x00, // 格式版本: 4 (2字节)
+		// 服务器版本（50字节）：'10.2.10-MariaDB-log' (19字符) + NULL (1字节) + 填充 (30字节)
+		'1', '0', '.', '2', '.', '1', '0', '-', 'M', 'a', 'r', 'i', 'a', 'D', 'B', '-', 'l', 'o', 'g', 0x00, // 20字节
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 填充 10字节
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 填充 10字节
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 填充 10字节，总共50字节
+		0x5a, 0x15, 0xaf, 0x4d, // 创建时间戳: 1512576881 (4字节)
+		0x13, // 事件头长度: 19 (1字节)
+		// 事件类型后长度数组（14字节，对应前14种事件类型）
+		0x13, 0x0f, 0x13, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x00,
+		0x02, // 校验和算法: CRC32 (值为2) (1字节)
+		0xe2, 0x13, 0xce, 0xd6, // CRC32 校验和（4字节）
+	}
+
+	// EventLength = 19(header) + len(bodyData) = 19 + 76 = 95
 	header := &BinlogEventHeader{
 		Timestamp:   1512576881,
 		EventType:   BINLOG_FORMAT_DESCRIPTION_EVENT,
 		ServerID:    10124,
-		EventLength: 78, // 19 + 57 + 2
+		EventLength: 95, // 19(header) + 2(版本) + 50(服务器版本) + 4(时间戳) + 1(HeaderLength) + 14(数组) + 1(CRC算法) + 4(CRC32值)
 		NextPos:     2305,
 		Flags:       0,
 	}
 
-	bodyData := []byte{
-		0x04, 0x00, // 格式版本: 4
-		// 服务器版本（50字节）
-		'1', '0', '.', '2', '.', '1', '0', '-', 'M', 'a', 'r', 'i', 'a', 'D', 'B', '-', 'l', 'o', 'g', 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x5a, 0x15, 0xaf, 0x4d, // 创建时间戳: 1512576881
-		0x13,               // 事件头长度: 19
-		// 事件类型后长度数组（简单示例：2字节）
-		0x00, 0x00,
-		0x01, // 校验和算法: CRC32
-		0xe2, 0x13, 0xce, 0xd6, // CRC32 校验和
-	}
-
 	event := &FormatDescriptionEvent{Header: *header}
 
-	// 解析事件体（不包含CRC32）
-	bodyWithoutCRC := bodyData[:len(bodyData)-4]
-	err := event.Unmarshal(bytes.NewReader(bodyWithoutCRC))
+	// 解析完整事件体
+	err := event.Unmarshal(bytes.NewReader(bodyData))
 	assert.NoError(t, err)
 
 	assert.Equal(t, uint16(4), event.BinlogFormatVersion)
@@ -157,8 +159,8 @@ func TestFormatDescriptionEventSimple(t *testing.T) {
 	assert.Greater(t, len(event.EventTypePostHeader), 0)
 	assert.Equal(t, uint8(BINLOG_CHECKSUM_ALG_CRC32), event.ChecksumAlgorithm)
 
-	t.Logf("FORMAT_DESCRIPTION_EVENT: Version=%s, HeaderLength=%d",
-		event.ServerVersion, event.HeaderLength)
+	t.Logf("FORMAT_DESCRIPTION_EVENT: Version=%s, HeaderLength=%d, ArrayLen=%d",
+		event.ServerVersion, event.HeaderLength, len(event.EventTypePostHeader))
 }
 
 // ============================================

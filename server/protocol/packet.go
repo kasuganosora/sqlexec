@@ -21,22 +21,28 @@ type Packet struct {
 }
 
 func (p *Packet) Unmarshal(r io.Reader) (err error) {
+	// MySQL协议头: 3字节payload length (little-endian) + 1字节sequence ID
 	buf := make([]byte, 4)
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
 		return err
 	}
-	// MySQL协议使用小端序
+	
+	// 解析协议头 (小端序)
 	p.PayloadLength = uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16
 	p.SequenceID = buf[3]
 
-	// 读取载荷数据（如果长度大于0）
+	// 读取载荷数据 (payload_length 字节，不包含 sequence ID)
 	p.Payload = nil
 	if p.PayloadLength > 0 && p.PayloadLength < 0xffffff {
 		p.Payload = make([]byte, p.PayloadLength)
-		_, err = io.ReadFull(r, p.Payload)
-		if err != nil {
+		n, readErr := io.ReadFull(r, p.Payload)
+		if readErr != nil {
+			err = readErr
 			return err
+		}
+		if n != int(p.PayloadLength) {
+			return fmt.Errorf("payload length mismatch: expected %d, got %d", p.PayloadLength, n)
 		}
 	}
 	return nil
@@ -1805,12 +1811,18 @@ type BinaryRowDataPacket struct {
 // columnCount: 列数
 // columnTypes: 列类型数组（从FieldMeta.Type获取）
 func (p *BinaryRowDataPacket) Unmarshal(r io.Reader, columnCount uint64, columnTypes []uint8) error {
-	if err := p.Packet.Unmarshal(r); err != nil {
+	// 注意：调用此函数时，reader 应该已经去掉了MySQL协议包头（4字节）
+	// 所以这里直接从 reader 读取数据，而不是调用 p.Packet.Unmarshal
+	
+	// 从 reader 中读取所有数据到 Payload
+	var err error
+	p.Payload, err = io.ReadAll(r)
+	if err != nil {
 		return err
 	}
 
-	// 从 Packet.Payload 中读取数据
-	reader := bufio.NewReader(bytes.NewReader(p.Packet.Payload))
+	// 从 Payload 中读取数据
+	reader := bufio.NewReader(bytes.NewReader(p.Payload))
 
 	// 1. 读取包头（固定为0x00）
 	header, err := reader.ReadByte()
@@ -1826,11 +1838,13 @@ func (p *BinaryRowDataPacket) Unmarshal(r io.Reader, columnCount uint64, columnT
 	// 计算公式: ceil((columnCount + 2) / 8)
 	// 对于1列: (1+2)/8 = 0.375, 向上取整 = 1
 	// 但NULL位图从第3位开始,所以需要至少1字节(8位)来覆盖第3位
-	nullBitmapSize := (columnCount + 2 + 7) / 8
+	nullBitmapSize := int((columnCount + 2 + 7) / 8)
 	p.NullBitmap = make([]byte, nullBitmapSize)
-	_, err = io.ReadFull(reader, p.NullBitmap)
-	if err != nil {
-		return fmt.Errorf("failed to read NULL bitmap: %w", err)
+	for i := 0; i < nullBitmapSize; i++ {
+		p.NullBitmap[i], err = reader.ReadByte()
+		if err != nil {
+			return fmt.Errorf("failed to read NULL bitmap byte %d: %w", i, err)
+		}
 	}
 
 	// 3. 读取列值
@@ -1989,28 +2003,28 @@ func (p *BinaryRowDataPacket) readBinaryTime(reader *bufio.Reader) (string, erro
 	if err != nil {
 		return "", err
 	}
-	
+
 	if length == 0 {
 		return "00:00:00", nil
 	}
-	
+
 	neg, _ := reader.ReadByte()
 	days, _ := ReadNumber[uint32](reader, 4)
 	hours, _ := reader.ReadByte()
 	minutes, _ := reader.ReadByte()
 	seconds, _ := reader.ReadByte()
-	
+
 	var microseconds uint32
 	if length == 12 {
 		microseconds, _ = ReadNumber[uint32](reader, 4)
 	}
-	
+
 	sign := "+"
 	if neg == 1 {
 		sign = "-"
 	}
-	
-	return fmt.Sprintf("%s%dd %02d:%02d:%02d.%06d", sign, days, hours, minutes, seconds, microseconds), nil
+
+	return fmt.Sprintf("%s%04d %02d:%02d:%02d.%06d", sign, days, hours, minutes, seconds, microseconds), nil
 }
 
 // readBinaryDateTime 读取二进制日期时间值（旧格式）
@@ -2092,13 +2106,13 @@ func (p *BinaryRowDataPacket) readBinaryTime2(reader *bufio.Reader) (string, err
 	if length > 8 {
 		microseconds, _ = ReadNumber[uint32](reader, 4)
 	}
-	
+
 	sign := "+"
 	if neg == 1 {
 		sign = "-"
 	}
-	
-	return fmt.Sprintf("%s%dd %02d:%02d:%02d.%06d", sign, days, hours, minutes, seconds, microseconds), nil
+
+	return fmt.Sprintf("%s%04dd %02d:%02d:%02d.%06d", sign, days, hours, minutes, seconds, microseconds), nil
 }
 
 // readBinaryTimestamp 读取二进制时间戳值
@@ -2230,14 +2244,8 @@ func (p *BinaryRowDataPacket) Marshal(columnCount uint64, columnTypes []uint8) (
 		}
 	}
 	
-	// 组装Packet头部
-	payload := buf.Bytes()
-	packetBuf := new(bytes.Buffer)
-	packetBuf.Write([]byte{byte(len(payload)), byte(len(payload) >> 8), byte(len(payload) >> 16)})
-	packetBuf.WriteByte(p.SequenceID)
-	packetBuf.Write(payload)
-	
-	return packetBuf.Bytes(), nil
+	// 只返回 Payload，不包含包头
+	return buf.Bytes(), nil
 }
 
 // writeValueByType 根据列类型写入二进制值

@@ -81,40 +81,68 @@ func (e *FormatDescriptionEvent) Unmarshal(r io.Reader) error {
 	// Binlog 事件不使用 Packet 封装，直接读取
 	reader := bufio.NewReader(r)
 
-	// 读取固定字段
-	e.BinlogFormatVersion, _ = ReadNumber[uint16](reader, 2)
+	// 读取格式版本（2字节）
+	versionBuf := make([]byte, 2)
+	if _, err := io.ReadFull(reader, versionBuf); err != nil {
+		return err
+	}
+	e.BinlogFormatVersion = binary.LittleEndian.Uint16(versionBuf)
 
 	// 读取服务器版本（50字节）
 	serverVersionBytes := make([]byte, 50)
-	io.ReadFull(reader, serverVersionBytes)
-	e.ServerVersion = string(serverVersionBytes)
+	if _, err := io.ReadFull(reader, serverVersionBytes); err != nil {
+		return err
+	}
+	e.ServerVersion = string(bytes.TrimRight(serverVersionBytes, "\x00"))
 
-	// 去除 NULL 填充
-	e.ServerVersion = string(bytes.TrimRight([]byte(e.ServerVersion), "\x00"))
+	// 读取创建时间戳（4字节）
+	timestampBuf := make([]byte, 4)
+	if _, err := io.ReadFull(reader, timestampBuf); err != nil {
+		return err
+	}
+	e.CreateTimestamp = binary.LittleEndian.Uint32(timestampBuf)
 
-	// 读取创建时间戳
-	e.CreateTimestamp, _ = ReadNumber[uint32](reader, 4)
+	// 读取事件头长度（1字节）
+	headerLenBuf := make([]byte, 1)
+	if _, err := io.ReadFull(reader, headerLenBuf); err != nil {
+		return err
+	}
+	e.HeaderLength = headerLenBuf[0]
 
-	// 读取事件头长度
-	e.HeaderLength, _ = ReadNumber[uint8](reader, 1)
+	// 读取所有剩余数据
+	remainingData, _ := io.ReadAll(reader)
+	remainingLen := len(remainingData)
 
-	// 计算事件类型后长度数组的长度
-	// 事件总长度 = 19（头部）+ 固定字段（57字节）+ 数组长度 + 校验和字段（5字节）
-	// 数组长度 = 事件总长度 - 19 - 57 - 5 = 事件总长度 - 81
-	arrayLength := int(e.Header.EventLength) - 19 - 57 - 5
-
-	if arrayLength > 0 {
-		// 读取事件类型后长度数组
-		e.EventTypePostHeader = make([]uint8, arrayLength)
-		io.ReadFull(reader, e.EventTypePostHeader)
+	if remainingLen == 0 {
+		// 没有更多数据，直接返回
+		e.ChecksumAlgorithm = BINLOG_CHECKSUM_ALG_UNDEF
+		return nil
 	}
 
-	// 读取校验和算法
-	e.ChecksumAlgorithm, _ = ReadNumber[uint8](reader, 1)
+	// 数据结构：[EventTypePostHeader数组] [ChecksumAlgorithm(1字节)] [ChecksumValue(4字节,可选)]
+	// 判断逻辑：如果 remainingLen >= 5 且 remainingData[remainingLen-5] == BINLOG_CHECKSUM_ALG_CRC32
+	// 则校验和算法在 remainingLen-5，CRC32 在最后 4 字节
+	// 否则校验和算法在 remainingLen-1
 
-	// 读取 CRC32 校验和（如果算法类型为 CRC32）
-	if e.ChecksumAlgorithm == BINLOG_CHECKSUM_ALG_CRC32 {
-		e.ChecksumValue, _ = ReadNumber[uint32](reader, 4)
+	var checksumAlgOffset int
+
+	if remainingLen >= 5 && remainingData[remainingLen-5] == BINLOG_CHECKSUM_ALG_CRC32 {
+		// 有 CRC32
+		checksumAlgOffset = remainingLen - 5
+		e.ChecksumAlgorithm = remainingData[checksumAlgOffset]
+		crcBytes := remainingData[remainingLen-4:]
+		e.ChecksumValue = binary.LittleEndian.Uint32(crcBytes)
+	} else {
+		// 没有 CRC32 或算法不是 CRC32
+		checksumAlgOffset = remainingLen - 1
+		e.ChecksumAlgorithm = remainingData[checksumAlgOffset]
+	}
+
+	// EventTypePostHeader数组 = 剩余数据的前面部分（不包括校验和字段）
+	arrayEnd := checksumAlgOffset
+	if arrayEnd > 0 {
+		e.EventTypePostHeader = make([]uint8, arrayEnd)
+		copy(e.EventTypePostHeader, remainingData[:arrayEnd])
 	}
 
 	return nil
@@ -396,12 +424,10 @@ func (e *QueryEvent) Unmarshal(r io.Reader) error {
 		io.ReadFull(reader, e.StatusVariables)
 	}
 
-	// 读取数据库名
-	if e.DatabaseNameLen > 0 {
-		e.DatabaseName, _ = ReadStringFixedFromReader(reader, int(e.DatabaseNameLen))
-		// 读取 NULL 终止符（仅在 DatabaseNameLen > 0 时）
-		reader.ReadByte()
-	}
+	// 读取数据库名（即使长度为0，也读取NULL终止符）
+	e.DatabaseName, _ = ReadStringFixedFromReader(reader, int(e.DatabaseNameLen))
+	// 读取 NULL 终止符（MariaDB规范：即使db_len=0，也要跳过1字节NULL）
+	reader.ReadByte()
 
 	// 读取 SQL 语句（使用单一 reader，避免创建新的 bufio.Reader）
 	var buf []byte

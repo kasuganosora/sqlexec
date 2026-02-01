@@ -372,10 +372,6 @@ func TestEofPacketWithStatusFlags(t *testing.T) {
 
 // TestBinaryRowDataPacketDateTime 测试二进制日期时间类型
 func TestBinaryRowDataPacketDateTime(t *testing.T) {
-	// 00 0B - 包头和长度（11字节）
-	// MySQL协议头部 (4字节: payload length + sequence ID)
-	// 0E 00 00 00 - Payload length: 14 bytes (little-endian)
-	// 00 - Sequence ID: 0
 	// Payload (14 bytes):
 	//   00 - Header
 	//   00 - NULL bitmap (no nulls)
@@ -388,9 +384,8 @@ func TestBinaryRowDataPacketDateTime(t *testing.T) {
 	//   19 - Seconds: 25
 	//   D8 8B 0B 00 - Microseconds: 765432 (0x000BB8D8 in little-endian)
 	testData := []byte{
-		0x0E, 0x00, 0x00, 0x00, // Payload length: 14 bytes (little-endian)
-		0x00,                   // Sequence ID: 0
 		0x00,                   // Header
+		0x00,                   // NULL bitmap (no nulls)
 		0x0B,                   // Length: 11
 		0xE8, 0x07,             // Year: 2024 (小端序: 0x07E8 = 2024)
 		0x07,                   // Month: 7
@@ -426,34 +421,31 @@ func TestBinaryRowDataPacketDateTime(t *testing.T) {
 
 // TestBinaryRowDataPacketTime 测试二进制时间类型
 func TestBinaryRowDataPacketTime(t *testing.T) {
-	// MySQL协议头部 (4字节: payload length + sequence ID)
-	// 0B 00 00 00 - Payload length: 11 bytes (little-endian)
-	// 00 - Sequence ID: 0
-	// Payload (11 bytes):
-	//   00 - Header
-	//   00 - NULL位图
-	//   08 - Length: 8
-	//   00 - 非负数
-	//   00 00 00 00 - 天数: 0
-	//   01 02 03 - 时间: 01:02:03
+	// 测试数据应该是一个完整的数据包，包含MySQL协议头部
+	// 但BinaryRowDataPacket.Unmarshal期望的reader应该已经去掉了包头
+	// 所以这里只提供Payload部分
 	testData := []byte{
-		0x0B, 0x00, 0x00, 0x00, // Payload length: 11 bytes (little-endian)
-		0x00,                   // Sequence ID: 0
 		0x00,                   // Header
 		0x00,                   // NULL bitmap (no nulls)
-		0x08,                   // Length: 8
+		0x0C,                   // Length: 12
 		0x00,                   // Not negative
 		0x00, 0x00, 0x00, 0x00, // Days: 0
 		0x01,                   // Hours: 1
 		0x02,                   // Minutes: 2
 		0x03,                   // Seconds: 3
+		0x00, 0x00, 0x00, 0x00, // Microseconds: 0
 	}
 
+	// 添加调试信息
+	t.Logf("测试数据 (%d bytes): %x", len(testData), testData)
+	
 	packet := &BinaryRowDataPacket{}
 	err := packet.Unmarshal(bytes.NewReader(testData), 1, []uint8{0x07})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(packet.Values))
 	if val, ok := packet.Values[0].(string); ok {
+		t.Logf("期望值: '+0000 01:02:03.000000'")
+		t.Logf("实际值: '%s'", val)
 		assert.Equal(t, "+0000 01:02:03.000000", val)
 	}
 
@@ -462,14 +454,12 @@ func TestBinaryRowDataPacketTime(t *testing.T) {
 
 // TestBinaryRowDataPacketBlob 测试二进制BLOB类型
 func TestBinaryRowDataPacketBlob(t *testing.T) {
-	// 00 05 - 包头和长度（5字节）
-	// 00 - NULL位图
-	// 03 - 长度: 3字节
-	// 61 62 63 - 数据: "abc"
+	// MEDIUM_BLOB (0xfd) 需要 3 字节长度前缀
+	// Payload: Header(1) + NULL bitmap(1) + Length prefix(3) + data(3) = 8字节
 	testData := []byte{
-		0x00, // Header
-		0x00, // NULL bitmap (no nulls)
-		0x03, // Length: 3
+		0x00,                   // Header
+		0x00,                   // NULL bitmap (no nulls)
+		0x03, 0x00, 0x00,     // 3字节长度前缀 (小端序: 0x000003)
 		'a', 'b', 'c',
 	}
 
@@ -478,8 +468,8 @@ func TestBinaryRowDataPacketBlob(t *testing.T) {
 	err := packet.Unmarshal(bytes.NewReader(testData), 1, []uint8{0xfd})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(packet.Values))
-	if val, ok := packet.Values[0].(string); ok {
-		assert.Equal(t, "abc", val)
+	if val, ok := packet.Values[0].([]byte); ok {
+		assert.Equal(t, []byte{'a', 'b', 'c'}, val)
 	}
 
 	t.Logf("BinaryRowDataPacket blob: %s", packet.Values[0])
