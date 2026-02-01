@@ -55,3 +55,7 @@ tidb-repo/
 # Temporary files
 *.tmp
 temp*
+
+# Project specific files
+permissions.json
+users.json
