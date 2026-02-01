@@ -106,13 +106,13 @@ func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row pars
 		return e.compareValues(left, right) < 0, nil
 	case "<=":
 		return e.compareValues(left, right) <= 0, nil
-	case "+":
+	case "+", "plus":
 		return e.addValues(left, right)
-	case "-":
+	case "-", "minus":
 		return e.subValues(left, right)
-	case "*":
+	case "*", "mul":
 		return e.mulValues(left, right)
-	case "/":
+	case "/", "div":
 		return e.divValues(left, right)
 	case "like":
 		return e.likeValues(left, right), nil
