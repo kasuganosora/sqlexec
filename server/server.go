@@ -443,13 +443,46 @@ func (s *Server) handleCommand(ctx context.Context, sess *session.Session, conn 
 	return nil
 }
 
+// mapErrorCode 将 API 错误码映射为 MySQL 错误码
+func (s *Server) mapErrorCode(err error) (uint16, string) {
+	// 检查错误消息内容
+	errMsg := err.Error()
+
+	// 表不存在
+	if strings.Contains(errMsg, "table") && strings.Contains(errMsg, "not found") {
+		return 1146, "42S02" // ER_NO_SUCH_TABLE
+	}
+
+	// 列不存在
+	if strings.Contains(errMsg, "column") && strings.Contains(errMsg, "not found") {
+		return 1054, "42S22" // ER_BAD_FIELD_ERROR
+	}
+
+	// 语法错误
+	if strings.Contains(errMsg, "syntax") || strings.Contains(errMsg, "SYNTAX_ERROR") {
+		return 1064, "42000" // ER_PARSE_ERROR
+	}
+
+	// 未知表
+	if strings.Contains(errMsg, "unknown") && strings.Contains(errMsg, "table") {
+		return 1146, "42S02" // ER_NO_SUCH_TABLE
+	}
+
+	// 数据库不存在
+	if strings.Contains(errMsg, "Unknown database") {
+		return 1049, "42000" // ER_BAD_DB_ERROR
+	}
+
+	// 默认语法错误
+	return 1064, "42000" // ER_PARSE_ERROR
+}
+
 func (s *Server) sendError(conn net.Conn, err error, sequenceID uint8) {
 	errPacket := &protocol.ErrorPacket{}
 	errPacket.SequenceID = sequenceID
 	errPacket.ErrorInPacket.Header = 0xff
-	errPacket.ErrorInPacket.ErrorCode = 1064
+	errPacket.ErrorInPacket.ErrorCode, errPacket.ErrorInPacket.SqlState = s.mapErrorCode(err)
 	errPacket.ErrorInPacket.SqlStateMarker = "#"
-	errPacket.ErrorInPacket.SqlState = "42000"
 	errPacket.ErrorInPacket.ErrorMessage = err.Error()
 
 	packetBytes, marshalErr := errPacket.Marshal()
