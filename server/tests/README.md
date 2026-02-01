@@ -56,6 +56,8 @@
 ### 6. temporary_table_test.go - 临时表测试
 测试临时表功能。
 - `TestTemporaryTables` - 临时表完整功能测试
+测试临时表功能。
+- `TestTemporaryTables` - 临时表完整功能测试
 
 ## 测试分类
 
