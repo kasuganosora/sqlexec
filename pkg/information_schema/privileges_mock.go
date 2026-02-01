@@ -2,6 +2,8 @@ package information_schema
 
 import (
 	"sync"
+
+	"github.com/kasuganosora/sqlexec/server/acl"
 )
 
 // MockACLManager is a mock implementation of ACLManager for testing
@@ -65,13 +67,13 @@ func (m *MockACLManager) IsLoaded() bool {
 }
 
 // GetUsers returns all users
-func (m *MockACLManager) GetUsers() interface{} {
+func (m *MockACLManager) GetUsers() []*acl.User {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	users := make([]interface{}, len(m.users))
+	users := make([]*acl.User, len(m.users))
 	for i, u := range m.users {
-		users[i] = &MockUser{
+		users[i] = &acl.User{
 			User:       u.User,
 			Host:       u.Host,
 			Password:   u.Password,

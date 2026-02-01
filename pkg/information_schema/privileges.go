@@ -284,10 +284,10 @@ func matchesPrivilegeLike(value, pattern string) bool {
 	if pattern == "%" {
 		return true
 	}
-	if pattern == value {
+	valueUpper := strings.ToUpper(value)
+	if pattern == valueUpper {
 		return true
 	}
-	valueUpper := strings.ToUpper(value)
 	if len(pattern) > 0 && pattern[0] == '%' && len(pattern) > 1 {
 		suffix := pattern[1:]
 		return len(value) >= len(suffix) && strings.HasSuffix(valueUpper, strings.ToUpper(suffix))

@@ -111,7 +111,7 @@ func TestUserPrivilegesTableQueryGranteeFormat(t *testing.T) {
 
 	// Verify GRANTEE format
 	if selectRow["GRANTEE"] != "'testuser'@'%'" {
-		t.Errorf("GRANTEE = %v, want 'testuser'@'%'", selectRow["GRANTEE"])
+		t.Errorf("GRANTEE = %v, want 'testuser'@'%%'", selectRow["GRANTEE"])
 	}
 
 	// Verify TABLE_CATALOG
@@ -533,7 +533,7 @@ func TestApplyPrivilegeFilters(t *testing.T) {
 
 	for _, row := range filtered {
 		if row["GRANTEE"] != "'user1'@'%'" {
-			t.Errorf("applyPrivilegeFilters() returned row with GRANTEE = %v, want 'user1'@'%'", row["GRANTEE"])
+			t.Errorf("applyPrivilegeFilters() returned row with GRANTEE = %v, want 'user1'@'%%'", row["GRANTEE"])
 		}
 	}
 }
