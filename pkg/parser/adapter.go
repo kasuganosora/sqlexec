@@ -720,6 +720,17 @@ func (a *SQLAdapter) convertSelectField(field *ast.SelectField) (*SelectColumn, 
 		col.IsWildcard = expr.Name.Name.String() == "*"
 	}
 
+	// 处理函数调用 - 将表达式转换为 Expression
+	if field.Expr != nil {
+		if expr, err := a.convertExpression(field.Expr); err == nil {
+			col.Expr = expr
+			// 如果是函数调用且没有设置名称，使用函数名作为列名
+			if col.Name == "" && expr.Type == ExprTypeFunction {
+				col.Name = expr.Function
+			}
+		}
+	}
+
 	if field.AsName.L != "" {
 		col.Alias = field.AsName.String()
 	}

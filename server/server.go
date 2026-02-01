@@ -73,6 +73,11 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 	return s
 }
 
+// SetDB 设置服务器的 DB 实例（用于测试）
+func (s *Server) SetDB(db *api.DB) {
+	s.db = db
+}
+
 func (s *Server) Start() (err error) {
 	acceptChan := make(chan net.Conn)
 	errChan := make(chan error, 1)
@@ -255,6 +260,7 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
 
 func (s *Server) handleHandshake(ctx context.Context, conn net.Conn, sess *session.Session) error {
 	handshakePacket := &protocol.HandshakeV10Packet{}
+	handshakePacket.Packet.SequenceID = 0 // 握手包的序列号必须为0
 	handshakePacket.ProtocolVersion = 10
 	handshakePacket.ServerVersion = s.config.Server.ServerVersion
 	handshakePacket.ThreadID = sess.ThreadID
@@ -303,8 +309,15 @@ func (s *Server) handleHandshake(ctx context.Context, conn net.Conn, sess *sessi
 	sess.Set("salt2", handshakePacket.AuthPluginDataPart2)
 
 	okPacket := &protocol.OkPacket{}
-	okPacket.SequenceID = sess.GetNextSequenceID()
+	// MySQL握手阶段序列号是连续的：
+	// - 握手包（服务器->客户端）：序列号0
+	// - 认证响应（客户端->服务器）：序列号1
+	// - OK包（服务器->客户端）：序列号2
+	okPacket.SequenceID = 2
 	okPacket.OkInPacket.Header = 0x00
+	// 握手完成后，准备接收新命令，序列号重置为255（GetNextSequenceID后为0）
+	// 参考MariaDB: net_new_transaction重置序列号
+	sess.SequenceID = 255
 	okPacket.OkInPacket.AffectedRows = 0
 	okPacket.OkInPacket.LastInsertId = 0
 	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
@@ -404,6 +417,10 @@ func (s *Server) unmarshalPacket(packet any, data []byte) error {
 }
 
 func (s *Server) handleCommand(ctx context.Context, sess *session.Session, conn net.Conn, commandType uint8, command any) error {
+	// 每个新命令开始时重置序列号，参考MariaDB的net_new_transaction()
+	// 握手完成后，第一个命令从序列号0开始
+	sess.ResetSequenceID()
+
 	switch commandType {
 	case protocol.COM_QUIT:
 		return s.handleComQuit(ctx, sess, conn, command.(*protocol.ComQuitPacket))
@@ -482,14 +499,25 @@ func (s *Server) sendError(conn net.Conn, err error, sequenceID uint8) {
 	errPacket.SequenceID = sequenceID
 	errPacket.ErrorInPacket.Header = 0xff
 	errPacket.ErrorInPacket.ErrorCode, errPacket.ErrorInPacket.SqlState = s.mapErrorCode(err)
-	errPacket.ErrorInPacket.SqlStateMarker = "#"
+	if errPacket.ErrorInPacket.SqlState != "" {
+		errPacket.ErrorInPacket.SqlStateMarker = "#"
+	}
 	errPacket.ErrorInPacket.ErrorMessage = err.Error()
+
+	log.Printf("[DEBUG] 错误包内容: ErrorCode=%d, SqlState='%s', SqlStateMarker='%s', ErrorMessage='%s'",
+		errPacket.ErrorInPacket.ErrorCode,
+		errPacket.ErrorInPacket.SqlState,
+		errPacket.ErrorInPacket.SqlStateMarker,
+		errPacket.ErrorInPacket.ErrorMessage)
 
 	packetBytes, marshalErr := errPacket.Marshal()
 	if marshalErr != nil {
 		log.Printf("序列化错误包失败: %v", marshalErr)
 		return
 	}
+
+	log.Printf("[DEBUG] 错误包字节: %x", packetBytes)
+
 	if _, writeErr := conn.Write(packetBytes); writeErr != nil {
 		log.Printf("发送错误包失败: %v", writeErr)
 	}
@@ -576,7 +604,7 @@ func (s *Server) getColumnFlags(col domain.ColumnInfo) uint16 {
 // formatRowValue 将行值格式化为字符串
 func (s *Server) formatRowValue(value interface{}) string {
 	if value == nil {
-		return "NULL"
+		return protocol.NULLValueMarker
 	}
 	switch v := value.(type) {
 	case string:
@@ -638,7 +666,7 @@ func (s *Server) sendQueryResult(conn net.Conn, sess *session.Session, result *d
 				rowData[j] = s.formatRowValue(val)
 			} else {
 				log.Printf("      Value not found in row, available keys: %v", getMapKeys(row))
-				rowData[j] = "NULL"
+				rowData[j] = ""
 			}
 		}
 		rows[i] = rowData
@@ -670,7 +698,6 @@ func (s *Server) handleComQuit(ctx context.Context, sess *session.Session, conn 
 }
 
 func (s *Server) handleComPing(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComPingPacket) error {
-	log.Printf("处理 COM_PING")
 	return s.sendOK(conn, sess.GetNextSequenceID())
 }
 
@@ -699,8 +726,10 @@ func (s *Server) handleComQuery(ctx context.Context, sess *session.Session, conn
 		strings.HasPrefix(queryUpper, "ALTER"), strings.HasPrefix(queryUpper, "TRUNCATE"):
 		return s.handleDML(sess, conn, query)
 	default:
-		log.Printf("未匹配到任何已知命令类型，返回 OK")
-		return s.sendOK(conn, sess.GetNextSequenceID())
+		// 未匹配到任何已知命令类型，尝试作为普通查询执行
+		// 这样可以捕获语法错误等解析问题
+		log.Printf("未匹配到任何已知命令类型，尝试作为普通查询执行")
+		return s.handleSelect(sess, conn, query)
 	}
 }
 
@@ -917,19 +946,14 @@ func (s *Server) handleUse(sess *session.Session, conn net.Conn, query string) e
 	log.Printf("切换数据库: [%s]", dbName)
 	sess.Set("current_database", dbName)
 
-	// API Session 执行 USE 语句
+	// API Session 设置当前数据库
 	apiSessIntf := sess.GetAPISession()
 	if apiSessIntf != nil {
 		log.Printf("获取 API Session 成功")
 		if apiSess, ok := apiSessIntf.(*api.Session); ok {
 			log.Printf("API Session 类型断言成功")
-			_, err := apiSess.Query(query)
-			if err != nil {
-				log.Printf("API Session 切换数据库失败: %v", err)
-				// 不返回错误，因为可能是数据库不存在
-			} else {
-				log.Printf("API Session 切换数据库成功")
-			}
+			apiSess.SetCurrentDB(dbName)
+			log.Printf("API Session 切换数据库成功: %s", dbName)
 		} else {
 			log.Printf("API Session 类型断言失败")
 		}

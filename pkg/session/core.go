@@ -80,6 +80,11 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 		return s.executor.ExecuteSelect(ctx, parseResult.Statement.Select)
 	}
 
+	// 处理 SHOW 语句 - 转换为 information_schema 查询
+	if parseResult.Statement.Show != nil {
+		return s.executor.ExecuteShow(ctx, parseResult.Statement.Show)
+	}
+
 	return nil, fmt.Errorf("statement type not supported yet")
 }
 
@@ -493,8 +498,28 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 		return nil, fmt.Errorf("session is closed")
 	}
 
+	dbName := useStmt.Database
+
+	// 验证数据库是否存在
+	// 允许使用 information_schema（特殊数据库）
+	if dbName != "information_schema" {
+		if s.dsManager != nil {
+			dsNames := s.dsManager.List()
+			found := false
+			for _, name := range dsNames {
+				if name == dbName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("unknown database '%s'", dbName)
+			}
+		}
+	}
+
 	// 设置当前数据库
-	s.currentDB = useStmt.Database
+	s.SetCurrentDB(dbName)
 
 	// 返回成功结果
 	return &domain.QueryResult{
@@ -509,6 +534,18 @@ func (s *CoreSession) GetCurrentDB() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.currentDB
+}
+
+// SetCurrentDB 设置当前使用的数据库名
+func (s *CoreSession) SetCurrentDB(dbName string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.currentDB = dbName
+
+	// 同步更新 OptimizedExecutor 的当前数据库
+	if s.executor != nil {
+		s.executor.SetCurrentDB(dbName)
+	}
 }
 
 // Close 关闭会话

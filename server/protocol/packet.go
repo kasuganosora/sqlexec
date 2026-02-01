@@ -10,6 +10,9 @@ import (
 	"io"
 )
 
+// NULLValueMarker 用于标记NULL值的特殊字符串
+const NULLValueMarker = "___SQL_EXEC_NULL___"
+
 type Packet struct {
 	PayloadLength uint32 `mysql:"int<3>"`
 	SequenceID    uint8  `mysql:"int<1>"`
@@ -587,8 +590,18 @@ func (p *ErrorPacket) Marshal() ([]byte, error) {
 	WriteNumber(buf, p.ErrorInPacket.ErrorCode, 2)
 
 	if p.ErrorInPacket.SqlState != "" {
-		WriteStringByNullEnd(buf, p.ErrorInPacket.SqlStateMarker)
-		WriteStringByNullEnd(buf, p.ErrorInPacket.SqlState)
+		// SQL State Marker: 写入1个字节 '#'
+		buf.WriteByte('#')
+		// SQL State: 写入5个字节（固定长度，不带NULL终止）
+		if len(p.ErrorInPacket.SqlState) >= 5 {
+			buf.WriteString(p.ErrorInPacket.SqlState[:5])
+		} else {
+			// 如果SqlState不足5字节，右补空格
+			buf.WriteString(p.ErrorInPacket.SqlState)
+			for i := len(p.ErrorInPacket.SqlState); i < 5; i++ {
+				buf.WriteByte(' ')
+			}
+		}
 	}
 
 	WriteStringByNullEnd(buf, p.ErrorInPacket.ErrorMessage)
@@ -834,6 +847,34 @@ type ComPacket struct {
 type ComInitDBPacket struct {
 	ComPacket
 	SchemaName string `mysql:"string<EOF>"`
+}
+
+// Unmarshal COM_INIT_DB packet
+func (p *ComInitDBPacket) Unmarshal(r io.Reader) (err error) {
+	// 先读取包头
+	if err := p.Packet.Unmarshal(r); err != nil {
+		return err
+	}
+
+	// 从 Payload 中读取 SchemaName
+	// COM_INIT_DB payload 格式: 1字节命令字节 + 数据库名（以null结尾或直到EOF）
+	if len(p.Packet.Payload) > 1 {
+		// 跳过第一个字节（命令字节）
+		schemaBytes := p.Packet.Payload[1:]
+		
+		// 检查是否有 null 终止符
+		if nullIndex := bytes.IndexByte(schemaBytes, 0); nullIndex >= 0 {
+			// 找到 null 终止符，取前面的部分
+			p.SchemaName = string(schemaBytes[:nullIndex])
+		} else {
+			// 没有 null 终止符，使用全部字节
+			p.SchemaName = string(schemaBytes)
+		}
+		return nil
+	}
+
+	p.SchemaName = ""
+	return nil
 }
 
 type ComFieldListPacket struct {
@@ -1107,7 +1148,12 @@ func (p *RowDataPacket) Marshal() ([]byte, error) {
 
 	// 写入行数据
 	for _, value := range p.RowData {
-		WriteStringByLenenc(buf, value)
+		// 处理NULL值：根据MySQL协议，NULL用0xfb表示
+		if value == NULLValueMarker {
+			buf.WriteByte(0xfb) // NULL标记
+		} else {
+			WriteStringByLenenc(buf, value)
+		}
 	}
 
 	// 组装Packet头部

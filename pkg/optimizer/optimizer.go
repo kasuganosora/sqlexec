@@ -79,6 +79,55 @@ func (o *Optimizer) convertToLogicalPlan(stmt *parser.SQLStatement) (LogicalPlan
 // convertSelect 转换 SELECT 语句
 func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, error) {
 	fmt.Println("  [DEBUG] convertSelect: 开始转换, 表名:", stmt.From)
+
+	// 处理没有 FROM 子句的查询（如 SELECT DATABASE()）
+	if stmt.From == "" {
+		fmt.Println("  [DEBUG] convertSelect: 无 FROM 子句，使用常量数据源")
+		// 创建一个虚拟表，只有一行一列
+		virtualTableInfo := &domain.TableInfo{
+			Name:    "dual",
+			Columns: []domain.ColumnInfo{},
+		}
+
+		var logicalPlan LogicalPlan = NewLogicalDataSource("dual", virtualTableInfo)
+
+		// 应用 WHERE 条件（Selection）
+		if stmt.Where != nil {
+			conditions := o.extractConditions(stmt.Where)
+			logicalPlan = NewLogicalSelection(conditions, logicalPlan)
+		}
+
+		// 应用 GROUP BY（Aggregate）
+		if len(stmt.GroupBy) > 0 {
+			aggFuncs := o.extractAggFuncs(stmt.Columns)
+			logicalPlan = NewLogicalAggregate(aggFuncs, stmt.GroupBy, logicalPlan)
+		}
+
+		// 应用 ORDER BY（Sort）
+		if len(stmt.OrderBy) > 0 {
+			orderItems := make([]OrderByItem, len(stmt.OrderBy))
+			for i, item := range stmt.OrderBy {
+				orderItems[i] = OrderByItem{
+					Column:    item.Column,
+					Direction: item.Direction,
+				}
+			}
+			logicalPlan = NewLogicalSort(orderItems, logicalPlan)
+		}
+
+		// 应用 LIMIT（Limit）
+		if stmt.Limit != nil {
+			limit := *stmt.Limit
+			offset := int64(0)
+			if stmt.Offset != nil {
+				offset = *stmt.Offset
+			}
+			logicalPlan = NewLogicalLimit(limit, offset, logicalPlan)
+		}
+
+		return logicalPlan, nil
+	}
+
 	// 1. 创建 DataSource
 	tableInfo, err := o.dataSource.GetTableInfo(context.Background(), stmt.From)
 	if err != nil {

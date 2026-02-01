@@ -207,7 +207,17 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 	rows := make([]domain.Row, 0, len(stmt.Values))
 	for _, values := range stmt.Values {
 		row := make(domain.Row)
-		for i, col := range stmt.Columns {
+
+		// 如果没有指定列名，使用表结构的列顺序
+		columns := stmt.Columns
+		if len(columns) == 0 {
+			// 从表结构获取列名
+			for _, col := range tableInfo.Columns {
+				columns = append(columns, col.Name)
+			}
+		}
+
+		for i, col := range columns {
 			if i < len(values) {
 				row[col] = values[i]
 			}

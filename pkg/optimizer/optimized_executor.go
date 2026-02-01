@@ -269,6 +269,31 @@ func (e *OptimizedExecutor) handleNoFromQuery(ctx context.Context, stmt *parser.
 				return result, nil
 			}
 		}
+
+		// 处理 SELECT 常量（如 SELECT 1）
+		if col.Expr != nil && col.Expr.Type == parser.ExprTypeValue {
+			fmt.Printf("  [DEBUG] handleNoFromQuery: 识别为 SELECT 常量: %v\n", col.Expr.Value)
+			
+			// 使用列别名（如果有）或默认名称
+			colName := col.Name
+			if colName == "" {
+				colName = fmt.Sprintf("%v", col.Expr.Value)
+			}
+			if col.Alias != "" {
+				colName = col.Alias
+			}
+
+			result := &domain.QueryResult{
+				Columns: []domain.ColumnInfo{
+					{Name: colName, Type: "int"},
+				},
+				Rows: []domain.Row{
+					{colName: col.Expr.Value},
+				},
+				Total: 1,
+			}
+			return result, nil
+		}
 	}
 
 	// 其他无 FROM 子句的查询暂时不支持
@@ -283,6 +308,13 @@ func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *pars
 	if stmt.From == "" {
 		fmt.Println("  [DEBUG] 检测到无 FROM 子句的查询")
 		return e.handleNoFromQuery(ctx, stmt)
+	}
+
+	// 再次检查是否是 information_schema 查询
+	// 因为 optimizer 路径不支持 information_schema 虚拟表
+	if e.isInformationSchemaQuery(stmt.From) {
+		fmt.Println("  [DEBUG] 在 optimizer 路径中检测到 information_schema 查询，切换到 builder 路径")
+		return e.executeWithBuilder(ctx, stmt)
 	}
 
 	// 1. 构建 SQLStatement

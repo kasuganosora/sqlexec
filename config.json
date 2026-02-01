@@ -1,9 +1,8 @@
 {
   "server": {
     "host": "127.0.0.1",
-    "port": 3307,
-    "server_version": "SqlExc",
-    "keep_alive_period": "30s"
+    "port": 13306,
+    "server_version": "SqlExc"
   },
   "database": {
     "max_connections": 100,
@@ -26,43 +25,34 @@
   },
   "cache": {
     "query_cache": {
-      "max_size": 1000,
-      "ttl": "5m"
+      "max_size": 1000
     },
     "result_cache": {
-      "max_size": 1000,
-      "ttl": "10m"
+      "max_size": 1000
     },
     "schema_cache": {
-      "max_size": 100,
-      "ttl": "1h"
+      "max_size": 100
     }
   },
   "monitor": {
     "slow_query": {
-      "threshold": "1s",
       "max_entries": 1000
     }
   },
   "connection": {
     "max_open": 10,
-    "max_idle": 5,
-    "lifetime": "30m",
-    "idle_timeout": "5m"
+    "max_idle": 5
   },
   "mvcc": {
     "enable_warning": true,
     "auto_downgrade": true,
-    "gc_interval": "5m",
-    "gc_age_threshold": "1h",
     "xid_wrap_threshold": 100000,
     "max_active_txns": 10000
   },
   "session": {
-    "max_age": "24h",
-    "gc_interval": "1m"
   },
   "optimizer": {
     "enabled": true
   }
 }
+

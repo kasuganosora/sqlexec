@@ -43,8 +43,19 @@ func (t *SchemataTable) Query(ctx context.Context, filters []domain.Filter, opti
 	// Get all data source names
 	dsNames := t.dsManager.List()
 
-	// Build result rows
-	rows := make([]domain.Row, 0, len(dsNames))
+	// Build result rows - include information_schema as a special database
+	rows := make([]domain.Row, 0, len(dsNames)+1)
+
+	// Add information_schema first (always available)
+	rows = append(rows, domain.Row{
+		"catalog_name":              "def",
+		"schema_name":               "information_schema",
+		"default_character_set_name": "utf8mb4",
+		"default_collation_name":     "utf8mb4_general_ci",
+		"sql_path":                 nil,
+	})
+
+	// Add all registered data sources
 	for _, name := range dsNames {
 		row := domain.Row{
 			"catalog_name":              "def",

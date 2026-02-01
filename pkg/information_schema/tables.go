@@ -57,11 +57,50 @@ func (t *TablesTable) GetSchema() []domain.ColumnInfo {
 
 // Query executes a query against tables table
 func (t *TablesTable) Query(ctx context.Context, filters []domain.Filter, options *domain.QueryOptions) (*domain.QueryResult, error) {
-	// Get all data source names
-	dsNames := t.dsManager.List()
-
 	// Build result rows
 	rows := make([]domain.Row, 0)
+
+	// Add information_schema's own tables
+	infoSchemaTables := []struct {
+		name    string
+		comment string
+	}{
+		{"schemata", "Databases"},
+		{"tables", "Tables"},
+		{"columns", "Table columns"},
+		{"table_constraints", "Table constraints"},
+		{"key_column_usage", "Key column usage"},
+	}
+
+	for _, table := range infoSchemaTables {
+		row := domain.Row{
+			"table_catalog":   "def",
+			"table_schema":    "information_schema",
+			"table_name":     table.name,
+			"table_type":      "SYSTEM VIEW",
+			"engine":          "MEMORY",
+			"version":         int64(10),
+			"row_format":      "Fixed",
+			"table_rows":      int64(0),
+			"avg_row_length":  int64(0),
+			"data_length":     int64(0),
+			"max_data_length": int64(0),
+			"index_length":    int64(0),
+			"data_free":       int64(0),
+			"auto_increment":  nil,
+			"create_time":     time.Now(),
+			"update_time":     nil,
+			"check_time":      nil,
+			"table_collation": "utf8mb4_general_ci",
+			"checksum":        nil,
+			"create_options":  "",
+			"table_comment":   table.comment,
+		}
+		rows = append(rows, row)
+	}
+
+	// Get all data source names
+	dsNames := t.dsManager.List()
 
 	for _, dsName := range dsNames {
 		// Get tables from this data source
