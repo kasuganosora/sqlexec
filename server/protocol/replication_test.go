@@ -413,7 +413,7 @@ func TestReplicationNetworkStream(t *testing.T) {
 	header, eventData, status, err := stream.ReadEvent()
 	assert.NoError(t, err)
 	assert.Equal(t, uint8(0x00), status)
-	assert.Equal(t, BINLOG_GTID_EVENT, header.EventType)
+	assert.Equal(t, uint8(BINLOG_GTID_EVENT), header.EventType)
 	assert.NotNil(t, eventData)
 
 	t.Logf("ReplicationNetworkStream: EventType=%s, Status=%d, DataLen=%d",

@@ -10,11 +10,12 @@ import (
 	"net"
 	"strings"
 
-	"github.com/kasuganosora/sqlexec/server/protocol"
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/config"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
+	"github.com/kasuganosora/sqlexec/server/acl"
+	"github.com/kasuganosora/sqlexec/server/protocol"
 	"github.com/kasuganosora/sqlexec/pkg/session"
 )
 
@@ -24,6 +25,7 @@ type Server struct {
 	sessionMgr *session.SessionMgr
 	config     *config.Config
 	db         *api.DB
+	aclManager *acl.ACLManager
 }
 
 func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *Server {
@@ -63,12 +65,23 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 		}
 	}
 
+	// 初始化 ACL Manager
+	// 使用服务器启动目录作为数据目录
+	dataDir := "."
+	aclManager, err := acl.NewACLManager(dataDir)
+	if err != nil {
+		log.Printf("初始化 ACL Manager 失败: %v", err)
+		// 继续使用未初始化的 ACL（无权限控制）
+		aclManager = nil
+	}
+
 	s := &Server{
 		listener:   listener,
 		ctx:        ctx,
 		sessionMgr: session.NewSessionMgr(ctx, session.NewMemoryDriver()),
 		config:     cfg,
 		db:         db,
+		aclManager: aclManager,
 	}
 	return s
 }
@@ -295,7 +308,26 @@ func (s *Server) handleHandshake(ctx context.Context, conn net.Conn, sess *sessi
 	log.Printf("收到认证包: User=%s, Database=%s, CharacterSet=%d",
 		authRequestPacket.User, authRequestPacket.Database, authRequestPacket.CharacterSet)
 
-	sess.SetUser(authRequestPacket.User)
+	// ACL 认证检查
+	if s.aclManager != nil {
+		// 验证用户凭据（使用简单的密码验证，暂不使用完整认证协议）
+		_, err := s.aclManager.Authenticate(authRequestPacket.User, "")
+		if err != nil {
+			log.Printf("认证失败: User=%s, error=%v", authRequestPacket.User, err)
+			// 发送认证失败错误包（手动构造错误响应）
+			errMsg := fmt.Sprintf("Access denied for user '%s'@'localhost'", authRequestPacket.User)
+			errData := append([]byte{0xff, 0x15, 0x04, '#', '2', '8', '0', '0', '0'}, []byte(errMsg)...)
+			_, _ = conn.Write(errData)
+			return fmt.Errorf("认证失败: 用户 %s", authRequestPacket.User)
+		}
+		
+		log.Printf("认证成功: User=%s", authRequestPacket.User)
+		sess.SetUser(authRequestPacket.User)
+	} else {
+		// ACL 未初始化，允许所有用户登录
+		log.Printf("ACL 未初始化，跳过认证: User=%s", authRequestPacket.User)
+		sess.SetUser(authRequestPacket.User)
+	}
 	sess.Set("capability", authRequestPacket.ClientCapabilities)
 	sess.Set("extended_capability", authRequestPacket.ExtendedClientCapabilities)
 	sess.Set("max_packet_size", authRequestPacket.MaxPacketSize)
@@ -716,10 +748,22 @@ func (s *Server) handleComQuery(ctx context.Context, sess *session.Session, conn
 		// SHOW 命令通过 API 层处理（转换为 information_schema 查询）
 		return s.handleSelect(sess, conn, query)
 	case strings.HasPrefix(queryUpper, "SET"):
+		// 检查是否是 SET PASSWORD 语句
+		if strings.Contains(queryUpper, "SET PASSWORD") {
+			return s.handleSetPassword(sess, conn, query)
+		}
 		return s.handleSet(sess, conn, query)
 	case strings.HasPrefix(queryUpper, "USE"):
 		log.Printf("匹配到 USE 命令，调用 handleUse")
 		return s.handleUse(sess, conn, query)
+	case strings.HasPrefix(queryUpper, "CREATE USER"):
+		return s.handleCreateUser(sess, conn, query)
+	case strings.HasPrefix(queryUpper, "DROP USER"):
+		return s.handleDropUser(sess, conn, query)
+	case strings.HasPrefix(queryUpper, "GRANT"):
+		return s.handleGrant(sess, conn, query)
+	case strings.HasPrefix(queryUpper, "REVOKE"):
+		return s.handleRevoke(sess, conn, query)
 	case strings.HasPrefix(queryUpper, "INSERT"), strings.HasPrefix(queryUpper, "UPDATE"),
 		strings.HasPrefix(queryUpper, "DELETE"), strings.HasPrefix(queryUpper, "REPLACE"),
 		strings.HasPrefix(queryUpper, "CREATE"), strings.HasPrefix(queryUpper, "DROP"),
@@ -961,6 +1005,339 @@ func (s *Server) handleUse(sess *session.Session, conn net.Conn, query string) e
 		log.Printf("API Session 未初始化")
 	}
 
+	return s.sendOK(conn, sess.GetNextSequenceID())
+}
+
+func (s *Server) handleCreateUser(sess *session.Session, conn net.Conn, query string) error {
+	// 简单解析 CREATE USER 语句
+	// 格式: CREATE USER 'username'@'host' IDENTIFIED BY 'password'
+	query = strings.TrimSpace(query)
+	query = strings.TrimPrefix(query, "CREATE USER")
+	query = strings.TrimPrefix(query, "create user")
+	query = strings.TrimSpace(query)
+	
+	// 解析用户名和主机
+	// 简化版本，假设格式为 'username'@'host' IDENTIFIED BY 'password'
+	// TODO: 使用完整的 SQL 解析器
+	
+	// 跳过 IF EXISTS
+	if strings.HasPrefix(strings.ToUpper(query), "IF NOT EXISTS") {
+		query = strings.TrimSpace(query[13:])
+	}
+	
+	// 解析用户名（假设格式为 'username'@'host'）
+	var username, host, password string
+	parts := strings.Fields(query)
+	if len(parts) >= 2 {
+		// 提取 'username'@'host'
+		userHost := strings.Trim(parts[0], "'\"")
+		if idx := strings.Index(userHost, "@"); idx > 0 {
+			username = userHost[:idx]
+			host = userHost[idx+1:]
+		} else {
+			username = userHost
+			host = "%"
+		}
+	}
+	
+	// 解析密码
+	for i, part := range parts {
+		if strings.ToUpper(part) == "IDENTIFIED" && i+2 < len(parts) && strings.ToUpper(parts[i+1]) == "BY" {
+			password = strings.Trim(parts[i+2], "'\"")
+			break
+		}
+	}
+	
+	// 创建用户
+	if err := s.aclManager.CreateUser(username, host, password); err != nil {
+		log.Printf("创建用户失败: %v", err)
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	
+	log.Printf("创建用户成功: %s@%s", username, host)
+	return s.sendOK(conn, sess.GetNextSequenceID())
+}
+
+func (s *Server) handleDropUser(sess *session.Session, conn net.Conn, query string) error {
+	// 简单解析 DROP USER 语句
+	query = strings.TrimSpace(query)
+	query = strings.TrimPrefix(query, "DROP USER")
+	query = strings.TrimPrefix(query, "drop user")
+	query = strings.TrimSpace(query)
+	
+	// 跳过 IF EXISTS
+	if strings.HasPrefix(strings.ToUpper(query), "IF EXISTS") {
+		query = strings.TrimSpace(query[10:])
+	}
+	
+	// 解析用户名和主机
+	var username, host string
+	userHost := strings.TrimSpace(query)
+	userHost = strings.TrimSuffix(userHost, ";")
+	
+	if idx := strings.Index(userHost, "@"); idx > 0 {
+		username = userHost[:idx]
+		host = userHost[idx+1:]
+	} else {
+		username = userHost
+		host = "%"
+	}
+	
+	// 删除用户
+	if err := s.aclManager.DropUser(username, host); err != nil {
+		log.Printf("删除用户失败: %v", err)
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	
+	log.Printf("删除用户成功: %s@%s", username, host)
+	return s.sendOK(conn, sess.GetNextSequenceID())
+}
+
+func (s *Server) handleGrant(sess *session.Session, conn net.Conn, query string) error {
+	// 简单解析 GRANT 语句
+	// 格式: GRANT privileges ON database.* TO 'user'@'host' [WITH GRANT OPTION]
+	query = strings.TrimSpace(query)
+	query = strings.TrimPrefix(query, "GRANT")
+	query = strings.TrimPrefix(query, "grant")
+	query = strings.TrimSpace(query)
+	
+	// 解析权限
+	var privileges []string
+	var rest string
+	if idx := strings.Index(strings.ToUpper(query), "ON"); idx > 0 {
+		privPart := strings.TrimSpace(query[:idx])
+		privileges = strings.Split(privPart, ",")
+		for i, p := range privileges {
+			privileges[i] = strings.TrimSpace(p)
+		}
+		rest = strings.TrimSpace(query[idx+2:])
+	} else {
+		err := fmt.Errorf("无效的 GRANT 语法")
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	
+	// 解析 ON 部分
+	var db, table string
+	if idx := strings.Index(strings.ToUpper(rest), "TO"); idx > 0 {
+		onPart := strings.TrimSpace(rest[:idx])
+		// 格式: database.table 或 database.*
+		if strings.Contains(onPart, ".") {
+			parts := strings.Split(onPart, ".")
+			if len(parts) >= 2 {
+				db = strings.TrimSpace(parts[0])
+				table = strings.TrimSpace(parts[1])
+			}
+		}
+		rest = strings.TrimSpace(rest[idx+2:])
+	} else {
+		err := fmt.Errorf("无效的 GRANT 语法")
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	
+	// 解析 TO 部分
+	var username, host string
+	toPart := strings.TrimSpace(rest)
+	if idx := strings.Index(toPart, "WITH"); idx > 0 {
+		toPart = strings.TrimSpace(toPart[:idx])
+	}
+	
+	// 解析用户名
+	if strings.Contains(toPart, "@") {
+		parts := strings.Split(toPart, "@")
+		username = strings.TrimSpace(strings.Trim(parts[0], "'\""))
+		host = strings.TrimSpace(strings.Trim(parts[1], "'\""))
+		host = strings.TrimSpace(strings.TrimSuffix(host, ";"))
+	} else {
+		username = strings.TrimSpace(strings.Trim(toPart, "'\""))
+		host = "%"
+	}
+	
+	// 确定权限级别
+	var level acl.PermissionLevel
+	if table == "*" {
+		level = acl.PermissionLevelDatabase
+	} else {
+		level = acl.PermissionLevelTable
+	}
+	
+	// 检查 WITH GRANT OPTION
+	withGrantOption := strings.Contains(strings.ToUpper(query), "WITH GRANT OPTION")
+	
+	// 授予权限
+	// 转换 []string 到 []acl.PermissionType
+	privTypes := make([]acl.PermissionType, len(privileges))
+	for i, p := range privileges {
+		privTypes[i] = acl.PermissionType(p)
+	}
+	
+	if err := s.aclManager.Grant(username, host, privTypes, level, db, table, ""); err != nil {
+		log.Printf("授权失败: %v", err)
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	
+	// 如果需要 WITH GRANT OPTION，额外授权
+	if withGrantOption {
+		s.aclManager.Grant(username, host, []acl.PermissionType{"GRANT OPTION"}, level, db, table, "")
+	}
+	
+	log.Printf("授权成功: %s@%s 被授予 %s 权限 (%s.%s)", username, host, privileges, db, table)
+	return s.sendOK(conn, sess.GetNextSequenceID())
+}
+
+func (s *Server) handleRevoke(sess *session.Session, conn net.Conn, query string) error {
+	// 简单解析 REVOKE 语句
+	// 格式: REVOKE privileges ON database.* FROM 'user'@'host'
+	query = strings.TrimSpace(query)
+	query = strings.TrimPrefix(query, "REVOKE")
+	query = strings.TrimPrefix(query, "revoke")
+	query = strings.TrimSpace(query)
+	
+	// 解析权限
+	var privileges []string
+	var rest string
+	if idx := strings.Index(strings.ToUpper(query), "ON"); idx > 0 {
+		privPart := strings.TrimSpace(query[:idx])
+		privileges = strings.Split(privPart, ",")
+		for i, p := range privileges {
+			privileges[i] = strings.TrimSpace(p)
+		}
+		rest = strings.TrimSpace(query[idx+2:])
+	} else {
+		err := fmt.Errorf("无效的 REVOKE 语法")
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	
+	// 解析 ON 部分
+	var db, table string
+	if idx := strings.Index(strings.ToUpper(rest), "FROM"); idx > 0 {
+		onPart := strings.TrimSpace(rest[:idx])
+		if strings.Contains(onPart, ".") {
+			parts := strings.Split(onPart, ".")
+			if len(parts) >= 2 {
+				db = strings.TrimSpace(parts[0])
+				table = strings.TrimSpace(parts[1])
+			}
+		}
+		rest = strings.TrimSpace(rest[idx+4:])
+	} else {
+		err := fmt.Errorf("无效的 REVOKE 语法")
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	
+	// 解析 FROM 部分
+	var username, host string
+	fromPart := strings.TrimSpace(rest)
+	fromPart = strings.TrimSpace(strings.TrimSuffix(fromPart, ";"))
+	
+	if strings.Contains(fromPart, "@") {
+		parts := strings.Split(fromPart, "@")
+		username = strings.TrimSpace(strings.Trim(parts[0], "'\""))
+		host = strings.TrimSpace(strings.Trim(parts[1], "'\""))
+	} else {
+		username = strings.TrimSpace(strings.Trim(fromPart, "'\""))
+		host = "%"
+	}
+	
+	// 确定权限级别
+	var level acl.PermissionLevel
+	if table == "*" {
+		level = acl.PermissionLevelDatabase
+	} else {
+		level = acl.PermissionLevelTable
+	}
+	
+	// 撤销权限
+	// 转换 []string 到 []acl.PermissionType
+	privTypes := make([]acl.PermissionType, len(privileges))
+	for i, p := range privileges {
+		privTypes[i] = acl.PermissionType(p)
+	}
+	
+	if err := s.aclManager.Revoke(username, host, privTypes, level, db, table, ""); err != nil {
+		log.Printf("撤销权限失败: %v", err)
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	
+	log.Printf("撤销权限成功: %s@%s 被撤销 %s 权限 (%s.%s)", username, host, privileges, db, table)
+	return s.sendOK(conn, sess.GetNextSequenceID())
+}
+
+func (s *Server) handleSetPassword(sess *session.Session, conn net.Conn, query string) error {
+	// 简单解析 SET PASSWORD 语句
+	// 格式: SET PASSWORD FOR 'user'@'host' = PASSWORD('newpassword')
+	// 或者: SET PASSWORD = PASSWORD('newpassword') (为当前用户)
+	query = strings.TrimSpace(query)
+	query = strings.TrimPrefix(query, "SET PASSWORD")
+	query = strings.TrimPrefix(query, "set password")
+	query = strings.TrimSpace(query)
+	
+	var username, host, newPassword string
+	
+	// 判断是为当前用户还是指定用户
+	if strings.HasPrefix(strings.ToUpper(query), "FOR") {
+		// 为指定用户设置密码
+		query = strings.TrimSpace(query[3:])
+		if idx := strings.Index(query, "="); idx > 0 {
+			userPart := strings.TrimSpace(query[:idx])
+			userPart = strings.TrimSpace(strings.TrimPrefix(userPart, "FOR"))
+			userPart = strings.TrimSpace(strings.TrimPrefix(userPart, "for"))
+			
+			// 解析用户名和主机
+			if strings.Contains(userPart, "@") {
+				parts := strings.Split(userPart, "@")
+				username = strings.TrimSpace(strings.Trim(parts[0], "'\""))
+				host = strings.TrimSpace(strings.Trim(parts[1], "'\""))
+			} else {
+				username = strings.TrimSpace(strings.Trim(userPart, "'\""))
+				host = "%"
+			}
+			
+			// 解析新密码
+			passwordPart := strings.TrimSpace(query[idx+1:])
+			passwordPart = strings.TrimSpace(strings.TrimPrefix(passwordPart, "PASSWORD"))
+			passwordPart = strings.TrimSpace(passwordPart)
+			newPassword = strings.Trim(passwordPart, "()'\"")
+		}
+	} else {
+		// 为当前用户设置密码
+		// 从 session 获取用户信息
+		apiSessIntf := sess.GetAPISession()
+		if apiSessIntf != nil {
+			if apiSess, ok := apiSessIntf.(*api.Session); ok {
+				// 获取当前数据库信息（暂不直接获取用户）
+				currentDB := apiSess.GetCurrentDB()
+				log.Printf("当前数据库: %s", currentDB)
+			}
+		}
+		if username == "" {
+			username = "root"
+		}
+		host = "%"
+		
+		if idx := strings.Index(query, "="); idx > 0 {
+			passwordPart := strings.TrimSpace(query[idx+1:])
+			passwordPart = strings.TrimSpace(strings.TrimPrefix(passwordPart, "PASSWORD"))
+			passwordPart = strings.TrimSpace(passwordPart)
+			newPassword = strings.Trim(passwordPart, "()'\"")
+		}
+	}
+	
+	// 设置密码
+	if err := s.aclManager.SetPassword(username, host, newPassword); err != nil {
+		log.Printf("设置密码失败: %v", err)
+		s.sendError(conn, err, sess.GetNextSequenceID())
+		return err
+	}
+	
+	log.Printf("设置密码成功: %s@%s", username, host)
 	return s.sendOK(conn, sess.GetNextSequenceID())
 }
 

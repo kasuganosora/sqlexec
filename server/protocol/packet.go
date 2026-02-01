@@ -403,11 +403,16 @@ func (p *OkPacket) Marshal() ([]byte, error) {
 	WriteNumber(buf, p.OkInPacket.StatusFlags, 2)
 	WriteNumber(buf, p.OkInPacket.Warnings, 2)
 
+	// 总是写入 Info（即使是空字符串）
 	if p.OkInPacket.Info != "" {
 		WriteStringByLenenc(buf, p.OkInPacket.Info)
+	} else {
+		// 写入0长度字符串
+		buf.WriteByte(0x00)
 	}
 
-	if p.OkInPacket.SessionStateInfo != "" {
+	// 总是写入 SessionStateInfo（如果标志位设置了）
+	if p.OkInPacket.StatusFlags&SERVER_SESSION_STATE_CHANGED != 0 {
 		WriteStringByLenenc(buf, p.OkInPacket.SessionStateInfo)
 	}
 
@@ -538,8 +543,9 @@ func (p *OkInPacket) Unmarshal(r io.Reader, conditional uint32) (err error) {
 		p.Warnings, _ = ReadNumber[uint16](reader, 2)
 	}
 
+	// 先读取 Info
 	p.Info, _ = ReadStringByLenencFromReader[uint8](reader)
-	// 只有在 StatusFlags 包含 SERVER_SESSION_STATE_CHANGED 时才读取 SessionStateInfo
+	// 然后读取 SessionStateInfo（如果 StatusFlags 包含 SERVER_SESSION_STATE_CHANGED）
 	if p.StatusFlags&SERVER_SESSION_STATE_CHANGED != 0 {
 		p.SessionStateInfo, _ = ReadStringByLenencFromReader[uint8](reader)
 	}
@@ -571,9 +577,9 @@ func (p *ErrorInPacket) Unmarshal(r io.Reader, conditional uint32) (err error) {
 		peekBytes, err := reader.Peek(1)
 		if err == nil && len(peekBytes) > 0 && peekBytes[0] == '#' {
 			// 读取SQL状态标记('#')
-			p.SqlStateMarker, _ = reader.ReadString(1)
+			p.SqlStateMarker, _ = ReadStringFixedFromReader(reader, 1)
 			// 读取SQL状态(5字节)
-			p.SqlState, _ = reader.ReadString(5)
+			p.SqlState, _ = ReadStringFixedFromReader(reader, 5)
 		}
 	}
 
@@ -1816,11 +1822,15 @@ func (p *BinaryRowDataPacket) Unmarshal(r io.Reader, columnCount uint64, columnT
 	}
 
 	// 2. 读取NULL位图
-	nullBitmapSize := (columnCount + 7) / 8
+	// MySQL协议规范:NULL位图包含columnCount+2位(前2位保留)
+	// 计算公式: ceil((columnCount + 2) / 8)
+	// 对于1列: (1+2)/8 = 0.375, 向上取整 = 1
+	// 但NULL位图从第3位开始,所以需要至少1字节(8位)来覆盖第3位
+	nullBitmapSize := (columnCount + 2 + 7) / 8
 	p.NullBitmap = make([]byte, nullBitmapSize)
 	_, err = io.ReadFull(reader, p.NullBitmap)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read NULL bitmap: %w", err)
 	}
 
 	// 3. 读取列值
@@ -2009,23 +2019,23 @@ func (p *BinaryRowDataPacket) readBinaryDateTime(reader *bufio.Reader) (string, 
 	if err != nil {
 		return "", err
 	}
-	
+
 	if length == 0 {
 		return "0000-00-00 00:00:00", nil
 	}
-	
+
 	year, _ := ReadNumber[uint16](reader, 2)
 	month, _ := reader.ReadByte()
 	day, _ := reader.ReadByte()
 	hours, _ := reader.ReadByte()
 	minutes, _ := reader.ReadByte()
 	seconds, _ := reader.ReadByte()
-	
+
 	var microseconds uint32
 	if length > 7 {
 		microseconds, _ = ReadNumber[uint32](reader, 4)
 	}
-	
+
 	if microseconds > 0 {
 		return fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d.%06d", year, month, day, hours, minutes, seconds, microseconds), nil
 	}

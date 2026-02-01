@@ -212,6 +212,62 @@ func (p *Parser) ParseDropDatabaseStmt(sql string) (*ast.DropDatabaseStmt, error
 	return dropDBStmt, nil
 }
 
+// ParseCreateUserStmt 解析 CREATE USER 语句
+func (p *Parser) ParseCreateUserStmt(sql string) (*ast.CreateUserStmt, error) {
+	stmt, err := p.ParseOneStmt(sql)
+	if err != nil {
+		return nil, err
+	}
+
+	createUserStmt, ok := stmt.(*ast.CreateUserStmt)
+	if !ok {
+		return nil, fmt.Errorf("不是 CREATE USER 语句")
+	}
+	return createUserStmt, nil
+}
+
+// ParseDropUserStmt 解析 DROP USER 语句
+func (p *Parser) ParseDropUserStmt(sql string) (*ast.DropUserStmt, error) {
+	stmt, err := p.ParseOneStmt(sql)
+	if err != nil {
+		return nil, err
+	}
+
+	dropUserStmt, ok := stmt.(*ast.DropUserStmt)
+	if !ok {
+		return nil, fmt.Errorf("不是 DROP USER 语句")
+	}
+	return dropUserStmt, nil
+}
+
+// ParseGrantStmt 解析 GRANT 语句
+func (p *Parser) ParseGrantStmt(sql string) (*ast.GrantStmt, error) {
+	stmt, err := p.ParseOneStmt(sql)
+	if err != nil {
+		return nil, err
+	}
+	
+	grantStmt, ok := stmt.(*ast.GrantStmt)
+	if !ok {
+		return nil, fmt.Errorf("不是 GRANT 语句")
+	}
+	return grantStmt, nil
+}
+
+// ParseRevokeStmt 解析 REVOKE 语句
+func (p *Parser) ParseRevokeStmt(sql string) (*ast.RevokeStmt, error) {
+	stmt, err := p.ParseOneStmt(sql)
+	if err != nil {
+		return nil, err
+	}
+	
+	revokeStmt, ok := stmt.(*ast.RevokeStmt)
+	if !ok {
+		return nil, fmt.Errorf("不是 REVOKE 语句")
+	}
+	return revokeStmt, nil
+}
+
 // GetStmtType 获取 SQL 语句类型
 func GetStmtType(stmt ast.StmtNode) string {
 	if stmt == nil {
@@ -251,6 +307,14 @@ func GetStmtType(stmt ast.StmtNode) string {
 		return "COMMIT"
 	case *ast.RollbackStmt:
 		return "ROLLBACK"
+	case *ast.CreateUserStmt:
+		return "CREATE_USER"
+	case *ast.DropUserStmt:
+		return "DROP_USER"
+	case *ast.GrantStmt:
+		return "GRANT"
+	case *ast.RevokeStmt:
+		return "REVOKE"
 	default:
 		return "UNKNOWN"
 	}

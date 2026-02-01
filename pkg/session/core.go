@@ -19,6 +19,8 @@ type CoreSession struct {
 	executor       *optimizer.OptimizedExecutor
 	adapter        *parser.SQLAdapter
 	currentDB      string // 当前使用的数据库名（USE 语句）
+	user           string // 当前登录用户名
+	host           string // 当前客户端主机
 	mu             sync.RWMutex
 	txn            domain.Transaction
 	txnMu         sync.Mutex       // 事务锁（防止嵌套）
@@ -45,6 +47,8 @@ func NewCoreSessionWithDSManager(dataSource domain.DataSource, dsManager *applic
 		executor:   optimizer.NewOptimizedExecutorWithDSManager(dataSource, dsManager, true),
 		adapter:    parser.NewSQLAdapter(),
 		currentDB:  "", // Default to no database selected
+		user:       "",
+		host:       "",
 		tempTables: []string{},
 		closed:     false,
 	}
@@ -546,6 +550,34 @@ func (s *CoreSession) SetCurrentDB(dbName string) {
 	if s.executor != nil {
 		s.executor.SetCurrentDB(dbName)
 	}
+}
+
+// CurrentUser returns current logged-in user
+func (s *CoreSession) CurrentUser() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.user
+}
+
+// SetUser sets current logged-in user
+func (s *CoreSession) SetUser(user string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.user = user
+}
+
+// CurrentHost returns current client host
+func (s *CoreSession) CurrentHost() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.host
+}
+
+// SetHost sets current client host
+func (s *CoreSession) SetHost(host string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.host = host
 }
 
 // Close 关闭会话

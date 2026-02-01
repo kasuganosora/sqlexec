@@ -230,7 +230,7 @@ func TestInformationSchema_SelectAll(t *testing.T) {
 	// 测试 SELECT *
 	rows, err := session.QueryAll("SELECT * FROM information_schema.schemata")
 	assert.NoError(t, err)
-	assert.Len(t, rows, 2) // Should have 2 databases
+	assert.Len(t, rows, 3) // Should have 3 databases (information_schema, db1 and db2)
 
 	session.Close()
 }

@@ -57,6 +57,10 @@ func (t *SchemataTable) Query(ctx context.Context, filters []domain.Filter, opti
 
 	// Add all registered data sources
 	for _, name := range dsNames {
+		// Skip information_schema itself (already added)
+		if name == "information_schema" {
+			continue
+		}
 		row := domain.Row{
 			"catalog_name":              "def",
 			"schema_name":               name,

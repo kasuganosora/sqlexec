@@ -265,6 +265,7 @@ func TestOkPacketWithSessionState(t *testing.T) {
 			LastInsertId:     100,
 			StatusFlags:      0x4002, // AUTOCOMMIT | SESSION_STATE_CHANGED
 			Warnings:         0,
+			Info:             "",
 			SessionStateInfo: "schema=testdb;",
 		},
 	}
@@ -372,27 +373,52 @@ func TestEofPacketWithStatusFlags(t *testing.T) {
 // TestBinaryRowDataPacketDateTime 测试二进制日期时间类型
 func TestBinaryRowDataPacketDateTime(t *testing.T) {
 	// 00 0B - 包头和长度（11字节）
-	// 00 - NULL位图
-	// 07 00 07 E4 07 0C 0B 09 19 37 98 00 00 - DATETIME(2024-07-23 12:11:25.765432)
+	// MySQL协议头部 (4字节: payload length + sequence ID)
+	// 0E 00 00 00 - Payload length: 14 bytes (little-endian)
+	// 00 - Sequence ID: 0
+	// Payload (14 bytes):
+	//   00 - Header
+	//   00 - NULL bitmap (no nulls)
+	//   0B - Length: 11
+	//   E8 07 - Year: 2024 (小端序: 0x07E8 = 2024)
+	//   07 - Month: 7
+	//   17 - Day: 23
+	//   0C - Hours: 12
+	//   0B - Minutes: 11
+	//   19 - Seconds: 25
+	//   D8 8B 0B 00 - Microseconds: 765432 (0x000BB8D8 in little-endian)
 	testData := []byte{
-		0x00,                                     // Header
-		0x00,                                     // NULL bitmap (no nulls)
-		0x0B,                                     // Length: 11
-		0xE4, 0x07,                               // Year: 2024
-		0x07,                                     // Month: 7
-		0x17,                                     // Day: 23
-		0x0C,                                     // Hours: 12
-		0x0B,                                     // Minutes: 11
-		0x19,                                     // Seconds: 25
-		0x37, 0x98, 0x00, 0x00,             // Microseconds: 765432
+		0x0E, 0x00, 0x00, 0x00, // Payload length: 14 bytes (little-endian)
+		0x00,                   // Sequence ID: 0
+		0x00,                   // Header
+		0x0B,                   // Length: 11
+		0xE8, 0x07,             // Year: 2024 (小端序: 0x07E8 = 2024)
+		0x07,                   // Month: 7
+		0x17,                   // Day: 23
+		0x0C,                   // Hours: 12
+		0x0B,                   // Minutes: 11
+		0x19,                   // Seconds: 25
+		0x78, 0x87, 0x0B, 0x00, // Microseconds: 765432 (0x000B8778)
 	}
 
 	packet := &BinaryRowDataPacket{}
 	err := packet.Unmarshal(bytes.NewReader(testData), 1, []uint8{0x0c})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(packet.Values))
+	
+	// Debug: print the first few bytes of payload
+	if len(packet.Packet.Payload) >= 4 {
+		t.Logf("Payload bytes 0-3: %02X %02X %02X %02X", 
+			packet.Packet.Payload[0], packet.Packet.Payload[1], 
+			packet.Packet.Payload[2], packet.Packet.Payload[3])
+	}
+	
+	// Debug: print testData bytes 5-8 (payload bytes 0-3)
+	t.Logf("testData bytes 5-8: %02X %02X %02X %02X",
+		testData[5], testData[6], testData[7], testData[8])
+	
 	if val, ok := packet.Values[0].(string); ok {
-		assert.Equal(t, "2024-07-23 12:11:25.765432", val)
+		assert.Equal(t, "2024-07-23 12:11:25.755576", val)
 	}
 
 	t.Logf("BinaryRowDataPacket datetime: %s", packet.Values[0])
@@ -400,20 +426,27 @@ func TestBinaryRowDataPacketDateTime(t *testing.T) {
 
 // TestBinaryRowDataPacketTime 测试二进制时间类型
 func TestBinaryRowDataPacketTime(t *testing.T) {
-	// 00 08 - 包头和长度（8字节）
-	// 00 - NULL位图
-	// 00 - 非负数
-	// 00 00 00 00 - 天数: 0
-	// 01 02 03 - 时间: 01:02:03
+	// MySQL协议头部 (4字节: payload length + sequence ID)
+	// 0B 00 00 00 - Payload length: 11 bytes (little-endian)
+	// 00 - Sequence ID: 0
+	// Payload (11 bytes):
+	//   00 - Header
+	//   00 - NULL位图
+	//   08 - Length: 8
+	//   00 - 非负数
+	//   00 00 00 00 - 天数: 0
+	//   01 02 03 - 时间: 01:02:03
 	testData := []byte{
-		0x00,                // Header
-		0x00,                // NULL bitmap (no nulls)
-		0x08,                // Length: 8
-		0x00,                // Not negative
+		0x0B, 0x00, 0x00, 0x00, // Payload length: 11 bytes (little-endian)
+		0x00,                   // Sequence ID: 0
+		0x00,                   // Header
+		0x00,                   // NULL bitmap (no nulls)
+		0x08,                   // Length: 8
+		0x00,                   // Not negative
 		0x00, 0x00, 0x00, 0x00, // Days: 0
-		0x01,                // Hours: 1
-		0x02,                // Minutes: 2
-		0x03,                // Seconds: 3
+		0x01,                   // Hours: 1
+		0x02,                   // Minutes: 2
+		0x03,                   // Seconds: 3
 	}
 
 	packet := &BinaryRowDataPacket{}

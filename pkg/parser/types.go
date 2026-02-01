@@ -23,6 +23,11 @@ const (
 	SQLTypeCommit    SQLType = "COMMIT"
 	SQLTypeRollback  SQLType = "ROLLBACK"
 	SQLTypeUse       SQLType = "USE"
+	SQLTypeCreateUser SQLType = "CREATE USER"
+	SQLTypeDropUser   SQLType = "DROP USER"
+	SQLTypeGrant      SQLType = "GRANT"
+	SQLTypeRevoke     SQLType = "REVOKE"
+	SQLTypeSetPasswd SQLType = "SET PASSWORD"
 	SQLTypeUnknown   SQLType = "UNKNOWN"
 )
 
@@ -52,6 +57,11 @@ type SQLStatement struct {
 	Commit     *TransactionStatement `json:"commit,omitempty"`
 	Rollback   *TransactionStatement `json:"rollback,omitempty"`
 	Use        *UseStatement        `json:"use,omitempty"`
+	CreateUser *CreateUserStatement `json:"create_user,omitempty"`
+	DropUser   *DropUserStatement   `json:"drop_user,omitempty"`
+	Grant      *GrantStatement      `json:"grant,omitempty"`
+	Revoke     *RevokeStatement     `json:"revoke,omitempty"`
+	SetPassword *SetPasswordStatement `json:"set_password,omitempty"`
 }
 
 // SelectStatement SELECT 语句
@@ -254,6 +264,43 @@ type ColumnInfo struct {
 	GeneratedType    string   `json:"generated_type,omitempty"`    // "STORED" (第一阶段) 或 "VIRTUAL" (第二阶段)
 	GeneratedExpr    string   `json:"generated_expr,omitempty"`      // 表达式字符串
 	GeneratedDepends []string `json:"generated_depends,omitempty"` // 依赖的列名
+}
+
+// CreateUserStatement CREATE USER 语句
+type CreateUserStatement struct {
+	Username    string `json:"username"`
+	Host        string `json:"host,omitempty"`        // Default is '%'
+	Password    string `json:"password,omitempty"`    // IDENTIFIED BY
+	IfNotExists bool   `json:"if_not_exists"`
+}
+
+// DropUserStatement DROP USER 语句
+type DropUserStatement struct {
+	Username  string `json:"username"`
+	Host      string `json:"host,omitempty"`  // Default is '%'
+	IfExists  bool   `json:"if_exists"`
+}
+
+// GrantStatement GRANT 语句
+type GrantStatement struct {
+	Privileges   []string           `json:"privileges"`
+	On           string             `json:"on"`             // e.g., "db.*", "db.table"
+	To           string             `json:"to"`             // e.g., "'user'@'host'"
+	WithGrantOption bool               `json:"with_grant_option"`
+}
+
+// RevokeStatement REVOKE 语句
+type RevokeStatement struct {
+	Privileges []string `json:"privileges"`
+	On         string   `json:"on"`   // e.g., "db.*", "db.table"
+	From       string   `json:"from"` // e.g., "'user'@'host'"
+}
+
+// SetPasswordStatement SET PASSWORD 语句
+type SetPasswordStatement struct {
+	Username    string `json:"username"`
+	Host        string `json:"host,omitempty"` // Default is '%'
+	NewPassword string `json:"new_password"` // PASSWORD('password')
 }
 
 // ParseResult 解析结果

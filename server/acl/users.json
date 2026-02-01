@@ -1,0 +1,12 @@
+{
+  "users": [
+    {
+      "host": "%",
+      "user": "root",
+      "password": ""
+    }
+  ],
+  "db": null,
+  "tables_priv": null,
+  "columns_priv": null
+}

@@ -2,13 +2,23 @@ package information_schema
 
 import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
+	"github.com/kasuganosora/sqlexec/server/acl"
 	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
+
+// ACLManager interface for ACL operations (to avoid circular dependency)
+type ACLManager interface {
+	CheckPermission(user, host, permission, db, table, column string) bool
+	HasGrantOption(user, host string) bool
+	GetUsers() []*acl.User
+	IsLoaded() bool
+}
 
 // Provider implements VirtualTableProvider for information_schema
 // It manages all information_schema virtual tables
 type Provider struct {
 	dsManager *application.DataSourceManager
+	aclManager ACLManager
 	tables    map[string]virtual.VirtualTable
 }
 
@@ -16,6 +26,18 @@ type Provider struct {
 func NewProvider(dsManager *application.DataSourceManager) virtual.VirtualTableProvider {
 	p := &Provider{
 		dsManager: dsManager,
+		aclManager: nil,
+		tables:    make(map[string]virtual.VirtualTable),
+	}
+	p.initializeTables()
+	return p
+}
+
+// NewProviderWithACL creates a new information_schema provider with ACL support
+func NewProviderWithACL(dsManager *application.DataSourceManager, aclMgr ACLManager) virtual.VirtualTableProvider {
+	p := &Provider{
+		dsManager: dsManager,
+		aclManager: aclMgr,
 		tables:    make(map[string]virtual.VirtualTable),
 	}
 	p.initializeTables()
@@ -30,6 +52,14 @@ func (p *Provider) initializeTables() {
 	p.tables["columns"] = NewColumnsTable(p.dsManager)
 	p.tables["table_constraints"] = NewTableConstraintsTable(p.dsManager)
 	p.tables["key_column_usage"] = NewKeyColumnUsageTable(p.dsManager)
+	
+	// Register MySQL privilege tables (if ACL manager is available)
+	if p.aclManager != nil {
+		p.tables["USER_PRIVILEGES"] = NewUserPrivilegesTable(p.aclManager)
+		p.tables["SCHEMA_PRIVILEGES"] = NewSchemaPrivilegesTable(p.aclManager)
+		p.tables["TABLE_PRIVILEGES"] = NewTablePrivilegesTable(p.aclManager)
+		p.tables["COLUMN_PRIVILEGES"] = NewColumnPrivilegesTable(p.aclManager)
+	}
 }
 
 // GetVirtualTable returns a virtual table by name
@@ -54,6 +84,38 @@ func (p *Provider) ListVirtualTables() []string {
 func (p *Provider) HasTable(name string) bool {
 	_, exists := p.tables[name]
 	return exists
+}
+
+// ListVirtualTablesForUser returns virtual table names visible to the specified user
+// Privilege tables are only visible to users with GRANT OPTION
+func (p *Provider) ListVirtualTablesForUser(user, host string) []string {
+	names := make([]string, 0, len(p.tables))
+	for name := range p.tables {
+		// Filter out privilege tables for non-privileged users
+		if isPrivilegeTable(name) && p.aclManager != nil {
+			if !p.aclManager.HasGrantOption(user, host) {
+				continue
+			}
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+// isPrivilegeTable checks if a table is a privilege-related table
+func isPrivilegeTable(name string) bool {
+	privilegeTables := []string{
+		"USER_PRIVILEGES",
+		"SCHEMA_PRIVILEGES",
+		"TABLE_PRIVILEGES",
+		"COLUMN_PRIVILEGES",
+	}
+	for _, t := range privilegeTables {
+		if name == t {
+			return true
+		}
+	}
+	return false
 }
 
 // TableNotFoundError is returned when a requested table doesn't exist
