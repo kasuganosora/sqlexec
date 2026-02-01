@@ -96,10 +96,21 @@ func (m *SessionMgr) GenerateSessionID(addr string, port string) string {
 func (m *SessionMgr) GetThreadId(ctx context.Context) uint32 {
 	// 先生成一个随机数
 	randId := uint32(1)
-	for {
+	maxAttempts := uint32(1000) // 防止无限循环
+
+	for randId <= maxAttempts {
+		// 检查 context 是否已取消
+		select {
+		case <-ctx.Done():
+			log.Printf("GetThreadId: context cancelled")
+			return 0
+		default:
+		}
+
 		// 看看这个随机数是否存在
 		_, err := m.driver.GetThreadId(ctx, randId)
 		if err != nil {
+			log.Printf("GetThreadId: found available ThreadID=%d", randId)
 			return randId
 		}
 
@@ -108,6 +119,9 @@ func (m *SessionMgr) GetThreadId(ctx context.Context) uint32 {
 		// 如果存在，则继续生成
 		time.Sleep(time.Millisecond * 5)
 	}
+
+	log.Printf("GetThreadId: exceeded max attempts, using fallback ID")
+	return randId
 }
 
 func (m *SessionMgr) GetSession(ctx context.Context, sessionID string) (sess *Session, err error) {

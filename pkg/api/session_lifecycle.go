@@ -9,6 +9,33 @@ func (s *Session) GetDB() *DB {
 	return s.db
 }
 
+// SetCurrentDB sets the current database for this session
+// This is used by the MySQL protocol handler when COM_INIT_DB is received
+func (s *Session) SetCurrentDB(dbName string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.coreSession != nil {
+		s.coreSession.SetCurrentDB(dbName)
+	}
+
+	// 同时更新缓存的数据库上下文，确保缓存键包含正确的数据库
+	if s.db != nil && s.db.cache != nil {
+		s.db.cache.SetCurrentDB(dbName)
+	}
+}
+
+// GetCurrentDB returns the current database for this session
+func (s *Session) GetCurrentDB() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.coreSession != nil {
+		return s.coreSession.GetCurrentDB()
+	}
+	return ""
+}
+
 // Close closes the session and releases resources
 // Temporary tables created in this session are automatically dropped
 func (s *Session) Close() error {

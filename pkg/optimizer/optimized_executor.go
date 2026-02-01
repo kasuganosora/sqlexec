@@ -19,6 +19,7 @@ type OptimizedExecutor struct {
 	dsManager   *application.DataSourceManager
 	optimizer   *Optimizer
 	useOptimizer bool
+	currentDB   string // 当前数据库名（用于 SELECT DATABASE()）
 }
 
 // NewOptimizedExecutor 创建优化的执行器
@@ -27,6 +28,7 @@ func NewOptimizedExecutor(dataSource domain.DataSource, useOptimizer bool) *Opti
 		dataSource:  dataSource,
 		optimizer:   NewOptimizer(dataSource),
 		useOptimizer: useOptimizer,
+		currentDB:   "", // 默认为空字符串
 	}
 }
 
@@ -37,6 +39,7 @@ func NewOptimizedExecutorWithDSManager(dataSource domain.DataSource, dsManager *
 		dsManager:  dsManager,
 		optimizer:   NewOptimizer(dataSource),
 		useOptimizer: useOptimizer,
+		currentDB:   "default", // 默认数据库
 	}
 }
 
@@ -54,6 +57,17 @@ func (e *OptimizedExecutor) GetQueryBuilder() interface{} {
 // GetOptimizer 获取优化器
 func (e *OptimizedExecutor) GetOptimizer() interface{} {
 	return e.optimizer
+}
+
+// SetCurrentDB 设置当前数据库
+func (e *OptimizedExecutor) SetCurrentDB(dbName string) {
+	e.currentDB = dbName
+	fmt.Printf("  [DEBUG] OptimizedExecutor.SetCurrentDB: currentDB 设置为 %q\n", dbName)
+}
+
+// GetCurrentDB 获取当前数据库
+func (e *OptimizedExecutor) GetCurrentDB() string {
+	return e.currentDB
 }
 
 // ExecuteSelect 执行 SELECT 查询（支持优化）
@@ -74,6 +88,114 @@ func (e *OptimizedExecutor) ExecuteSelect(ctx context.Context, stmt *parser.Sele
 	return e.executeWithBuilder(ctx, stmt)
 }
 
+// ExecuteShow 执行 SHOW 语句 - 转换为 information_schema 查询
+func (e *OptimizedExecutor) ExecuteShow(ctx context.Context, showStmt *parser.ShowStatement) (*domain.QueryResult, error) {
+	fmt.Printf("  [DEBUG] Executing SHOW statement: Type=%s, Table=%s, Like=%s, Where=%s\n",
+		showStmt.Type, showStmt.Table, showStmt.Like, showStmt.Where)
+
+	// 根据 SHOW 类型转换为相应的 information_schema 查询
+	switch showStmt.Type {
+	case "TABLES":
+		// SHOW TABLES -> SELECT table_name FROM information_schema.tables WHERE table_schema = ?
+		var whereClause string
+		if showStmt.Like != "" {
+			whereClause = fmt.Sprintf(" AND table_name LIKE '%s'", showStmt.Like)
+		}
+		if showStmt.Where != "" {
+			whereClause = fmt.Sprintf(" AND (%s)", showStmt.Where)
+		}
+
+		// 获取当前数据库（从 session 上下文）
+		currentDB := e.currentDB
+		if showStmt.Table != "" {
+			// 如果指定了数据库，使用指定的
+			currentDB = showStmt.Table
+		}
+
+		// 构建 SQL 语句
+		sql := fmt.Sprintf("SELECT table_name FROM information_schema.tables WHERE table_schema = '%s'%s",
+			currentDB, whereClause)
+		fmt.Printf("  [DEBUG] SHOW TABLES converted to: %s, currentDB=%s\n", sql, currentDB)
+
+		// 解析 SQL
+		adapter := parser.NewSQLAdapter()
+		parseResult, err := adapter.Parse(sql)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse SHOW TABLES query: %w", err)
+		}
+
+		if parseResult.Statement.Select == nil {
+			return nil, fmt.Errorf("SHOW TABLES conversion failed: not a SELECT statement")
+		}
+
+		return e.executeWithBuilder(ctx, parseResult.Statement.Select)
+
+	case "DATABASES":
+		// SHOW DATABASES -> SELECT schema_name FROM information_schema.schemata
+		var whereClause string
+		if showStmt.Like != "" {
+			whereClause = fmt.Sprintf(" WHERE schema_name LIKE '%s'", showStmt.Like)
+		}
+		if showStmt.Where != "" {
+			if whereClause == "" {
+				whereClause = fmt.Sprintf(" WHERE (%s)", showStmt.Where)
+			} else {
+				whereClause = fmt.Sprintf("%s AND (%s)", whereClause, showStmt.Where)
+			}
+		}
+
+		sql := fmt.Sprintf("SELECT schema_name FROM information_schema.schemata%s", whereClause)
+		fmt.Printf("  [DEBUG] SHOW DATABASES converted to: %s\n", sql)
+
+		// 解析 SQL
+		adapter := parser.NewSQLAdapter()
+		parseResult, err := adapter.Parse(sql)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse SHOW DATABASES query: %w", err)
+		}
+
+		if parseResult.Statement.Select == nil {
+			return nil, fmt.Errorf("SHOW DATABASES conversion failed: not a SELECT statement")
+		}
+
+		return e.executeWithBuilder(ctx, parseResult.Statement.Select)
+
+	case "COLUMNS":
+		// SHOW COLUMNS FROM table -> SELECT * FROM information_schema.columns WHERE table_name = ?
+		if showStmt.Table == "" {
+			return nil, fmt.Errorf("SHOW COLUMNS requires a table name")
+		}
+
+		var whereClause string
+		if showStmt.Like != "" {
+			whereClause = fmt.Sprintf(" AND column_name LIKE '%s'", showStmt.Like)
+		}
+		if showStmt.Where != "" {
+			whereClause = fmt.Sprintf(" AND (%s)", showStmt.Where)
+		}
+
+		sql := fmt.Sprintf("SELECT * FROM information_schema.columns WHERE table_name = '%s'%s",
+			showStmt.Table, whereClause)
+		fmt.Printf("  [DEBUG] SHOW COLUMNS converted to: %s\n", sql)
+
+		// 解析 SQL
+		adapter := parser.NewSQLAdapter()
+		parseResult, err := adapter.Parse(sql)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse SHOW COLUMNS query: %w", err)
+		}
+
+		if parseResult.Statement.Select == nil {
+			return nil, fmt.Errorf("SHOW COLUMNS conversion failed: not a SELECT statement")
+		}
+
+		return e.executeWithBuilder(ctx, parseResult.Statement.Select)
+
+	default:
+		return nil, fmt.Errorf("unsupported SHOW type: %s", showStmt.Type)
+	}
+}
+
 // isInformationSchemaQuery 检查是否是 information_schema 查询
 func (e *OptimizedExecutor) isInformationSchemaQuery(tableName string) bool {
 	if e.dsManager == nil {
@@ -81,12 +203,82 @@ func (e *OptimizedExecutor) isInformationSchemaQuery(tableName string) bool {
 	}
 
 	// Check for information_schema. prefix (case-insensitive)
-	return strings.HasPrefix(strings.ToLower(tableName), "information_schema.")
+	if strings.HasPrefix(strings.ToLower(tableName), "information_schema.") {
+		return true
+	}
+
+	// 检查当前数据库是否为 information_schema
+	if strings.EqualFold(e.currentDB, "information_schema") {
+		return true
+	}
+
+	return false
+}
+
+// handleNoFromQuery 处理没有 FROM 子句的查询（如 SELECT DATABASE()）
+func (e *OptimizedExecutor) handleNoFromQuery(ctx context.Context, stmt *parser.SelectStatement) (*domain.QueryResult, error) {
+	fmt.Println("  [DEBUG] handleNoFromQuery: 开始处理")
+	fmt.Printf("  [DEBUG] handleNoFromQuery: e.currentDB = %q\n", e.currentDB)
+
+	// 检查是否是 SELECT DATABASE()
+	if len(stmt.Columns) == 1 {
+		col := stmt.Columns[0]
+		if col.Expr != nil && col.Expr.Type == parser.ExprTypeFunction {
+			funcName := strings.ToUpper(col.Expr.Function)
+			if funcName == "DATABASE" {
+				fmt.Println("  [DEBUG] handleNoFromQuery: 识别为 SELECT DATABASE(), 当前数据库:", e.currentDB)
+
+				// 使用列别名（如果有）或默认名称
+				colName := "DATABASE()"
+				if col.Alias != "" {
+					colName = col.Alias
+				}
+
+				result := &domain.QueryResult{
+					Columns: []domain.ColumnInfo{
+						{Name: colName, Type: "string"},
+					},
+					Rows: []domain.Row{
+						{colName: e.currentDB},
+					},
+					Total: 1,
+				}
+				return result, nil
+			}
+		}
+
+		// 处理其他系统变量（如 @@version_comment）
+		if col.Expr != nil && col.Expr.Type == parser.ExprTypeColumn {
+			colName := strings.ToUpper(col.Expr.Column)
+			if colName == "@@VERSION_COMMENT" {
+				fmt.Println("  [DEBUG] handleNoFromQuery: 识别为 SELECT @@version_comment")
+				result := &domain.QueryResult{
+					Columns: []domain.ColumnInfo{
+						{Name: "@@version_comment", Type: "string"},
+					},
+					Rows: []domain.Row{
+						{"@@version_comment": "sqlexec MySQL-compatible database"},
+					},
+					Total: 1,
+				}
+				return result, nil
+			}
+		}
+	}
+
+	// 其他无 FROM 子句的查询暂时不支持
+	return nil, fmt.Errorf("unsupported query without FROM clause")
 }
 
 // executeWithOptimizer 使用优化器执行查询
 func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *parser.SelectStatement) (*domain.QueryResult, error) {
 	fmt.Println("  [DEBUG] 开始优化查询...")
+
+	// 处理没有 FROM 子句的查询（如 SELECT DATABASE()）
+	if stmt.From == "" {
+		fmt.Println("  [DEBUG] 检测到无 FROM 子句的查询")
+		return e.handleNoFromQuery(ctx, stmt)
+	}
 
 	// 1. 构建 SQLStatement
 	sqlStmt := &parser.SQLStatement{

@@ -31,6 +31,7 @@ type QueryCache struct {
 	mu            sync.RWMutex
 	ttl           time.Duration
 	maxSize       int
+	currentDB     string // 当前数据库上下文
 }
 
 // CacheEntry 缓存条目
@@ -133,6 +134,18 @@ func (c *QueryCache) Clear() {
 	c.store = make(map[string]*CacheEntry)
 }
 
+// SetCurrentDB 设置当前数据库上下文
+func (c *QueryCache) SetCurrentDB(dbName string) {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.currentDB = dbName
+}
+
 // ClearTable 清空指定表的缓存
 func (c *QueryCache) ClearTable(tableName string) {
 	if c == nil {
@@ -213,6 +226,8 @@ func (c *QueryCache) Stats() CacheStats {
 func (c *QueryCache) generateKey(sql string, params []interface{}) string {
 	h := fnv.New32a()
 	h.Write([]byte(sql))
+	// 在缓存键中包含当前数据库上下文
+	h.Write([]byte(c.currentDB))
 
 	// 参数排序以确保相同参数不同顺序生成相同键
 	if len(params) > 0 {
