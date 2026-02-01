@@ -14,7 +14,7 @@ func TestTablesTableGetName(t *testing.T) {
 func TestTablesTableGetSchema(t *testing.T) {
 	table := NewTablesTable(nil)
 	schema := table.GetSchema()
-	assert.Len(t, schema, 21) // tables table has 21 columns
+	assert.Len(t, schema, 22) // tables table has 22 columns (including table_attributes)
 	
 	// Check some key columns
 	columnNames := []string{}
@@ -27,4 +27,5 @@ func TestTablesTableGetSchema(t *testing.T) {
 	assert.Contains(t, columnNames, "table_name")
 	assert.Contains(t, columnNames, "table_type")
 	assert.Contains(t, columnNames, "engine")
+	assert.Contains(t, columnNames, "table_attributes")
 }
