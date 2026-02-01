@@ -266,6 +266,8 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
 	}
 
 	if commandType == protocol.COM_QUIT {
+		// COM_QUIT 命令不发送响应，直接关闭连接并清理资源
+		sess.CloseAPISession()
 		return nil
 	}
 	}
@@ -725,7 +727,9 @@ func (s *Server) sendOK(conn net.Conn, sequenceID uint8) error {
 }
 
 func (s *Server) handleComQuit(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComQuitPacket) error {
-	log.Printf("处理 COM_QUIT")
+	log.Printf("处理 COM_QUIT: SessionID=%s, ThreadID=%d", sess.ID, sess.ThreadID)
+	// COM_QUIT 不需要发送响应包
+	// 资源清理在主循环中处理 (server.go:268-272)
 	return nil
 }
 
