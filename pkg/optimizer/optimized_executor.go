@@ -202,6 +202,11 @@ func (e *OptimizedExecutor) isInformationSchemaQuery(tableName string) bool {
 		return false
 	}
 
+	// 空表名不是 information_schema 查询（如 SELECT DATABASE()）
+	if tableName == "" {
+		return false
+	}
+
 	// Check for information_schema. prefix (case-insensitive)
 	if strings.HasPrefix(strings.ToLower(tableName), "information_schema.") {
 		return true
