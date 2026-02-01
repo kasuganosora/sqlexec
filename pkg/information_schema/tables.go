@@ -2,6 +2,7 @@ package information_schema
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -120,30 +121,30 @@ func (t *TablesTable) Query(ctx context.Context, filters []domain.Filter, option
 				continue
 			}
 
-			row := domain.Row{
-				"table_catalog":     "def",
-				"table_schema":      dsName,
-				"table_name":       tableName,
-				"table_type":        "BASE TABLE",
-				"engine":            "MEMORY",
-				"version":           int64(10),
-				"row_format":        "Fixed",
-				"table_rows":        int64(len(tableInfo.Columns)),
-				"avg_row_length":    int64(0),
-				"data_length":       int64(0),
-				"max_data_length":   int64(0),
-				"index_length":      int64(0),
-				"data_free":         int64(0),
-				"auto_increment":    nil,
-				"create_time":       time.Now(),
-				"update_time":       nil,
-				"check_time":        nil,
-				"table_collation":   "utf8mb4_general_ci",
-				"checksum":          nil,
-				"create_options":    "",
-				"table_comment":     "",
-				"table_attributes":  tableInfo.Atts,
-			}
+		row := domain.Row{
+			"table_catalog":     "def",
+			"table_schema":      dsName,
+			"table_name":       tableName,
+			"table_type":        "BASE TABLE",
+			"engine":            "MEMORY",
+			"version":           int64(10),
+			"row_format":        "Fixed",
+			"table_rows":        int64(len(tableInfo.Columns)),
+			"avg_row_length":    int64(0),
+			"data_length":       int64(0),
+			"max_data_length":   int64(0),
+			"index_length":      int64(0),
+			"data_free":         int64(0),
+			"auto_increment":    nil,
+			"create_time":       time.Now(),
+			"update_time":       nil,
+			"check_time":        nil,
+			"table_collation":   "utf8mb4_general_ci",
+			"checksum":          nil,
+			"create_options":    "",
+			"table_comment":     "",
+			"table_attributes":  serializeTableAttributes(tableInfo.Atts),
+		}
 
 			rows = append(rows, row)
 		}
@@ -249,4 +250,20 @@ func (t *TablesTable) matchesLike(value, pattern string) bool {
 		return len(value) >= len(prefix) && value[:len(prefix)] == prefix
 	}
 	return false
+}
+
+// serializeTableAttributes converts table attributes map to JSON string
+func serializeTableAttributes(atts map[string]interface{}) interface{} {
+	if atts == nil {
+		return nil
+	}
+
+	// Convert to JSON
+	jsonBytes, err := json.Marshal(atts)
+	if err != nil {
+		return nil
+	}
+
+	// Return as string
+	return string(jsonBytes)
 }
