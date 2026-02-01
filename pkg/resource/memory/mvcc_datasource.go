@@ -303,6 +303,15 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 			cols := make([]domain.ColumnInfo, len(cowSnapshot.modifiedData.schema.Columns))
 			copy(cols, cowSnapshot.modifiedData.schema.Columns)
 
+			// 深拷贝表属性
+			var atts map[string]interface{}
+			if cowSnapshot.modifiedData.schema.Atts != nil {
+				atts = make(map[string]interface{}, len(cowSnapshot.modifiedData.schema.Atts))
+				for k, v := range cowSnapshot.modifiedData.schema.Atts {
+					atts[k] = v
+				}
+			}
+
 			newVersionData := &TableData{
 				version:   m.currentVer,
 				createdAt: time.Now(),
@@ -310,6 +319,7 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 					Name:    cowSnapshot.modifiedData.schema.Name,
 					Schema:  cowSnapshot.modifiedData.schema.Schema,
 					Columns: cols,
+					Atts:    atts,
 				},
 				rows: newRows,
 			}
@@ -372,6 +382,15 @@ func (s *COWTableSnapshot) ensureCopied(tableVer *TableVersions) error {
 	cols := make([]domain.ColumnInfo, len(baseData.schema.Columns))
 	copy(cols, baseData.schema.Columns)
 
+	// 深拷贝表属性
+	var atts map[string]interface{}
+	if baseData.schema.Atts != nil {
+		atts = make(map[string]interface{}, len(baseData.schema.Atts))
+		for k, v := range baseData.schema.Atts {
+			atts[k] = v
+		}
+	}
+
 	// 创建修改后的数据结构，但不立即拷贝所有行
 	// 采用行级COW：只创建结构，行按需拷贝
 	s.modifiedData = &TableData{
@@ -381,6 +400,7 @@ func (s *COWTableSnapshot) ensureCopied(tableVer *TableVersions) error {
 			Name:    baseData.schema.Name,
 			Schema:  baseData.schema.Schema,
 			Columns: cols,
+			Atts:    atts,
 		},
 		rows: nil, // 行数据延迟加载和拷贝
 	}
@@ -512,10 +532,20 @@ func (m *MVCCDataSource) GetTableInfo(ctx context.Context, tableName string) (*d
 	cols := make([]domain.ColumnInfo, len(latest.schema.Columns))
 	copy(cols, latest.schema.Columns)
 
+	// 深拷贝表属性
+	var atts map[string]interface{}
+	if latest.schema.Atts != nil {
+		atts = make(map[string]interface{}, len(latest.schema.Atts))
+		for k, v := range latest.schema.Atts {
+			atts[k] = v
+		}
+	}
+
 	return &domain.TableInfo{
 		Name:    latest.schema.Name,
 		Schema:  latest.schema.Schema,
 		Columns: cols,
+		Atts:    atts,
 	}, nil
 }
 
@@ -538,6 +568,15 @@ func (m *MVCCDataSource) CreateTable(ctx context.Context, tableInfo *domain.Tabl
 	cols := make([]domain.ColumnInfo, len(tableInfo.Columns))
 	copy(cols, tableInfo.Columns)
 
+	// 深拷贝表属性
+	var atts map[string]interface{}
+	if tableInfo.Atts != nil {
+		atts = make(map[string]interface{}, len(tableInfo.Atts))
+		for k, v := range tableInfo.Atts {
+			atts[k] = v
+		}
+	}
+
 	// 创建新版本
 	m.currentVer++
 	versionData := &TableData{
@@ -548,6 +587,7 @@ func (m *MVCCDataSource) CreateTable(ctx context.Context, tableInfo *domain.Tabl
 			Schema:     tableInfo.Schema,
 			Columns:    cols,
 			Temporary:  tableInfo.Temporary,
+			Atts:       atts,
 		},
 		rows: []domain.Row{},
 	}
@@ -597,10 +637,25 @@ func (m *MVCCDataSource) TruncateTable(ctx context.Context, tableName string) er
 
 	// 创建新版本（空数据）
 	m.currentVer++
+
+	// 深拷贝表属性
+	var atts map[string]interface{}
+	if tableVer.versions[tableVer.latest].schema.Atts != nil {
+		atts = make(map[string]interface{}, len(tableVer.versions[tableVer.latest].schema.Atts))
+		for k, v := range tableVer.versions[tableVer.latest].schema.Atts {
+			atts[k] = v
+		}
+	}
+
 	versionData := &TableData{
 		version:   m.currentVer,
 		createdAt: time.Now(),
-		schema:    tableVer.versions[tableVer.latest].schema,
+		schema: &domain.TableInfo{
+			Name:    tableVer.versions[tableVer.latest].schema.Name,
+			Schema:  tableVer.versions[tableVer.latest].schema.Schema,
+			Columns: tableVer.versions[tableVer.latest].schema.Columns,
+			Atts:    atts,
+		},
 		rows:      []domain.Row{},
 	}
 
@@ -933,7 +988,16 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 			GeneratedDepends: latestData.schema.Columns[i].GeneratedDepends,
 		}
 	}
-	
+
+	// 深拷贝表属性
+	var atts map[string]interface{}
+	if latestData.schema.Atts != nil {
+		atts = make(map[string]interface{}, len(latestData.schema.Atts))
+		for k, v := range latestData.schema.Atts {
+			atts[k] = v
+		}
+	}
+
 	newRows := make([]domain.Row, len(latestData.rows)+len(rows))
 	copy(newRows, latestData.rows)
 	copy(newRows[len(latestData.rows):], rows)
@@ -945,6 +1009,7 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 			Name:    latestData.schema.Name,
 			Schema:  latestData.schema.Schema,
 			Columns: cols,
+			Atts:    atts,
 		},
 		rows:      newRows,
 	}
@@ -1109,10 +1174,24 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		}
 	}
 
+	// 深拷贝表属性
+	var atts map[string]interface{}
+	if sourceData.schema.Atts != nil {
+		atts = make(map[string]interface{}, len(sourceData.schema.Atts))
+		for k, v := range sourceData.schema.Atts {
+			atts[k] = v
+		}
+	}
+
 	versionData := &TableData{
 		version:   m.currentVer,
 		createdAt: time.Now(),
-		schema:    sourceData.schema,
+		schema: &domain.TableInfo{
+			Name:    sourceData.schema.Name,
+			Schema:  sourceData.schema.Schema,
+			Columns: sourceData.schema.Columns,
+			Atts:    atts,
+		},
 		rows:      newRows,
 	}
 
@@ -1208,10 +1287,24 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		}
 	}
 
+	// 深拷贝表属性
+	var atts map[string]interface{}
+	if sourceData.schema.Atts != nil {
+		atts = make(map[string]interface{}, len(sourceData.schema.Atts))
+		for k, v := range sourceData.schema.Atts {
+			atts[k] = v
+		}
+	}
+
 	versionData := &TableData{
 		version:   m.currentVer,
 		createdAt: time.Now(),
-		schema:    sourceData.schema,
+		schema: &domain.TableInfo{
+			Name:    sourceData.schema.Name,
+			Schema:  sourceData.schema.Schema,
+			Columns: sourceData.schema.Columns,
+			Atts:    atts,
+		},
 		rows:      newRows,
 	}
 
@@ -1253,6 +1346,15 @@ func (m *MVCCDataSource) LoadTable(tableName string, schema *domain.TableInfo, r
 	cols := make([]domain.ColumnInfo, len(schema.Columns))
 	copy(cols, schema.Columns)
 
+	// 深拷贝表属性
+	var atts map[string]interface{}
+	if schema.Atts != nil {
+		atts = make(map[string]interface{}, len(schema.Atts))
+		for k, v := range schema.Atts {
+			atts[k] = v
+		}
+	}
+
 	versionData := &TableData{
 		version:   m.currentVer,
 		createdAt: time.Now(),
@@ -1260,6 +1362,7 @@ func (m *MVCCDataSource) LoadTable(tableName string, schema *domain.TableInfo, r
 			Name:    schema.Name,
 			Schema:  schema.Schema,
 			Columns: cols,
+			Atts:    atts,
 		},
 		rows: rows,
 	}

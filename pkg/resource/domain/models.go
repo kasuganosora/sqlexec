@@ -42,10 +42,11 @@ type DataSourceConfig struct {
 
 // TableInfo 表信息
 type TableInfo struct {
-	Name       string       `json:"name"`
-	Schema     string       `json:"schema,omitempty"`
-	Columns    []ColumnInfo `json:"columns"`
-	Temporary  bool         `json:"temporary,omitempty"` // 是否是临时表
+	Name       string                 `json:"name"`
+	Schema     string                 `json:"schema,omitempty"`
+	Columns    []ColumnInfo            `json:"columns"`
+	Temporary  bool                   `json:"temporary,omitempty"` // 是否是临时表
+	Atts       map[string]interface{} `json:"atts,omitempty"`       // 表属性
 }
 
 // ColumnInfo 列信息
@@ -76,6 +77,22 @@ type ForeignKeyInfo struct {
 
 // Row 行数据
 type Row map[string]interface{}
+
+// 行属性内部键名，不对外暴露
+const (
+	rowAttsKey = "__atts__" // 行属性键名，保留字段，禁止用户访问
+)
+
+// SetRowAttributes 设置行属性（内部使用）
+func SetRowAttributes(row Row, atts map[string]any) {
+	row[rowAttsKey] = atts
+}
+
+// GetRowAttributes 获取行属性（内部使用）
+func GetRowAttributes(row Row) (map[string]any, bool) {
+	atts, ok := row[rowAttsKey].(map[string]any)
+	return atts, ok
+}
 
 // QueryResult 查询结果
 type QueryResult struct {
