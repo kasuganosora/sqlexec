@@ -166,6 +166,26 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
 		commandName := protocol.GetCommandName(commandType)
 		log.Printf("收到命令: %s (0x%02x), SequenceID: %d", commandName, commandType, packetContent[3])
 
+		// Dump 数据包内容（用于调试 COM_INIT_DB）
+		if commandType == protocol.COM_INIT_DB {
+			log.Printf("[DEBUG] COM_INIT_DB 数据包 dump:")
+			log.Printf("  完整数据包长度: %d 字节", len(packetContent))
+			log.Printf("  Header: %02x %02x %02x %02x", packetContent[0], packetContent[1], packetContent[2], packetContent[3])
+			log.Printf("  Payload:")
+			for i := 4; i < len(packetContent); i++ {
+				if i%16 == 4 {
+					log.Printf("    %04x:", i-4)
+				}
+				log.Printf(" %02x", packetContent[i])
+				if (i-3)%16 == 0 {
+					log.Printf("")
+				}
+			}
+			if len(packetContent) > 4 && (len(packetContent)-4)%16 != 0 {
+				log.Printf("")
+			}
+		}
+
 		var commandPack any
 		switch commandType {
 		case protocol.COM_QUIT:
@@ -215,15 +235,21 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
 			return err
 		}
 
-		err = s.handleCommand(ctx, sess, conn, commandType, commandPack)
-		if err != nil {
-			log.Printf("处理命令 %s 失败: %v", commandName, err)
+	err = s.handleCommand(ctx, sess, conn, commandType, commandPack)
+	if err != nil {
+		// 如果是协议解析错误，需要断开连接
+		// 其他错误（如查询错误）已经通过 sendError 发送了错误包，应该保持连接继续处理
+		if strings.Contains(err.Error(), "解析") || strings.Contains(err.Error(), "包") {
+			log.Printf("处理命令 %s 失败（协议错误，断开连接）: %v", commandName, err)
 			return err
 		}
+		// 查询错误已经发送了错误包，继续处理下一个命令
+		log.Printf("处理命令 %s 失败（已发送错误包，继续处理）: %v", commandName, err)
+	}
 
-		if commandType == protocol.COM_QUIT {
-			return nil
-		}
+	if commandType == protocol.COM_QUIT {
+		return nil
+	}
 	}
 }
 
@@ -526,8 +552,18 @@ func (s *Server) formatRowValue(value interface{}) string {
 		return fmt.Sprintf("%d", value)
 	case uint, uint8, uint16, uint32, uint64:
 		return fmt.Sprintf("%d", value)
-	case float32, float64:
-		return fmt.Sprintf("%f", value)
+	case float32:
+		// 检查是否是整数（没有小数部分）
+		if v == float32(int(v)) {
+			return fmt.Sprintf("%d", int(v))
+		}
+		return fmt.Sprintf("%g", v)
+	case float64:
+		// 检查是否是整数（没有小数部分）
+		if v == float64(int(v)) {
+			return fmt.Sprintf("%d", int(v))
+		}
+		return fmt.Sprintf("%g", v)
 	case bool:
 		if v {
 			return "1"
@@ -540,6 +576,14 @@ func (s *Server) formatRowValue(value interface{}) string {
 	}
 }
 
+func getMapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // sendQueryResult 发送查询结果（从 domain.QueryResult 转换为 MySQL 协议格式）
 func (s *Server) sendQueryResult(conn net.Conn, sess *session.Session, result *domain.QueryResult, schema string, table string) error {
 	// 转换列定义
@@ -550,12 +594,17 @@ func (s *Server) sendQueryResult(conn net.Conn, sess *session.Session, result *d
 
 	// 转换行数据
 	rows := make([][]string, len(result.Rows))
+	log.Printf("转换行数据: 总行数=%d, 总列数=%d", len(result.Rows), len(result.Columns))
 	for i, row := range result.Rows {
+		log.Printf("  Row %d: %+v", i, row)
 		rowData := make([]string, len(result.Columns))
 		for j, col := range result.Columns {
+			log.Printf("    Column %d: Name=%s", j, col.Name)
 			if val, exists := row[col.Name]; exists {
+				log.Printf("      Value found: %v (type: %T)", val, val)
 				rowData[j] = s.formatRowValue(val)
 			} else {
+				log.Printf("      Value not found in row, available keys: %v", getMapKeys(row))
 				rowData[j] = "NULL"
 			}
 		}
@@ -598,12 +647,18 @@ func (s *Server) handleComQuery(ctx context.Context, sess *session.Session, conn
 	query := strings.TrimSpace(commandPack.Query)
 	queryUpper := strings.ToUpper(query)
 
+	log.Printf("查询类型判断: query=[%s], upper=[%s]", query, queryUpper)
+
 	switch {
-	case strings.HasPrefix(queryUpper, "SELECT") || strings.HasPrefix(queryUpper, "SHOW"):
+	case strings.HasPrefix(queryUpper, "SELECT"):
+		return s.handleSelect(sess, conn, query)
+	case strings.HasPrefix(queryUpper, "SHOW"):
+		// SHOW 命令通过 API 层处理（转换为 information_schema 查询）
 		return s.handleSelect(sess, conn, query)
 	case strings.HasPrefix(queryUpper, "SET"):
 		return s.handleSet(sess, conn, query)
 	case strings.HasPrefix(queryUpper, "USE"):
+		log.Printf("匹配到 USE 命令，调用 handleUse")
 		return s.handleUse(sess, conn, query)
 	case strings.HasPrefix(queryUpper, "INSERT"), strings.HasPrefix(queryUpper, "UPDATE"),
 		strings.HasPrefix(queryUpper, "DELETE"), strings.HasPrefix(queryUpper, "REPLACE"),
@@ -611,6 +666,7 @@ func (s *Server) handleComQuery(ctx context.Context, sess *session.Session, conn
 		strings.HasPrefix(queryUpper, "ALTER"), strings.HasPrefix(queryUpper, "TRUNCATE"):
 		return s.handleDML(sess, conn, query)
 	default:
+		log.Printf("未匹配到任何已知命令类型，返回 OK")
 		return s.sendOK(conn, sess.GetNextSequenceID())
 	}
 }
@@ -637,6 +693,7 @@ func (s *Server) handleSelect(sess *session.Session, conn net.Conn, query string
 		return err
 	}
 
+	log.Printf("开始查询: %s", query)
 	queryObj, err := apiSess.Query(query)
 	if err != nil {
 		log.Printf("查询失败: %v", err)
@@ -658,9 +715,18 @@ func (s *Server) handleSelect(sess *session.Session, conn net.Conn, query string
 
 	// 收集所有行数据
 	var rows []domain.Row
+	rowCount := 0
 	for queryObj.Next() {
-		rows = append(rows, queryObj.Row())
+		row := queryObj.Row()
+		log.Printf("  Query 返回的行 %d: %+v", rowCount, row)
+		for k, v := range row {
+			log.Printf("    %s: %v (type: %T)", k, v, v)
+		}
+		rows = append(rows, row)
+		rowCount++
 	}
+
+	log.Printf("总共收集到 %d 行数据", rowCount)
 
 	if queryObj.Err() != nil {
 		log.Printf("遍历结果集失败: %v", queryObj.Err())
@@ -807,20 +873,35 @@ func (s *Server) handleSet(sess *session.Session, conn net.Conn, query string) e
 }
 
 func (s *Server) handleUse(sess *session.Session, conn net.Conn, query string) error {
-	dbName := strings.TrimSpace(query[3:])
-	log.Printf("切换数据库: %s", dbName)
+	// 移除 "USE" 关键字和可能的分号/空格
+	query = strings.TrimSpace(query)
+	query = strings.TrimPrefix(query, "USE")
+	query = strings.TrimPrefix(query, "use")
+	dbName := strings.TrimSpace(query)
+	dbName = strings.TrimSuffix(dbName, ";")
+	dbName = strings.TrimSpace(dbName)
+
+	log.Printf("切换数据库: [%s]", dbName)
 	sess.Set("current_database", dbName)
 
 	// API Session 执行 USE 语句
 	apiSessIntf := sess.GetAPISession()
 	if apiSessIntf != nil {
+		log.Printf("获取 API Session 成功")
 		if apiSess, ok := apiSessIntf.(*api.Session); ok {
+			log.Printf("API Session 类型断言成功")
 			_, err := apiSess.Query(query)
 			if err != nil {
 				log.Printf("API Session 切换数据库失败: %v", err)
 				// 不返回错误，因为可能是数据库不存在
+			} else {
+				log.Printf("API Session 切换数据库成功")
 			}
+		} else {
+			log.Printf("API Session 类型断言失败")
 		}
+	} else {
+		log.Printf("API Session 未初始化")
 	}
 
 	return s.sendOK(conn, sess.GetNextSequenceID())
@@ -884,8 +965,38 @@ func (s *Server) handleDML(sess *session.Session, conn net.Conn, query string) e
 }
 
 func (s *Server) handleComInitDB(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComInitDBPacket) error {
-	log.Printf("处理 COM_INIT_DB: %s", commandPack.SchemaName)
-	sess.Set("current_database", commandPack.SchemaName)
+	log.Printf("处理 COM_INIT_DB: [%q] (len=%d)", commandPack.SchemaName, len(commandPack.SchemaName))
+
+	// 如果数据库名为空，从 session 中读取之前设置的值
+	dbName := commandPack.SchemaName
+	if dbName == "" {
+		if val, err := sess.Get("current_database"); err == nil && val != nil {
+			if strVal, ok := val.(string); ok {
+				dbName = strVal
+				log.Printf("从 session 中读取到数据库名: %s", dbName)
+			}
+		}
+	}
+
+	// 如果仍然为空，不做任何操作
+	if dbName == "" {
+		log.Printf("COM_INIT_DB 数据库名为空且无法从 session 获取，跳过处理")
+		return s.sendOK(conn, sess.GetNextSequenceID())
+	}
+
+	sess.Set("current_database", dbName)
+
+	// 获取 API Session 并更新当前数据库
+	apiSessIntf := sess.GetAPISession()
+	if apiSessIntf != nil {
+		if apiSess, ok := apiSessIntf.(*api.Session); ok {
+			log.Printf("更新 API Session 当前数据库: %s", dbName)
+			apiSess.SetCurrentDB(dbName)
+		}
+	} else {
+		log.Printf("API Session 未初始化，无法更新当前数据库")
+	}
+
 	return s.sendOK(conn, sess.GetNextSequenceID())
 }
 
