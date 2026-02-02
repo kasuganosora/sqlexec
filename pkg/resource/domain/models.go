@@ -197,3 +197,48 @@ type Schema struct {
 	Indexes     []*Index     `json:"indexes"`
 	Constraints []*Constraint `json:"constraints"`
 }
+
+// ViewAlgorithm 视图算法类型
+type ViewAlgorithm string
+
+const (
+	ViewAlgorithmUndefined ViewAlgorithm = "UNDEFINED"
+	ViewAlgorithmMerge    ViewAlgorithm = "MERGE"
+	ViewAlgorithmTempTable ViewAlgorithm = "TEMPTABLE"
+)
+
+// ViewSecurity 视图安全类型
+type ViewSecurity string
+
+const (
+	ViewSecurityDefiner  ViewSecurity = "DEFINER"
+	ViewSecurityInvoker ViewSecurity = "INVOKER"
+)
+
+// ViewCheckOption 视图检查选项
+type ViewCheckOption string
+
+const (
+	ViewCheckOptionNone      ViewCheckOption = "NONE"
+	ViewCheckOptionCascaded  ViewCheckOption = "CASCADED"
+	ViewCheckOptionLocal     ViewCheckOption = "LOCAL"
+)
+
+// ViewInfo 视图元数据
+type ViewInfo struct {
+	Algorithm   ViewAlgorithm   `json:"algorithm"`    // MERGE, TEMPTABLE, UNDEFINED
+	Definer     string          `json:"definer"`      // 'user'@'host'
+	Security    ViewSecurity    `json:"security"`     // DEFINER, INVOKER
+	SelectStmt  string          `json:"select_stmt"`  // 视图定义的 SELECT 语句
+	CheckOption ViewCheckOption `json:"check_option"` // NONE, CASCADED, LOCAL
+	Cols        []string        `json:"cols"`         // 视图列名列表
+	Updatable   bool            `json:"updatable"`    // 是否可更新
+	Charset     string          `json:"charset,omitempty"`     // 客户端字符集
+	Collate     string          `json:"collate,omitempty"`     // 连接排序规则
+}
+
+// 视图相关常量
+const (
+	ViewMetaKey  = "__view__" // 视图元数据在 TableInfo.Atts 中的键名
+	MaxViewDepth = 10         // 视图嵌套最大深度
+)

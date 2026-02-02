@@ -8,27 +8,31 @@ import (
 type SQLType string
 
 const (
-	SQLTypeSelect    SQLType = "SELECT"
-	SQLTypeInsert    SQLType = "INSERT"
-	SQLTypeUpdate    SQLType = "UPDATE"
-	SQLTypeDelete    SQLType = "DELETE"
-	SQLTypeCreate    SQLType = "CREATE"
-	SQLTypeDrop      SQLType = "DROP"
-	SQLTypeAlter     SQLType = "ALTER"
-	SQLTypeTruncate  SQLType = "TRUNCATE"
-	SQLTypeShow      SQLType = "SHOW"
-	SQLTypeDescribe  SQLType = "DESCRIBE"
-	SQLTypeExplain   SQLType = "EXPLAIN"
-	SQLTypeBegin     SQLType = "BEGIN"
-	SQLTypeCommit    SQLType = "COMMIT"
-	SQLTypeRollback  SQLType = "ROLLBACK"
-	SQLTypeUse       SQLType = "USE"
-	SQLTypeCreateUser SQLType = "CREATE USER"
-	SQLTypeDropUser   SQLType = "DROP USER"
-	SQLTypeGrant      SQLType = "GRANT"
-	SQLTypeRevoke     SQLType = "REVOKE"
-	SQLTypeSetPasswd SQLType = "SET PASSWORD"
-	SQLTypeUnknown   SQLType = "UNKNOWN"
+	SQLTypeSelect      SQLType = "SELECT"
+	SQLTypeInsert      SQLType = "INSERT"
+	SQLTypeUpdate      SQLType = "UPDATE"
+	SQLTypeDelete      SQLType = "DELETE"
+	SQLTypeCreate      SQLType = "CREATE"
+	SQLTypeCreateView  SQLType = "CREATE VIEW"
+	SQLTypeDrop        SQLType = "DROP"
+	SQLTypeDropView    SQLType = "DROP VIEW"
+	SQLTypeAlter       SQLType = "ALTER"
+	// Note: TiDB does not support ALTER VIEW, so SQLTypeAlterView is deprecated
+	// SQLTypeAlterView   SQLType = "ALTER VIEW"
+	SQLTypeTruncate    SQLType = "TRUNCATE"
+	SQLTypeShow        SQLType = "SHOW"
+	SQLTypeDescribe    SQLType = "DESCRIBE"
+	SQLTypeExplain     SQLType = "EXPLAIN"
+	SQLTypeBegin       SQLType = "BEGIN"
+	SQLTypeCommit      SQLType = "COMMIT"
+	SQLTypeRollback    SQLType = "ROLLBACK"
+	SQLTypeUse         SQLType = "USE"
+	SQLTypeCreateUser  SQLType = "CREATE USER"
+	SQLTypeDropUser    SQLType = "DROP USER"
+	SQLTypeGrant       SQLType = "GRANT"
+	SQLTypeRevoke      SQLType = "REVOKE"
+	SQLTypeSetPasswd   SQLType = "SET PASSWORD"
+	SQLTypeUnknown     SQLType = "UNKNOWN"
 )
 
 // 排序方向
@@ -39,29 +43,33 @@ const (
 
 // SQLStatement SQL 语句
 type SQLStatement struct {
-	Type       SQLType               `json:"type"`
-	RawSQL     string                `json:"raw_sql"`
-	Select     *SelectStatement       `json:"select,omitempty"`
-	Insert     *InsertStatement       `json:"insert,omitempty"`
-	Update     *UpdateStatement       `json:"update,omitempty"`
-	Delete     *DeleteStatement       `json:"delete,omitempty"`
-	Create     *CreateStatement       `json:"create,omitempty"`
-	Drop       *DropStatement         `json:"drop,omitempty"`
-	Alter      *AlterStatement        `json:"alter,omitempty"`
-	CreateIndex *CreateIndexStatement `json:"create_index,omitempty"`
-	DropIndex   *DropIndexStatement   `json:"drop_index,omitempty"`
-	Show       *ShowStatement        `json:"show,omitempty"`
-	Describe   *DescribeStatement    `json:"describe,omitempty"`
-	Explain    *ExplainStatement     `json:"explain,omitempty"`
-	Begin      *TransactionStatement `json:"begin,omitempty"`
-	Commit     *TransactionStatement `json:"commit,omitempty"`
-	Rollback   *TransactionStatement `json:"rollback,omitempty"`
-	Use        *UseStatement        `json:"use,omitempty"`
-	CreateUser *CreateUserStatement `json:"create_user,omitempty"`
-	DropUser   *DropUserStatement   `json:"drop_user,omitempty"`
-	Grant      *GrantStatement      `json:"grant,omitempty"`
-	Revoke     *RevokeStatement     `json:"revoke,omitempty"`
-	SetPassword *SetPasswordStatement `json:"set_password,omitempty"`
+	Type         SQLType               `json:"type"`
+	RawSQL       string                `json:"raw_sql"`
+	Select       *SelectStatement       `json:"select,omitempty"`
+	Insert       *InsertStatement       `json:"insert,omitempty"`
+	Update       *UpdateStatement       `json:"update,omitempty"`
+	Delete       *DeleteStatement       `json:"delete,omitempty"`
+	Create       *CreateStatement       `json:"create,omitempty"`
+	CreateView   *CreateViewStatement   `json:"create_view,omitempty"`
+	Drop         *DropStatement         `json:"drop,omitempty"`
+	DropView     *DropViewStatement     `json:"drop_view,omitempty"`
+	Alter        *AlterStatement        `json:"alter,omitempty"`
+	// Note: TiDB does not support ALTER VIEW, so AlterView field is deprecated
+	// AlterView    *AlterViewStatement    `json:"alter_view,omitempty"`
+	CreateIndex   *CreateIndexStatement  `json:"create_index,omitempty"`
+	DropIndex    *DropIndexStatement    `json:"drop_index,omitempty"`
+	Show         *ShowStatement        `json:"show,omitempty"`
+	Describe     *DescribeStatement    `json:"describe,omitempty"`
+	Explain      *ExplainStatement     `json:"explain,omitempty"`
+	Begin        *TransactionStatement `json:"begin,omitempty"`
+	Commit       *TransactionStatement `json:"commit,omitempty"`
+	Rollback     *TransactionStatement `json:"rollback,omitempty"`
+	Use          *UseStatement        `json:"use,omitempty"`
+	CreateUser   *CreateUserStatement `json:"create_user,omitempty"`
+	DropUser     *DropUserStatement   `json:"drop_user,omitempty"`
+	Grant        *GrantStatement      `json:"grant,omitempty"`
+	Revoke       *RevokeStatement     `json:"revoke,omitempty"`
+	SetPassword  *SetPasswordStatement `json:"set_password,omitempty"`
 }
 
 // SelectStatement SELECT 语句
@@ -321,3 +329,40 @@ type ParserError struct {
 func (e *ParserError) Error() string {
 	return fmt.Sprintf("SQL parse error at position %d: %s", e.Pos, e.Message)
 }
+
+// CreateViewStatement CREATE VIEW 语句
+type CreateViewStatement struct {
+	OrReplace    bool               `json:"or_replace"`
+	Algorithm    string             `json:"algorithm,omitempty"`    // UNDEFINED, MERGE, TEMPTABLE
+	Definer      string             `json:"definer,omitempty"`      // 'user'@'host'
+	Security     string             `json:"security,omitempty"`     // DEFINER, INVOKER
+	Name         string             `json:"name"`
+	ColumnList   []string           `json:"column_list,omitempty"`
+	Select       *SelectStatement   `json:"select"`
+	CheckOption  string             `json:"check_option,omitempty"` // NONE, CASCADED, LOCAL
+}
+
+// DropViewStatement DROP VIEW 语句
+type DropViewStatement struct {
+	Views     []string `json:"views"`      // 视图名称列表
+	IfExists  bool     `json:"if_exists"`  // IF EXISTS
+	Restrict  bool     `json:"restrict"`   // RESTRICT (TiDB 不支持，保留用于兼容性)
+	Cascade   bool     `json:"cascade"`    // CASCADE (TiDB 不支持，保留用于兼容性)
+}
+
+// Note: TiDB does not support ALTER VIEW statement
+// The following AlterViewStatement is kept for compatibility but not used
+/*
+// AlterViewStatement ALTER VIEW 语句
+type AlterViewStatement struct {
+	Algorithm    string             `json:"algorithm,omitempty"`    // UNDEFINED, MERGE, TEMPTABLE
+	Definer      string             `json:"definer,omitempty"`      // 'user'@'host'
+	Security     string             `json:"security,omitempty"`     // DEFINER, INVOKER
+	Name         string             `json:"name"`
+	ColumnList   []string           `json:"column_list,omitempty"`
+	Select       *SelectStatement   `json:"select"`
+	CheckOption  string             `json:"check_option,omitempty"` // NONE, CASCADED, LOCAL
+}
+*/
+
+

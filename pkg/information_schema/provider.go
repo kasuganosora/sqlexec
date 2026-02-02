@@ -52,6 +52,7 @@ func (p *Provider) initializeTables() {
 	p.tables["columns"] = NewColumnsTable(p.dsManager)
 	p.tables["table_constraints"] = NewTableConstraintsTable(p.dsManager)
 	p.tables["key_column_usage"] = NewKeyColumnUsageTable(p.dsManager)
+	p.tables["views"] = NewViewsTable(p.dsManager)
 	
 	// Register MySQL privilege tables (if ACL manager is available)
 	if p.aclManager != nil {

@@ -61,6 +61,11 @@ func (b *QueryBuilder) ExecuteStatement(ctx context.Context, stmt *SQLStatement)
 		return b.executeDrop(ctx, stmt.Drop)
 	case SQLTypeAlter:
 		return b.executeAlter(ctx, stmt.Alter)
+	case SQLTypeCreateView:
+		return b.executeCreateView(ctx, stmt.CreateView)
+	case SQLTypeDropView:
+		return b.executeDropView(ctx, stmt.DropView)
+	// Note: SQLTypeAlterView is not supported by TiDB
 	default:
 		return nil, fmt.Errorf("unsupported SQL type: %s", stmt.Type)
 	}
@@ -229,6 +234,15 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 		}
 		// 过滤生成列（不允许显式插入）
 		filteredRow := generated.FilterGeneratedColumns(row, tableInfo)
+
+		// Check if table is a view and validate with CHECK OPTION
+		if viewInfo, isView := b.getViewInfo(tableInfo); isView {
+			validator := NewCheckOptionValidator(viewInfo)
+			if err := validator.ValidateInsert(filteredRow); err != nil {
+				return nil, fmt.Errorf("view check option failed: %w", err)
+			}
+		}
+
 		rows = append(rows, filteredRow)
 	}
 
@@ -272,6 +286,26 @@ func (b *QueryBuilder) executeUpdate(ctx context.Context, stmt *UpdateStatement)
 	}
 	// 过滤生成列（不允许显式更新）
 	filteredUpdates := generated.FilterGeneratedColumns(updates, tableInfo)
+
+	// Check if table is a view and validate with CHECK OPTION
+	if viewInfo, isView := b.getViewInfo(tableInfo); isView {
+		validator := NewCheckOptionValidator(viewInfo)
+
+		// Get rows that would be updated to validate them
+		queryResult, err := b.dataSource.Query(ctx, stmt.Table, &domain.QueryOptions{
+			Filters: b.convertExpressionToFilters(stmt.Where),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to query rows for check option validation: %w", err)
+		}
+
+		// Validate each row would still satisfy view definition after update
+		for _, row := range queryResult.Rows {
+			if err := validator.ValidateUpdate(row, filteredUpdates); err != nil {
+				return nil, fmt.Errorf("view check option failed: %w", err)
+			}
+		}
+	}
 
 	options := &domain.UpdateOptions{
 		Upsert: false,
@@ -644,4 +678,319 @@ func (b *QueryBuilder) extractExpressionValue(val interface{}) interface{} {
 	}
 
 	return b.convertValue(val)
+}
+
+// getViewInfo checks if a table is a view and returns its metadata
+func (b *QueryBuilder) getViewInfo(tableInfo *domain.TableInfo) (*domain.ViewInfo, bool) {
+	if tableInfo.Atts == nil {
+		return nil, false
+	}
+
+	viewMeta, exists := tableInfo.Atts[domain.ViewMetaKey]
+	if !exists {
+		return nil, false
+	}
+
+	viewInfo, ok := viewMeta.(domain.ViewInfo)
+	if !ok {
+		return nil, false
+	}
+
+	return &viewInfo, true
+}
+
+// executeCreateView 执行 CREATE VIEW
+func (b *QueryBuilder) executeCreateView(ctx context.Context, stmt *CreateViewStatement) (*domain.QueryResult, error) {
+	// Check if data source is writable
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is not writable")
+	}
+
+	// Build view metadata
+	viewInfo := domain.ViewInfo{
+		Algorithm:   parseViewAlgorithm(stmt.Algorithm),
+		Definer:     stmt.Definer,
+		Security:    parseViewSecurity(stmt.Security),
+		SelectStmt:  "", // Will be set from SELECT
+		CheckOption: parseViewCheckOption(stmt.CheckOption),
+		Cols:        stmt.ColumnList,
+		Updatable:   true, // Will be recalculated
+	}
+
+	// Serialize SELECT statement to string
+	if stmt.Select != nil {
+		// Reconstruct SELECT SQL from parsed statement
+		viewInfo.SelectStmt = b.buildSelectSQL(stmt.Select)
+	}
+
+	// Create table info for the view
+	tableInfo := domain.TableInfo{
+		Name:      stmt.Name,
+		Schema:    "", // Use default schema
+		Columns:   []domain.ColumnInfo{},
+		Atts:      map[string]interface{}{
+			domain.ViewMetaKey: viewInfo,
+		},
+	}
+
+	// Determine column definitions from SELECT
+	if stmt.Select != nil && len(stmt.Select.Columns) > 0 {
+		tableInfo.Columns = make([]domain.ColumnInfo, 0, len(stmt.Select.Columns))
+		for _, col := range stmt.Select.Columns {
+			colType := "text"
+			colName := col.Name
+			if colName == "" && col.Alias != "" {
+				colName = col.Alias
+			}
+
+			tableInfo.Columns = append(tableInfo.Columns, domain.ColumnInfo{
+				Name:     colName,
+				Type:     colType,
+				Nullable: true,
+			})
+		}
+	}
+
+	// Create the view (as a table in the data source)
+	err := b.dataSource.CreateTable(ctx, &tableInfo)
+	if err != nil {
+		// Check if table already exists
+		if stmt.OrReplace {
+			// Try to drop first
+			b.dataSource.DropTable(ctx, stmt.Name)
+			err = b.dataSource.CreateTable(ctx, &tableInfo)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to create view: %w", err)
+		}
+	}
+	
+	return &domain.QueryResult{
+		Columns: []domain.ColumnInfo{
+			{Name: "result", Type: "text", Nullable: true},
+		},
+		Rows:    []domain.Row{{"result": "OK"}},
+		Total:   1,
+	}, nil
+}
+
+// executeDropView 执行 DROP VIEW
+func (b *QueryBuilder) executeDropView(ctx context.Context, stmt *DropViewStatement) (*domain.QueryResult, error) {
+	// Check if data source is writable
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is not writable")
+	}
+	
+	// Drop each view
+	results := make([]domain.Row, 0)
+	for _, viewName := range stmt.Views {
+		err := b.dataSource.DropTable(ctx, viewName)
+		if err != nil {
+			if !stmt.IfExists {
+				return nil, fmt.Errorf("failed to drop view '%s': %w", viewName, err)
+			}
+			// IF EXISTS specified, continue to next view
+		} else {
+			results = append(results, domain.Row{
+				"view": viewName,
+				"status": "dropped",
+			})
+		}
+	}
+	
+	if len(results) == 0 {
+		return &domain.QueryResult{
+			Columns: []domain.ColumnInfo{
+				{Name: "result", Type: "text", Nullable: true},
+			},
+			Rows:    []domain.Row{},
+			Total:   0,
+		}, nil
+	}
+	
+	return &domain.QueryResult{
+		Columns: []domain.ColumnInfo{
+			{Name: "view", Type: "text", Nullable: true},
+			{Name: "status", Type: "text", Nullable: true},
+		},
+		Rows:  results,
+		Total: int64(len(results)),
+	}, nil
+}
+
+// Note: executeAlterView is not supported by TiDB and has been removed
+// The following code is kept commented for reference but should not be used
+/*
+func (b *QueryBuilder) executeAlterView(ctx context.Context, stmt *AlterViewStatement) (*domain.QueryResult, error) {
+	// Check if data source is writable
+	if !b.dataSource.IsWritable() {
+		return nil, fmt.Errorf("data source is not writable")
+	}
+	
+	// For simplicity, ALTER VIEW is implemented as DROP + CREATE
+	// 1. Check if view exists
+	_, err := b.dataSource.GetTableInfo(ctx, stmt.Name)
+	if err != nil {
+		return nil, fmt.Errorf("view '%s' does not exist", stmt.Name)
+	}
+
+	// 2. Drop the view
+	err = b.dataSource.DropTable(ctx, stmt.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to drop view for ALTER: %w", err)
+	}
+	
+	// 3. Create the new view
+	createStmt := &CreateViewStatement{
+		Name:        stmt.Name,
+		ColumnList:  stmt.ColumnList,
+		Select:      stmt.Select,
+		Algorithm:    stmt.Algorithm,
+		Definer:      stmt.Definer,
+		Security:     stmt.Security,
+		CheckOption:  stmt.CheckOption,
+	}
+	
+	return b.executeCreateView(ctx, createStmt)
+}
+*/
+
+// buildSelectSQL builds a SELECT SQL string from a SelectStatement
+func (b *QueryBuilder) buildSelectSQL(stmt *SelectStatement) string {
+	sql := "SELECT"
+
+	// DISTINCT
+	if stmt.Distinct {
+		sql += " DISTINCT"
+	}
+
+	// Columns
+	if len(stmt.Columns) > 0 {
+		colNames := make([]string, 0, len(stmt.Columns))
+		for _, col := range stmt.Columns {
+			name := col.Name
+			if name == "" {
+				name = "*"
+			}
+			if col.Alias != "" {
+				name += " AS " + col.Alias
+			}
+			colNames = append(colNames, name)
+		}
+		sql += " " + strings.Join(colNames, ", ")
+	}
+
+	// FROM
+	if stmt.From != "" {
+		sql += " FROM " + stmt.From
+	}
+
+	// WHERE
+	if stmt.Where != nil {
+		sql += " WHERE " + b.buildExpressionSQL(stmt.Where)
+	}
+
+	// GROUP BY
+	if len(stmt.GroupBy) > 0 {
+		sql += " GROUP BY " + strings.Join(stmt.GroupBy, ", ")
+	}
+
+	// HAVING
+	if stmt.Having != nil {
+		sql += " HAVING " + b.buildExpressionSQL(stmt.Having)
+	}
+
+	// ORDER BY
+	if len(stmt.OrderBy) > 0 {
+		orderItems := make([]string, 0, len(stmt.OrderBy))
+		for _, item := range stmt.OrderBy {
+			orderItems = append(orderItems, item.Column+" "+item.Direction)
+		}
+		sql += " ORDER BY " + strings.Join(orderItems, ", ")
+	}
+
+	// LIMIT
+	if stmt.Limit != nil {
+		sql += fmt.Sprintf(" LIMIT %d", *stmt.Limit)
+	}
+
+	// OFFSET
+	if stmt.Offset != nil {
+		sql += fmt.Sprintf(" OFFSET %d", *stmt.Offset)
+	}
+
+	return sql
+}
+
+// buildExpressionSQL builds an expression SQL string from an Expression
+func (b *QueryBuilder) buildExpressionSQL(expr *Expression) string {
+	if expr == nil {
+		return ""
+	}
+
+	switch expr.Type {
+	case ExprTypeColumn:
+		return expr.Column
+
+	case ExprTypeValue:
+		return fmt.Sprintf("%v", expr.Value)
+
+	case ExprTypeOperator:
+		left := b.buildExpressionSQL(expr.Left)
+		right := b.buildExpressionSQL(expr.Right)
+		if expr.Operator == "and" || expr.Operator == "or" {
+			return fmt.Sprintf("(%s) %s (%s)", left, strings.ToUpper(expr.Operator), right)
+		}
+		return fmt.Sprintf("%s %s %s", left, strings.ToUpper(expr.Operator), right)
+
+	case ExprTypeFunction:
+		args := make([]string, 0, len(expr.Args))
+		for _, arg := range expr.Args {
+			args = append(args, b.buildExpressionSQL(&arg))
+		}
+		return fmt.Sprintf("%s(%s)", strings.ToUpper(expr.Function), strings.Join(args, ", "))
+
+	default:
+		return ""
+	}
+}
+
+// parseViewAlgorithm 解析视图算法字符串为 ViewAlgorithm 类型
+func parseViewAlgorithm(algorithm string) domain.ViewAlgorithm {
+	switch strings.ToUpper(algorithm) {
+	case "UNDEFINED":
+		return domain.ViewAlgorithmUndefined
+	case "MERGE":
+		return domain.ViewAlgorithmMerge
+	case "TEMPTABLE":
+		return domain.ViewAlgorithmTempTable
+	default:
+		return domain.ViewAlgorithmUndefined
+	}
+}
+
+// parseViewSecurity 解析视图安全类型字符串为 ViewSecurity 类型
+func parseViewSecurity(security string) domain.ViewSecurity {
+	switch strings.ToUpper(security) {
+	case "DEFINER":
+		return domain.ViewSecurityDefiner
+	case "INVOKER":
+		return domain.ViewSecurityInvoker
+	default:
+		return domain.ViewSecurityDefiner
+	}
+}
+
+// parseViewCheckOption 解析视图检查选项字符串为 ViewCheckOption 类型
+func parseViewCheckOption(checkOption string) domain.ViewCheckOption {
+	switch strings.ToUpper(checkOption) {
+	case "NONE":
+		return domain.ViewCheckOptionNone
+	case "CASCADED":
+		return domain.ViewCheckOptionCascaded
+	case "LOCAL":
+		return domain.ViewCheckOptionLocal
+	default:
+		return domain.ViewCheckOptionNone
+	}
 }

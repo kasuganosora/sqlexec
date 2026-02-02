@@ -139,12 +139,23 @@ func (a *SQLAdapter) convertToStatement(node ast.StmtNode) (*SQLStatement, error
 		stmt.Create = createStmt
 
 	case *ast.DropTableStmt:
-		stmt.Type = SQLTypeDrop
-		dropStmt, err := a.convertDropTableStmt(stmtNode)
-		if err != nil {
-			return nil, err
+		// TiDB uses DropTableStmt for both DROP TABLE and DROP VIEW
+		// Check IsView field to distinguish
+		if stmtNode.IsView {
+			stmt.Type = SQLTypeDropView
+			dropViewStmt, err := a.convertDropViewStmt(stmtNode)
+			if err != nil {
+				return nil, err
+			}
+			stmt.DropView = dropViewStmt
+		} else {
+			stmt.Type = SQLTypeDrop
+			dropStmt, err := a.convertDropTableStmt(stmtNode)
+			if err != nil {
+				return nil, err
+			}
+			stmt.Drop = dropStmt
 		}
-		stmt.Drop = dropStmt
 
 	case *ast.TruncateTableStmt:
 		stmt.Type = SQLTypeDrop
@@ -222,6 +233,14 @@ func (a *SQLAdapter) convertToStatement(node ast.StmtNode) (*SQLStatement, error
 
 			stmt.Explain = explainStmt
 		}
+
+	case *ast.CreateViewStmt:
+		stmt.Type = SQLTypeCreateView
+		createViewStmt, err := a.convertCreateViewStmt(stmtNode)
+		if err != nil {
+			return nil, err
+		}
+		stmt.CreateView = createViewStmt
 
 	default:
 		stmt.Type = SQLTypeUnknown
@@ -1088,11 +1107,97 @@ func (a *SQLAdapter) convertDropIndexStmt(stmt *ast.DropIndexStmt) (*DropIndexSt
 		IndexName: stmt.IndexName,
 		IfExists:  stmt.IfExists,
 	}
-
+	
 	// 获取表名
 	if stmt.Table != nil {
 		dropIndexStmt.TableName = stmt.Table.Name.String()
 	}
-
+	
 	return dropIndexStmt, nil
 }
+
+// convertCreateViewStmt 转换 CREATE VIEW 语句
+func (a *SQLAdapter) convertCreateViewStmt(stmt *ast.CreateViewStmt) (*CreateViewStatement, error) {
+	createViewStmt := &CreateViewStatement{
+		OrReplace: stmt.OrReplace,
+		Name:      stmt.ViewName.Name.String(),
+	}
+
+	// 解析 Algorithm - ViewAlgorithm has String() method, no Valid() needed
+	createViewStmt.Algorithm = stmt.Algorithm.String()
+
+	// 解析 Definer
+	if stmt.Definer != nil {
+		if stmt.Definer.CurrentUser {
+			createViewStmt.Definer = "CURRENT_USER"
+		} else {
+			username := stmt.Definer.Username
+			hostname := stmt.Definer.Hostname
+			if hostname != "" {
+				createViewStmt.Definer = fmt.Sprintf("'%s'@'%s'", username, hostname)
+			} else {
+				createViewStmt.Definer = fmt.Sprintf("'%s'", username)
+			}
+		}
+	}
+
+	// 解析 Security - ViewSecurity has String() method, no Valid() needed
+	createViewStmt.Security = stmt.Security.String()
+
+	// 解析列名列表
+	if len(stmt.Cols) > 0 {
+		createViewStmt.ColumnList = make([]string, 0, len(stmt.Cols))
+		for _, col := range stmt.Cols {
+			createViewStmt.ColumnList = append(createViewStmt.ColumnList, col.String())
+		}
+	}
+
+	// 解析 SELECT 语句
+	if stmt.Select != nil {
+		selectStmt, err := a.convertSelectStmt(stmt.Select.(*ast.SelectStmt))
+		if err != nil {
+			return nil, err
+		}
+		createViewStmt.Select = selectStmt
+	}
+
+	// 解析 CheckOption - ViewCheckOption has String() method, no Valid() needed
+	// Note: TiDB uses Local and Cascaded, we convert to standard naming
+	checkOpt := stmt.CheckOption.String()
+	if checkOpt == "Local" {
+		createViewStmt.CheckOption = "LOCAL"
+	} else if checkOpt == "Cascaded" {
+		createViewStmt.CheckOption = "CASCADED"
+	} else {
+		createViewStmt.CheckOption = "NONE"
+	}
+
+	return createViewStmt, nil
+}
+
+// convertDropViewStmt 转换 DROP VIEW 语句（基于 DropTableStmt）
+func (a *SQLAdapter) convertDropViewStmt(stmt *ast.DropTableStmt) (*DropViewStatement, error) {
+	dropViewStmt := &DropViewStatement{
+		IfExists: stmt.IfExists,
+	}
+
+	// 解析视图名称列表
+	if len(stmt.Tables) > 0 {
+		dropViewStmt.Views = make([]string, 0, len(stmt.Tables))
+		for _, table := range stmt.Tables {
+			dropViewStmt.Views = append(dropViewStmt.Views, table.Name.String())
+		}
+	}
+
+	// TiDB 的 DROP VIEW 不支持 CASCADE/RESTRICT 选项
+	// 但保留字段以兼容其他数据库
+	dropViewStmt.Restrict = false
+	dropViewStmt.Cascade = false
+
+	return dropViewStmt, nil
+}
+
+
+
+
+
