@@ -137,6 +137,15 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 	queryCtx, cancel, qc := s.createQueryContext(ctx, sql)
 	defer cancel()
 
+	// 设置当前用户到 executor（用于权限检查）
+	s.mu.RLock()
+	currentUser := s.user
+	s.mu.RUnlock()
+
+	if s.executor != nil && currentUser != "" {
+		s.executor.SetCurrentUser(currentUser)
+	}
+
 	// 注册查询到全局注册表
 	registry := GetGlobalQueryRegistry()
 	if err := registry.RegisterQuery(qc); err != nil {
@@ -154,6 +163,9 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 	if !parseResult.Success {
 		return nil, fmt.Errorf("SQL parse error: %s", parseResult.Error)
 	}
+
+	// 将用户信息传递到上下文（用于权限检查）
+	queryCtx = context.WithValue(queryCtx, "user", currentUser)
 
 	// 处理 USE 语句
 	if parseResult.Statement.Use != nil {

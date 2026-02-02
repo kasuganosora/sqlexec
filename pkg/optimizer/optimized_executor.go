@@ -32,6 +32,7 @@ type OptimizedExecutor struct {
 	optimizer     *Optimizer
 	useOptimizer  bool
 	currentDB     string
+	currentUser   string // 当前用户（用于权限检查）
 	functionAPI   *builtin.FunctionAPI // 函数API
 	exprEvaluator *ExpressionEvaluator // 表达式求值器
 }
@@ -114,8 +115,24 @@ func (e *OptimizedExecutor) GetCurrentDB() string {
 	return e.currentDB
 }
 
+// SetCurrentUser 设置当前用户
+func (e *OptimizedExecutor) SetCurrentUser(user string) {
+	e.currentUser = user
+	fmt.Printf("  [DEBUG] OptimizedExecutor.SetCurrentUser: 当前用户设置为 %q\n", user)
+}
+
+// GetCurrentUser 获取当前用户
+func (e *OptimizedExecutor) GetCurrentUser() string {
+	return e.currentUser
+}
+
 // ExecuteSelect 执行 SELECT 查询（支持优化）
 func (e *OptimizedExecutor) ExecuteSelect(ctx context.Context, stmt *parser.SelectStatement) (*domain.QueryResult, error) {
+	// 将用户信息传递到 context（用于权限检查）
+	if e.currentUser != "" {
+		ctx = context.WithValue(ctx, "user", e.currentUser)
+	}
+
 	// Check if this is an information_schema query
 	// information_schema queries should use QueryBuilder path to access virtual tables
 	if e.isInformationSchemaQuery(stmt.From) {
@@ -136,6 +153,12 @@ func (e *OptimizedExecutor) ExecuteSelect(ctx context.Context, stmt *parser.Sele
 func (e *OptimizedExecutor) ExecuteShow(ctx context.Context, showStmt *parser.ShowStatement) (*domain.QueryResult, error) {
 	fmt.Printf("  [DEBUG] Executing SHOW statement: Type=%s, Table=%s, Like=%s, Where=%s\n",
 		showStmt.Type, showStmt.Table, showStmt.Like, showStmt.Where)
+
+	// 将用户信息传递到 context（用于权限检查）
+	if e.currentUser != "" {
+		ctx = context.WithValue(ctx, "user", e.currentUser)
+		fmt.Printf("  [DEBUG] ExecuteShow: 设置用户到context: %s\n", e.currentUser)
+	}
 
 	// 根据 SHOW 类型转换为相应的 information_schema 查询
 	switch showStmt.Type {

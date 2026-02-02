@@ -71,6 +71,11 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 	// 构建 QueryOptions
 	options := &domain.QueryOptions{}
 
+	// 从上下文中获取用户信息（用于权限检查）
+	if user, ok := ctx.Value("user").(string); ok {
+		options.User = user
+	}
+
 	// 检查是否是 select *
 	isSelectAll := false
 	for _, col := range stmt.Columns {

@@ -1,7 +1,32 @@
-2026/02/01 07:48:27 加载配置: Host=127.0.0.1, Port=13306, Address=127.0.0.1:13306
-2026/02/01 07:48:27 已注册数据源: default
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_PING (0x0e)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_QUIT (0x01)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_SET_OPTION (0x1b)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_REFRESH (0x07)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_STATISTICS (0x09)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_DEBUG (0x0d)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_SHUTDOWN (0x08)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_QUERY (0x03)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_INIT_DB (0x02)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_FIELD_LIST (0x04)
+[SERVER] 2026/02/02 07:47:28 Registered handler: COM_PROCESS_KILL (0x0c)
+[SERVER] 2026/02/02 07:47:28 已注册 11 个命令处理器
 启动 MySQL 服务器...
 支持的命令:
 - select * from test
 - select @@version_comment limit 1
 使用任何 MySQL 客户端连接 127.0.0.1:13306
+[SERVER] 2026/02/02 07:47:31 开始获取或创建会话: remoteAddr=127.0.0.1:53687, addr=127.0.0.1, port=53687
+[SERVER] 2026/02/02 07:47:31 调试: sess 指针 = 0xc0002508c0, &sess.ID = 0xc0002508d0, &sess.ThreadID = 0xc0002508e0
+[SERVER] 2026/02/02 07:47:31 新连接来自: 127.0.0.1:53687, SessionID: 816f5a6f993fa1f4696d5ded8d947a3b, ThreadID: 1
+  [DEBUG] DefaultRuleSet: 创建规则集, 数量: 8
+  [DEBUG]   规则0: PredicatePushDown
+  [DEBUG]   规则1: ColumnPruning
+  [DEBUG]   规则2: ProjectionElimination
+  [DEBUG]   规则3: LimitPushDown
+  [DEBUG]   规则4: ConstantFolding
+  [DEBUG]   规则5: JoinReorder
+  [DEBUG]   规则6: JoinElimination
+  [DEBUG]   规则7: SemiJoinRewrite
+[SERVER] 2026/02/02 07:47:31 已为连接创建 API Session, ThreadID=1
+[DEBUG] Packet.Unmarshal: failed to read header: EOF
+[SERVER] 2026/02/02 07:47:31 解析握手响应失败: EOF

@@ -119,6 +119,7 @@ type QueryOptions struct {
 	Offset       int      `json:"offset,omitempty"`
 	SelectAll    bool     `json:"select_all,omitempty"`     // 是否是 select *
 	SelectColumns []string `json:"select_columns,omitempty"` // 指定要查询的列（列裁剪）
+	User         string   `json:"user,omitempty"`         // 当前用户名（用于权限检查）
 }
 
 // InsertOptions 插入选项

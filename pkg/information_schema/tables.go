@@ -62,6 +62,22 @@ func (t *TablesTable) Query(ctx context.Context, filters []domain.Filter, option
 	// Build result rows
 	rows := make([]domain.Row, 0)
 
+	// 权限检查：只有 root 用户可以看到所有表，包括权限表
+	// 非特权用户只能看到基本的 information_schema 表
+	allowPrivilegeTables := false
+	if options != nil && options.User != "" {
+		fmt.Printf("  [DEBUG] TablesTable.Query: User=%s, checking permissions\n", options.User)
+		// root 用户可以看到所有表
+		if options.User == "root" {
+			allowPrivilegeTables = true
+			fmt.Printf("  [DEBUG] TablesTable.Query: root用户，允许查看权限表\n")
+		} else {
+			fmt.Printf("  [DEBUG] TablesTable.Query: 非特权用户，隐藏权限表\n")
+		}
+	} else {
+		fmt.Printf("  [DEBUG] TablesTable.Query: options=%v, User is empty or nil\n", options)
+	}
+
 	// Add information_schema's own tables
 	infoSchemaTables := []struct {
 		name    string
@@ -72,10 +88,20 @@ func (t *TablesTable) Query(ctx context.Context, filters []domain.Filter, option
 		{"columns", "Table columns"},
 		{"table_constraints", "Table constraints"},
 		{"key_column_usage", "Key column usage"},
-		{"USER_PRIVILEGES", "User privileges"},
-		{"SCHEMA_PRIVILEGES", "Schema privileges"},
-		{"TABLE_PRIVILEGES", "Table privileges"},
-		{"COLUMN_PRIVILEGES", "Column privileges"},
+	}
+
+	// 只有特权用户（如 root）才能看到权限表
+	if allowPrivilegeTables {
+		privilegeTables := []struct {
+			name    string
+			comment string
+		}{
+			{"USER_PRIVILEGES", "User privileges"},
+			{"SCHEMA_PRIVILEGES", "Schema privileges"},
+			{"TABLE_PRIVILEGES", "Table privileges"},
+			{"COLUMN_PRIVILEGES", "Column privileges"},
+		}
+		infoSchemaTables = append(infoSchemaTables, privilegeTables...)
 	}
 
 	for _, table := range infoSchemaTables {
