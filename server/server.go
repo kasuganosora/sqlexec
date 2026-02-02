@@ -20,6 +20,7 @@ import (
 	processHandlers "github.com/kasuganosora/sqlexec/server/handler/process"
 	"github.com/kasuganosora/sqlexec/server/protocol"
 	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
+	isacl "github.com/kasuganosora/sqlexec/pkg/information_schema"
 )
 
 type Server struct {
@@ -108,6 +109,12 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 
 	// 注册所有处理器
 	s.registerHandlers()
+
+	// 注册全局ACL Manager到information_schema
+	if s.aclManager != nil {
+		isacl.RegisterACLManager(s.aclManager)
+		s.logger.Printf("已注册 ACL Manager 到 information_schema")
+	}
 
 	return s
 }

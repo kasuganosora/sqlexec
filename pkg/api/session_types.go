@@ -90,3 +90,5 @@ func (s *Session) GetUser() string {
 	}
 	return ""
 }
+
+

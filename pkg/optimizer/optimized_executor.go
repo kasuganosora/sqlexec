@@ -37,6 +37,13 @@ type OptimizedExecutor struct {
 	exprEvaluator *ExpressionEvaluator // 表达式求值器
 }
 
+// contextKey 是context中的key类型
+type contextKey int
+
+const (
+	aclManagerKey contextKey = iota
+)
+
 // NewOptimizedExecutor 创建优化的执行器
 func NewOptimizedExecutor(dataSource domain.DataSource, useOptimizer bool) *OptimizedExecutor {
 	functionAPI := builtin.NewFunctionAPI()
@@ -737,7 +744,16 @@ func (e *OptimizedExecutor) getVirtualDataSource() domain.DataSource {
 		return nil
 	}
 
-	// Create information_schema virtual data source
+	// 尝试获取全局ACL Manager adapter
+	aclAdapter := information_schema.GetACLManagerAdapter()
+
+	// 使用ACL Manager adapter创建provider，以便权限表可以正常工作
+	if aclAdapter != nil {
+		provider := information_schema.NewProviderWithACL(e.dsManager, aclAdapter)
+		return virtual.NewVirtualDataSource(provider)
+	}
+
+	// 如果没有ACL Manager，使用不带ACL的provider
 	provider := information_schema.NewProvider(e.dsManager)
 	return virtual.NewVirtualDataSource(provider)
 }
