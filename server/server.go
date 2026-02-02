@@ -297,6 +297,15 @@ func (s *Server) handleHandshake(conn net.Conn, sess *pkg_session.Session) error
 
 	// 更新 session 信息
 	sess.SetUser(handshakeResponse.User)
+	
+	// 同时设置 API 层 Session 的用户
+	if apiSessIntf := sess.GetAPISession(); apiSessIntf != nil {
+		if apiSess, ok := apiSessIntf.(*api.Session); ok {
+			apiSess.SetUser(handshakeResponse.User)
+			s.logger.Printf("已设置 API Session 用户: %s", handshakeResponse.User)
+		}
+	}
+	
 	if handshakeResponse.Database != "" {
 		// 简化实现，不调用 SetCurrentDB
 		sess.Set("current_database", handshakeResponse.Database)

@@ -71,3 +71,22 @@ func (s *Session) GetThreadID() uint32 {
 	defer s.mu.RUnlock()
 	return s.threadID
 }
+
+// SetUser 设置当前用户名
+func (s *Session) SetUser(user string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.coreSession != nil {
+		s.coreSession.SetUser(user)
+	}
+}
+
+// GetUser 获取当前用户名
+func (s *Session) GetUser() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.coreSession != nil {
+		return s.coreSession.CurrentUser()
+	}
+	return ""
+}
