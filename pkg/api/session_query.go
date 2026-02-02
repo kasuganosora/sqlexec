@@ -45,11 +45,15 @@ func (s *Session) Query(sql string, args ...interface{}) (*Query, error) {
 		}
 	}
 
-	// Parse and execute query
+	// Parse and execute query (使用 context.Background,超时由CoreSession内部处理)
 	ctx := context.Background()
 
 	result, err := s.coreSession.ExecuteQuery(ctx, boundSQL)
 	if err != nil {
+		// 检查错误类型并返回适当的错误码
+		if err.Error() == "query execution timed out" || err.Error() == "query was killed" {
+			return nil, WrapError(err, ErrCodeTimeout, "failed to execute query")
+		}
 		return nil, WrapError(err, ErrCodeSyntax, "failed to execute query")
 	}
 

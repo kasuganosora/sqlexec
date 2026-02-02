@@ -25,12 +25,14 @@ func (p *Packet) Unmarshal(r io.Reader) (err error) {
 	buf := make([]byte, 4)
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
+		fmt.Printf("[DEBUG] Packet.Unmarshal: failed to read header: %v\n", err)
 		return err
 	}
 	
 	// 解析协议头 (小端序)
 	p.PayloadLength = uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16
 	p.SequenceID = buf[3]
+	fmt.Printf("[DEBUG] Packet.Unmarshal: seq=%d, payload_len=%d, header=%X\n", p.SequenceID, p.PayloadLength, buf)
 
 	// 读取载荷数据 (payload_length 字节，不包含 sequence ID)
 	p.Payload = nil
@@ -38,12 +40,14 @@ func (p *Packet) Unmarshal(r io.Reader) (err error) {
 		p.Payload = make([]byte, p.PayloadLength)
 		n, readErr := io.ReadFull(r, p.Payload)
 		if readErr != nil {
+			fmt.Printf("[DEBUG] Packet.Unmarshal: failed to read payload: %v (read %d/%d)\n", readErr, n, p.PayloadLength)
 			err = readErr
 			return err
 		}
 		if n != int(p.PayloadLength) {
 			return fmt.Errorf("payload length mismatch: expected %d, got %d", p.PayloadLength, n)
 		}
+		fmt.Printf("[DEBUG] Packet.Unmarshal: payload=%X\n", p.Payload)
 	}
 	return nil
 }
@@ -216,45 +220,64 @@ type HandshakeResponse struct {
 }
 
 func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err error) {
-	p.Packet.Unmarshal(r)
+	err = p.Packet.Unmarshal(r)
+	if err != nil {
+		return err
+	}
 	// 使用Payload中的数据创建reader
-	reader := bufio.NewReader(bytes.NewReader(p.Payload))
+	reader := bytes.NewReader(p.Payload)
+	
 	p.ClientCapabilities, _ = ReadNumber[uint16](reader, 2)
 	p.ExtendedClientCapabilities, _ = ReadNumber[uint16](reader, 2)
 	p.MaxPacketSize, _ = ReadNumber[uint32](reader, 4)
 	p.CharacterSet, _ = ReadNumber[uint8](reader, 1)
-	p.Reserved = make([]byte, 19)
-	io.ReadFull(reader, p.Reserved)
-	p.MariaDBCaps, _ = ReadNumber[uint32](reader, 4)
-	// 读取用户名（NUL结尾字符串）
-	p.User, _ = ReadStringByNullEndFromReader(reader)
 
-	// 修复：根据能力标志正确处理认证响应
-	switch {
-	case capabilities&CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA != 0:
-		// 长度编码的认证响应
-		p.AuthResponse, _ = ReadStringByLenencFromReader[uint8](reader)
-	case capabilities&CLIENT_SECURE_CONNECTION != 0:
-		// 安全连接：1字节长度 + N字节内容
-		authLen, _ := ReadNumber[uint8](reader, 1)
-		authData := make([]byte, authLen)
-		io.ReadFull(reader, authData)
-		p.AuthResponse = hex.EncodeToString(authData)
-	default:
-		// 旧密码认证：NUL结尾字符串
-		p.AuthResponse, _ = ReadStringByNullEndFromReader(reader)
+	// 读取Reserved字段（最多19字节）
+	p.Reserved = make([]byte, 19)
+	n, _ := reader.Read(p.Reserved)
+	if n < 19 {
+		// 截断到实际读取的字节数
+		p.Reserved = p.Reserved[:n]
 	}
 
-	if capabilities&CLIENT_CONNECT_WITH_DB != 0 {
+	// 尝试读取MariaDBCaps（如果还有数据）
+	if reader.Len() >= 4 {
+		p.MariaDBCaps, _ = ReadNumber[uint32](reader, 4)
+	}
+
+	// 读取用户名（NUL结尾字符串）
+	userReader := bufio.NewReader(reader)
+	p.User, _ = ReadStringByNullEndFromReader(userReader)
+
+	// 修复：根据能力标志正确处理认证响应
+	// 检查是否还有数据可读
+	if reader.Len() > 0 {
+		switch {
+		case capabilities&CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA != 0:
+			// 长度编码的认证响应
+			p.AuthResponse, _ = ReadStringByLenencFromReader[uint8](reader)
+		case capabilities&CLIENT_SECURE_CONNECTION != 0:
+			// 安全连接：1字节长度 + N字节内容
+			authLen, _ := ReadNumber[uint8](reader, 1)
+			authData := make([]byte, authLen)
+			io.ReadFull(reader, authData)
+			p.AuthResponse = hex.EncodeToString(authData)
+		default:
+			// 旧密码认证：NUL结尾字符串
+			p.AuthResponse, _ = ReadStringByNullEndFromReader(reader)
+		}
+	}
+
+	if reader.Len() > 0 && capabilities&CLIENT_CONNECT_WITH_DB != 0 {
 		p.Database, _ = ReadStringByNullEndFromReader(reader)
 	}
 
-	if capabilities&CLIENT_PLUGIN_AUTH != 0 {
+	if reader.Len() > 0 && capabilities&CLIENT_PLUGIN_AUTH != 0 {
 		p.ClientAuthPluginName, _ = ReadStringByNullEndFromReader(reader)
 	}
 
 	// 修复：连接属性解析使用有限读取器
-	if capabilities&CLIENT_CONNECT_ATTRS != 0 {
+	if reader.Len() > 0 && capabilities&CLIENT_CONNECT_ATTRS != 0 {
 		attrLen, _ := ReadLenencNumber[uint64](reader)
 		p.ConnectionAttributesLength = attrLen
 		p.ConnectionAttributes = make([]ConnectionAttributeItem, 0)
@@ -274,7 +297,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 		}
 	}
 
-	if capabilities&CLIENT_ZSTD_COMPRESSION_ALGORITHM != 0 {
+	if reader.Len() > 0 && capabilities&CLIENT_ZSTD_COMPRESSION_ALGORITHM != 0 {
 		p.ZstdCompressionLevel, _ = ReadNumber[uint8](reader, 1)
 	}
 
@@ -412,9 +435,6 @@ func (p *OkPacket) Marshal() ([]byte, error) {
 	// 总是写入 Info（即使是空字符串）
 	if p.OkInPacket.Info != "" {
 		WriteStringByLenenc(buf, p.OkInPacket.Info)
-	} else {
-		// 写入0长度字符串
-		buf.WriteByte(0x00)
 	}
 
 	// 总是写入 SessionStateInfo（如果标志位设置了）

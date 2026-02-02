@@ -14,6 +14,16 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
+// ProcessListProvider 进程列表提供者函数类型（用于避免循环依赖）
+type ProcessListProvider func() []interface{}
+
+var processListProvider ProcessListProvider
+
+// RegisterProcessListProvider 注册进程列表提供者
+func RegisterProcessListProvider(provider ProcessListProvider) {
+	processListProvider = provider
+}
+
 // OptimizedExecutor 优化的执行器
 // 集成 Optimizer 和 QueryBuilder，提供优化后的查询执行
 type OptimizedExecutor struct {
@@ -225,9 +235,96 @@ func (e *OptimizedExecutor) ExecuteShow(ctx context.Context, showStmt *parser.Sh
 
 		return e.executeWithBuilder(ctx, parseResult.Statement.Select)
 
+	case "PROCESSLIST":
+		// SHOW PROCESSLIST - 从查询注册表获取所有查询
+		return e.executeShowProcessList(ctx, showStmt.Full)
+
 	default:
 		return nil, fmt.Errorf("unsupported SHOW type: %s", showStmt.Type)
 	}
+}
+
+// executeShowProcessList 执行 SHOW PROCESSLIST
+func (e *OptimizedExecutor) executeShowProcessList(ctx context.Context, full bool) (*domain.QueryResult, error) {
+	// 使用进程列表提供者获取查询列表
+	var processList []interface{}
+	if processListProvider != nil {
+		processList = processListProvider()
+	}
+
+	// 定义 PROCESSLIST 字段
+	columns := []domain.ColumnInfo{
+		{Name: "Id", Type: "BIGINT UNSIGNED"},
+		{Name: "User", Type: "VARCHAR"},
+		{Name: "Host", Type: "VARCHAR"},
+		{Name: "db", Type: "VARCHAR"},
+		{Name: "Command", Type: "VARCHAR"},
+		{Name: "Time", Type: "BIGINT UNSIGNED"},
+		{Name: "State", Type: "VARCHAR"},
+		{Name: "Info", Type: "TEXT"},
+	}
+
+	// 构建结果行
+	rows := make([]domain.Row, 0, len(processList))
+	for _, item := range processList {
+		// 使用类型断言和反射来访问字段
+		// 由于避免循环依赖，我们假设 item 是一个结构体，包含 QueryID, ThreadID, SQL, StartTime, Duration, Status, User, Host, DB 字段
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			// 如果不是 map，跳过
+			continue
+		}
+
+		threadID, _ := itemMap["ThreadID"].(uint32)
+		sql, _ := itemMap["SQL"].(string)
+		duration, _ := itemMap["Duration"].(time.Duration)
+		status, _ := itemMap["Status"].(string)
+		user, _ := itemMap["User"].(string)
+		host, _ := itemMap["Host"].(string)
+		db, _ := itemMap["DB"].(string)
+
+		timeSeconds := uint64(duration.Seconds())
+
+		// 获取 Info 字段
+		info := sql
+		if !full && len(info) > 100 {
+			info = info[:100]
+		}
+
+		// 构建 State
+		state := "executing"
+		if status == "canceled" {
+			state = "killed"
+		} else if status == "timeout" {
+			state = "timeout"
+		}
+
+		// User 和 Host 的默认值
+		if user == "" {
+			user = "user"
+		}
+		if host == "" {
+			host = "localhost:3306"
+		}
+
+		row := domain.Row{
+			"Id":     int64(threadID),
+			"User":   user,
+			"Host":   host,
+			"db":     db,
+			"Command": "Query",
+			"Time":   timeSeconds,
+			"State":  state,
+			"Info":   info,
+		}
+		rows = append(rows, row)
+	}
+
+	return &domain.QueryResult{
+		Columns: columns,
+		Rows:    rows,
+		Total:   int64(len(rows)),
+	}, nil
 }
 
 // isInformationSchemaQuery 检查是否是 information_schema 查询

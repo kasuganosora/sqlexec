@@ -82,6 +82,10 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 	}
 
 	if err != nil {
+		// 检查错误类型并返回适当的错误码
+		if err.Error() == "query execution timed out" || err.Error() == "query was killed" {
+			return nil, WrapError(err, ErrCodeTimeout, "failed to execute statement")
+		}
 		return nil, WrapError(err, ErrCodeInternal, "failed to execute statement")
 	}
 

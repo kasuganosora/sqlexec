@@ -9,6 +9,7 @@ package api
 //   - Transaction management: Begin(), InTransaction(), IsolationLevel(), SetIsolationLevel()
 //   - Temporary table management: CreateTempTable()
 //   - Session lifecycle: GetDB(), Close()
+//   - Query timeout and kill support
 //
 // Session is created by DB.Session() or DB.SessionWithOptions()
 // and wraps CoreSession with additional functionality like caching and validation.

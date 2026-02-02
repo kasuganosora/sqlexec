@@ -28,6 +28,7 @@ type DBConfig struct {
 	CacheTTL      int // seconds
 	DefaultLogger Logger
 	DebugMode     bool
+	QueryTimeout  time.Duration // 全局查询超时, 0表示不限制
 }
 
 // NewDB creates a new DB object with the given configuration
@@ -174,6 +175,14 @@ func (db *DB) SessionWithOptions(opts *SessionOptions) *Session {
 
 	// Create CoreSession with DataSourceManager for information_schema support
 	coreSession := session.NewCoreSessionWithDSManager(ds, db.dsManager)
+
+	// 设置查询超时 (Session级别覆盖DB级别)
+	queryTimeout := opts.QueryTimeout
+	if queryTimeout == 0 && db.config != nil {
+		queryTimeout = db.config.QueryTimeout
+	}
+	coreSession.SetQueryTimeout(queryTimeout)
+
 	apiSession := &Session{
 		db:           db,
 		coreSession:   coreSession,

@@ -991,6 +991,9 @@ func (a *SQLAdapter) convertShowStmt(stmt *ast.ShowStmt) (*ShowStatement, error)
 		if stmt.Table != nil {
 			showStmt.Table = stmt.Table.Name.String()
 		}
+	case ast.ShowProcessList:
+		showStmt.Type = "PROCESSLIST"
+		showStmt.Full = stmt.Full
 	default:
 		showStmt.Type = "UNKNOWN"
 	}

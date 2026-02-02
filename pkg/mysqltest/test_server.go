@@ -215,6 +215,30 @@ func (s *TestServer) InsertTestData(tableName string, rows []domain.Row) error {
 	return nil
 }
 
+// CreateTestDatabase 创建测试数据库（数据源）
+func (s *TestServer) CreateTestDatabase(dbName string) error {
+	if s.db == nil {
+		return fmt.Errorf("server not initialized")
+	}
+
+	// 创建 MVCC 数据源
+	memoryDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Name:     dbName,
+		Writable: true,
+	})
+
+	if err := memoryDS.Connect(s.ctx); err != nil {
+		return fmt.Errorf("failed to connect memory data source: %w", err)
+	}
+
+	if err := s.db.RegisterDataSource(dbName, memoryDS); err != nil {
+		return fmt.Errorf("failed to register data source %s: %w", dbName, err)
+	}
+
+	return nil
+}
+
 // NewSQLConnection 创建一个新的 SQL 连接
 func (s *TestServer) NewSQLConnection() (*sql.DB, error) {
 	dsn := s.GetDSN()

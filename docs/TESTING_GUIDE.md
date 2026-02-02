@@ -151,25 +151,16 @@ func TestSQLParser(t *testing.T) {
 func TestQueryExecution(t *testing.T) {
     ctx := context.Background()
 
-    // 创建mock执行器
-    mockExec := executor.NewMockExecutor()
-    mockExec.SetResult("SELECT * FROM users", &domain.QueryResult{
-        Columns: []domain.ColumnInfo{
-            {Name: "id", Type: "int64"},
-            {Name: "name", Type: "string"},
-        },
-        Rows: []domain.Row{
-            {"id": int64(1), "name": "Alice"},
-        },
-        Total: 1,
-    })
+    // 创建mock执行器（使用 session 包的 mock）
+    // 注意：实际使用时请参考 session 包的 mock 实现
+    // 这个示例仅用于说明测试逻辑
 
     // 执行查询
-    result, err := mockExec.Execute(ctx, "SELECT * FROM users")
-    require.NoError(t, err)
+    // result, err := mockExec.Execute(ctx, "SELECT * FROM users")
+    // require.NoError(t, err)
 
-    assert.Equal(t, 1, len(result.Rows))
-    assert.Equal(t, "Alice", result.Rows[0]["name"])
+    // assert.Equal(t, 1, len(result.Rows))
+    // assert.Equal(t, "Alice", result.Rows[0]["name"])
 }
 ```
 
@@ -297,7 +288,6 @@ go test ./pkg/parser
 
 # 运行特定测试函数
 go test ./pkg/session -run TestCoreSession_WithoutServer
-go test ./pkg/executor -run TestQueryExecutor_SimpleSelect
 
 # 查看详细输出
 go test ./pkg/session -v
@@ -313,7 +303,6 @@ go tool cover -html=coverage.out
 ```bash
 # 只运行以 _unit_test.go 结尾的测试文件
 go test -run "Unit" ./pkg/session
-go test -run "Unit" ./pkg/executor
 ```
 
 ## 测试最佳实践
@@ -442,9 +431,6 @@ pkg/
 │   ├── core_unit_test.go    # 纯逻辑单元测试 ✅
 │   ├── mock_executor.go     # Mock执行器 ✅
 │   └── session_test.go      # 集成测试
-├── executor/
-│   ├── executor.go
-│   ├── executor_test.go     # 执行器测试 ✅
 ├── testutils/
 │   └── helper.go            # 测试辅助工具 ✅
 └── parser/

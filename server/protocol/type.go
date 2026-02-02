@@ -38,6 +38,10 @@ func ReadStringByNullEndFromReader(r io.Reader) (string, error) {
 	for {
 		b, err := reader.ReadByte()
 		if err != nil {
+			// 如果已经读取了至少一个字节，且错误是EOF，可能是空字符串
+			if err == io.EOF && len(buf) > 0 {
+				break
+			}
 			return "", err
 		}
 		if b == 0 {

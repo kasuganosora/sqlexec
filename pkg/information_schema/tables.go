@@ -72,6 +72,10 @@ func (t *TablesTable) Query(ctx context.Context, filters []domain.Filter, option
 		{"columns", "Table columns"},
 		{"table_constraints", "Table constraints"},
 		{"key_column_usage", "Key column usage"},
+		{"USER_PRIVILEGES", "User privileges"},
+		{"SCHEMA_PRIVILEGES", "Schema privileges"},
+		{"TABLE_PRIVILEGES", "Table privileges"},
+		{"COLUMN_PRIVILEGES", "Column privileges"},
 	}
 
 	for _, table := range infoSchemaTables {

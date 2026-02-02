@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kasuganosora/sqlexec/pkg/application"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,14 +13,14 @@ import (
 // 提供快速创建内存数据源、表和数据的能力
 type MemoryTestHelper struct {
 	ds          domain.DataSource
-	factory     *application.MemoryFactory
+	factory     *memory.MemoryFactory
 	ctx         context.Context
 }
 
 // NewMemoryTestHelper 创建内存测试辅助器
 // 自动创建并连接内存数据源
 func NewMemoryTestHelper(t *testing.T) *MemoryTestHelper {
-	factory := application.NewMemoryFactory()
+	factory := memory.NewMemoryFactory()
 	config := &domain.DataSourceConfig{
 		Type:     domain.DataSourceTypeMemory,
 		Writable: true,

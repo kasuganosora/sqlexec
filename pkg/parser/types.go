@@ -152,10 +152,11 @@ type DropIndexStatement struct {
 
 // ShowStatement SHOW 语句
 type ShowStatement struct {
-	Type   string `json:"type"` // TABLES, DATABASES, COLUMNS, etc.
+	Type   string `json:"type"` // TABLES, DATABASES, COLUMNS, PROCESSLIST, etc.
 	Table  string `json:"table,omitempty"`
 	Where string `json:"where,omitempty"`
 	Like   string `json:"like,omitempty"`
+	Full   bool   `json:"full,omitempty"` // SHOW FULL PROCESSLIST
 }
 
 // DescribeStatement DESCRIBE 语句

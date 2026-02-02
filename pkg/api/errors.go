@@ -26,6 +26,7 @@ const (
 	ErrCodeConstraint       ErrorCode = "CONSTRAINT"
 	ErrCodeTransaction     ErrorCode = "TRANSACTION"
 	ErrCodeTimeout         ErrorCode = "TIMEOUT"
+	ErrCodeQueryKilled     ErrorCode = "QUERY_KILLED"
 	ErrCodeInvalidParam    ErrorCode = "INVALID_PARAM"
 	ErrCodeNotSupported    ErrorCode = "NOT_SUPPORTED"
 	ErrCodeClosed          ErrorCode = "CLOSED"

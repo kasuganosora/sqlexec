@@ -2,13 +2,16 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/optimizer"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 )
 
 // CoreSession 核心会话实现（用于用户 API）
@@ -26,6 +29,9 @@ type CoreSession struct {
 	txnMu         sync.Mutex       // 事务锁（防止嵌套）
 	tempTables     []string          // 会话级临时表列表
 	closed         bool
+	queryTimeout   time.Duration    // 查询超时时间
+	threadID       uint32           // 关联的线程ID (用于KILL)
+	queryMu        sync.Mutex       // 查询锁
 }
 
 // NewCoreSession 创建核心会话
@@ -42,27 +48,102 @@ func NewCoreSession(dataSource domain.DataSource) *CoreSession {
 // NewCoreSessionWithDSManager 创建带有数据源管理器的核心会话
 func NewCoreSessionWithDSManager(dataSource domain.DataSource, dsManager *application.DataSourceManager) *CoreSession {
 	return &CoreSession{
-		dataSource: dataSource,
-		dsManager:  dsManager,
-		executor:   optimizer.NewOptimizedExecutorWithDSManager(dataSource, dsManager, true),
-		adapter:    parser.NewSQLAdapter(),
-		currentDB:  "", // Default to no database selected
-		user:       "",
-		host:       "",
-		tempTables: []string{},
-		closed:     false,
+		dataSource:   dataSource,
+		dsManager:    dsManager,
+		executor:     optimizer.NewOptimizedExecutorWithDSManager(dataSource, dsManager, true),
+		adapter:      parser.NewSQLAdapter(),
+		currentDB:    "", // Default to no database selected
+		user:         "",
+		host:         "",
+		tempTables:   []string{},
+		closed:       false,
+		queryTimeout: 0, // 默认不限制
+		threadID:     0, // 后续设置
 	}
+}
+
+// SetQueryTimeout 设置查询超时时间
+func (s *CoreSession) SetQueryTimeout(timeout time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.queryTimeout = timeout
+}
+
+// GetQueryTimeout 获取查询超时时间
+func (s *CoreSession) GetQueryTimeout() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.queryTimeout
+}
+
+// SetThreadID 设置线程ID
+func (s *CoreSession) SetThreadID(threadID uint32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.threadID = threadID
+}
+
+// GetThreadID 获取线程ID
+func (s *CoreSession) GetThreadID() uint32 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.threadID
+}
+
+// createQueryContext 创建带超时的查询上下文
+func (s *CoreSession) createQueryContext(parentCtx context.Context, sql string) (context.Context, context.CancelFunc, *QueryContext) {
+	s.mu.RLock()
+	timeout := s.queryTimeout
+	threadID := s.threadID
+	user := s.user
+	host := s.host
+	currentDB := s.currentDB
+	s.mu.RUnlock()
+
+	// 先创建可取消的上下文
+	baseCtx, cancel := context.WithCancel(parentCtx)
+	queryID := GenerateQueryID(threadID)
+
+	queryCtx := &QueryContext{
+		QueryID:    queryID,
+		ThreadID:   threadID,
+		SQL:        sql,
+		StartTime:  time.Now(),
+		CancelFunc: cancel,
+		User:       user,
+		Host:       host,
+		DB:         currentDB,
+	}
+
+	// 如果设置了超时,包装超时上下文
+	var ctx context.Context
+	if timeout > 0 {
+		ctx, queryCtx.CancelFunc = context.WithTimeout(baseCtx, timeout)
+	} else {
+		ctx = baseCtx
+	}
+
+	return ctx, cancel, queryCtx
 }
 
 // ExecuteQuery 执行查询（底层实现）
 // 返回 *domain.QueryResult，供 api 层封装成 Query 对象
 func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.QueryResult, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.closed {
 		return nil, fmt.Errorf("session is closed")
 	}
+
+	// 创建查询上下文(带超时和取消支持)
+	queryCtx, cancel, qc := s.createQueryContext(ctx, sql)
+	defer cancel()
+
+	// 注册查询到全局注册表
+	registry := GetGlobalQueryRegistry()
+	if err := registry.RegisterQuery(qc); err != nil {
+		// 注册失败,记录日志但继续执行
+		fmt.Printf("Failed to register query: %v\n", err)
+	}
+	defer registry.UnregisterQuery(qc.QueryID)
 
 	// 解析 SQL
 	parseResult, err := s.adapter.Parse(sql)
@@ -79,28 +160,47 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 		return s.executeUseStatement(parseResult.Statement.Use)
 	}
 
-	// 执行查询
+	// 执行查询(使用带取消的 context)
+	var result *domain.QueryResult
 	if parseResult.Statement.Select != nil {
-		return s.executor.ExecuteSelect(ctx, parseResult.Statement.Select)
+		result, err = s.executor.ExecuteSelect(queryCtx, parseResult.Statement.Select)
+	} else if parseResult.Statement.Show != nil {
+		// 处理 SHOW 语句 - 转换为 information_schema 查询
+		result, err = s.executor.ExecuteShow(queryCtx, parseResult.Statement.Show)
+	} else {
+		return nil, fmt.Errorf("statement type not supported yet")
 	}
 
-	// 处理 SHOW 语句 - 转换为 information_schema 查询
-	if parseResult.Statement.Show != nil {
-		return s.executor.ExecuteShow(ctx, parseResult.Statement.Show)
+	// 检查是否是超时或取消导致的错误
+	if errors.Is(err, context.DeadlineExceeded) {
+		qc.SetTimeout()
+		return nil, fmt.Errorf("query execution timed out after %v", qc.GetDuration())
+	}
+	if errors.Is(err, context.Canceled) {
+		if qc.IsCanceled() {
+			return nil, fmt.Errorf("query was killed")
+		}
+		return nil, fmt.Errorf("query execution cancelled")
 	}
 
-	return nil, fmt.Errorf("statement type not supported yet")
+	return result, err
 }
 
 // ExecuteInsert 执行 INSERT（底层实现）
 // 返回 *domain.QueryResult，其中 Total 字段是影响的行数
 func (s *CoreSession) ExecuteInsert(ctx context.Context, sql string, rows []domain.Row) (*domain.QueryResult, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.closed {
 		return nil, fmt.Errorf("session is closed")
 	}
+
+	// 创建查询上下文(带超时和取消支持)
+	queryCtx, cancel, qc := s.createQueryContext(ctx, sql)
+	defer cancel()
+
+	// 注册查询
+	registry := GetGlobalQueryRegistry()
+	registry.RegisterQuery(qc)
+	defer registry.UnregisterQuery(qc.QueryID)
 
 	// 解析 SQL
 	parseResult, err := s.adapter.Parse(sql)
@@ -117,24 +217,39 @@ func (s *CoreSession) ExecuteInsert(ctx context.Context, sql string, rows []doma
 	}
 
 	// 使用 executor 执行 INSERT (has information_schema support)
-	result, err := s.executor.ExecuteInsert(ctx, parseResult.Statement.Insert)
-	if err != nil {
-		return nil, fmt.Errorf("INSERT failed: %w", err)
+	result, err := s.executor.ExecuteInsert(queryCtx, parseResult.Statement.Insert)
+
+	// 检查是否是超时或取消导致的错误
+	if errors.Is(err, context.DeadlineExceeded) {
+		qc.SetTimeout()
+		return nil, fmt.Errorf("query execution timed out after %v", qc.GetDuration())
+	}
+	if errors.Is(err, context.Canceled) {
+		if qc.IsCanceled() {
+			return nil, fmt.Errorf("query was killed")
+		}
+		return nil, fmt.Errorf("query execution cancelled")
 	}
 
 	// 返回结果，其中 Total 是影响的行数
-	return result, nil
+	return result, err
 }
 
 // ExecuteUpdate 执行 UPDATE（底层实现）
 // 返回 *domain.QueryResult，其中 Total 字段是影响的行数
 func (s *CoreSession) ExecuteUpdate(ctx context.Context, sql string, _ []domain.Filter, _ domain.Row) (*domain.QueryResult, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.closed {
 		return nil, fmt.Errorf("session is closed")
 	}
+
+	// 创建查询上下文(带超时和取消支持)
+	queryCtx, cancel, qc := s.createQueryContext(ctx, sql)
+	defer cancel()
+
+	// 注册查询
+	registry := GetGlobalQueryRegistry()
+	registry.RegisterQuery(qc)
+	defer registry.UnregisterQuery(qc.QueryID)
 
 	// 解析 SQL
 	parseResult, err := s.adapter.Parse(sql)
@@ -151,24 +266,39 @@ func (s *CoreSession) ExecuteUpdate(ctx context.Context, sql string, _ []domain.
 	}
 
 	// 使用 executor 执行 UPDATE (has information_schema support)
-	result, err := s.executor.ExecuteUpdate(ctx, parseResult.Statement.Update)
-	if err != nil {
-		return nil, fmt.Errorf("UPDATE failed: %w", err)
+	result, err := s.executor.ExecuteUpdate(queryCtx, parseResult.Statement.Update)
+
+	// 检查是否是超时或取消导致的错误
+	if errors.Is(err, context.DeadlineExceeded) {
+		qc.SetTimeout()
+		return nil, fmt.Errorf("query execution timed out after %v", qc.GetDuration())
+	}
+	if errors.Is(err, context.Canceled) {
+		if qc.IsCanceled() {
+			return nil, fmt.Errorf("query was killed")
+		}
+		return nil, fmt.Errorf("query execution cancelled")
 	}
 
 	// 返回结果，其中 Total 是影响的行数
-	return result, nil
+	return result, err
 }
 
 // ExecuteDelete 执行 DELETE（底层实现）
 // 返回 *domain.QueryResult，其中 Total 字段是影响的行数
 func (s *CoreSession) ExecuteDelete(ctx context.Context, sql string, _ []domain.Filter) (*domain.QueryResult, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if s.closed {
 		return nil, fmt.Errorf("session is closed")
 	}
+
+	// 创建查询上下文(带超时和取消支持)
+	queryCtx, cancel, qc := s.createQueryContext(ctx, sql)
+	defer cancel()
+
+	// 注册查询
+	registry := GetGlobalQueryRegistry()
+	registry.RegisterQuery(qc)
+	defer registry.UnregisterQuery(qc.QueryID)
 
 	// 解析 SQL
 	parseResult, err := s.adapter.Parse(sql)
@@ -185,13 +315,22 @@ func (s *CoreSession) ExecuteDelete(ctx context.Context, sql string, _ []domain.
 	}
 
 	// 使用 executor 执行 DELETE (has information_schema support)
-	result, err := s.executor.ExecuteDelete(ctx, parseResult.Statement.Delete)
-	if err != nil {
-		return nil, fmt.Errorf("DELETE failed: %w", err)
+	result, err := s.executor.ExecuteDelete(queryCtx, parseResult.Statement.Delete)
+
+	// 检查是否是超时或取消导致的错误
+	if errors.Is(err, context.DeadlineExceeded) {
+		qc.SetTimeout()
+		return nil, fmt.Errorf("query execution timed out after %v", qc.GetDuration())
+	}
+	if errors.Is(err, context.Canceled) {
+		if qc.IsCanceled() {
+			return nil, fmt.Errorf("query was killed")
+		}
+		return nil, fmt.Errorf("query execution cancelled")
 	}
 
 	// 返回结果，其中 Total 是影响的行数
-	return result, nil
+	return result, err
 }
 
 // ExecuteCreate 执行 CREATE（底层实现）
@@ -504,7 +643,7 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 
 	dbName := useStmt.Database
 
-	// 验证数据库是否存在
+	// 验证数据库是否存在，如果不存在则自动创建
 	// 允许使用 information_schema（特殊数据库）
 	if dbName != "information_schema" {
 		if s.dsManager != nil {
@@ -517,7 +656,19 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 				}
 			}
 			if !found {
-				return nil, fmt.Errorf("unknown database '%s'", dbName)
+				// 数据库不存在，自动创建
+				// 创建 MVCC 数据源
+				memoryDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+					Type:     domain.DataSourceTypeMemory,
+					Name:     dbName,
+					Writable: true,
+				})
+				if err := memoryDS.Connect(context.Background()); err != nil {
+					return nil, fmt.Errorf("failed to create database '%s': %w", dbName, err)
+				}
+				if err := s.dsManager.Register(dbName, memoryDS); err != nil {
+					return nil, fmt.Errorf("failed to register database '%s': %w", dbName, err)
+				}
 			}
 		}
 	}

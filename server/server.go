@@ -1,31 +1,48 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net"
-	"strings"
+	"os"
 
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/config"
+	"github.com/kasuganosora/sqlexec/pkg/optimizer"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/kasuganosora/sqlexec/server/acl"
+	"github.com/kasuganosora/sqlexec/server/handler"
+	simpleHandlers "github.com/kasuganosora/sqlexec/server/handler/simple"
+	queryHandlers "github.com/kasuganosora/sqlexec/server/handler/query"
+	processHandlers "github.com/kasuganosora/sqlexec/server/handler/process"
 	"github.com/kasuganosora/sqlexec/server/protocol"
-	"github.com/kasuganosora/sqlexec/pkg/session"
+	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 )
 
 type Server struct {
-	ctx        context.Context
-	listener   net.Listener
-	sessionMgr *session.SessionMgr
-	config     *config.Config
-	db         *api.DB
-	aclManager *acl.ACLManager
+	ctx            context.Context
+	listener       net.Listener
+	sessionMgr     *pkg_session.SessionMgr
+	config         *config.Config
+	db             *api.DB
+	aclManager     *acl.ACLManager
+	handlerRegistry *handler.HandlerRegistry
+	logger         Logger
+}
+
+type Logger interface {
+	Printf(format string, v ...interface{})
+}
+
+type serverLogger struct {
+	logger *log.Logger
+}
+
+func (l *serverLogger) Printf(format string, v ...interface{}) {
+	l.logger.Printf(format, v...)
 }
 
 func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *Server {
@@ -35,10 +52,10 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 
 	// 初始化 API DB
 	db, err := api.NewDB(&api.DBConfig{
-		CacheEnabled:  true,
-		CacheSize:     1000,
-		CacheTTL:      300,
-		DebugMode:     false,
+		CacheEnabled: true,
+		CacheSize:    1000,
+		CacheTTL:     300,
+		DebugMode:    false,
 	})
 	if err != nil {
 		log.Printf("初始化 API DB 失败: %v", err)
@@ -75,15 +92,48 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 		aclManager = nil
 	}
 
+	// 注册进程列表提供者（用于 SHOW PROCESSLIST）
+	optimizer.RegisterProcessListProvider(pkg_session.GetProcessListForOptimizer)
+
 	s := &Server{
-		listener:   listener,
-		ctx:        ctx,
-		sessionMgr: session.NewSessionMgr(ctx, session.NewMemoryDriver()),
-		config:     cfg,
-		db:         db,
-		aclManager: aclManager,
+		listener:       listener,
+		ctx:            ctx,
+		sessionMgr:     pkg_session.NewSessionMgr(ctx, pkg_session.NewMemoryDriver()),
+		config:         cfg,
+		db:             db,
+		aclManager:     aclManager,
+		handlerRegistry: handler.NewHandlerRegistry(&serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)}),
+		logger:         &serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)},
 	}
+
+	// 注册所有处理器
+	s.registerHandlers()
+
 	return s
+}
+
+// registerHandlers 注册所有命令处理器
+func (s *Server) registerHandlers() {
+	// 注册简单处理器
+	s.handlerRegistry.Register(simpleHandlers.NewPingHandler(nil))
+	s.handlerRegistry.Register(simpleHandlers.NewQuitHandler())
+	s.handlerRegistry.Register(simpleHandlers.NewSetOptionHandler(nil))
+	s.handlerRegistry.Register(simpleHandlers.NewRefreshHandler(nil))
+	s.handlerRegistry.Register(simpleHandlers.NewStatisticsHandler())
+	s.handlerRegistry.Register(simpleHandlers.NewDebugHandler())
+	s.handlerRegistry.Register(simpleHandlers.NewShutdownHandler())
+
+	// 注册查询处理器
+	s.handlerRegistry.Register(queryHandlers.NewQueryHandler())
+	s.handlerRegistry.Register(queryHandlers.NewInitDBHandler(nil))
+	s.handlerRegistry.Register(queryHandlers.NewFieldListHandler(nil))
+
+	// 注册进程控制处理器
+	s.handlerRegistry.Register(processHandlers.NewProcessKillHandler(nil))
+
+	if s.logger != nil {
+		s.logger.Printf("已注册 %d 个命令处理器", s.handlerRegistry.Count())
+	}
 }
 
 // SetDB 设置服务器的 DB 实例（用于测试）
@@ -95,192 +145,125 @@ func (s *Server) Start() (err error) {
 	acceptChan := make(chan net.Conn)
 	errChan := make(chan error, 1)
 
-	// 启动 goroutine 接受连接
+	// 启动监听协程
 	go func() {
 		for {
 			conn, err := s.listener.Accept()
 			if err != nil {
-				select {
-				case errChan <- err:
-				default:
-				}
+				errChan <- err
 				return
 			}
-			select {
-			case acceptChan <- conn:
-			case <-s.ctx.Done():
-				conn.Close()
-				return
-			}
+			acceptChan <- conn
 		}
 	}()
 
+	// 主循环
 	for {
 		select {
-		case <-s.ctx.Done():
-			s.listener.Close()
-			return s.ctx.Err()
+		case conn := <-acceptChan:
+			go s.handleConnection(conn)
 		case err := <-errChan:
 			return err
-		case conn := <-acceptChan:
-			go func(ctx context.Context, conn net.Conn) {
-				err := s.Handle(ctx, conn)
-				if err != nil {
-					log.Printf("handle error: %+v\n", err)
-				}
-				conn.Close()
-			}(s.ctx, conn)
+		case <-s.ctx.Done():
+			return s.ctx.Err()
 		}
 	}
 }
 
-func (s *Server) Handle(ctx context.Context, conn net.Conn) (err error) {
+func (s *Server) handleConnection(conn net.Conn) (err error) {
+	defer conn.Close()
+
+	// 调试：检查 server 的关键字段是否为 nil
+	if s == nil {
+		log.Printf("[严重错误] server 为 nil!")
+		return fmt.Errorf("server is nil")
+	}
+	if s.sessionMgr == nil {
+		s.logger.Printf("[严重错误] sessionMgr 为 nil!")
+		return fmt.Errorf("sessionMgr is nil")
+	}
+	if s.logger == nil {
+		log.Printf("[警告] logger 为 nil，使用默认日志")
+	}
+
 	remoteAddr := conn.RemoteAddr().String()
 	addr, port := parseRemoteAddr(remoteAddr)
 
-	sess, err := s.sessionMgr.GetOrCreateSession(ctx, addr, port)
+	s.logger.Printf("开始获取或创建会话: remoteAddr=%s, addr=%s, port=%s", remoteAddr, addr, port)
+	sess, err := s.sessionMgr.GetOrCreateSession(s.ctx, addr, port)
 	if err != nil {
+		s.logger.Printf("获取或创建会话失败: %v", err)
 		return err
 	}
+	if sess == nil {
+		s.logger.Printf("会话为 nil，无法继续处理")
+		return fmt.Errorf("session is nil")
+	}
 
-	log.Printf("新连接来自: %s:%s, SessionID: %s, ThreadID: %d", addr, port, sess.ID, sess.ThreadID)
-	sess.ResetSequenceID()
+	// 调试：打印 sess 指针和字段信息
+	s.logger.Printf("调试: sess 指针 = %p, &sess.ID = %p, &sess.ThreadID = %p", sess, &sess.ID, &sess.ThreadID)
+
+	s.logger.Printf("新连接来自: %s:%s, SessionID: %s, ThreadID: %d", addr, port, sess.ID, sess.ThreadID)
 
 	// 创建 API Session 并关联到协议 Session
 	if s.db != nil && sess.GetAPISession() == nil {
 		apiSess := s.db.Session()
+		apiSess.SetThreadID(sess.ThreadID) // 设置 threadID 用于 KILL 查询
 		sess.SetAPISession(apiSess)
-		log.Printf("已为连接创建 API Session")
+		s.logger.Printf("已为连接创建 API Session, ThreadID=%d", sess.ThreadID)
 	}
 
 	if len(sess.User) == 0 {
-		err = s.handleHandshake(ctx, conn, sess)
+		err = s.handleHandshake(conn, sess)
 		if err != nil {
 			return err
 		}
 	}
 
+	// 命令处理循环
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
+		packet := &protocol.Packet{}
+		if err := packet.Unmarshal(conn); err != nil {
+			if err != io.EOF {
+				s.logger.Printf("读取包失败: %v", err)
+			}
+			return err
 		}
 
-		packetContent, err := s.readMySQLPacket(conn)
+		commandType := packet.GetCommandType()
+		s.logger.Printf("收到命令: 0x%02x", commandType)
+
+		// 解析命令包
+		commandPack, err := parseCommandPacket(commandType, packet)
 		if err != nil {
-			if err == io.EOF {
-				log.Printf("客户端正常断开连接")
-				sess.CloseAPISession()
-				return nil
-			}
-			log.Printf("读取包失败: %v", err)
-			s.sendError(conn, err, sess.GetNextSequenceID())
-			sess.CloseAPISession()
+			s.logger.Printf("解析命令包失败: %v", err)
 			return err
 		}
 
-		commandType := packetContent[4]
-		commandName := protocol.GetCommandName(commandType)
-		log.Printf("收到命令: %s (0x%02x), SequenceID: %d", commandName, commandType, packetContent[3])
-
-		// Dump 数据包内容（用于调试 COM_INIT_DB）
-		if commandType == protocol.COM_INIT_DB {
-			log.Printf("[DEBUG] COM_INIT_DB 数据包 dump:")
-			log.Printf("  完整数据包长度: %d 字节", len(packetContent))
-			log.Printf("  Header: %02x %02x %02x %02x", packetContent[0], packetContent[1], packetContent[2], packetContent[3])
-			log.Printf("  Payload:")
-			for i := 4; i < len(packetContent); i++ {
-				if i%16 == 4 {
-					log.Printf("    %04x:", i-4)
-				}
-				log.Printf(" %02x", packetContent[i])
-				if (i-3)%16 == 0 {
-					log.Printf("")
-				}
-			}
-			if len(packetContent) > 4 && (len(packetContent)-4)%16 != 0 {
-				log.Printf("")
-			}
-		}
-
-		var commandPack any
-		switch commandType {
-		case protocol.COM_QUIT:
-			commandPack = &protocol.ComQuitPacket{}
-		case protocol.COM_PING:
-			commandPack = &protocol.ComPingPacket{}
-		case protocol.COM_QUERY:
-			commandPack = &protocol.ComQueryPacket{}
-		case protocol.COM_INIT_DB:
-			commandPack = &protocol.ComInitDBPacket{}
-		case protocol.COM_SET_OPTION:
-			commandPack = &protocol.ComSetOptionPacket{}
-		case protocol.COM_STMT_PREPARE:
-			commandPack = &protocol.ComStmtPreparePacket{}
-		case protocol.COM_STMT_EXECUTE:
-			commandPack = &protocol.ComStmtExecutePacket{}
-		case protocol.COM_STMT_CLOSE:
-			commandPack = &protocol.ComStmtClosePacket{}
-		case protocol.COM_STMT_SEND_LONG_DATA:
-			commandPack = &protocol.ComStmtSendLongDataPacket{}
-		case protocol.COM_STMT_RESET:
-			commandPack = &protocol.ComStmtResetPacket{}
-		case protocol.COM_FIELD_LIST:
-			commandPack = &protocol.ComFieldListPacket{}
-		case protocol.COM_REFRESH:
-			commandPack = &protocol.ComRefreshPacket{}
-		case protocol.COM_STATISTICS:
-			commandPack = &protocol.ComStatisticsPacket{}
-		case protocol.COM_PROCESS_INFO:
-			commandPack = &protocol.ComProcessInfoPacket{}
-		case protocol.COM_PROCESS_KILL:
-			commandPack = &protocol.ComProcessKillPacket{}
-		case protocol.COM_DEBUG:
-			commandPack = &protocol.ComDebugPacket{}
-		case protocol.COM_SHUTDOWN:
-			commandPack = &protocol.ComShutdownPacket{}
-	default:
-		errMsg := fmt.Sprintf("不支持的命令类型: %s (0x%02x)", commandName, commandType)
-		log.Printf("%s", errMsg)
-		s.sendError(conn, fmt.Errorf("不支持的命令类型: %s (0x%02x)", commandName, commandType), sess.GetNextSequenceID())
-		continue
-	}
-
-		if err := s.unmarshalPacket(commandPack, packetContent); err != nil {
-			log.Printf("解析包失败: %v", err)
-			s.sendError(conn, err, sess.GetNextSequenceID())
+		// 使用注册中心处理命令
+		handlerCtx := handler.NewHandlerContext(sess, conn, commandType, s.logger)
+		err = s.handlerRegistry.Handle(handlerCtx, commandType, commandPack)
+		if err != nil {
+			s.logger.Printf("处理命令失败: %v", err)
 			return err
 		}
 
-	err = s.handleCommand(ctx, sess, conn, commandType, commandPack)
-	if err != nil {
-		// 如果是协议解析错误，需要断开连接
-		// 其他错误（如查询错误）已经通过 sendError 发送了错误包，应该保持连接继续处理
-		if strings.Contains(err.Error(), "解析") || strings.Contains(err.Error(), "包") {
-			log.Printf("处理命令 %s 失败（协议错误，断开连接）: %v", commandName, err)
-			return err
+		// QUIT 命令不需要发送响应，直接退出循环
+		if commandType == protocol.COM_QUIT {
+			return nil
 		}
-		// 查询错误已经发送了错误包，继续处理下一个命令
-		log.Printf("处理命令 %s 失败（已发送错误包，继续处理）: %v", commandName, err)
-	}
-
-	if commandType == protocol.COM_QUIT {
-		// COM_QUIT 命令不发送响应，直接关闭连接并清理资源
-		sess.CloseAPISession()
-		return nil
-	}
 	}
 }
 
-func (s *Server) handleHandshake(ctx context.Context, conn net.Conn, sess *session.Session) error {
+func (s *Server) handleHandshake(conn net.Conn, sess *pkg_session.Session) error {
+	// 发送握手包 (序列号为0)
 	handshakePacket := &protocol.HandshakeV10Packet{}
-	handshakePacket.Packet.SequenceID = 0 // 握手包的序列号必须为0
+	handshakePacket.Packet.SequenceID = 0
 	handshakePacket.ProtocolVersion = 10
-	handshakePacket.ServerVersion = s.config.Server.ServerVersion
+	handshakePacket.ServerVersion = "10.11.4-MariaDB"
 	handshakePacket.ThreadID = sess.ThreadID
-	handshakePacket.AuthPluginDataPart = []byte(RandomString(8))
-	handshakePacket.AuthPluginDataPart2 = []byte(RandomString(12))
+	handshakePacket.AuthPluginDataPart = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
+	handshakePacket.AuthPluginDataPart2 = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c}
 	handshakePacket.CapabilityFlags1 = 0xf7fe
 	handshakePacket.CharacterSet = 8
 	handshakePacket.StatusFlags = 0x0002
@@ -288,1516 +271,113 @@ func (s *Server) handleHandshake(ctx context.Context, conn net.Conn, sess *sessi
 	handshakePacket.MariaDBCaps = 0x00000007
 	handshakePacket.AuthPluginName = "mysql_native_password"
 
-	packetBytes, err := handshakePacket.Marshal()
+
+	handshakeData, err := handshakePacket.Marshal()
 	if err != nil {
-		log.Printf("序列化握手包失败: %v", err)
 		return err
 	}
 
-	_, err = io.Copy(conn, bytes.NewReader(packetBytes))
-	if err != nil {
-		log.Printf("发送握手包失败: %v", err)
+	if _, err := conn.Write(handshakeData); err != nil {
 		return err
 	}
-	log.Printf("已发送握手包, ThreadID: %d", handshakePacket.ThreadID)
+	s.logger.Printf("已发送握手包, ThreadID: %d", handshakePacket.ThreadID)
 
-	authRequestPacket := &protocol.HandshakeResponse{}
-	if err := authRequestPacket.Unmarshal(conn, uint32(handshakePacket.CapabilityFlags1)|uint32(handshakePacket.CapabilityFlags2)<<16); err != nil {
-		log.Printf("解析认证包失败: %v", err)
+	// 计算完整的能力标志 (32位)
+	serverCapabilities := (uint32(handshakePacket.CapabilityFlags2) << 16) | uint32(handshakePacket.CapabilityFlags1)
+
+	// 读取握手响应
+	handshakeResponse := &protocol.HandshakeResponse{}
+	if err := handshakeResponse.Unmarshal(conn, serverCapabilities); err != nil {
+		s.logger.Printf("解析认证包失败: %v", err)
 		return err
 	}
 
-	log.Printf("收到认证包: User=%s, Database=%s, CharacterSet=%d",
-		authRequestPacket.User, authRequestPacket.Database, authRequestPacket.CharacterSet)
+	s.logger.Printf("收到认证包: User=%s, Database=%s, CharacterSet=%d",
+		handshakeResponse.User, handshakeResponse.Database, handshakeResponse.CharacterSet)
 
-	// ACL 认证检查
-	if s.aclManager != nil {
-		// 验证用户凭据（使用简单的密码验证，暂不使用完整认证协议）
-		_, err := s.aclManager.Authenticate(authRequestPacket.User, "")
-		if err != nil {
-			log.Printf("认证失败: User=%s, error=%v", authRequestPacket.User, err)
-			// 发送认证失败错误包（手动构造错误响应）
-			errMsg := fmt.Sprintf("Access denied for user '%s'@'localhost'", authRequestPacket.User)
-			errData := append([]byte{0xff, 0x15, 0x04, '#', '2', '8', '0', '0', '0'}, []byte(errMsg)...)
-			_, _ = conn.Write(errData)
-			return fmt.Errorf("认证失败: 用户 %s", authRequestPacket.User)
-		}
-		
-		log.Printf("认证成功: User=%s", authRequestPacket.User)
-		sess.SetUser(authRequestPacket.User)
-	} else {
-		// ACL 未初始化，允许所有用户登录
-		log.Printf("ACL 未初始化，跳过认证: User=%s", authRequestPacket.User)
-		sess.SetUser(authRequestPacket.User)
+	// 更新 session 信息
+	sess.SetUser(handshakeResponse.User)
+	if handshakeResponse.Database != "" {
+		// 简化实现，不调用 SetCurrentDB
+		sess.Set("current_database", handshakeResponse.Database)
 	}
-	sess.Set("capability", authRequestPacket.ClientCapabilities)
-	sess.Set("extended_capability", authRequestPacket.ExtendedClientCapabilities)
-	sess.Set("max_packet_size", authRequestPacket.MaxPacketSize)
-	sess.Set("character_set", authRequestPacket.CharacterSet)
-	sess.Set("maria_db_caps", authRequestPacket.MariaDBCaps)
-	sess.Set("auth_response", authRequestPacket.AuthResponse)
-	sess.Set("database", authRequestPacket.Database)
-	sess.Set("connection_attributes", authRequestPacket.ConnectionAttributes)
-	sess.Set("zstd_compression_level", authRequestPacket.ZstdCompressionLevel)
-	sess.Set("salt", handshakePacket.AuthPluginDataPart)
-	sess.Set("salt2", handshakePacket.AuthPluginDataPart2)
 
-	okPacket := &protocol.OkPacket{}
 	// MySQL握手阶段序列号是连续的：
 	// - 握手包（服务器->客户端）：序列号0
 	// - 认证响应（客户端->服务器）：序列号1
 	// - OK包（服务器->客户端）：序列号2
-	okPacket.SequenceID = 2
-	okPacket.OkInPacket.Header = 0x00
 	// 握手完成后，准备接收新命令，序列号重置为255（GetNextSequenceID后为0）
 	// 参考MariaDB: net_new_transaction重置序列号
 	sess.SequenceID = 255
+
+	okPacket := &protocol.OkPacket{}
+	okPacket.SequenceID = 2
+	okPacket.OkInPacket.Header = 0x00
 	okPacket.OkInPacket.AffectedRows = 0
 	okPacket.OkInPacket.LastInsertId = 0
 	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
 	okPacket.OkInPacket.Warnings = 0
 
-	okPacketBytes, err := okPacket.Marshal()
+	okData, err := okPacket.Marshal()
 	if err != nil {
-		log.Printf("序列化OK包失败: %v", err)
 		return err
 	}
 
-	_, err = io.Copy(conn, bytes.NewReader(okPacketBytes))
+	_, err = conn.Write(okData)
 	if err != nil {
-		log.Printf("发送OK包失败: %v", err)
 		return err
 	}
-	log.Printf("已发送认证成功包")
+	s.logger.Printf("已发送认证成功包")
+
 	return nil
 }
 
-func parseRemoteAddr(addr string) (string, string) {
-	parts := strings.Split(addr, ":")
-	if len(parts) == 2 {
-		return parts[0], parts[1]
-	}
-	return addr, ""
-}
-
-func (s *Server) readMySQLPacket(conn net.Conn) ([]byte, error) {
-	header := make([]byte, 4)
-	_, err := io.ReadFull(conn, header)
-	if err != nil {
-		return nil, err
-	}
-
-	packetLength := uint32(header[0]) | uint32(header[1])<<8 | uint32(header[2])<<16
-
-	// 验证包长度，避免内存耗尽攻击
-	if packetLength > 0xffffff {
-		return nil, fmt.Errorf("包长度超出限制: %d", packetLength)
-	}
-
-	packetBody := make([]byte, packetLength)
-	if packetLength > 0 {
-		_, err = io.ReadFull(conn, packetBody)
-		if err != nil {
-			return nil, err
+func parseRemoteAddr(remoteAddr string) (string, string) {
+	// 简单解析，格式为 "ip:port"
+	parts := make([]byte, 0)
+	for i := 0; i < len(remoteAddr); i++ {
+		if remoteAddr[i] == ':' {
+			return string(parts), remoteAddr[i+1:]
 		}
+		parts = append(parts, remoteAddr[i])
 	}
-
-	fullPacket := make([]byte, 4+packetLength)
-	copy(fullPacket[:4], header)
-	copy(fullPacket[4:], packetBody)
-
-	return fullPacket, nil
+	return string(parts), ""
 }
 
-func (s *Server) unmarshalPacket(packet any, data []byte) error {
-	switch p := packet.(type) {
-	case *protocol.ComQuitPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComPingPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComQueryPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComInitDBPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComSetOptionPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComStmtPreparePacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComStmtExecutePacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComStmtClosePacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComStmtSendLongDataPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComStmtResetPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComFieldListPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComRefreshPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComStatisticsPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComProcessInfoPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComProcessKillPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComDebugPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	case *protocol.ComShutdownPacket:
-		return p.Unmarshal(bytes.NewReader(data))
-	default:
-		return fmt.Errorf("不支持的包类型")
-	}
-}
-
-func (s *Server) handleCommand(ctx context.Context, sess *session.Session, conn net.Conn, commandType uint8, command any) error {
-	// 每个新命令开始时重置序列号，参考MariaDB的net_new_transaction()
-	// 握手完成后，第一个命令从序列号0开始
-	sess.ResetSequenceID()
-
+func parseCommandPacket(commandType uint8, packet *protocol.Packet) (interface{}, error) {
 	switch commandType {
-	case protocol.COM_QUIT:
-		return s.handleComQuit(ctx, sess, conn, command.(*protocol.ComQuitPacket))
 	case protocol.COM_PING:
-		return s.handleComPing(ctx, sess, conn, command.(*protocol.ComPingPacket))
-	case protocol.COM_QUERY:
-		return s.handleComQuery(ctx, sess, conn, command.(*protocol.ComQueryPacket))
-	case protocol.COM_INIT_DB:
-		return s.handleComInitDB(ctx, sess, conn, command.(*protocol.ComInitDBPacket))
+		cmd := &protocol.ComPingPacket{}
+		cmd.Packet = *packet
+		return cmd, nil
+	case protocol.COM_QUIT:
+		cmd := &protocol.ComQuitPacket{}
+		cmd.Packet = *packet
+		return cmd, nil
 	case protocol.COM_SET_OPTION:
-		return s.handleComSetOption(ctx, sess, conn, command.(*protocol.ComSetOptionPacket))
-	case protocol.COM_STMT_PREPARE:
-		return s.handleComStmtPrepare(ctx, sess, conn, command.(*protocol.ComStmtPreparePacket))
-	case protocol.COM_STMT_EXECUTE:
-		return s.handleComStmtExecute(ctx, sess, conn, command.(*protocol.ComStmtExecutePacket))
-	case protocol.COM_STMT_CLOSE:
-		return s.handleComStmtClose(ctx, sess, conn, command.(*protocol.ComStmtClosePacket))
-	case protocol.COM_STMT_SEND_LONG_DATA:
-		return s.handleComStmtSendLongData(ctx, sess, conn, command.(*protocol.ComStmtSendLongDataPacket))
-	case protocol.COM_STMT_RESET:
-		return s.handleComStmtReset(ctx, sess, conn, command.(*protocol.ComStmtResetPacket))
+		cmd := &protocol.ComSetOptionPacket{}
+		cmd.Packet = *packet
+		return cmd, nil
+	case protocol.COM_QUERY:
+		cmd := &protocol.ComQueryPacket{}
+		cmd.Packet = *packet
+		// ComQueryPacket.Unmarshal 会自动从 Payload 中提取 Query 字段
+		// 因为 cmd.Packet 已经被赋值,所以不需要再次 Unmarshal
+		// Query 字段会在访问时自动提取
+		return cmd, nil
+	case protocol.COM_INIT_DB:
+		cmd := &protocol.ComInitDBPacket{}
+		cmd.Packet = *packet
+		return cmd, nil
 	case protocol.COM_FIELD_LIST:
-		return s.handleComFieldList(ctx, sess, conn, command.(*protocol.ComFieldListPacket))
-	case protocol.COM_REFRESH:
-		return s.handleComRefresh(ctx, sess, conn, command.(*protocol.ComRefreshPacket))
-	case protocol.COM_STATISTICS:
-		return s.handleComStatistics(ctx, sess, conn, command.(*protocol.ComStatisticsPacket))
-	case protocol.COM_PROCESS_INFO:
-		return s.handleComProcessInfo(ctx, sess, conn, command.(*protocol.ComProcessInfoPacket))
+		cmd := &protocol.ComFieldListPacket{}
+		cmd.Packet = *packet
+		return cmd, nil
 	case protocol.COM_PROCESS_KILL:
-		return s.handleComProcessKill(ctx, sess, conn, command.(*protocol.ComProcessKillPacket))
-	case protocol.COM_DEBUG:
-		return s.handleComDebug(ctx, sess, conn, command.(*protocol.ComDebugPacket))
-	case protocol.COM_SHUTDOWN:
-		return s.handleComShutdown(ctx, sess, conn, command.(*protocol.ComShutdownPacket))
-	}
-	return nil
-}
-
-// mapErrorCode 将 API 错误码映射为 MySQL 错误码
-func (s *Server) mapErrorCode(err error) (uint16, string) {
-	// 检查错误消息内容
-	errMsg := err.Error()
-
-	// 表不存在
-	if strings.Contains(errMsg, "table") && strings.Contains(errMsg, "not found") {
-		return 1146, "42S02" // ER_NO_SUCH_TABLE
-	}
-
-	// 列不存在
-	if strings.Contains(errMsg, "column") && strings.Contains(errMsg, "not found") {
-		return 1054, "42S22" // ER_BAD_FIELD_ERROR
-	}
-
-	// 语法错误
-	if strings.Contains(errMsg, "syntax") || strings.Contains(errMsg, "SYNTAX_ERROR") {
-		return 1064, "42000" // ER_PARSE_ERROR
-	}
-
-	// 未知表
-	if strings.Contains(errMsg, "unknown") && strings.Contains(errMsg, "table") {
-		return 1146, "42S02" // ER_NO_SUCH_TABLE
-	}
-
-	// 数据库不存在
-	if strings.Contains(errMsg, "Unknown database") {
-		return 1049, "42000" // ER_BAD_DB_ERROR
-	}
-
-	// 默认语法错误
-	return 1064, "42000" // ER_PARSE_ERROR
-}
-
-func (s *Server) sendError(conn net.Conn, err error, sequenceID uint8) {
-	errPacket := &protocol.ErrorPacket{}
-	errPacket.SequenceID = sequenceID
-	errPacket.ErrorInPacket.Header = 0xff
-	errPacket.ErrorInPacket.ErrorCode, errPacket.ErrorInPacket.SqlState = s.mapErrorCode(err)
-	if errPacket.ErrorInPacket.SqlState != "" {
-		errPacket.ErrorInPacket.SqlStateMarker = "#"
-	}
-	errPacket.ErrorInPacket.ErrorMessage = err.Error()
-
-	log.Printf("[DEBUG] 错误包内容: ErrorCode=%d, SqlState='%s', SqlStateMarker='%s', ErrorMessage='%s'",
-		errPacket.ErrorInPacket.ErrorCode,
-		errPacket.ErrorInPacket.SqlState,
-		errPacket.ErrorInPacket.SqlStateMarker,
-		errPacket.ErrorInPacket.ErrorMessage)
-
-	packetBytes, marshalErr := errPacket.Marshal()
-	if marshalErr != nil {
-		log.Printf("序列化错误包失败: %v", marshalErr)
-		return
-	}
-
-	log.Printf("[DEBUG] 错误包字节: %x", packetBytes)
-
-	if _, writeErr := conn.Write(packetBytes); writeErr != nil {
-		log.Printf("发送错误包失败: %v", writeErr)
-	}
-}
-
-// mapMySQLType 将数据源类型映射为 MySQL 协议类型
-func (s *Server) mapMySQLType(typeStr string) byte {
-	switch {
-	case typeStr == "int", typeStr == "integer":
-		return protocol.MYSQL_TYPE_LONG
-	case typeStr == "tinyint":
-		return protocol.MYSQL_TYPE_TINY
-	case typeStr == "smallint":
-		return protocol.MYSQL_TYPE_SHORT
-	case typeStr == "bigint":
-		return protocol.MYSQL_TYPE_LONGLONG
-	case typeStr == "float":
-		return protocol.MYSQL_TYPE_FLOAT
-	case typeStr == "double":
-		return protocol.MYSQL_TYPE_DOUBLE
-	case typeStr == "decimal", typeStr == "numeric":
-		return protocol.MYSQL_TYPE_DECIMAL
-	case typeStr == "date":
-		return protocol.MYSQL_TYPE_DATE
-	case typeStr == "datetime":
-		return protocol.MYSQL_TYPE_DATETIME
-	case typeStr == "timestamp":
-		return protocol.MYSQL_TYPE_TIMESTAMP
-	case typeStr == "time":
-		return protocol.MYSQL_TYPE_TIME
-	case typeStr == "year":
-		return protocol.MYSQL_TYPE_YEAR
-	case typeStr == "text":
-		return protocol.MYSQL_TYPE_BLOB
-	case typeStr == "blob":
-		return protocol.MYSQL_TYPE_BLOB
-	case typeStr == "boolean", typeStr == "bool":
-		return protocol.MYSQL_TYPE_TINY
+		cmd := &protocol.ComProcessKillPacket{}
+		cmd.Packet = *packet
+		return cmd, nil
 	default:
-		return protocol.MYSQL_TYPE_VAR_STRING
+		return nil, fmt.Errorf("unsupported command type: 0x%02x", commandType)
 	}
-}
-
-// columnToFieldMeta 将 domain.ColumnInfo 转换为 protocol.FieldMeta
-func (s *Server) columnToFieldMeta(col domain.ColumnInfo, schema string, table string) protocol.FieldMeta {
-	mysqlType := s.mapMySQLType(col.Type)
-	columnLength := uint32(255)
-
-	return protocol.FieldMeta{
-		Catalog:                   "def",
-		Schema:                    schema,
-		Table:                     table,
-		OrgTable:                  table,
-		Name:                      col.Name,
-		OrgName:                   col.Name,
-		LengthOfFixedLengthFields: 12,
-		CharacterSet:              33,
-		ColumnLength:              columnLength,
-		Type:                      mysqlType,
-		Flags:                     s.getColumnFlags(col),
-		Decimals:                  0,
-		Reserved:                  "\x00\x00",
-	}
-}
-
-// getColumnFlags 根据列属性返回标志位
-func (s *Server) getColumnFlags(col domain.ColumnInfo) uint16 {
-	var flags uint16 = 0
-	if !col.Nullable {
-		flags |= protocol.NOT_NULL_FLAG
-	}
-	if col.Primary {
-		flags |= protocol.PRI_KEY_FLAG
-	}
-	if col.AutoIncrement {
-		flags |= protocol.AUTO_INCREMENT_FLAG
-	}
-	if col.Unique {
-		flags |= protocol.UNIQUE_KEY_FLAG
-	}
-	return flags
-}
-
-// formatRowValue 将行值格式化为字符串
-func (s *Server) formatRowValue(value interface{}) string {
-	if value == nil {
-		return protocol.NULLValueMarker
-	}
-	switch v := value.(type) {
-	case string:
-		return v
-	case int, int8, int16, int32, int64:
-		return fmt.Sprintf("%d", value)
-	case uint, uint8, uint16, uint32, uint64:
-		return fmt.Sprintf("%d", value)
-	case float32:
-		// 检查是否是整数（没有小数部分）
-		if v == float32(int(v)) {
-			return fmt.Sprintf("%d", int(v))
-		}
-		return fmt.Sprintf("%g", v)
-	case float64:
-		// 检查是否是整数（没有小数部分）
-		if v == float64(int(v)) {
-			return fmt.Sprintf("%d", int(v))
-		}
-		return fmt.Sprintf("%g", v)
-	case bool:
-		if v {
-			return "1"
-		}
-		return "0"
-	case []byte:
-		return string(v)
-	default:
-		return fmt.Sprintf("%v", value)
-	}
-}
-
-func getMapKeys(m map[string]interface{}) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
-// sendQueryResult 发送查询结果（从 domain.QueryResult 转换为 MySQL 协议格式）
-func (s *Server) sendQueryResult(conn net.Conn, sess *session.Session, result *domain.QueryResult, schema string, table string) error {
-	// 转换列定义
-	columns := make([]protocol.FieldMeta, len(result.Columns))
-	for i, col := range result.Columns {
-		columns[i] = s.columnToFieldMeta(col, schema, table)
-	}
-
-	// 转换行数据
-	rows := make([][]string, len(result.Rows))
-	log.Printf("转换行数据: 总行数=%d, 总列数=%d", len(result.Rows), len(result.Columns))
-	for i, row := range result.Rows {
-		log.Printf("  Row %d: %+v", i, row)
-		rowData := make([]string, len(result.Columns))
-		for j, col := range result.Columns {
-			log.Printf("    Column %d: Name=%s", j, col.Name)
-			if val, exists := row[col.Name]; exists {
-				log.Printf("      Value found: %v (type: %T)", val, val)
-				rowData[j] = s.formatRowValue(val)
-			} else {
-				log.Printf("      Value not found in row, available keys: %v", getMapKeys(row))
-				rowData[j] = ""
-			}
-		}
-		rows[i] = rowData
-	}
-
-	return s.sendResultSet(conn, sess, columns, rows)
-}
-
-func (s *Server) sendOK(conn net.Conn, sequenceID uint8) error {
-	okPacket := &protocol.OkPacket{}
-	okPacket.SequenceID = sequenceID
-	okPacket.OkInPacket.Header = 0x00
-	okPacket.OkInPacket.AffectedRows = 0
-	okPacket.OkInPacket.LastInsertId = 0
-	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
-	okPacket.OkInPacket.Warnings = 0
-
-	packetBytes, err := okPacket.Marshal()
-	if err != nil {
-		return err
-	}
-	_, err = conn.Write(packetBytes)
-	return err
-}
-
-func (s *Server) handleComQuit(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComQuitPacket) error {
-	log.Printf("处理 COM_QUIT: SessionID=%s, ThreadID=%d", sess.ID, sess.ThreadID)
-	// COM_QUIT 不需要发送响应包
-	// 资源清理在主循环中处理 (server.go:268-272)
-	return nil
-}
-
-func (s *Server) handleComPing(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComPingPacket) error {
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleComQuery(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComQueryPacket) error {
-	log.Printf("处理 COM_QUERY: %s", commandPack.Query)
-
-	query := strings.TrimSpace(commandPack.Query)
-	queryUpper := strings.ToUpper(query)
-
-	log.Printf("查询类型判断: query=[%s], upper=[%s]", query, queryUpper)
-
-	switch {
-	case strings.HasPrefix(queryUpper, "SELECT"):
-		return s.handleSelect(sess, conn, query)
-	case strings.HasPrefix(queryUpper, "SHOW"):
-		// SHOW 命令通过 API 层处理（转换为 information_schema 查询）
-		return s.handleSelect(sess, conn, query)
-	case strings.HasPrefix(queryUpper, "SET"):
-		// 检查是否是 SET PASSWORD 语句
-		if strings.Contains(queryUpper, "SET PASSWORD") {
-			return s.handleSetPassword(sess, conn, query)
-		}
-		return s.handleSet(sess, conn, query)
-	case strings.HasPrefix(queryUpper, "USE"):
-		log.Printf("匹配到 USE 命令，调用 handleUse")
-		return s.handleUse(sess, conn, query)
-	case strings.HasPrefix(queryUpper, "CREATE USER"):
-		return s.handleCreateUser(sess, conn, query)
-	case strings.HasPrefix(queryUpper, "DROP USER"):
-		return s.handleDropUser(sess, conn, query)
-	case strings.HasPrefix(queryUpper, "GRANT"):
-		return s.handleGrant(sess, conn, query)
-	case strings.HasPrefix(queryUpper, "REVOKE"):
-		return s.handleRevoke(sess, conn, query)
-	case strings.HasPrefix(queryUpper, "INSERT"), strings.HasPrefix(queryUpper, "UPDATE"),
-		strings.HasPrefix(queryUpper, "DELETE"), strings.HasPrefix(queryUpper, "REPLACE"),
-		strings.HasPrefix(queryUpper, "CREATE"), strings.HasPrefix(queryUpper, "DROP"),
-		strings.HasPrefix(queryUpper, "ALTER"), strings.HasPrefix(queryUpper, "TRUNCATE"):
-		return s.handleDML(sess, conn, query)
-	default:
-		// 未匹配到任何已知命令类型，尝试作为普通查询执行
-		// 这样可以捕获语法错误等解析问题
-		log.Printf("未匹配到任何已知命令类型，尝试作为普通查询执行")
-		return s.handleSelect(sess, conn, query)
-	}
-}
-
-func (s *Server) handleSelect(sess *session.Session, conn net.Conn, query string) error {
-	if strings.Contains(query, "@@") {
-		return s.handleVariableSelect(sess, conn, query)
-	}
-
-	// 使用 API Session 执行查询
-	apiSessIntf := sess.GetAPISession()
-	if apiSessIntf == nil {
-		log.Printf("API Session 未初始化")
-		err := fmt.Errorf("database not initialized")
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-
-	apiSess, ok := apiSessIntf.(*api.Session)
-	if !ok {
-		log.Printf("API Session 类型断言失败")
-		err := fmt.Errorf("invalid session type")
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-
-	log.Printf("开始查询: %s", query)
-	queryObj, err := apiSess.Query(query)
-	if err != nil {
-		log.Printf("查询失败: %v", err)
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	defer queryObj.Close()
-
-	// 获取列信息
-	columns := queryObj.Columns()
-	if len(columns) == 0 {
-		// 使用空结果集
-		emptyResult := &domain.QueryResult{
-			Columns: []domain.ColumnInfo{},
-			Rows:    []domain.Row{},
-		}
-		return s.sendQueryResult(conn, sess, emptyResult, "", "")
-	}
-
-	// 收集所有行数据
-	var rows []domain.Row
-	rowCount := 0
-	for queryObj.Next() {
-		row := queryObj.Row()
-		log.Printf("  Query 返回的行 %d: %+v", rowCount, row)
-		for k, v := range row {
-			log.Printf("    %s: %v (type: %T)", k, v, v)
-		}
-		rows = append(rows, row)
-		rowCount++
-	}
-
-	log.Printf("总共收集到 %d 行数据", rowCount)
-
-	if queryObj.Err() != nil {
-		log.Printf("遍历结果集失败: %v", queryObj.Err())
-		s.sendError(conn, queryObj.Err(), sess.GetNextSequenceID())
-		return queryObj.Err()
-	}
-
-	// 构建 QueryResult
-	result := &domain.QueryResult{
-		Columns: columns,
-		Rows:    rows,
-	}
-
-	// 从 SQL 解析表名
-	schema := ""
-	table := ""
-	if strings.Contains(strings.ToLower(query), "from") {
-		fromParts := strings.Split(strings.ToLower(query), "from")
-		if len(fromParts) > 1 {
-			tableParts := strings.Fields(fromParts[1])
-			if len(tableParts) > 0 {
-				table = strings.Trim(tableParts[0], "` ")
-				if strings.Contains(table, ".") {
-					parts := strings.Split(table, ".")
-					if len(parts) == 2 {
-						schema = parts[0]
-						table = parts[1]
-					}
-				}
-			}
-		}
-	}
-
-	return s.sendQueryResult(conn, sess, result, schema, table)
-}
-
-func (s *Server) handleVariableSelect(sess *session.Session, conn net.Conn, query string) error {
-	varName := ""
-	if idx := strings.Index(query, "@@"); idx > 0 {
-		varName = strings.TrimSpace(query[idx+2:])
-		if idx := strings.Index(varName, " "); idx > 0 {
-			varName = varName[:idx]
-		}
-		varName = strings.ToLower(strings.TrimSpace(varName))
-	}
-
-	log.Printf("查询系统变量: %s", varName)
-
-	varValue := ""
-	switch varName {
-	case "version_comment":
-		varValue = "mariadb.org binary distribution"
-	case "version":
-		varValue = "10.3.12-MariaDB"
-	case "hostname":
-		varValue = "localhost"
-	default:
-		if val, err := sess.GetVariable(varName); err == nil && val != nil {
-			varValue = fmt.Sprintf("%v", val)
-		} else {
-			varValue = ""
-		}
-	}
-
-	return s.sendResultSet(conn, sess, []protocol.FieldMeta{
-		{
-			Catalog:                   "def",
-			Schema:                    "",
-			Table:                     "",
-			OrgTable:                  "",
-			Name:                      "@@" + varName,
-			OrgName:                   "@@" + varName,
-			LengthOfFixedLengthFields: 12,
-			CharacterSet:              33,
-			ColumnLength:              255,
-			Type:                      protocol.MYSQL_TYPE_VAR_STRING,
-			Flags:                     0,
-			Decimals:                  0,
-			Reserved:                  "\x00\x00",
-		},
-	}, [][]string{{varValue}})
-}
-
-func (s *Server) handleSet(sess *session.Session, conn net.Conn, query string) error {
-	log.Printf("处理 SET 查询: %s", query)
-
-	cmd := strings.TrimSpace(query[3:])
-
-	if strings.HasPrefix(strings.ToUpper(cmd), "NAMES") {
-		charset := strings.TrimSpace(cmd[5:])
-		if idx := strings.Index(charset, "COLLATE"); idx > 0 {
-			charset = strings.TrimSpace(charset[:idx])
-		}
-		if err := sess.SetVariable("names", charset); err != nil {
-			log.Printf("设置字符集失败: %v", err)
-			return err
-		}
-		log.Printf("设置字符集: %s", charset)
-		return s.sendOK(conn, sess.GetNextSequenceID())
-	}
-
-	assignments := strings.Split(cmd, ",")
-
-	for _, assign := range assignments {
-		assign = strings.TrimSpace(assign)
-
-		var varName, varValue string
-
-		eqIdx := strings.Index(assign, "=")
-		if eqIdx == -1 {
-			eqIdx = strings.Index(assign, ":=")
-		}
-
-		if eqIdx == -1 {
-			log.Printf("无法解析 SET 命令: %s", assign)
-			continue
-		}
-
-		varName = strings.TrimSpace(assign[:eqIdx])
-		varValue = strings.TrimSpace(assign[eqIdx+1:])
-
-		if (strings.HasPrefix(varValue, "'") && strings.HasSuffix(varValue, "'")) ||
-			(strings.HasPrefix(varValue, "\"") && strings.HasSuffix(varValue, "\"")) {
-			varValue = varValue[1 : len(varValue)-1]
-		}
-
-		varName = strings.TrimSpace(varName)
-		varName = strings.TrimPrefix(varName, "@@global.")
-		varName = strings.TrimPrefix(varName, "@@session.")
-		varName = strings.TrimPrefix(varName, "@@local.")
-		varName = strings.TrimPrefix(varName, "@@")
-		varName = strings.TrimPrefix(varName, "@")
-		varName = strings.ToLower(varName)
-
-		if err := sess.SetVariable(varName, varValue); err != nil {
-			log.Printf("设置变量 %s 失败: %v", varName, err)
-			continue
-		}
-
-		log.Printf("设置会话变量: %s = %s", varName, varValue)
-	}
-
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleUse(sess *session.Session, conn net.Conn, query string) error {
-	// 移除 "USE" 关键字和可能的分号/空格
-	query = strings.TrimSpace(query)
-	query = strings.TrimPrefix(query, "USE")
-	query = strings.TrimPrefix(query, "use")
-	dbName := strings.TrimSpace(query)
-	dbName = strings.TrimSuffix(dbName, ";")
-	dbName = strings.TrimSpace(dbName)
-
-	log.Printf("切换数据库: [%s]", dbName)
-	sess.Set("current_database", dbName)
-
-	// API Session 设置当前数据库
-	apiSessIntf := sess.GetAPISession()
-	if apiSessIntf != nil {
-		log.Printf("获取 API Session 成功")
-		if apiSess, ok := apiSessIntf.(*api.Session); ok {
-			log.Printf("API Session 类型断言成功")
-			apiSess.SetCurrentDB(dbName)
-			log.Printf("API Session 切换数据库成功: %s", dbName)
-		} else {
-			log.Printf("API Session 类型断言失败")
-		}
-	} else {
-		log.Printf("API Session 未初始化")
-	}
-
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleCreateUser(sess *session.Session, conn net.Conn, query string) error {
-	// 简单解析 CREATE USER 语句
-	// 格式: CREATE USER 'username'@'host' IDENTIFIED BY 'password'
-	query = strings.TrimSpace(query)
-	query = strings.TrimPrefix(query, "CREATE USER")
-	query = strings.TrimPrefix(query, "create user")
-	query = strings.TrimSpace(query)
-	
-	// 解析用户名和主机
-	// 简化版本，假设格式为 'username'@'host' IDENTIFIED BY 'password'
-	// TODO: 使用完整的 SQL 解析器
-	
-	// 跳过 IF EXISTS
-	if strings.HasPrefix(strings.ToUpper(query), "IF NOT EXISTS") {
-		query = strings.TrimSpace(query[13:])
-	}
-	
-	// 解析用户名（假设格式为 'username'@'host'）
-	var username, host, password string
-	parts := strings.Fields(query)
-	if len(parts) >= 2 {
-		// 提取 'username'@'host'
-		userHost := strings.Trim(parts[0], "'\"")
-		if idx := strings.Index(userHost, "@"); idx > 0 {
-			username = userHost[:idx]
-			host = userHost[idx+1:]
-		} else {
-			username = userHost
-			host = "%"
-		}
-	}
-	
-	// 解析密码
-	for i, part := range parts {
-		if strings.ToUpper(part) == "IDENTIFIED" && i+2 < len(parts) && strings.ToUpper(parts[i+1]) == "BY" {
-			password = strings.Trim(parts[i+2], "'\"")
-			break
-		}
-	}
-	
-	// 创建用户
-	if err := s.aclManager.CreateUser(username, host, password); err != nil {
-		log.Printf("创建用户失败: %v", err)
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	
-	log.Printf("创建用户成功: %s@%s", username, host)
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleDropUser(sess *session.Session, conn net.Conn, query string) error {
-	// 简单解析 DROP USER 语句
-	query = strings.TrimSpace(query)
-	query = strings.TrimPrefix(query, "DROP USER")
-	query = strings.TrimPrefix(query, "drop user")
-	query = strings.TrimSpace(query)
-	
-	// 跳过 IF EXISTS
-	if strings.HasPrefix(strings.ToUpper(query), "IF EXISTS") {
-		query = strings.TrimSpace(query[10:])
-	}
-	
-	// 解析用户名和主机
-	var username, host string
-	userHost := strings.TrimSpace(query)
-	userHost = strings.TrimSuffix(userHost, ";")
-	
-	if idx := strings.Index(userHost, "@"); idx > 0 {
-		username = userHost[:idx]
-		host = userHost[idx+1:]
-	} else {
-		username = userHost
-		host = "%"
-	}
-	
-	// 删除用户
-	if err := s.aclManager.DropUser(username, host); err != nil {
-		log.Printf("删除用户失败: %v", err)
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	
-	log.Printf("删除用户成功: %s@%s", username, host)
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleGrant(sess *session.Session, conn net.Conn, query string) error {
-	// 简单解析 GRANT 语句
-	// 格式: GRANT privileges ON database.* TO 'user'@'host' [WITH GRANT OPTION]
-	query = strings.TrimSpace(query)
-	query = strings.TrimPrefix(query, "GRANT")
-	query = strings.TrimPrefix(query, "grant")
-	query = strings.TrimSpace(query)
-	
-	// 解析权限
-	var privileges []string
-	var rest string
-	if idx := strings.Index(strings.ToUpper(query), "ON"); idx > 0 {
-		privPart := strings.TrimSpace(query[:idx])
-		privileges = strings.Split(privPart, ",")
-		for i, p := range privileges {
-			privileges[i] = strings.TrimSpace(p)
-		}
-		rest = strings.TrimSpace(query[idx+2:])
-	} else {
-		err := fmt.Errorf("无效的 GRANT 语法")
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	
-	// 解析 ON 部分
-	var db, table string
-	if idx := strings.Index(strings.ToUpper(rest), "TO"); idx > 0 {
-		onPart := strings.TrimSpace(rest[:idx])
-		// 格式: database.table 或 database.*
-		if strings.Contains(onPart, ".") {
-			parts := strings.Split(onPart, ".")
-			if len(parts) >= 2 {
-				db = strings.TrimSpace(parts[0])
-				table = strings.TrimSpace(parts[1])
-			}
-		}
-		rest = strings.TrimSpace(rest[idx+2:])
-	} else {
-		err := fmt.Errorf("无效的 GRANT 语法")
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	
-	// 解析 TO 部分
-	var username, host string
-	toPart := strings.TrimSpace(rest)
-	if idx := strings.Index(toPart, "WITH"); idx > 0 {
-		toPart = strings.TrimSpace(toPart[:idx])
-	}
-	
-	// 解析用户名
-	if strings.Contains(toPart, "@") {
-		parts := strings.Split(toPart, "@")
-		username = strings.TrimSpace(strings.Trim(parts[0], "'\""))
-		host = strings.TrimSpace(strings.Trim(parts[1], "'\""))
-		host = strings.TrimSpace(strings.TrimSuffix(host, ";"))
-	} else {
-		username = strings.TrimSpace(strings.Trim(toPart, "'\""))
-		host = "%"
-	}
-	
-	// 确定权限级别
-	var level acl.PermissionLevel
-	if table == "*" {
-		level = acl.PermissionLevelDatabase
-	} else {
-		level = acl.PermissionLevelTable
-	}
-	
-	// 检查 WITH GRANT OPTION
-	withGrantOption := strings.Contains(strings.ToUpper(query), "WITH GRANT OPTION")
-	
-	// 授予权限
-	// 转换 []string 到 []acl.PermissionType
-	privTypes := make([]acl.PermissionType, len(privileges))
-	for i, p := range privileges {
-		privTypes[i] = acl.PermissionType(p)
-	}
-	
-	if err := s.aclManager.Grant(username, host, privTypes, level, db, table, ""); err != nil {
-		log.Printf("授权失败: %v", err)
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	
-	// 如果需要 WITH GRANT OPTION，额外授权
-	if withGrantOption {
-		s.aclManager.Grant(username, host, []acl.PermissionType{"GRANT OPTION"}, level, db, table, "")
-	}
-	
-	log.Printf("授权成功: %s@%s 被授予 %s 权限 (%s.%s)", username, host, privileges, db, table)
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleRevoke(sess *session.Session, conn net.Conn, query string) error {
-	// 简单解析 REVOKE 语句
-	// 格式: REVOKE privileges ON database.* FROM 'user'@'host'
-	query = strings.TrimSpace(query)
-	query = strings.TrimPrefix(query, "REVOKE")
-	query = strings.TrimPrefix(query, "revoke")
-	query = strings.TrimSpace(query)
-	
-	// 解析权限
-	var privileges []string
-	var rest string
-	if idx := strings.Index(strings.ToUpper(query), "ON"); idx > 0 {
-		privPart := strings.TrimSpace(query[:idx])
-		privileges = strings.Split(privPart, ",")
-		for i, p := range privileges {
-			privileges[i] = strings.TrimSpace(p)
-		}
-		rest = strings.TrimSpace(query[idx+2:])
-	} else {
-		err := fmt.Errorf("无效的 REVOKE 语法")
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	
-	// 解析 ON 部分
-	var db, table string
-	if idx := strings.Index(strings.ToUpper(rest), "FROM"); idx > 0 {
-		onPart := strings.TrimSpace(rest[:idx])
-		if strings.Contains(onPart, ".") {
-			parts := strings.Split(onPart, ".")
-			if len(parts) >= 2 {
-				db = strings.TrimSpace(parts[0])
-				table = strings.TrimSpace(parts[1])
-			}
-		}
-		rest = strings.TrimSpace(rest[idx+4:])
-	} else {
-		err := fmt.Errorf("无效的 REVOKE 语法")
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	
-	// 解析 FROM 部分
-	var username, host string
-	fromPart := strings.TrimSpace(rest)
-	fromPart = strings.TrimSpace(strings.TrimSuffix(fromPart, ";"))
-	
-	if strings.Contains(fromPart, "@") {
-		parts := strings.Split(fromPart, "@")
-		username = strings.TrimSpace(strings.Trim(parts[0], "'\""))
-		host = strings.TrimSpace(strings.Trim(parts[1], "'\""))
-	} else {
-		username = strings.TrimSpace(strings.Trim(fromPart, "'\""))
-		host = "%"
-	}
-	
-	// 确定权限级别
-	var level acl.PermissionLevel
-	if table == "*" {
-		level = acl.PermissionLevelDatabase
-	} else {
-		level = acl.PermissionLevelTable
-	}
-	
-	// 撤销权限
-	// 转换 []string 到 []acl.PermissionType
-	privTypes := make([]acl.PermissionType, len(privileges))
-	for i, p := range privileges {
-		privTypes[i] = acl.PermissionType(p)
-	}
-	
-	if err := s.aclManager.Revoke(username, host, privTypes, level, db, table, ""); err != nil {
-		log.Printf("撤销权限失败: %v", err)
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	
-	log.Printf("撤销权限成功: %s@%s 被撤销 %s 权限 (%s.%s)", username, host, privileges, db, table)
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleSetPassword(sess *session.Session, conn net.Conn, query string) error {
-	// 简单解析 SET PASSWORD 语句
-	// 格式: SET PASSWORD FOR 'user'@'host' = PASSWORD('newpassword')
-	// 或者: SET PASSWORD = PASSWORD('newpassword') (为当前用户)
-	query = strings.TrimSpace(query)
-	query = strings.TrimPrefix(query, "SET PASSWORD")
-	query = strings.TrimPrefix(query, "set password")
-	query = strings.TrimSpace(query)
-	
-	var username, host, newPassword string
-	
-	// 判断是为当前用户还是指定用户
-	if strings.HasPrefix(strings.ToUpper(query), "FOR") {
-		// 为指定用户设置密码
-		query = strings.TrimSpace(query[3:])
-		if idx := strings.Index(query, "="); idx > 0 {
-			userPart := strings.TrimSpace(query[:idx])
-			userPart = strings.TrimSpace(strings.TrimPrefix(userPart, "FOR"))
-			userPart = strings.TrimSpace(strings.TrimPrefix(userPart, "for"))
-			
-			// 解析用户名和主机
-			if strings.Contains(userPart, "@") {
-				parts := strings.Split(userPart, "@")
-				username = strings.TrimSpace(strings.Trim(parts[0], "'\""))
-				host = strings.TrimSpace(strings.Trim(parts[1], "'\""))
-			} else {
-				username = strings.TrimSpace(strings.Trim(userPart, "'\""))
-				host = "%"
-			}
-			
-			// 解析新密码
-			passwordPart := strings.TrimSpace(query[idx+1:])
-			passwordPart = strings.TrimSpace(strings.TrimPrefix(passwordPart, "PASSWORD"))
-			passwordPart = strings.TrimSpace(passwordPart)
-			newPassword = strings.Trim(passwordPart, "()'\"")
-		}
-	} else {
-		// 为当前用户设置密码
-		// 从 session 获取用户信息
-		apiSessIntf := sess.GetAPISession()
-		if apiSessIntf != nil {
-			if apiSess, ok := apiSessIntf.(*api.Session); ok {
-				// 获取当前数据库信息（暂不直接获取用户）
-				currentDB := apiSess.GetCurrentDB()
-				log.Printf("当前数据库: %s", currentDB)
-			}
-		}
-		if username == "" {
-			username = "root"
-		}
-		host = "%"
-		
-		if idx := strings.Index(query, "="); idx > 0 {
-			passwordPart := strings.TrimSpace(query[idx+1:])
-			passwordPart = strings.TrimSpace(strings.TrimPrefix(passwordPart, "PASSWORD"))
-			passwordPart = strings.TrimSpace(passwordPart)
-			newPassword = strings.Trim(passwordPart, "()'\"")
-		}
-	}
-	
-	// 设置密码
-	if err := s.aclManager.SetPassword(username, host, newPassword); err != nil {
-		log.Printf("设置密码失败: %v", err)
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-	
-	log.Printf("设置密码成功: %s@%s", username, host)
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleDML(sess *session.Session, conn net.Conn, query string) error {
-	log.Printf("处理 DML 查询: %s", query)
-
-	// 使用 API Session 执行 DML
-	apiSessIntf := sess.GetAPISession()
-	if apiSessIntf == nil {
-		log.Printf("API Session 未初始化")
-		err := fmt.Errorf("database not initialized")
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-
-	apiSess, ok := apiSessIntf.(*api.Session)
-	if !ok {
-		log.Printf("API Session 类型断言失败")
-		err := fmt.Errorf("invalid session type")
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-
-	result, err := apiSess.Execute(query)
-	if err != nil {
-		log.Printf("DML 执行失败: %v", err)
-		s.sendError(conn, err, sess.GetNextSequenceID())
-		return err
-	}
-
-	if result.Err() != nil {
-		log.Printf("DML 结果错误: %v", result.Err())
-		s.sendError(conn, result.Err(), sess.GetNextSequenceID())
-		return result.Err()
-	}
-
-	// 发送 OK 包
-	okPacket := &protocol.OkPacket{}
-	okPacket.SequenceID = sess.GetNextSequenceID()
-	okPacket.OkInPacket.Header = 0x00
-	okPacket.OkInPacket.AffectedRows = uint64(result.RowsAffected)
-	okPacket.OkInPacket.LastInsertId = uint64(result.LastInsertID)
-	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
-	okPacket.OkInPacket.Warnings = 0
-
-	packetBytes, err := okPacket.Marshal()
-	if err != nil {
-		log.Printf("序列化 OK 包失败: %v", err)
-		return err
-	}
-
-	_, err = conn.Write(packetBytes)
-	if err != nil {
-		log.Printf("发送 OK 包失败: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func (s *Server) handleComInitDB(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComInitDBPacket) error {
-	log.Printf("处理 COM_INIT_DB: [%q] (len=%d)", commandPack.SchemaName, len(commandPack.SchemaName))
-
-	// 如果数据库名为空，从 session 中读取之前设置的值
-	dbName := commandPack.SchemaName
-	if dbName == "" {
-		if val, err := sess.Get("current_database"); err == nil && val != nil {
-			if strVal, ok := val.(string); ok {
-				dbName = strVal
-				log.Printf("从 session 中读取到数据库名: %s", dbName)
-			}
-		}
-	}
-
-	// 如果仍然为空，不做任何操作
-	if dbName == "" {
-		log.Printf("COM_INIT_DB 数据库名为空且无法从 session 获取，跳过处理")
-		return s.sendOK(conn, sess.GetNextSequenceID())
-	}
-
-	sess.Set("current_database", dbName)
-
-	// 获取 API Session 并更新当前数据库
-	apiSessIntf := sess.GetAPISession()
-	if apiSessIntf != nil {
-		if apiSess, ok := apiSessIntf.(*api.Session); ok {
-			log.Printf("更新 API Session 当前数据库: %s", dbName)
-			apiSess.SetCurrentDB(dbName)
-		}
-	} else {
-		log.Printf("API Session 未初始化，无法更新当前数据库")
-	}
-
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleComSetOption(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComSetOptionPacket) error {
-	log.Printf("处理 COM_SET_OPTION: %d", commandPack.OptionOperation)
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleComStmtPrepare(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStmtPreparePacket) error {
-	log.Printf("处理 COM_STMT_PREPARE: %s", commandPack.Query)
-
-	stmtID := sess.ThreadID
-
-	paramCount := s.countParams(commandPack.Query)
-	columnCount := s.analyzeColumns(commandPack.Query)
-
-	response := &protocol.StmtPrepareResponsePacket{
-		Packet: protocol.Packet{
-			SequenceID: sess.GetNextSequenceID(),
-		},
-		StatementID:  stmtID,
-		ColumnCount:  columnCount,
-		ParamCount:   paramCount,
-		Reserved:     0,
-		WarningCount: 0,
-		Params:       make([]protocol.FieldMeta, paramCount),
-		Columns:      make([]protocol.FieldMeta, columnCount),
-	}
-
-	for i := uint16(0); i < paramCount; i++ {
-		response.Params[i] = protocol.FieldMeta{
-			Catalog:                   "def",
-			Schema:                    "",
-			Table:                     "",
-			OrgTable:                  "",
-			Name:                      "?",
-			OrgName:                   "",
-			LengthOfFixedLengthFields: 12,
-			CharacterSet:              33,
-			ColumnLength:              255,
-			Type:                      protocol.MYSQL_TYPE_VAR_STRING,
-			Flags:                     0,
-			Decimals:                  0,
-			Reserved:                  "\x00\x00",
-		}
-	}
-
-	columnNames := s.getColumns(commandPack.Query)
-	for i := uint16(0); i < columnCount && i < uint16(len(columnNames)); i++ {
-		response.Columns[i] = protocol.FieldMeta{
-			Catalog:                   "def",
-			Schema:                    "test",
-			Table:                     "table",
-			OrgTable:                  "table",
-			Name:                      columnNames[i],
-			OrgName:                   columnNames[i],
-			LengthOfFixedLengthFields: 12,
-			CharacterSet:              33,
-			ColumnLength:              255,
-			Type:                      protocol.MYSQL_TYPE_VAR_STRING,
-			Flags:                     protocol.NOT_NULL_FLAG,
-			Decimals:                  0,
-			Reserved:                  "\x00\x00",
-		}
-	}
-
-	packetBytes, err := response.Marshal()
-	if err != nil {
-		log.Printf("序列化 COM_STMT_PREPARE 响应失败: %v", err)
-		return err
-	}
-
-	_, err = conn.Write(packetBytes)
-	if err != nil {
-		log.Printf("发送 COM_STMT_PREPARE 响应失败: %v", err)
-		return err
-	}
-
-	log.Printf("已发送 COM_STMT_PREPARE 响应: statement_id=%d, params=%d, columns=%d",
-		response.StatementID, response.ParamCount, response.ColumnCount)
-
-	sess.Set(fmt.Sprintf("stmt_%d", stmtID), commandPack.Query)
-
-	return nil
-}
-
-func (s *Server) handleComStmtExecute(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStmtExecutePacket) error {
-	log.Printf("处理 COM_STMT_EXECUTE: statement_id=%d", commandPack.StatementID)
-
-	queryKey := fmt.Sprintf("stmt_%d", commandPack.StatementID)
-	query, _ := sess.Get(queryKey)
-	if query == nil {
-		log.Printf("预处理语句不存在: statement_id=%d", commandPack.StatementID)
-		s.sendError(conn, fmt.Errorf("预处理语句不存在"), sess.GetNextSequenceID())
-		return fmt.Errorf("预处理语句不存在")
-	}
-
-	columnCount := s.analyzeColumns(query.(string))
-
-	columnCountPacket := &protocol.ColumnCountPacket{
-		Packet: protocol.Packet{
-			SequenceID: sess.GetNextSequenceID(),
-		},
-		ColumnCount: uint64(columnCount),
-	}
-	columnCountData, err := columnCountPacket.MarshalDefault()
-	if err != nil {
-		log.Printf("序列化列数包失败: %v", err)
-		return err
-	}
-	_, err = conn.Write(columnCountData)
-	if err != nil {
-		log.Printf("发送列数包失败: %v", err)
-		return err
-	}
-
-	columnNames := s.getColumns(query.(string))
-	for i := 0; i < int(columnCount) && i < len(columnNames); i++ {
-		fieldMeta := protocol.FieldMetaPacket{
-			Packet: protocol.Packet{
-				SequenceID: sess.GetNextSequenceID(),
-			},
-			FieldMeta: protocol.FieldMeta{
-				Catalog:                   "def",
-				Schema:                    "test",
-				Table:                     "table",
-				OrgTable:                  "table",
-				Name:                      columnNames[i],
-				OrgName:                   columnNames[i],
-				LengthOfFixedLengthFields: 12,
-				CharacterSet:              33,
-				ColumnLength:              255,
-				Type:                      protocol.MYSQL_TYPE_VAR_STRING,
-				Flags:                     protocol.NOT_NULL_FLAG,
-				Decimals:                  0,
-				Reserved:                  "\x00\x00",
-			},
-		}
-		fieldMetaData, err := fieldMeta.MarshalDefault()
-		if err != nil {
-			log.Printf("序列化字段元数据失败: %v", err)
-			return err
-		}
-		if _, err := conn.Write(fieldMetaData); err != nil {
-			log.Printf("发送字段元数据失败: %v", err)
-			return err
-		}
-	}
-
-	eofPacket := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
-	eofData, err := eofPacket.Marshal()
-	if err != nil {
-		log.Printf("序列化EOF包失败: %v", err)
-		return err
-	}
-	if _, err := conn.Write(eofData); err != nil {
-		log.Printf("发送EOF包失败: %v", err)
-		return err
-	}
-
-	rowData := protocol.RowDataPacket{
-		Packet: protocol.Packet{
-			SequenceID: sess.GetNextSequenceID(),
-		},
-		RowData: []string{"1"},
-	}
-	rowDataBytes, err := rowData.Marshal()
-	if err != nil {
-		log.Printf("序列化行数据失败: %v", err)
-		return err
-	}
-	if _, err := conn.Write(rowDataBytes); err != nil {
-		log.Printf("发送行数据失败: %v", err)
-		return err
-	}
-
-	finalEof := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
-	finalEofData, err := finalEof.Marshal()
-	if err != nil {
-		log.Printf("序列化最终EOF包失败: %v", err)
-		return err
-	}
-	if _, err := conn.Write(finalEofData); err != nil {
-		log.Printf("发送最终EOF包失败: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func (s *Server) handleComStmtClose(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStmtClosePacket) error {
-	log.Printf("处理 COM_STMT_CLOSE: statement_id=%d", commandPack.StatementID)
-
-	queryKey := fmt.Sprintf("stmt_%d", commandPack.StatementID)
-	sess.Delete(queryKey)
-
-	return nil
-}
-
-func (s *Server) handleComStmtSendLongData(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStmtSendLongDataPacket) error {
-	log.Printf("处理 COM_STMT_SEND_LONG_DATA")
-	return nil
-}
-
-func (s *Server) handleComStmtReset(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStmtResetPacket) error {
-	log.Printf("处理 COM_STMT_RESET")
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleComFieldList(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComFieldListPacket) error {
-	log.Printf("处理 COM_FIELD_LIST")
-	eofPacket := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
-	eofData, _ := eofPacket.Marshal()
-	_, err := conn.Write(eofData)
-	return err
-}
-
-func (s *Server) handleComRefresh(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComRefreshPacket) error {
-	log.Printf("处理 COM_REFRESH")
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleComStatistics(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComStatisticsPacket) error {
-	log.Printf("处理 COM_STATISTICS")
-	stats := "Uptime: 3600  Threads: 1  Questions: 10  Slow queries: 0  Opens: 5  Flush tables: 1  Open tables: 4  Queries per second avg: 0.003"
-	if _, err := conn.Write([]byte(stats)); err != nil {
-		log.Printf("发送统计信息失败: %v", err)
-		return err
-	}
-	return nil
-}
-
-func (s *Server) handleComProcessInfo(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComProcessInfoPacket) error {
-	log.Printf("处理 COM_PROCESS_INFO")
-	return s.sendResultSet(conn, sess, []protocol.FieldMeta{}, [][]string{})
-}
-
-func (s *Server) handleComProcessKill(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComProcessKillPacket) error {
-	log.Printf("处理 COM_PROCESS_KILL")
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleComDebug(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComDebugPacket) error {
-	log.Printf("处理 COM_DEBUG")
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) handleComShutdown(ctx context.Context, sess *session.Session, conn net.Conn, commandPack *protocol.ComShutdownPacket) error {
-	log.Printf("处理 COM_SHUTDOWN")
-	return s.sendOK(conn, sess.GetNextSequenceID())
-}
-
-func (s *Server) sendResultSet(conn net.Conn, sess *session.Session, columns []protocol.FieldMeta, rows [][]string) error {
-	columnCountPacket := &protocol.ColumnCountPacket{
-		Packet: protocol.Packet{
-			SequenceID: sess.GetNextSequenceID(),
-		},
-		ColumnCount: uint64(len(columns)),
-	}
-	columnCountData, err := columnCountPacket.MarshalDefault()
-	if err != nil {
-		return err
-	}
-	if _, err := conn.Write(columnCountData); err != nil {
-		return err
-	}
-
-	for _, col := range columns {
-		fieldMeta := protocol.FieldMetaPacket{
-			Packet: protocol.Packet{
-				SequenceID: sess.GetNextSequenceID(),
-			},
-			FieldMeta: col,
-		}
-		fieldMetaData, err := fieldMeta.MarshalDefault()
-		if err != nil {
-			return err
-		}
-		if _, err := conn.Write(fieldMetaData); err != nil {
-			return err
-		}
-	}
-
-	eofPacket := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
-	eofData, err := eofPacket.Marshal()
-	if err != nil {
-		return err
-	}
-	if _, err := conn.Write(eofData); err != nil {
-		return err
-	}
-
-	for _, row := range rows {
-		rowData := protocol.RowDataPacket{
-			Packet: protocol.Packet{
-				SequenceID: sess.GetNextSequenceID(),
-			},
-			RowData: row,
-		}
-		rowDataBytes, err := rowData.Marshal()
-		if err != nil {
-			return err
-		}
-		if _, err := conn.Write(rowDataBytes); err != nil {
-			return err
-		}
-	}
-
-	finalEof := protocol.CreateEofPacketWithStatus(sess.GetNextSequenceID(), true, false)
-	finalEofData, err := finalEof.Marshal()
-	if err != nil {
-		return err
-	}
-	if _, err := conn.Write(finalEofData); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *Server) countParams(query string) uint16 {
-	count := uint16(0)
-	for _, ch := range query {
-		if ch == '?' {
-			count++
-		}
-	}
-	return count
-}
-
-func (s *Server) analyzeColumns(query string) uint16 {
-	queryUpper := strings.ToUpper(query)
-
-	if strings.Contains(queryUpper, "SELECT") {
-		return 1
-	}
-
-	if strings.Contains(queryUpper, "SHOW") {
-		return 2
-	}
-
-	return 0
-}
-
-func (s *Server) getColumns(query string) []string {
-	queryUpper := strings.ToUpper(query)
-
-	if strings.Contains(queryUpper, "SELECT") {
-		return []string{"id"}
-	}
-
-	if strings.Contains(queryUpper, "SHOW") {
-		return []string{"Variable_name", "Value"}
-	}
-
-	return []string{}
-}
-
-func RandomString(n int) string {
-	letters := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+-/!@#$%^&*()_~`"
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
 }
