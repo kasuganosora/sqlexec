@@ -75,34 +75,84 @@ func (p *PhysicalTableScan) Cost() float64 {
 // Execute 执行扫描
 func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 开始查询表 %s, 过滤器数: %d, Limit: %v\n", p.TableName, len(p.filters), p.limitInfo)
-	
-	// 如果有下推的过滤条件，使用QueryOptions中的Filters
-	options := &domain.QueryOptions{}
-	if len(p.filters) > 0 {
-		options.Filters = p.filters
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用下推的过滤条件\n")
+
+	// 检查数据源是否支持 FilterableDataSource
+	filterableDS, isFilterable := p.dataSource.(domain.FilterableDataSource)
+
+	// 计算偏移量和限制量
+	offset := int64(0)
+	limit := int64(0)
+	if p.limitInfo != nil {
+		offset = p.limitInfo.Offset
+		limit = p.limitInfo.Limit
+	}
+
+	var result *domain.QueryResult
+	var err error
+
+	if isFilterable && len(p.filters) > 0 {
+		// 数据源支持过滤，调用 Filter 方法
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 数据源支持过滤，调用 Filter 方法\n")
 		for i, filter := range p.filters {
 			fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
 		}
-	}
-	
-	// 如果有下推的Limit，应用Limit
-	if p.limitInfo != nil {
-		if p.limitInfo.Limit > 0 {
-			options.Limit = int(p.limitInfo.Limit)
+
+		// 构建过滤条件
+		var filter domain.Filter
+		if len(p.filters) == 1 {
+			// 单个条件，直接使用
+			filter = p.filters[0]
+		} else {
+			// 多个条件，使用 AND 逻辑组合
+			filter = domain.Filter{
+				Logic: "AND",
+				Value: p.filters,
+			}
 		}
-		if p.limitInfo.Offset > 0 {
-			options.Offset = int(p.limitInfo.Offset)
+
+		// 调用 Filter 方法
+		rows, total, filterErr := filterableDS.Filter(ctx, p.TableName, filter, int(offset), int(limit))
+		if filterErr != nil {
+			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: Filter 方法失败 %v\n", filterErr)
+			return nil, filterErr
 		}
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用下推的Limit: limit=%d, offset=%d\n", options.Limit, options.Offset)
+
+		// 构建结果
+		result = &domain.QueryResult{
+			Rows:  rows,
+			Total: total,
+		}
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: Filter 完成，返回 %d 行（total=%d）\n", len(rows), total)
+	} else {
+		// 数据源不支持过滤或无过滤条件，使用 Query 方法
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 数据源不支持过滤或无过滤条件，使用 Query 方法\n")
+		
+		// 使用 QueryOptions 传递过滤和分页
+		options := &domain.QueryOptions{}
+		if len(p.filters) > 0 {
+			options.Filters = p.filters
+			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用过滤条件到 QueryOptions\n")
+			for i, filter := range p.filters {
+				fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
+			}
+		}
+		if limit > 0 {
+			options.Limit = int(limit)
+		}
+		if offset > 0 {
+			options.Offset = int(offset)
+		}
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用分页参数: limit=%d, offset=%d\n", options.Limit, options.Offset)
+
+		// 调用 Query 方法
+		result, err = p.dataSource.Query(ctx, p.TableName, options)
+		if err != nil {
+			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: Query 方法失败 %v\n", err)
+			return nil, err
+		}
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: Query 完成，返回 %d 行\n", len(result.Rows))
 	}
-	
-	result, err := p.dataSource.Query(ctx, p.TableName, options)
-	if err != nil {
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 查询失败 %v\n", err)
-		return nil, err
-	}
-	fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 查询完成，返回 %d 行\n", len(result.Rows))
+
 	return result, nil
 }
 

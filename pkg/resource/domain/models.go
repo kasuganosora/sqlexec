@@ -101,13 +101,14 @@ type QueryResult struct {
 	Total   int64        `json:"total"`
 }
 
-// Filter 查询过滤器
+// Filter 查询过滤器（支持嵌套逻辑）
 type Filter struct {
-	Field      string      `json:"field"`
-	Operator   string      `json:"operator"` // =, !=, >, <, >=, <=, LIKE, IN, BETWEEN
-	Value      interface{} `json:"value"`
-	LogicOp    string      `json:"logic_op,omitempty"`    // AND, OR (用于多条件组合)
-	SubFilters []Filter    `json:"sub_filters,omitempty"` // 子过滤器（用于逻辑组合）
+	Logic      string      `json:"logic,omitempty"`       // AND, OR（嵌套逻辑）
+	Field      string      `json:"field,omitempty"`        // 字段名（简单过滤时使用）
+	Operator   string      `json:"operator,omitempty"`    // =, !=, >, <, >=, <=, LIKE, IN, BETWEEN
+	Value      interface{} `json:"value,omitempty"`        // 过滤值，如果是嵌套过滤则是 []Filter
+	LogicOp    string      `json:"logic_op,omitempty"`     // AND, OR（保留向后兼容）
+	SubFilters []Filter    `json:"sub_filters,omitempty"` // 子过滤器（保留向后兼容）
 }
 
 // QueryOptions 查询选项

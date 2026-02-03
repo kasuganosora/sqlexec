@@ -56,6 +56,79 @@ func (m *MVCCDataSource) SupportsMVCC() bool {
 	return true
 }
 
+// SupportsFiltering 实现FilterableDataSource接口的能力声明
+func (m *MVCCDataSource) SupportsFiltering(tableName string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// 检查表是否存在
+	_, ok := m.tables[tableName]
+	return ok
+}
+
+// Filter 实现FilterableDataSource接口的过滤和分页方法
+func (m *MVCCDataSource) Filter(
+	ctx context.Context,
+	tableName string,
+	filter domain.Filter,
+	offset, limit int,
+) ([]domain.Row, int64, error) {
+	m.mu.RLock()
+
+	// 检查表是否存在
+	tableVer, ok := m.tables[tableName]
+	if !ok {
+		m.mu.RUnlock()
+		return nil, 0, domain.NewErrTableNotFound(tableName)
+	}
+
+	m.mu.RUnlock()
+
+	// 获取表数据
+	tableVer.mu.RLock()
+	defer tableVer.mu.RUnlock()
+
+	if tableVer.latest < 0 {
+		return nil, 0, domain.NewErrTableNotFound(tableName)
+	}
+
+	tableData := tableVer.versions[tableVer.latest]
+	if tableData == nil || tableData.schema == nil {
+		return nil, 0, domain.NewErrTableNotFound(tableName)
+	}
+
+	// 构造过滤条件列表
+	var filters []domain.Filter
+	if filter.Field != "" || filter.Operator != "" {
+		filters = []domain.Filter{filter}
+	} else if subFilters, ok := filter.Value.([]domain.Filter); ok && len(subFilters) > 0 {
+		filters = subFilters
+	}
+
+	// 使用util包的ApplyFilters过滤数据
+	options := &domain.QueryOptions{
+		Filters: filters,
+	}
+
+	filteredRows := util.ApplyFilters(tableData.rows, options)
+	total := int64(len(filteredRows))
+
+	// 应用分页
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= len(filteredRows) {
+		return []domain.Row{}, total, nil
+	}
+
+	end := len(filteredRows)
+	if limit > 0 && (offset+limit) < end {
+		end = offset + limit
+	}
+
+	return filteredRows[offset:end], total, nil
+}
+
 // TableVersions 表的多版本数据
 type TableVersions struct {
 	mu      sync.RWMutex
