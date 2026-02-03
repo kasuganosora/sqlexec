@@ -19,20 +19,24 @@ import (
 	simpleHandlers "github.com/kasuganosora/sqlexec/server/handler/simple"
 	queryHandlers "github.com/kasuganosora/sqlexec/server/handler/query"
 	processHandlers "github.com/kasuganosora/sqlexec/server/handler/process"
+	handshakeHandler "github.com/kasuganosora/sqlexec/server/handler/handshake"
+	parsers "github.com/kasuganosora/sqlexec/server/handler/packet_parsers"
 	"github.com/kasuganosora/sqlexec/server/protocol"
 	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 	isacl "github.com/kasuganosora/sqlexec/pkg/information_schema"
 )
 
 type Server struct {
-	ctx            context.Context
-	listener       net.Listener
-	sessionMgr     *pkg_session.SessionMgr
-	config         *config.Config
-	db             *api.DB
-	aclManager     *acl.ACLManager
-	handlerRegistry *handler.HandlerRegistry
-	logger         Logger
+	ctx               context.Context
+	listener          net.Listener
+	sessionMgr        *pkg_session.SessionMgr
+	config            *config.Config
+	db                *api.DB
+	aclManager        *acl.ACLManager
+	handlerRegistry   *handler.HandlerRegistry
+	parserRegistry    *handler.PacketParserRegistry
+	handshakeHandler  handler.HandshakeHandler
+	logger            Logger
 }
 
 type Logger interface {
@@ -98,18 +102,23 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 	optimizer.RegisterProcessListProvider(pkg_session.GetProcessListForOptimizer)
 
 	s := &Server{
-		listener:       listener,
-		ctx:            ctx,
-		sessionMgr:     pkg_session.NewSessionMgr(ctx, pkg_session.NewMemoryDriver()),
-		config:         cfg,
-		db:             db,
-		aclManager:     aclManager,
-		handlerRegistry: handler.NewHandlerRegistry(&serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)}),
-		logger:         &serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)},
+		listener:         listener,
+		ctx:              ctx,
+		sessionMgr:       pkg_session.NewSessionMgr(ctx, pkg_session.NewMemoryDriver()),
+		config:           cfg,
+		db:               db,
+		aclManager:       aclManager,
+		handlerRegistry:  handler.NewHandlerRegistry(&serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)}),
+		parserRegistry:   handler.NewPacketParserRegistry(&serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)}),
+		handshakeHandler: handshakeHandler.NewDefaultHandshakeHandler(db, &serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)}),
+		logger:           &serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)},
 	}
 
 	// 注册所有处理器
 	s.registerHandlers()
+
+	// 注册所有包解析器
+	s.registerParsers()
 
 	// 注册全局ACL Manager到information_schema
 	if s.aclManager != nil {
@@ -141,6 +150,22 @@ func (s *Server) registerHandlers() {
 
 	if s.logger != nil {
 		s.logger.Printf("已注册 %d 个命令处理器", s.handlerRegistry.Count())
+	}
+}
+
+// registerParsers 注册所有包解析器
+func (s *Server) registerParsers() {
+	// 注册所有命令包解析器
+	s.parserRegistry.Register(parsers.NewPingPacketParser())
+	s.parserRegistry.Register(parsers.NewQuitPacketParser())
+	s.parserRegistry.Register(parsers.NewSetOptionPacketParser())
+	s.parserRegistry.Register(parsers.NewQueryPacketParser())
+	s.parserRegistry.Register(parsers.NewInitDBPacketParser())
+	s.parserRegistry.Register(parsers.NewFieldListPacketParser())
+	s.parserRegistry.Register(parsers.NewProcessKillPacketParser())
+
+	if s.logger != nil {
+		s.logger.Printf("已注册 %d 个包解析器", s.parserRegistry.Count())
 	}
 }
 
@@ -222,7 +247,8 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 	}
 
 	if len(sess.User) == 0 {
-		err = s.handleHandshake(conn, sess)
+		// 使用注册的握手处理器处理握手
+		err = s.handshakeHandler.Handle(conn, sess)
 		if err != nil {
 			return err
 		}
@@ -241,8 +267,8 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 		commandType := packet.GetCommandType()
 		s.logger.Printf("收到命令: 0x%02x", commandType)
 
-		// 解析命令包
-		commandPack, err := parseCommandPacket(commandType, packet)
+		// 使用注册的解析器解析命令包
+		commandPack, err := s.parserRegistry.Parse(commandType, packet)
 		if err != nil {
 			s.logger.Printf("解析命令包失败: %v", err)
 			return err
@@ -260,129 +286,5 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 		if commandType == protocol.COM_QUIT {
 			return nil
 		}
-	}
-}
-
-func (s *Server) handleHandshake(conn net.Conn, sess *pkg_session.Session) error {
-	// 发送握手包 (序列号为0)
-	handshakePacket := &protocol.HandshakeV10Packet{}
-	handshakePacket.Packet.SequenceID = 0
-	handshakePacket.ProtocolVersion = 10
-	handshakePacket.ServerVersion = "10.11.4-MariaDB"
-	handshakePacket.ThreadID = sess.ThreadID
-	handshakePacket.AuthPluginDataPart = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
-	handshakePacket.AuthPluginDataPart2 = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c}
-	handshakePacket.CapabilityFlags1 = 0xf7fe
-	handshakePacket.CharacterSet = 8
-	handshakePacket.StatusFlags = 0x0002
-	handshakePacket.CapabilityFlags2 = 0x81bf
-	handshakePacket.MariaDBCaps = 0x00000007
-	handshakePacket.AuthPluginName = "mysql_native_password"
-
-
-	handshakeData, err := handshakePacket.Marshal()
-	if err != nil {
-		return err
-	}
-
-	if _, err := conn.Write(handshakeData); err != nil {
-		return err
-	}
-	s.logger.Printf("已发送握手包, ThreadID: %d", handshakePacket.ThreadID)
-
-	// 计算完整的能力标志 (32位)
-	serverCapabilities := (uint32(handshakePacket.CapabilityFlags2) << 16) | uint32(handshakePacket.CapabilityFlags1)
-
-	// 读取握手响应
-	handshakeResponse := &protocol.HandshakeResponse{}
-	if err := handshakeResponse.Unmarshal(conn, serverCapabilities); err != nil {
-		s.logger.Printf("解析认证包失败: %v", err)
-		return err
-	}
-
-	s.logger.Printf("收到认证包: User=%s, Database=%s, CharacterSet=%d",
-		handshakeResponse.User, handshakeResponse.Database, handshakeResponse.CharacterSet)
-
-	// 更新 session 信息
-	sess.SetUser(handshakeResponse.User)
-	
-	// 同时设置 API 层 Session 的用户
-	if apiSessIntf := sess.GetAPISession(); apiSessIntf != nil {
-		if apiSess, ok := apiSessIntf.(*api.Session); ok {
-			apiSess.SetUser(handshakeResponse.User)
-			s.logger.Printf("已设置 API Session 用户: %s", handshakeResponse.User)
-		}
-	}
-	
-	if handshakeResponse.Database != "" {
-		// 简化实现，不调用 SetCurrentDB
-		sess.Set("current_database", handshakeResponse.Database)
-	}
-
-	// MySQL握手阶段序列号是连续的：
-	// - 握手包（服务器->客户端）：序列号0
-	// - 认证响应（客户端->服务器）：序列号1
-	// - OK包（服务器->客户端）：序列号2
-	// 握手完成后，准备接收新命令，序列号重置为255（GetNextSequenceID后为0）
-	// 参考MariaDB: net_new_transaction重置序列号
-	sess.SequenceID = 255
-
-	okPacket := &protocol.OkPacket{}
-	okPacket.SequenceID = 2
-	okPacket.OkInPacket.Header = 0x00
-	okPacket.OkInPacket.AffectedRows = 0
-	okPacket.OkInPacket.LastInsertId = 0
-	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
-	okPacket.OkInPacket.Warnings = 0
-
-	okData, err := okPacket.Marshal()
-	if err != nil {
-		return err
-	}
-
-	_, err = conn.Write(okData)
-	if err != nil {
-		return err
-	}
-	s.logger.Printf("已发送认证成功包")
-
-	return nil
-}
-
-func parseCommandPacket(commandType uint8, packet *protocol.Packet) (interface{}, error) {
-	switch commandType {
-	case protocol.COM_PING:
-		cmd := &protocol.ComPingPacket{}
-		cmd.Packet = *packet
-		return cmd, nil
-	case protocol.COM_QUIT:
-		cmd := &protocol.ComQuitPacket{}
-		cmd.Packet = *packet
-		return cmd, nil
-	case protocol.COM_SET_OPTION:
-		cmd := &protocol.ComSetOptionPacket{}
-		cmd.Packet = *packet
-		return cmd, nil
-	case protocol.COM_QUERY:
-		cmd := &protocol.ComQueryPacket{}
-		cmd.Packet = *packet
-		// ComQueryPacket.Unmarshal 会自动从 Payload 中提取 Query 字段
-		// 因为 cmd.Packet 已经被赋值,所以不需要再次 Unmarshal
-		// Query 字段会在访问时自动提取
-		return cmd, nil
-	case protocol.COM_INIT_DB:
-		cmd := &protocol.ComInitDBPacket{}
-		cmd.Packet = *packet
-		return cmd, nil
-	case protocol.COM_FIELD_LIST:
-		cmd := &protocol.ComFieldListPacket{}
-		cmd.Packet = *packet
-		return cmd, nil
-	case protocol.COM_PROCESS_KILL:
-		cmd := &protocol.ComProcessKillPacket{}
-		cmd.Packet = *packet
-		return cmd, nil
-	default:
-		return nil, fmt.Errorf("unsupported command type: 0x%02x", commandType)
 	}
 }

@@ -168,16 +168,19 @@ func TestGetBackupStats(t *testing.T) {
 	backupDir := t.TempDir()
 	bm := NewBackupManager(backupDir)
 
-	// Create backups
-	testData := map[string]string{"key": "value"}
-	bm.Backup(BackupTypeFull, []string{"test1"}, testData)
-	bm.Backup(BackupTypeFull, []string{"test2"}, testData)
+	// Create backups - use unique data to ensure distinct backups
+	testData1 := map[string]string{"key1": "value1"}
+	testData2 := map[string]string{"key2": "value2"}
+	_, err1 := bm.Backup(BackupTypeFull, []string{"test1"}, testData1)
+	require.NoError(t, err1, "First backup should succeed")
+	_, err2 := bm.Backup(BackupTypeFull, []string{"test2"}, testData2)
+	require.NoError(t, err2, "Second backup should succeed")
 
 	// Get stats
 	count, size, err := bm.GetBackupStats()
 	require.NoError(t, err)
-	assert.Equal(t, 2, count)
-	assert.Greater(t, size, int64(0))
+	assert.Equal(t, 2, count, "Should have 2 completed backups")
+	assert.Greater(t, size, int64(0), "Total size should be greater than 0")
 }
 
 func TestExportMetadata(t *testing.T) {

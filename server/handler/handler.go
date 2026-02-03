@@ -31,6 +31,15 @@ type Handler interface {
 	Name() string
 }
 
+// HandshakeHandler 握手处理器接口
+type HandshakeHandler interface {
+	// Handle 处理握手流程
+	Handle(conn net.Conn, sess *pkg_session.Session) error
+
+	// Name 返回处理器名称
+	Name() string
+}
+
 // HandlerContext 处理器上下文
 type HandlerContext struct {
 	Session      *pkg_session.Session

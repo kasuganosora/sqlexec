@@ -91,7 +91,7 @@ func TestGetCharsetName(t *testing.T) {
 		// 边界情况
 		{"未知的ID", 0, "unknown"},
 		{"未知的ID2", 100, "unknown"},
-		{"未知的ID3", 255, "unknown"},
+		{"未知的ID3", 200, "unknown"},
 		{"最大uint8", 255, "utf8mb4_0900_ai_ci"},
 	}
 

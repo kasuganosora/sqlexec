@@ -956,6 +956,11 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 
 	// 非事务模式：在持有全局锁时，获取表版本锁
 	// 锁顺序：先全局锁，后表级锁（避免死锁）
+	
+	// 先递增全局版本号（在持有全局锁时）
+	m.currentVer++
+	
+	// 获取表级锁
 	tableVer.mu.Lock()
 
 	// 现在可以安全地释放全局锁，因为已经持有表锁
@@ -967,8 +972,7 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
-	// 非事务插入，创建新版本
-	m.currentVer++
+	// 非事务插入，创建新版本（版本号已在获取表锁前递增）
 	
 	// 深拷贝 schema
 	cols := make([]domain.ColumnInfo, len(latestData.schema.Columns))
