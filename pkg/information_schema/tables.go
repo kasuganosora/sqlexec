@@ -8,6 +8,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
@@ -213,73 +214,19 @@ func (t *TablesTable) Query(ctx context.Context, filters []domain.Filter, option
 	}, nil
 }
 
-// applyFilters applies filters to result rows
+// applyFilters applies filters to result rows (using utils package)
 func (t *TablesTable) applyFilters(rows []domain.Row, filters []domain.Filter) ([]domain.Row, error) {
-	for _, filter := range filters {
-		var filteredRows []domain.Row
-
-		for _, row := range rows {
-			matches, err := t.matchesFilter(row, filter)
-			if err != nil {
-				return nil, err
-			}
-			if matches {
-				filteredRows = append(filteredRows, row)
-			}
-		}
-
-		rows = filteredRows
-	}
-
-	return rows, nil
+	return utils.ApplyFilters(rows, filters)
 }
 
-// matchesFilter checks if a row matches a filter
+// matchesFilter checks if a row matches a filter (using utils package)
 func (t *TablesTable) matchesFilter(row domain.Row, filter domain.Filter) (bool, error) {
-	value, exists := row[filter.Field]
-	if !exists {
-		return false, nil
-	}
-
-	// Convert value to string for comparison
-	var strValue string
-	if value == nil {
-		strValue = ""
-	} else {
-		strValue = fmt.Sprintf("%v", value)
-	}
-
-	// Apply operator
-	switch filter.Operator {
-	case "=":
-		return strValue == fmt.Sprintf("%v", filter.Value), nil
-	case "!=":
-		return strValue != fmt.Sprintf("%v", filter.Value), nil
-	case "like":
-		return t.matchesLike(strValue, fmt.Sprintf("%v", filter.Value)), nil
-	default:
-		return false, fmt.Errorf("unsupported filter operator: %s", filter.Operator)
-	}
+	return utils.MatchesFilter(row, filter)
 }
 
-// matchesLike implements simple LIKE pattern matching
+// matchesLike implements simple LIKE pattern matching (using utils package)
 func (t *TablesTable) matchesLike(value, pattern string) bool {
-	// Simple implementation - can be enhanced for full LIKE support
-	if pattern == "%" {
-		return true
-	}
-	if pattern == value {
-		return true
-	}
-	if len(pattern) > 0 && pattern[0] == '%' && len(pattern) > 1 {
-		suffix := pattern[1:]
-		return len(value) >= len(suffix) && value[len(value)-len(suffix):] == suffix
-	}
-	if len(pattern) > 0 && pattern[len(pattern)-1] == '%' && len(pattern) > 1 {
-		prefix := pattern[:len(pattern)-1]
-		return len(value) >= len(prefix) && value[:len(prefix)] == prefix
-	}
-	return false
+	return utils.MatchesLike(value, pattern)
 }
 
 // serializeTableAttributes converts table attributes map to JSON string

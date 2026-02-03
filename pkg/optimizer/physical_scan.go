@@ -6,6 +6,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // PhysicalTableScan 物理表扫描
@@ -192,58 +193,8 @@ func (p *PhysicalSelection) Execute(ctx context.Context) (*domain.QueryResult, e
 
 // matchesFilter 检查行是否匹配过滤器（简化实现）
 func matchesFilter(row domain.Row, filter domain.Filter) bool {
-	value, exists := row[filter.Field]
-	if !exists {
-		return false
-	}
-
-	// 类型转换比较
-	return compareWithOperator(value, filter.Value, filter.Operator)
-}
-
-// compareWithOperator 使用指定操作符比较两个值
-func compareWithOperator(left, right interface{}, op string) bool {
-	leftVal, leftOk := toFloat64(left)
-	if !leftOk {
-		// 无法转换为数字，使用字符串比较
-		return compareStrings(left, right, op)
-	}
-
-	rightVal, rightOk := toFloat64(right)
-	if rightOk {
-		// 两者都是数字，使用数字比较
-		switch op {
-		case "=":
-			return leftVal == rightVal
-		case ">", "gt":
-			return leftVal > rightVal
-		case ">=", "gte":
-			return leftVal >= rightVal
-		case "<", "lt":
-			return leftVal < rightVal
-		case "<=", "lte":
-			return leftVal <= rightVal
-		case "!=", "ne":
-			return leftVal != rightVal
-		}
-	}
-
-	// 默认：使用字符串比较
-	return compareStrings(left, right, op)
-}
-
-// compareStrings 比较字符串值
-func compareStrings(left, right interface{}, op string) bool {
-	leftStr := fmt.Sprintf("%v", left)
-	rightStr := fmt.Sprintf("%v", right)
-
-	switch op {
-	case "=":
-		return leftStr == rightStr
-	case "!=", "ne":
-		return leftStr != rightStr
-	}
-	return false
+	match, _ := utils.MatchesFilter(row, filter)
+	return match
 }
 
 // Explain 返回计划说明
@@ -926,7 +877,7 @@ func (p *PhysicalHashAggregate) calculateAggregation(agg *AggregationItem, rows 
 		for _, row := range rows {
 			val := row[colName]
 			if val != nil {
-				fval, _ := toFloat64(val)
+				fval, _ := utils.ToFloat64(val)
 				sum += fval
 			}
 		}
@@ -940,7 +891,7 @@ func (p *PhysicalHashAggregate) calculateAggregation(agg *AggregationItem, rows 
 		for _, row := range rows {
 			val := row[colName]
 			if val != nil {
-				fval, _ := toFloat64(val)
+				fval, _ := utils.ToFloat64(val)
 				sum += fval
 				count++
 			}

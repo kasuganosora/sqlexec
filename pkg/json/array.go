@@ -1,7 +1,7 @@
 package json
 
 import (
-	"fmt"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // ArrayAppend appends values to an array at the specified path
@@ -181,18 +181,7 @@ func ArrayGet(bj BinaryJSON, pathStr string, index int) (BinaryJSON, error) {
 	return NewBinaryJSON(arr[index])
 }
 
-// toString converts any value to string
+// toString converts any value to string (using utils package)
 func toString(v interface{}) string {
-	switch val := v.(type) {
-	case string:
-		return val
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		return fmt.Sprintf("%d", val)
-	case float32, float64:
-		return fmt.Sprintf("%f", val)
-	case bool:
-		return fmt.Sprintf("%t", val)
-	default:
-		return fmt.Sprintf("%v", val)
-	}
+	return utils.ToString(v)
 }

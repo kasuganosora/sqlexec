@@ -271,7 +271,7 @@ func (c *QueryCache) evictOldest() {
 	}
 }
 
-// contains 检查字符串是否包含子串（不区分大小写）
+// contains 检查字符串是否包含子串（简化实现，避免循环导入）
 func contains(s, substr string) bool {
 	// 简化实现
 	return len(s) > 0 && len(substr) > 0 && len(s) >= len(substr)

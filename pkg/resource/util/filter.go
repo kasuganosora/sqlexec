@@ -2,6 +2,7 @@ package util
 
 import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // ApplyFilters 应用过滤器（通用实现）
@@ -96,32 +97,9 @@ func MatchFilter(row domain.Row, filter domain.Filter) bool {
 		return false
 	}
 
-	switch filter.Operator {
-	case "=":
-		return CompareEqual(value, filter.Value)
-	case "!=":
-		return !CompareEqual(value, filter.Value)
-	case ">":
-		return CompareGreater(value, filter.Value)
-	case "<":
-		return !CompareGreater(value, filter.Value) && !CompareEqual(value, filter.Value)
-	case ">=":
-		return CompareGreater(value, filter.Value) || CompareEqual(value, filter.Value)
-	case "<=":
-		return !CompareGreater(value, filter.Value)
-	case "LIKE":
-		return CompareLike(value, filter.Value)
-	case "NOT LIKE":
-		return !CompareLike(value, filter.Value)
-	case "IN":
-		return CompareIn(value, filter.Value)
-	case "NOT IN":
-		return !CompareIn(value, filter.Value)
-	case "BETWEEN":
-		return CompareBetween(value, filter.Value)
-	case "NOT BETWEEN":
-		return !CompareBetween(value, filter.Value)
-	default:
+	result, err := utils.CompareValues(value, filter.Value, filter.Operator)
+	if err != nil {
 		return false
 	}
+	return result
 }

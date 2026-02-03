@@ -3,6 +3,8 @@ package builtin
 import (
 	"fmt"
 	"math"
+
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 func init() {
@@ -316,22 +318,9 @@ func init() {
 	}
 }
 
-// 辅助函数：将参数转换为float64
+// 辅助函数：将参数转换为float64 (using utils package)
 func toFloat64(arg interface{}) (float64, error) {
-	switch v := arg.(type) {
-	case float64:
-		return v, nil
-	case float32:
-		return float64(v), nil
-	case int:
-		return float64(v), nil
-	case int64:
-		return float64(v), nil
-	case int32:
-		return float64(v), nil
-	default:
-		return 0, fmt.Errorf("cannot convert %T to float64", arg)
-	}
+	return utils.ToFloat64(arg)
 }
 
 // 数学函数实现

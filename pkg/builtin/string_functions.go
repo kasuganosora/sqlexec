@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 func init() {
@@ -315,34 +317,14 @@ func init() {
 	}
 }
 
-// 辅助函数：将参数转换为字符串
+// 辅助函数：将参数转换为字符串 (using utils package)
 func toString(arg interface{}) string {
-	switch v := arg.(type) {
-	case string:
-		return v
-	case []byte:
-		return string(v)
-	default:
-		return fmt.Sprintf("%v", v)
-	}
+	return utils.ToString(arg)
 }
 
-// 辅助函数：将参数转换为整数
+// 辅助函数：将参数转换为整数 (using utils package)
 func toInt64(arg interface{}) (int64, error) {
-	switch v := arg.(type) {
-	case int:
-		return int64(v), nil
-	case int64:
-		return v, nil
-	case int32:
-		return int64(v), nil
-	case float64:
-		return int64(v), nil
-	case float32:
-		return int64(v), nil
-	default:
-		return 0, fmt.Errorf("cannot convert %T to int64", arg)
-	}
+	return utils.ToInt64(arg)
 }
 
 // 字符串函数实现

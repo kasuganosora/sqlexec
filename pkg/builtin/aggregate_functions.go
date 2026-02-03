@@ -2,6 +2,8 @@ package builtin
 
 import (
 	"math"
+
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // AggregateContext 聚合函数上下文
@@ -123,30 +125,7 @@ func GetAggregate(name string) (*AggregateFunctionInfo, bool) {
 
 // 辅助函数：比较两个值
 func compareValues(a, b interface{}) int {
-	aFloat, aErr := toFloat64(a)
-	bFloat, bErr := toFloat64(b)
-	
-	if aErr == nil && bErr == nil {
-		if aFloat < bFloat {
-			return -1
-		} else if aFloat > bFloat {
-			return 1
-		}
-		return 0
-	}
-	
-	aStr, aStrOk := a.(string)
-	bStr, bStrOk := b.(string)
-	if aStrOk && bStrOk {
-		if aStr < bStr {
-			return -1
-		} else if aStr > bStr {
-			return 1
-		}
-		return 0
-	}
-	
-	return 0
+	return utils.CompareValuesForSort(a, b)
 }
 
 // 聚合函数实现
@@ -175,10 +154,10 @@ func aggSum(ctx *AggregateContext, args []interface{}) error {
 	if len(args) == 0 {
 		return nil
 	}
-	
+
 	for _, arg := range args {
 		if arg != nil {
-			val, err := toFloat64(arg)
+			val, err := utils.ToFloat64(arg)
 			if err != nil {
 				return err
 			}
@@ -196,10 +175,10 @@ func aggAvg(ctx *AggregateContext, args []interface{}) error {
 	if len(args) == 0 {
 		return nil
 	}
-	
+
 	for _, arg := range args {
 		if arg != nil {
-			val, err := toFloat64(arg)
+			val, err := utils.ToFloat64(arg)
 			if err != nil {
 				return err
 			}
@@ -265,10 +244,10 @@ func aggStdDev(ctx *AggregateContext, args []interface{}) error {
 	if len(args) == 0 {
 		return nil
 	}
-	
+
 	for _, arg := range args {
 		if arg != nil {
-			val, err := toFloat64(arg)
+			val, err := utils.ToFloat64(arg)
 			if err != nil {
 				return err
 			}

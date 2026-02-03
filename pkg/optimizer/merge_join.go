@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // PhysicalMergeJoin 物理归并连接
@@ -313,37 +314,7 @@ func getJoinColumns(conditions []*JoinCondition) (string, string) {
 // compareValuesForSort 为归并排序比较两个值
 // 返回 -1: a < b, 0: a == b, 1: a > b
 func compareValuesForSort(a, b interface{}) int {
-	if a == nil && b == nil {
-		return 0
-	}
-	if a == nil {
-		return -1
-	}
-	if b == nil {
-		return 1
-	}
-
-	// 尝试数值比较
-	aNum, aOk := toFloat64(a)
-	bNum, bOk := toFloat64(b)
-	if aOk && bOk {
-		if aNum < bNum {
-			return -1
-		} else if aNum > bNum {
-			return 1
-		}
-		return 0
-	}
-
-	// 字符串比较
-	aStr := fmt.Sprintf("%v", a)
-	bStr := fmt.Sprintf("%v", b)
-	if aStr < bStr {
-		return -1
-	} else if aStr > bStr {
-		return 1
-	}
-	return 0
+	return utils.CompareValuesForSort(a, b)
 }
 
 // Explain 返回计划说明

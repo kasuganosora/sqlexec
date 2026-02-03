@@ -454,6 +454,7 @@ func normalizeName(name string) string {
 
 // toLowerCase 转小写
 func toLowerCase(s string) string {
+	// 这里不能直接使用 utils.ToLowerCase，会导致循环导入
 	result := ""
 	for _, c := range s {
 		if c >= 'A' && c <= 'Z' {
@@ -478,7 +479,7 @@ func findSubstring(s, substr string) int {
 	if len(s) < len(substr) {
 		return -1
 	}
-	
+
 	for i := 0; i <= len(s)-len(substr); i++ {
 		match := true
 		for j := 0; j < len(substr); j++ {

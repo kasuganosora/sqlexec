@@ -2,11 +2,10 @@ package parser
 
 import (
 	"fmt"
-	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // CheckOptionValidator validates INSERT/UPDATE operations against WITH CHECK OPTION
@@ -228,104 +227,9 @@ func (cv *CheckOptionValidator) extractValue(row domain.Row, expr *Expression) (
 	}
 }
 
-// compareValues compares two values
+// compareValues compares two values (using utils package)
 func (cv *CheckOptionValidator) compareValues(left, right interface{}, operator string) (bool, error) {
-	// Normalize operator to standard format
-	// TiDB parser returns "eq", "neq", "lt", "le", "gt", "ge"
-	// Convert to "=", "!=", "<", "<=", ">", ">="
-	normalizedOp := operator
-	switch operator {
-	case "EQ":
-		normalizedOp = "="
-	case "NEQ", "LT", "LE", "GT", "GE":
-		// Keep as is for now
-	}
-
-	// Handle nil values
-	if left == nil || right == nil {
-		// NULL comparisons
-		switch normalizedOp {
-		case "=":
-			return left == nil && right == nil, nil
-		case "!=":
-			return !(left == nil && right == nil), nil
-		default:
-			return false, nil
-		}
-	}
-
-	// Try numeric comparison
-	leftFloat, leftOk := cv.toFloat64(left)
-	rightFloat, rightOk := cv.toFloat64(right)
-
-	if leftOk && rightOk {
-		switch normalizedOp {
-		case "=", "EQ":
-			return leftFloat == rightFloat, nil
-		case "!=", "NEQ":
-			return leftFloat != rightFloat, nil
-		case ">", "GT":
-			return leftFloat > rightFloat, nil
-		case "<", "LT":
-			return leftFloat < rightFloat, nil
-		case ">=", "GE":
-			return leftFloat >= rightFloat, nil
-		case "<=", "LE":
-			return leftFloat <= rightFloat, nil
-		}
-	}
-
-	// String comparison
-	leftStr, leftOk := left.(string)
-	rightStr, rightOk := right.(string)
-
-	if leftOk && rightOk {
-		switch normalizedOp {
-		case "=", "EQ":
-			return leftStr == rightStr, nil
-		case "!=", "NEQ":
-			return leftStr != rightStr, nil
-		case ">", "GT":
-			return leftStr > rightStr, nil
-		case "<", "LT":
-			return leftStr < rightStr, nil
-		case ">=", "GE":
-			return leftStr >= rightStr, nil
-		case "<=", "LE":
-			return leftStr <= rightStr, nil
-		case "LIKE":
-			pattern := strings.ToLower(rightStr)
-			text := strings.ToLower(leftStr)
-			return strings.Contains(text, pattern), nil
-		}
-	}
-
-	return false, nil
-}
-
-// toFloat64 converts a value to float64 if possible
-func (cv *CheckOptionValidator) toFloat64(val interface{}) (float64, bool) {
-	if val == nil {
-		return 0, false
-	}
-
-	switch v := val.(type) {
-	case int, int8, int16, int32, int64:
-		return float64(reflect.ValueOf(v).Int()), true
-	case uint, uint8, uint16, uint32, uint64:
-		return float64(reflect.ValueOf(v).Uint()), true
-	case float32, float64:
-		return float64(reflect.ValueOf(v).Float()), true
-	case string:
-		// 尝试从字符串解析数字
-		f, err := strconv.ParseFloat(v, 64)
-		if err == nil {
-			return f, true
-		}
-		return 0, false
-	default:
-		return 0, false
-	}
+	return utils.CompareValues(left, right, operator)
 }
 
 // isTruthy checks if a value is truthy
