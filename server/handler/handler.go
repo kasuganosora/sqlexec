@@ -2,9 +2,9 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"net"
 
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 	"github.com/kasuganosora/sqlexec/server/protocol"
 	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 )
@@ -116,7 +116,7 @@ func (ctx *HandlerContext) SendError(err error) error {
 		ctx.Logger.Printf("[ERROR] Sending error: %v", err)
 	}
 
-	errorCode, sqlState := mapErrorCode(err)
+	errorCode, sqlState := utils.MapErrorCode(err)
 
 	errPacket := &protocol.ErrorPacket{}
 	errPacket.SequenceID = ctx.GetNextSequenceID()
@@ -173,62 +173,6 @@ func (ctx *HandlerContext) Log(format string, v ...interface{}) {
 	if ctx.Logger != nil {
 		ctx.Logger.Printf(format, v...)
 	}
-}
-
-// mapErrorCode 将错误映射到 MySQL 错误码
-func mapErrorCode(err error) (uint16, string) {
-	// 检查错误消息内容
-	errMsg := err.Error()
-
-	// 表不存在
-	if containsSubstring(errMsg, "table") && containsSubstring(errMsg, "not found") {
-		return 1146, "42S02" // ER_NO_SUCH_TABLE
-	}
-
-	// 列不存在
-	if containsSubstring(errMsg, "column") && containsSubstring(errMsg, "not found") {
-		return 1054, "42S22" // ER_BAD_FIELD_ERROR
-	}
-
-	// 语法错误
-	if containsSubstring(errMsg, "syntax") || containsSubstring(errMsg, "SYNTAX_ERROR") || containsSubstring(errMsg, "parse") {
-		return 1064, "42000" // ER_PARSE_ERROR
-	}
-
-	// 空查询
-	if containsSubstring(errMsg, "no statements found") || containsSubstring(errMsg, "empty query") {
-		return 1065, "42000" // ER_EMPTY_QUERY
-	}
-
-	// 超时或取消
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		return 1317, "HY000" // ER_QUERY_INTERRUPTED
-	}
-
-	// 默认语法错误
-	return 1064, "42000" // ER_PARSE_ERROR
-}
-
-// containsSubstring 检查字符串是否包含子串
-func containsSubstring(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && indexOfSubstring(s, substr) >= 0)
-}
-
-// indexOfSubstring 查找子串位置
-func indexOfSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		match := true
-		for j := 0; j < len(substr); j++ {
-			if s[i+j] != substr[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return i
-		}
-	}
-	return -1
 }
 
 // HandlerError 自定义错误类型

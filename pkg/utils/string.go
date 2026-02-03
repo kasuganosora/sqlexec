@@ -118,3 +118,25 @@ func JoinWith(strs []string, sep string) string {
 func ToLowerCase(s string) string {
 	return strings.ToLower(s)
 }
+
+// ContainsSubstring 检查字符串是否包含子串
+func ContainsSubstring(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && IndexOfSubstring(s, substr) >= 0)
+}
+
+// IndexOfSubstring 查找子串位置
+func IndexOfSubstring(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		match := true
+		for j := 0; j < len(substr); j++ {
+			if s[i+j] != substr[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
+}

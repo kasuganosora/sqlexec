@@ -13,6 +13,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/optimizer"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 	"github.com/kasuganosora/sqlexec/server/acl"
 	"github.com/kasuganosora/sqlexec/server/handler"
 	simpleHandlers "github.com/kasuganosora/sqlexec/server/handler/simple"
@@ -194,7 +195,7 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 	}
 
 	remoteAddr := conn.RemoteAddr().String()
-	addr, port := parseRemoteAddr(remoteAddr)
+	addr, port := utils.ParseRemoteAddr(remoteAddr)
 
 	s.logger.Printf("开始获取或创建会话: remoteAddr=%s, addr=%s, port=%s", remoteAddr, addr, port)
 	sess, err := s.sessionMgr.GetOrCreateSession(s.ctx, addr, port)
@@ -346,18 +347,6 @@ func (s *Server) handleHandshake(conn net.Conn, sess *pkg_session.Session) error
 	s.logger.Printf("已发送认证成功包")
 
 	return nil
-}
-
-func parseRemoteAddr(remoteAddr string) (string, string) {
-	// 简单解析，格式为 "ip:port"
-	parts := make([]byte, 0)
-	for i := 0; i < len(remoteAddr); i++ {
-		if remoteAddr[i] == ':' {
-			return string(parts), remoteAddr[i+1:]
-		}
-		parts = append(parts, remoteAddr[i])
-	}
-	return string(parts), ""
 }
 
 func parseCommandPacket(commandType uint8, packet *protocol.Packet) (interface{}, error) {
