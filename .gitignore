@@ -59,3 +59,6 @@ temp*
 # Project specific files
 permissions.json
 users.json
+
+# CodeBuddy configuration and workspace files
+.codebuddy/
