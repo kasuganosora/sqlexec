@@ -1,4 +1,4 @@
-package testing
+package mock
 
 import (
 	"fmt"
@@ -6,14 +6,14 @@ import (
 	"sync"
 )
 
-// MockLogger 实现handler.Logger接口用于测试
+// MockLogger implements handler.Logger interface for testing
 type MockLogger struct {
 	mu      sync.Mutex
 	logs    []string
 	enabled bool
 }
 
-// NewMockLogger 创建一个新的Mock日志记录器
+// NewMockLogger creates a new mock logger
 func NewMockLogger() *MockLogger {
 	return &MockLogger{
 		logs:    make([]string, 0),
@@ -21,7 +21,7 @@ func NewMockLogger() *MockLogger {
 	}
 }
 
-// Printf 实现Logger接口
+// Printf implements Logger interface
 func (m *MockLogger) Printf(format string, v ...interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -34,7 +34,7 @@ func (m *MockLogger) Printf(format string, v ...interface{}) {
 	m.logs = append(m.logs, msg)
 }
 
-// GetLogs 获取所有日志记录
+// GetLogs returns all log records
 func (m *MockLogger) GetLogs() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -43,14 +43,14 @@ func (m *MockLogger) GetLogs() []string {
 	return result
 }
 
-// ClearLogs 清除所有日志记录
+// ClearLogs clears all log records
 func (m *MockLogger) ClearLogs() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.logs = make([]string, 0)
 }
 
-// ContainsLog 检查是否包含特定日志
+// ContainsLog checks if contains specific log
 func (m *MockLogger) ContainsLog(substr string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -63,14 +63,14 @@ func (m *MockLogger) ContainsLog(substr string) bool {
 	return false
 }
 
-// GetLogCount 获取日志数量
+// GetLogCount returns log count
 func (m *MockLogger) GetLogCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.logs)
 }
 
-// GetLastLog 获取最后一条日志
+// GetLastLog returns last log
 func (m *MockLogger) GetLastLog() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -81,14 +81,14 @@ func (m *MockLogger) GetLastLog() string {
 	return m.logs[len(m.logs)-1]
 }
 
-// Disable 禁用日志记录
+// Disable disables logging
 func (m *MockLogger) Disable() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.enabled = false
 }
 
-// Enable 启用日志记录
+// Enable enables logging
 func (m *MockLogger) Enable() {
 	m.mu.Lock()
 	defer m.mu.Unlock()

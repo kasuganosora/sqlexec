@@ -1,4 +1,4 @@
-package testing
+package mock
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// MockConnection 实现net.Conn接口用于测试
+// MockConnection implements net.Conn interface for testing
 type MockConnection struct {
 	mu          sync.Mutex
 	writtenData [][]byte
@@ -21,7 +21,7 @@ type MockConnection struct {
 	deadline    time.Time
 }
 
-// NewMockConnection 创建一个新的Mock连接
+// NewMockConnection creates a new mock connection
 func NewMockConnection() *MockConnection {
 	return &MockConnection{
 		writtenData: make([][]byte, 0),
@@ -32,7 +32,7 @@ func NewMockConnection() *MockConnection {
 	}
 }
 
-// Write 实现io.Writer接口，记录写入的数据
+// Write implements io.Writer interface, records written data
 func (m *MockConnection) Write(b []byte) (n int, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -45,7 +45,7 @@ func (m *MockConnection) Write(b []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 
-	// 记录写入的数据
+	// Record written data
 	data := make([]byte, len(b))
 	copy(data, b)
 	m.writtenData = append(m.writtenData, data)
@@ -53,7 +53,7 @@ func (m *MockConnection) Write(b []byte) (n int, err error) {
 	return len(b), nil
 }
 
-// Read 实现io.Reader接口，从队列中读取数据
+// Read implements io.Reader interface, reads data from queue
 func (m *MockConnection) Read(b []byte) (n int, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -67,11 +67,11 @@ func (m *MockConnection) Read(b []byte) (n int, err error) {
 	}
 
 	if len(m.readQueue) == 0 {
-		// 没有数据可读，等待或返回EOF
+		// No data to read, return EOF
 		return 0, io.EOF
 	}
 
-	// 从队列头部取出一个包
+	// Take a packet from the queue head
 	packet := m.readQueue[0]
 	m.readQueue = m.readQueue[1:]
 
@@ -79,7 +79,7 @@ func (m *MockConnection) Read(b []byte) (n int, err error) {
 	return n, nil
 }
 
-// Close 关闭连接
+// Close closes the connection
 func (m *MockConnection) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -87,21 +87,21 @@ func (m *MockConnection) Close() error {
 	return nil
 }
 
-// LocalAddress 返回本地地址
+// LocalAddress returns local address
 func (m *MockConnection) LocalAddr() net.Addr {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.localAddr
 }
 
-// RemoteAddress 返回远程地址
+// RemoteAddress returns remote address
 func (m *MockConnection) RemoteAddr() net.Addr {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.remoteAddr
 }
 
-// SetDeadline 设置读写超时
+// SetDeadline sets read/write timeout
 func (m *MockConnection) SetDeadline(t time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -109,7 +109,7 @@ func (m *MockConnection) SetDeadline(t time.Time) error {
 	return nil
 }
 
-// SetReadDeadline 设置读超时
+// SetReadDeadline sets read timeout
 func (m *MockConnection) SetReadDeadline(t time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -117,7 +117,7 @@ func (m *MockConnection) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-// SetWriteDeadline 设置写超时
+// SetWriteDeadline sets write timeout
 func (m *MockConnection) SetWriteDeadline(t time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -125,7 +125,7 @@ func (m *MockConnection) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-// AddReadData 添加模拟的读取数据（用于测试）
+// AddReadData adds mock read data (for testing)
 func (m *MockConnection) AddReadData(data []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -134,7 +134,7 @@ func (m *MockConnection) AddReadData(data []byte) {
 	m.readQueue = append(m.readQueue, packet)
 }
 
-// GetWrittenData 获取所有写入的数据
+// GetWrittenData returns all written data
 func (m *MockConnection) GetWrittenData() [][]byte {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -143,7 +143,7 @@ func (m *MockConnection) GetWrittenData() [][]byte {
 	return result
 }
 
-// GetWrittenDataBytes 获取所有写入的字节数据
+// GetWrittenDataBytes returns all written byte data
 func (m *MockConnection) GetWrittenDataBytes() []byte {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -154,45 +154,45 @@ func (m *MockConnection) GetWrittenDataBytes() []byte {
 	return buf.Bytes()
 }
 
-// ClearWrittenData 清除写入的数据记录
+// ClearWrittenData clears written data records
 func (m *MockConnection) ClearWrittenData() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.writtenData = make([][]byte, 0)
 }
 
-// IsClosed 检查连接是否已关闭
+// IsClosed checks if connection is closed
 func (m *MockConnection) IsClosed() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.closed
 }
 
-// SetReadError 设置读取错误（用于测试错误场景）
+// SetReadError sets read error (for testing error scenarios)
 func (m *MockConnection) SetReadError(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.readError = err
 }
 
-// SetWriteError 设置写入错误（用于测试错误场景）
+// SetWriteError sets write error (for testing error scenarios)
 func (m *MockConnection) SetWriteError(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.writeError = err
 }
 
-// MockAddr 实现net.Addr接口
+// MockAddr implements net.Addr interface
 type MockAddr struct {
 	addr string
 }
 
-// Network 返回网络类型
+// Network returns network type
 func (m *MockAddr) Network() string {
 	return "tcp"
 }
 
-// String 返回地址字符串
+// String returns address string
 func (m *MockAddr) String() string {
 	return m.addr
 }

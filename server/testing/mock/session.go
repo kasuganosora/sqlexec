@@ -1,4 +1,4 @@
-package testing
+package mock
 
 import (
 	"sync"
@@ -6,7 +6,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/api"
 )
 
-// MockSession 实现pkg/session.Session接口用于测试
+// MockSession implements pkg/session.Session interface for testing
 type MockSession struct {
 	mu           sync.Mutex
 	ID           string
@@ -18,7 +18,7 @@ type MockSession struct {
 	closed       bool
 }
 
-// NewMockSession 创建一个新的Mock Session
+// NewMockSession creates a new mock session
 func NewMockSession() *MockSession {
 	return &MockSession{
 		ID:         "mock-session-1",
@@ -30,56 +30,56 @@ func NewMockSession() *MockSession {
 	}
 }
 
-// GetID 获取Session ID
+// GetID returns Session ID
 func (m *MockSession) GetID() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.ID
 }
 
-// SetID 设置Session ID
+// SetID sets Session ID
 func (m *MockSession) SetID(id string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ID = id
 }
 
-// GetThreadID 获取线程ID
+// GetThreadID returns thread ID
 func (m *MockSession) GetThreadID() uint32 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.ThreadID
 }
 
-// SetThreadID 设置线程ID
+// SetThreadID sets thread ID
 func (m *MockSession) SetThreadID(threadID uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ThreadID = threadID
 }
 
-// GetUser 获取用户名
+// GetUser returns username
 func (m *MockSession) GetUser() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.User
 }
 
-// SetUser 设置用户名
+// SetUser sets username
 func (m *MockSession) SetUser(user string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.User = user
 }
 
-// GetSequenceID 获取当前序列号
+// GetSequenceID returns current sequence ID
 func (m *MockSession) GetSequenceID() uint8 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.SequenceID
 }
 
-// GetNextSequenceID 获取下一个序列号并递增
+// GetNextSequenceID gets next sequence ID and increments
 func (m *MockSession) GetNextSequenceID() uint8 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -92,56 +92,56 @@ func (m *MockSession) GetNextSequenceID() uint8 {
 	return current
 }
 
-// ResetSequenceID 重置序列号为0
+// ResetSequenceID resets sequence ID to 0
 func (m *MockSession) ResetSequenceID() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.SequenceID = 0
 }
 
-// SetSequenceID 设置序列号（用于测试特定场景）
+// SetSequenceID sets sequence ID (for testing specific scenarios)
 func (m *MockSession) SetSequenceID(seqID uint8) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.SequenceID = seqID
 }
 
-// Get 获取Session数据
+// Get gets session data
 func (m *MockSession) Get(key string) interface{} {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.data[key]
 }
 
-// Set 设置Session数据
+// Set sets session data
 func (m *MockSession) Set(key string, value interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.data[key] = value
 }
 
-// Delete 删除Session数据
+// Delete deletes session data
 func (m *MockSession) Delete(key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.data, key)
 }
 
-// GetAPISession 获取API Session
+// GetAPISession returns API Session
 func (m *MockSession) GetAPISession() interface{} {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.apiSession
 }
 
-// SetAPISession 设置API Session
+// SetAPISession sets API Session
 func (m *MockSession) SetAPISession(apiSession interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.apiSession = apiSession
 }
 
-// Close 关闭Session
+// Close closes session
 func (m *MockSession) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -149,14 +149,14 @@ func (m *MockSession) Close() error {
 	return nil
 }
 
-// IsClosed 检查Session是否已关闭
+// IsClosed checks if session is closed
 func (m *MockSession) IsClosed() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.closed
 }
 
-// Clone 克隆Session（用于测试）
+// Clone clones session (for testing)
 func (m *MockSession) Clone() *MockSession {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -178,9 +178,9 @@ func (m *MockSession) Clone() *MockSession {
 	return clone
 }
 
-// NewMockAPISession 创建一个Mock的API Session
+// NewMockAPISession creates a mock API session
 func NewMockAPISession() *api.Session {
-	// 使用真实API Session但不需要真实DB
-	// 在单元测试中，我们可以mock DB部分
+	// Use real API session but no real DB needed
+	// In unit tests, we can mock the DB part
 	return nil
 }
