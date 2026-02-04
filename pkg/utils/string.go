@@ -124,12 +124,16 @@ func ContainsSubstring(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && IndexOfSubstring(s, substr) >= 0)
 }
 
-// IndexOfSubstring 查找子串位置
+// IndexOfSubstring 查找子串位置（按字符索引，支持Unicode）
 func IndexOfSubstring(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
+	// 转换为rune切片以正确处理Unicode字符
+	runes := []rune(s)
+	subRunes := []rune(substr)
+	
+	for i := 0; i <= len(runes)-len(subRunes); i++ {
 		match := true
-		for j := 0; j < len(substr); j++ {
-			if s[i+j] != substr[j] {
+		for j := 0; j < len(subRunes); j++ {
+			if runes[i+j] != subRunes[j] {
 				match = false
 				break
 			}

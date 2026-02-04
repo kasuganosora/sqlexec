@@ -224,41 +224,59 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 	if err != nil {
 		return err
 	}
-	// 使用Payload中的数据创建reader
-	reader := bytes.NewReader(p.Payload)
+	// 使用Payload中的数据创建reader，统一使用bufio.Reader
+	reader := bufio.NewReader(bytes.NewReader(p.Payload))
 	
-	p.ClientCapabilities, _ = ReadNumber[uint16](reader, 2)
-	p.ExtendedClientCapabilities, _ = ReadNumber[uint16](reader, 2)
-	p.MaxPacketSize, _ = ReadNumber[uint32](reader, 4)
-	p.CharacterSet, _ = ReadNumber[uint8](reader, 1)
+	// 辅助函数：读取指定字节数
+	readBytes := func(n int) ([]byte, error) {
+		buf := make([]byte, n)
+		_, err := io.ReadFull(reader, buf)
+		return buf, err
+	}
+	
+	// 1. ClientCapabilities (2字节)
+	buf, _ := readBytes(2)
+	p.ClientCapabilities = binary.LittleEndian.Uint16(buf)
+	// 2. ExtendedClientCapabilities (2字节)
+	buf, _ = readBytes(2)
+	p.ExtendedClientCapabilities = binary.LittleEndian.Uint16(buf)
+	// 3. MaxPacketSize (4字节)
+	buf, _ = readBytes(4)
+	p.MaxPacketSize = binary.LittleEndian.Uint32(buf)
+	// 4. CharacterSet (1字节)
+	buf, _ = readBytes(1)
+	p.CharacterSet = buf[0]
 
-	// 读取Reserved字段（最多19字节）
+	// 5. Reserved字段（19字节）
 	p.Reserved = make([]byte, 19)
 	n, _ := reader.Read(p.Reserved)
 	if n < 19 {
-		// 截断到实际读取的字节数
 		p.Reserved = p.Reserved[:n]
 	}
 
-	// 尝试读取MariaDBCaps（如果还有数据）
-	if reader.Len() >= 4 {
-		p.MariaDBCaps, _ = ReadNumber[uint32](reader, 4)
+	// 6. 尝试读取MariaDBCaps（如果还有数据）
+	buf = make([]byte, 1)
+	reader.Peek(1) // 检查是否还有数据
+	if reader.Buffered() >= 4 {
+		buf, _ := readBytes(4)
+		p.MariaDBCaps = binary.LittleEndian.Uint32(buf)
 	}
 
-	// 读取用户名（NUL结尾字符串）
-	userReader := bufio.NewReader(reader)
-	p.User, _ = ReadStringByNullEndFromReader(userReader)
+	// 7. 读取用户名（NUL结尾字符串）
+	p.User, _ = ReadStringByNullEndFromReader(reader)
 
-	// 修复：根据能力标志正确处理认证响应
-	// 检查是否还有数据可读
-	if reader.Len() > 0 {
+	// 8. 读取认证响应
+	buf = make([]byte, 1)
+	reader.Peek(1) // 检查是否还有数据
+	if reader.Buffered() > 0 {
 		switch {
 		case capabilities&CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA != 0:
 			// 长度编码的认证响应
 			p.AuthResponse, _ = ReadStringByLenencFromReader[uint8](reader)
 		case capabilities&CLIENT_SECURE_CONNECTION != 0:
 			// 安全连接：1字节长度 + N字节内容
-			authLen, _ := ReadNumber[uint8](reader, 1)
+			authLenBytes, _ := readBytes(1)
+			authLen := int(authLenBytes[0])
 			authData := make([]byte, authLen)
 			io.ReadFull(reader, authData)
 			p.AuthResponse = hex.EncodeToString(authData)
@@ -268,37 +286,56 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 		}
 	}
 
-	if reader.Len() > 0 && capabilities&CLIENT_CONNECT_WITH_DB != 0 {
-		p.Database, _ = ReadStringByNullEndFromReader(reader)
-	}
-
-	if reader.Len() > 0 && capabilities&CLIENT_PLUGIN_AUTH != 0 {
-		p.ClientAuthPluginName, _ = ReadStringByNullEndFromReader(reader)
-	}
-
-	// 修复：连接属性解析使用有限读取器
-	if reader.Len() > 0 && capabilities&CLIENT_CONNECT_ATTRS != 0 {
-		attrLen, _ := ReadLenencNumber[uint64](reader)
-		p.ConnectionAttributesLength = attrLen
-		p.ConnectionAttributes = make([]ConnectionAttributeItem, 0)
-
-		// 使用有限读取器确保不读取额外数据
-		attrReader := io.LimitReader(reader, int64(attrLen))
-		for {
-			item := &ConnectionAttributeItem{}
-			err := item.Unmarshal(attrReader)
-			if err != nil {
-				if errors.Is(err, io.EOF) {
-					break
-				}
-				return err
-			}
-			p.ConnectionAttributes = append(p.ConnectionAttributes, *item)
+	// 9. 读取Database（如果有）
+	if capabilities&CLIENT_CONNECT_WITH_DB != 0 {
+		buf = make([]byte, 1)
+		reader.Peek(1) // 检查是否还有数据
+		if reader.Buffered() > 0 {
+			p.Database, _ = ReadStringByNullEndFromReader(reader)
 		}
 	}
 
-	if reader.Len() > 0 && capabilities&CLIENT_ZSTD_COMPRESSION_ALGORITHM != 0 {
-		p.ZstdCompressionLevel, _ = ReadNumber[uint8](reader, 1)
+	// 10. 读取ClientAuthPluginName（如果有）
+	if capabilities&CLIENT_PLUGIN_AUTH != 0 {
+		buf = make([]byte, 1)
+		reader.Peek(1) // 检查是否还有数据
+		if reader.Buffered() > 0 {
+			p.ClientAuthPluginName, _ = ReadStringByNullEndFromReader(reader)
+		}
+	}
+
+	// 11. 读取连接属性（如果有）
+	if capabilities&CLIENT_CONNECT_ATTRS != 0 {
+		buf = make([]byte, 1)
+		reader.Peek(1) // 检查是否还有数据
+		if reader.Buffered() > 0 {
+			attrLenBytes, _ := ReadLenencNumber[uint64](reader)
+			p.ConnectionAttributesLength = attrLenBytes
+			p.ConnectionAttributes = make([]ConnectionAttributeItem, 0)
+
+			attrReader := io.LimitReader(reader, int64(attrLenBytes))
+			for {
+				item := &ConnectionAttributeItem{}
+				err := item.Unmarshal(attrReader)
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					return err
+				}
+				p.ConnectionAttributes = append(p.ConnectionAttributes, *item)
+			}
+		}
+	}
+
+	// 12. 读取ZstdCompressionLevel（如果有）
+	if capabilities&CLIENT_ZSTD_COMPRESSION_ALGORITHM != 0 {
+		buf = make([]byte, 1)
+		reader.Peek(1) // 检查是否还有数据
+		if reader.Buffered() > 0 {
+			buf, _ := readBytes(1)
+			p.ZstdCompressionLevel = buf[0]
+		}
 	}
 
 	return nil
@@ -432,10 +469,9 @@ func (p *OkPacket) Marshal() ([]byte, error) {
 	WriteNumber(buf, p.OkInPacket.StatusFlags, 2)
 	WriteNumber(buf, p.OkInPacket.Warnings, 2)
 
-	// 总是写入 Info（即使是空字符串）
-	if p.OkInPacket.Info != "" {
-		WriteStringByLenenc(buf, p.OkInPacket.Info)
-	}
+	// 总是写入 Info（使用长度编码，即使Info是空字符串）
+	// 根据MySQL协议，Info字段总是存在，长度为0表示空字符串
+	WriteStringByLenenc(buf, p.OkInPacket.Info)
 
 	// 总是写入 SessionStateInfo（如果标志位设置了）
 	if p.OkInPacket.StatusFlags&SERVER_SESSION_STATE_CHANGED != 0 {
@@ -569,12 +605,23 @@ func (p *OkInPacket) Unmarshal(r io.Reader, conditional uint32) (err error) {
 		p.Warnings, _ = ReadNumber[uint16](reader, 2)
 	}
 
-	// 先读取 Info
-	p.Info, _ = ReadStringByLenencFromReader[uint8](reader)
-	// 然后读取 SessionStateInfo（如果 StatusFlags 包含 SERVER_SESSION_STATE_CHANGED）
-	if p.StatusFlags&SERVER_SESSION_STATE_CHANGED != 0 {
+	// 读取 Info（可选字段，长度编码）
+	// Info总是存在，长度为0表示空字符串
+	if reader.Buffered() > 0 {
+		infoLen, _ := ReadLenencNumber[uint8](reader)
+		if infoLen > 0 {
+			infoBytes := make([]byte, infoLen)
+			reader.Read(infoBytes)
+			p.Info = string(infoBytes)
+		}
+		// infoLen = 0 表示空字符串，Info保持为""
+	}
+
+	// 读取 SessionStateInfo（如果 StatusFlags 包含 SERVER_SESSION_STATE_CHANGED）
+	if p.StatusFlags&SERVER_SESSION_STATE_CHANGED != 0 && reader.Buffered() > 0 {
 		p.SessionStateInfo, _ = ReadStringByLenencFromReader[uint8](reader)
 	}
+
 	return nil
 }
 
