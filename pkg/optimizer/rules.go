@@ -459,6 +459,28 @@ func DefaultRuleSet() RuleSet {
 	return rules
 }
 
+// EnhancedRuleSet 返回增强规则集（包含新规则）
+func EnhancedRuleSet(estimator CardinalityEstimator) RuleSet {
+	rules := RuleSet{
+		&PredicatePushDownRule{}, // 基础谓词下推
+		// 增强的谓词下推规则（需要放在基础规则之后）
+		NewEnhancedPredicatePushdownRule(estimator),
+		&ColumnPruningRule{},
+		&ProjectionEliminationRule{},
+		&LimitPushDownRule{},
+		&ConstantFoldingRule{},
+		&JoinReorderRule{},
+		&JoinEliminationRule{},
+		&SemiJoinRewriteRule{},
+		NewORToUnionRule(), // OR转UNION规则
+	}
+	fmt.Println("  [DEBUG] EnhancedRuleSet: 创建增强规则集, 数量:", len(rules))
+	for i, r := range rules {
+		fmt.Printf("  [DEBUG]   规则%d: %s\n", i, r.Name())
+	}
+	return rules
+}
+
 // RuleExecutor 规则执行器
 type RuleExecutor struct {
 	rules RuleSet

@@ -2,9 +2,7 @@ package optimizer
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
@@ -133,21 +131,6 @@ func (r *JoinEliminationRule) isForeignKeyPrimaryKeyJoin(join *LogicalJoin) bool
 	return false
 }
 
-// expressionToString 将表达式转换为字符串（简化版）
-func expressionToString(expr *parser.Expression) string {
-	if expr == nil {
-		return ""
-	}
-	// 简化实现：直接返回字面量值或列名
-	// 实际应该遍历表达式树
-	if expr.Type == parser.ExprTypeValue {
-		return fmt.Sprintf("%v", expr.Value)
-	}
-	if expr.Type == parser.ExprTypeColumn {
-		return expr.Column
-	}
-	return ""
-}
 
 // extractTableNames 从计划中提取表名
 func extractTableNames(plan LogicalPlan) []string {
