@@ -516,7 +516,7 @@ func (o *Optimizer) convertToPhysicalPlan(ctx context.Context, logicalPlan Logic
 		if err != nil {
 			return nil, err
 		}
-		return NewPhysicalHashAggregate(p.GetAggFuncs(), p.GetGroupByCols(), child), nil
+		return NewOptimizedAggregate(p.GetAggFuncs(), p.GetGroupByCols(), child), nil
 	default:
 		return nil, fmt.Errorf("unsupported logical plan type: %T", p)
 	}

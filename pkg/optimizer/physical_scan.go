@@ -11,14 +11,17 @@ import (
 
 // PhysicalTableScan 物理表扫描
 type PhysicalTableScan struct {
-	TableName  string
-	Columns    []ColumnInfo
-	TableInfo  *domain.TableInfo
-	cost       float64
-	children   []PhysicalPlan
-	dataSource domain.DataSource
-	filters    []domain.Filter // 下推的过滤条件
-	limitInfo  *LimitInfo      // 下推的Limit信息
+	TableName             string
+	Columns               []ColumnInfo
+	TableInfo             *domain.TableInfo
+	cost                  float64
+	children              []PhysicalPlan
+	dataSource            domain.DataSource
+	filters               []domain.Filter // 下推的过滤条件
+	limitInfo             *LimitInfo      // 下推的Limit信息
+	parallelScanner       *OptimizedParallelScanner // 并行扫描器
+	enableParallelScan    bool           // 是否启用并行扫描
+	minParallelScanRows   int64          // 启用并行扫描的最小行数
 }
 
 // NewPhysicalTableScan 创建物理表扫描
@@ -40,15 +43,28 @@ func NewPhysicalTableScan(tableName string, tableInfo *domain.TableInfo, dataSou
 		rowCount = limitInfo.Limit
 	}
 
+	// 创建并行扫描器（默认8个worker）
+	parallelScanner := NewOptimizedParallelScanner(dataSource, 8)
+
+	// 启用并行扫描的最小行数（1000行）
+	minParallelScanRows := int64(1000)
+
+	// 如果数据量足够大，启用并行扫描
+	enableParallelScan := rowCount >= minParallelScanRows && len(filters) == 0
+	// 只有在没有复杂过滤条件时才使用并行扫描
+
 	return &PhysicalTableScan{
-		TableName: tableName,
-		Columns:   columns,
-		TableInfo: tableInfo,
-		cost:      float64(rowCount),
-		children:  []PhysicalPlan{},
-		dataSource: dataSource,
-		filters:   filters,
-		limitInfo: limitInfo,
+		TableName:           tableName,
+		Columns:             columns,
+		TableInfo:           tableInfo,
+		cost:                float64(rowCount),
+		children:            []PhysicalPlan{},
+		dataSource:          dataSource,
+		filters:             filters,
+		limitInfo:           limitInfo,
+		parallelScanner:     parallelScanner,
+		enableParallelScan:  enableParallelScan,
+		minParallelScanRows: minParallelScanRows,
 	}
 }
 
@@ -76,6 +92,50 @@ func (p *PhysicalTableScan) Cost() float64 {
 func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 开始查询表 %s, 过滤器数: %d, Limit: %v\n", p.TableName, len(p.filters), p.limitInfo)
 
+	// 计算偏移量和限制量
+	offset := int64(0)
+	limit := int64(0)
+	if p.limitInfo != nil {
+		offset = p.limitInfo.Offset
+		limit = p.limitInfo.Limit
+	}
+
+	// 如果没有过滤条件且启用了并行扫描，使用 OptimizedParallelScanner
+	if p.enableParallelScan && len(p.filters) == 0 {
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 使用 OptimizedParallelScanner 进行并行扫描\n")
+		
+		// 使用并行扫描器执行查询
+		scanRange := ScanRange{
+			TableName: p.TableName,
+			Offset:    offset,
+			Limit:     limit,
+		}
+
+		options := &domain.QueryOptions{}
+		if limit > 0 {
+			options.Limit = int(limit)
+		}
+		if offset > 0 {
+			options.Offset = int(offset)
+		}
+
+		result, err := p.parallelScanner.Execute(ctx, scanRange, options)
+		if err != nil {
+			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 并行扫描失败 %v，回退到串行扫描\n", err)
+			// 回退到串行扫描
+			return p.executeSerialScan(ctx)
+		}
+
+		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 并行扫描完成，返回 %d 行\n", len(result.Rows))
+		return result, nil
+	}
+
+	// 否则使用串行扫描
+	return p.executeSerialScan(ctx)
+}
+
+// executeSerialScan 执行串行扫描
+func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.QueryResult, error) {
 	// 检查数据源是否支持 FilterableDataSource
 	filterableDS, isFilterable := p.dataSource.(domain.FilterableDataSource)
 
@@ -92,7 +152,7 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 
 	if isFilterable && len(p.filters) > 0 {
 		// 数据源支持过滤，调用 Filter 方法
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 数据源支持过滤，调用 Filter 方法\n")
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 数据源支持过滤，调用 Filter 方法\n")
 		for i, filter := range p.filters {
 			fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
 		}
@@ -113,7 +173,7 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 		// 调用 Filter 方法
 		rows, total, filterErr := filterableDS.Filter(ctx, p.TableName, filter, int(offset), int(limit))
 		if filterErr != nil {
-			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: Filter 方法失败 %v\n", filterErr)
+			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Filter 方法失败 %v\n", filterErr)
 			return nil, filterErr
 		}
 
@@ -122,16 +182,16 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 			Rows:  rows,
 			Total: total,
 		}
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: Filter 完成，返回 %d 行（total=%d）\n", len(rows), total)
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Filter 完成，返回 %d 行（total=%d）\n", len(rows), total)
 	} else {
 		// 数据源不支持过滤或无过滤条件，使用 Query 方法
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 数据源不支持过滤或无过滤条件，使用 Query 方法\n")
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 数据源不支持过滤或无过滤条件，使用 Query 方法\n")
 		
 		// 使用 QueryOptions 传递过滤和分页
 		options := &domain.QueryOptions{}
 		if len(p.filters) > 0 {
 			options.Filters = p.filters
-			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用过滤条件到 QueryOptions\n")
+			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用过滤条件到 QueryOptions\n")
 			for i, filter := range p.filters {
 				fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
 			}
@@ -142,15 +202,15 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 		if offset > 0 {
 			options.Offset = int(offset)
 		}
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用分页参数: limit=%d, offset=%d\n", options.Limit, options.Offset)
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用分页参数: limit=%d, offset=%d\n", options.Limit, options.Offset)
 
 		// 调用 Query 方法
 		result, err = p.dataSource.Query(ctx, p.TableName, options)
 		if err != nil {
-			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: Query 方法失败 %v\n", err)
+			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Query 方法失败 %v\n", err)
 			return nil, err
 		}
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: Query 完成，返回 %d 行\n", len(result.Rows))
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Query 完成，返回 %d 行\n", len(result.Rows))
 	}
 
 	return result, nil

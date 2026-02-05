@@ -449,7 +449,8 @@ func (eo *EnhancedOptimizer) convertAggregateEnhanced(ctx context.Context, p *Lo
 	// 计算成本
 	_ = eo.costModel.AggregateCost(int64(10000), len(groupByCols), len(aggFuncs))
 
-	return NewPhysicalHashAggregate(aggFuncs, groupByCols, child), nil
+	// 使用优化的聚合算子（基于 DuckDB Perfect Hash Aggregation）
+	return NewOptimizedAggregate(aggFuncs, groupByCols, child), nil
 }
 
 // convertUnionEnhanced 转换UNION（增强版）
