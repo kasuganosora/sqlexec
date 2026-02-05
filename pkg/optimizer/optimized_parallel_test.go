@@ -301,8 +301,8 @@ func TestOptimizedParallelScannerWithOffsetAndLimit(t *testing.T) {
 
 // TestOptimizedParallelScannerParallelism 测试不同并行度
 func TestOptimizedParallelScannerParallelism(t *testing.T) {
-	// 测试不同的并行度
-	parallelisms := []int{1, 2, 4, 8, 16}
+	// 测试不同的并行度（最大为8）
+	parallelisms := []int{1, 2, 4, 8}
 
 	for _, parallelism := range parallelisms {
 		t.Run(parallelismName(parallelism), func(t *testing.T) {
@@ -329,10 +329,14 @@ func TestOptimizedParallelScannerParallelism(t *testing.T) {
 				t.Errorf("Expected Total=5000, got %d", result.Total)
 			}
 
-			// 验证并行度
-			if scanner.GetParallelism() != parallelism {
-				t.Errorf("Expected parallelism=%d, got %d", parallelism, scanner.GetParallelism())
-			}
+		// 验证并行度（注意：大于8的值会被限制为8）
+		expectedParallelism := parallelism
+		if parallelism > 8 {
+			expectedParallelism = 8
+		}
+		if scanner.GetParallelism() != expectedParallelism {
+			t.Errorf("Expected parallelism=%d, got %d", expectedParallelism, scanner.GetParallelism())
+		}
 
 			// 验证 Query 调用次数应该等于并行度（或更少）
 			callCount := dataSource.GetCallCount()
@@ -359,22 +363,30 @@ func TestOptimizedParallelScannerSetParallelism(t *testing.T) {
 	}
 
 	// 测试设置有效并行度（在范围内）
+	scanner.SetParallelism(6)
+	if scanner.GetParallelism() != 6 {
+		t.Errorf("Expected parallelism=6, got %d", scanner.GetParallelism())
+	}
+
+	// 测试设置最大并行度（会被限制为8）
 	scanner.SetParallelism(32)
-	if scanner.GetParallelism() != 32 {
-		t.Errorf("Expected parallelism=32, got %d", scanner.GetParallelism())
+	if scanner.GetParallelism() != 8 {
+		t.Errorf("Expected parallelism=8 (max), got %d", scanner.GetParallelism())
 	}
 
-	// 测试设置最大并行度
-	scanner.SetParallelism(64)
-	if scanner.GetParallelism() != 64 {
-		t.Errorf("Expected parallelism=64 (max), got %d", scanner.GetParallelism())
-	}
-
-	// 测试设置无效并行度（超过最大值 64，应该保持不变）
+	// 测试设置超过最大值的并行度（应该被限制为8）
 	scanner.SetParallelism(100)
-	// SetParallelism 不会更新并行度，因为 100 > 64
-	if scanner.GetParallelism() != 64 {
-		t.Errorf("Expected parallelism=64 (unchanged), got %d", scanner.GetParallelism())
+	if scanner.GetParallelism() != 8 {
+		t.Errorf("Expected parallelism=8 (capped), got %d", scanner.GetParallelism())
+	}
+
+	// 测试自动选择并行度（传入0或负数）
+	scanner.SetParallelism(0)
+	if scanner.GetParallelism() < 1 {
+		t.Errorf("Expected auto-selected parallelism >= 1, got %d", scanner.GetParallelism())
+	}
+	if scanner.GetParallelism() > 8 {
+		t.Errorf("Expected auto-selected parallelism <= 8, got %d", scanner.GetParallelism())
 	}
 }
 

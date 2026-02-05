@@ -19,21 +19,37 @@ type OptimizedParallelScanner struct {
 }
 
 // NewOptimizedParallelScanner 创建优化的并行扫描器
+// parallelism: 并行度，0 表示自动选择最优值
+// Default: min(runtime.NumCPU(), 8) with range [4, 8]
 func NewOptimizedParallelScanner(dataSource domain.DataSource, parallelism int) *OptimizedParallelScanner {
-	// 默认使用 CPU 核心数
+	// 自动选择最优并行度：min(CPU核心数, 8)，范围 [4, 8]
 	if parallelism <= 0 {
-		parallelism = runtime.NumCPU()
+		cpuCount := runtime.NumCPU()
+		parallelism = cpuCount
+		if parallelism > 8 {
+			parallelism = 8
+		}
+		if parallelism < 4 && cpuCount >= 4 {
+			parallelism = 4
+		}
 	}
 
-	// 限制最大并行度
-	if parallelism > 64 {
-		parallelism = 64
-	}
-
-	// 根据数据大小设置批量大小
-	batchSize := 1000 // 默认批量大小
+	// 限制最大并行度为 8（根据性能基准测试，8 workers 性能最佳）
 	if parallelism > 8 {
-		batchSize = 500 // 高并行度时减小批量大小
+		parallelism = 8
+	}
+
+	// 根据数据大小设置批量大小（自适应）
+	// 较低并行度使用较大批量，减少调度开销
+	// 较高并行度使用较小批量，提高负载均衡
+	batchSize := 1000 // 默认批量大小
+	switch {
+	case parallelism >= 8:
+		batchSize = 500
+	case parallelism >= 4:
+		batchSize = 750
+	default:
+		batchSize = 1000
 	}
 
 	return &OptimizedParallelScanner{
@@ -240,22 +256,47 @@ func (ops *OptimizedParallelScanner) GetParallelism() int {
 }
 
 // SetParallelism 设置并行度
+// Recommended range: 4-8 workers (based on performance benchmarks)
+// parallelism <= 0: auto-select using min(runtime.NumCPU(), 8)
+// parallelism > 8: limited to 8 for optimal performance
 func (ops *OptimizedParallelScanner) SetParallelism(parallelism int) {
-	if parallelism > 0 && parallelism <= 64 {
-		ops.parallelism = parallelism
+	// Auto-select if parallelism <= 0
+	if parallelism <= 0 {
+		cpuCount := runtime.NumCPU()
+		parallelism = cpuCount
 		if parallelism > 8 {
-			ops.batchSize = 500
-		} else {
-			ops.batchSize = 1000
+			parallelism = 8
 		}
+		if parallelism < 4 && cpuCount >= 4 {
+			parallelism = 4
+		}
+	}
+
+	// Limit to maximum 8 workers
+	if parallelism > 8 {
+		parallelism = 8
+	}
+
+	ops.parallelism = parallelism
+
+	// Adjust batch size based on parallelism
+	switch {
+	case parallelism >= 8:
+		ops.batchSize = 500
+	case parallelism >= 4:
+		ops.batchSize = 750
+	default:
+		ops.batchSize = 1000
 	}
 }
 
 // Explain 解释优化的并行扫描器
 func (ops *OptimizedParallelScanner) Explain() string {
+	cpuCount := runtime.NumCPU()
 	return fmt.Sprintf(
-		"OptimizedParallelScanner(parallelism=%d, batchSize=%d)",
+		"OptimizedParallelScanner(parallelism=%d/CPU=%d, batchSize=%d)",
 		ops.parallelism,
+		cpuCount,
 		ops.batchSize,
 	)
 }

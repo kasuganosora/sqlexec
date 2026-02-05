@@ -37,21 +37,21 @@ func NewPhysicalTableScan(tableName string, tableInfo *domain.TableInfo, dataSou
 
 	// 假设表有1000行
 	rowCount := int64(1000)
-	
+
 	// 如果有Limit，调整成本估计
 	if limitInfo != nil && limitInfo.Limit > 0 {
 		rowCount = limitInfo.Limit
 	}
 
-	// 创建并行扫描器（默认8个worker）
-	parallelScanner := NewOptimizedParallelScanner(dataSource, 8)
+	// 创建并行扫描器（自动选择最优并行度：min(CPU核心数, 8)，范围 [4, 8]）
+	parallelScanner := NewOptimizedParallelScanner(dataSource, 0)
 
-	// 启用并行扫描的最小行数（1000行）
-	minParallelScanRows := int64(1000)
+	// 启用并行扫描的最小行数（100行，根据性能基准测试优化）
+	minParallelScanRows := int64(100)
 
-	// 如果数据量足够大，启用并行扫描
+	// 如果数据量足够大且没有过滤条件，启用并行扫描
+	// <100行使用串行扫描，避免并行开销
 	enableParallelScan := rowCount >= minParallelScanRows && len(filters) == 0
-	// 只有在没有复杂过滤条件时才使用并行扫描
 
 	return &PhysicalTableScan{
 		TableName:           tableName,
