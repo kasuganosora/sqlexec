@@ -23,29 +23,36 @@ type DB struct {
 
 // DBConfig contains configuration options for the DB object
 type DBConfig struct {
-	CacheEnabled  bool
-	CacheSize     int
-	CacheTTL      int // seconds
-	DefaultLogger Logger
-	DebugMode     bool
-	QueryTimeout  time.Duration // 全局查询超时, 0表示不限制
+	CacheEnabled          bool
+	CacheSize           int
+	CacheTTL            int // seconds
+	DefaultLogger       Logger
+	DebugMode           bool
+	QueryTimeout        time.Duration // 全局查询超时, 0表示不限制
+	UseEnhancedOptimizer bool         // 是否使用增强优化器（默认true）
 }
 
 // NewDB creates a new DB object with the given configuration
 func NewDB(config *DBConfig) (*DB, error) {
 	if config == nil {
 		config = &DBConfig{
-			CacheEnabled:  true,
-			CacheSize:     1000,
-			CacheTTL:      300, // 5 minutes
-			DefaultLogger: NewDefaultLogger(LogInfo),
-			DebugMode:     false,
+			CacheEnabled:          true,
+			CacheSize:           1000,
+			CacheTTL:            300, // 5 minutes
+			DefaultLogger:       NewDefaultLogger(LogInfo),
+			DebugMode:           false,
+			UseEnhancedOptimizer: true, // 默认启用增强优化器
 		}
 	}
 
 	// Ensure logger is set
 	if config.DefaultLogger == nil {
 		config.DefaultLogger = NewDefaultLogger(LogInfo)
+	}
+
+	// Ensure UseEnhancedOptimizer is set to true if not specified
+	if config.UseEnhancedOptimizer == false && config == nil {
+		config.UseEnhancedOptimizer = true
 	}
 
 	cache := NewQueryCache(CacheConfig{
@@ -174,7 +181,17 @@ func (db *DB) SessionWithOptions(opts *SessionOptions) *Session {
 	}
 
 	// Create CoreSession with DataSourceManager for information_schema support
-	coreSession := session.NewCoreSessionWithDSManager(ds, db.dsManager)
+	// 根据 UseEnhancedOptimizer 配置选择优化器类型
+	useEnhanced := true
+	if opts.UseEnhancedOptimizer != nil {
+		useEnhanced = *opts.UseEnhancedOptimizer
+	} else {
+		if db.config != nil {
+			useEnhanced = db.config.UseEnhancedOptimizer
+		}
+	}
+
+	coreSession := session.NewCoreSessionWithDSManagerAndEnhanced(ds, db.dsManager, true, useEnhanced)
 
 	// 设置查询超时 (Session级别覆盖DB级别)
 	queryTimeout := opts.QueryTimeout

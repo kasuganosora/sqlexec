@@ -29,8 +29,9 @@ func RegisterProcessListProvider(provider ProcessListProvider) {
 type OptimizedExecutor struct {
 	dataSource    domain.DataSource
 	dsManager     *application.DataSourceManager
-	optimizer     *Optimizer
+	optimizer     interface{} // 支持 *Optimizer 或 *EnhancedOptimizer
 	useOptimizer  bool
+	useEnhanced   bool  // 是否使用增强优化器
 	currentDB     string
 	currentUser   string // 当前用户（用于权限检查）
 	functionAPI   *builtin.FunctionAPI // 函数API
@@ -44,8 +45,13 @@ const (
 	aclManagerKey contextKey = iota
 )
 
-// NewOptimizedExecutor 创建优化的执行器
+// NewOptimizedExecutor 创建优化的执行器（默认使用增强优化器）
 func NewOptimizedExecutor(dataSource domain.DataSource, useOptimizer bool) *OptimizedExecutor {
+	return NewOptimizedExecutorWithEnhanced(dataSource, useOptimizer, true) // 默认启用增强优化器
+}
+
+// NewOptimizedExecutorWithEnhanced 创建优化的执行器（支持增强优化器选项）
+func NewOptimizedExecutorWithEnhanced(dataSource domain.DataSource, useOptimizer, useEnhanced bool) *OptimizedExecutor {
 	functionAPI := builtin.NewFunctionAPI()
 	// 使用包装器将旧的 FunctionRegistry 适配到新的 FunctionAPI
 	registry := builtin.GetGlobalRegistry()
@@ -59,18 +65,31 @@ func NewOptimizedExecutor(dataSource domain.DataSource, useOptimizer bool) *Opti
 		)
 	}
 
+	var opt interface{}
+	if useEnhanced {
+		opt = NewEnhancedOptimizer(dataSource, 0) // parallelism=0 表示自动选择最优并行度
+	} else {
+		opt = NewOptimizer(dataSource)
+	}
+
 	return &OptimizedExecutor{
 		dataSource:    dataSource,
-		optimizer:     NewOptimizer(dataSource),
+		optimizer:     opt,
 		useOptimizer:  useOptimizer,
+		useEnhanced:   useEnhanced,
 		currentDB:     "", // 默认为空字符串
 		functionAPI:   functionAPI,
 		exprEvaluator: NewExpressionEvaluator(functionAPI),
 	}
 }
 
-// NewOptimizedExecutorWithDSManager 创建带有数据源管理器的优化执行器
+// NewOptimizedExecutorWithDSManager 创建带有数据源管理器的优化执行器（默认使用增强优化器）
 func NewOptimizedExecutorWithDSManager(dataSource domain.DataSource, dsManager *application.DataSourceManager, useOptimizer bool) *OptimizedExecutor {
+	return NewOptimizedExecutorWithDSManagerAndEnhanced(dataSource, dsManager, useOptimizer, true)
+}
+
+// NewOptimizedExecutorWithDSManagerAndEnhanced 创建带有数据源管理器的优化执行器（支持增强优化器选项）
+func NewOptimizedExecutorWithDSManagerAndEnhanced(dataSource domain.DataSource, dsManager *application.DataSourceManager, useOptimizer, useEnhanced bool) *OptimizedExecutor {
 	functionAPI := builtin.NewFunctionAPI()
 	// 使用包装器将旧的 FunctionRegistry 适配到新的 FunctionAPI
 	registry := builtin.GetGlobalRegistry()
@@ -84,11 +103,19 @@ func NewOptimizedExecutorWithDSManager(dataSource domain.DataSource, dsManager *
 		)
 	}
 
+	var opt interface{}
+	if useEnhanced {
+		opt = NewEnhancedOptimizer(dataSource, 0) // parallelism=0 表示自动选择最优并行度
+	} else {
+		opt = NewOptimizer(dataSource)
+	}
+
 	return &OptimizedExecutor{
 		dataSource:    dataSource,
 		dsManager:     dsManager,
-		optimizer:     NewOptimizer(dataSource),
+		optimizer:     opt,
 		useOptimizer:  useOptimizer,
+		useEnhanced:   useEnhanced,
 		currentDB:     "default", // 默认数据库
 		functionAPI:   functionAPI,
 		exprEvaluator: NewExpressionEvaluator(functionAPI),
@@ -98,6 +125,24 @@ func NewOptimizedExecutorWithDSManager(dataSource domain.DataSource, dsManager *
 // SetUseOptimizer 设置是否使用优化器
 func (e *OptimizedExecutor) SetUseOptimizer(use bool) {
 	e.useOptimizer = use
+}
+
+// SetUseEnhanced 设置是否使用增强优化器
+func (e *OptimizedExecutor) SetUseEnhanced(useEnhanced bool) {
+	e.useEnhanced = useEnhanced
+	// 重新创建优化器
+	var opt interface{}
+	if useEnhanced {
+		opt = NewEnhancedOptimizer(e.dataSource, 0)
+	} else {
+		opt = NewOptimizer(e.dataSource)
+	}
+	e.optimizer = opt
+}
+
+// GetUseEnhanced 获取是否使用增强优化器
+func (e *OptimizedExecutor) GetUseEnhanced() bool {
+	return e.useEnhanced
 }
 
 // GetQueryBuilder 获取底层的 QueryBuilder（如果存在）
@@ -708,9 +753,31 @@ func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *pars
 	}
 	fmt.Println("  [DEBUG] SQLStatement构建完成")
 
-	// 2. 优化查询计划
+	// 2. 优化查询计划（根据 useEnhanced 选择优化器）
 	fmt.Println("  [DEBUG] 调用 Optimize...")
-	physicalPlan, err := e.optimizer.Optimize(ctx, sqlStmt)
+	var physicalPlan PhysicalPlan
+	var err error
+
+	if e.useEnhanced {
+		if enhancedOpt, ok := e.optimizer.(*EnhancedOptimizer); ok {
+			physicalPlan, err = enhancedOpt.Optimize(ctx, sqlStmt)
+		} else {
+			// Fallback to base optimizer
+			fmt.Println("  [DEBUG] Enhanced optimizer not available, using base optimizer")
+			if baseOpt, ok := e.optimizer.(*Optimizer); ok {
+				physicalPlan, err = baseOpt.Optimize(ctx, sqlStmt)
+			} else {
+				return nil, fmt.Errorf("invalid optimizer type")
+			}
+		}
+	} else {
+		if baseOpt, ok := e.optimizer.(*Optimizer); ok {
+			physicalPlan, err = baseOpt.Optimize(ctx, sqlStmt)
+		} else {
+			return nil, fmt.Errorf("invalid optimizer type")
+		}
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("optimizer failed: %w", err)
 	}

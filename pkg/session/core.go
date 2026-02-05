@@ -34,23 +34,28 @@ type CoreSession struct {
 	queryMu        sync.Mutex       // 查询锁
 }
 
-// NewCoreSession 创建核心会话
+// NewCoreSession 创建核心会话（默认使用增强优化器）
 func NewCoreSession(dataSource domain.DataSource) *CoreSession {
 	return &CoreSession{
 		dataSource: dataSource,
-		executor:   optimizer.NewOptimizedExecutor(dataSource, true),
+		executor:   optimizer.NewOptimizedExecutorWithEnhanced(dataSource, true, true), // 默认启用增强优化器
 		adapter:    parser.NewSQLAdapter(),
 		tempTables: []string{},
 		closed:     false,
 	}
 }
 
-// NewCoreSessionWithDSManager 创建带有数据源管理器的核心会话
+// NewCoreSessionWithDSManager 创建带有数据源管理器的核心会话（默认使用增强优化器）
 func NewCoreSessionWithDSManager(dataSource domain.DataSource, dsManager *application.DataSourceManager) *CoreSession {
+	return NewCoreSessionWithDSManagerAndEnhanced(dataSource, dsManager, true, true)
+}
+
+// NewCoreSessionWithDSManagerAndEnhanced 创建带有数据源管理器的核心会话（支持增强优化器选项）
+func NewCoreSessionWithDSManagerAndEnhanced(dataSource domain.DataSource, dsManager *application.DataSourceManager, useOptimizer, useEnhanced bool) *CoreSession {
 	return &CoreSession{
 		dataSource:   dataSource,
 		dsManager:    dsManager,
-		executor:     optimizer.NewOptimizedExecutorWithDSManager(dataSource, dsManager, true),
+		executor:     optimizer.NewOptimizedExecutorWithDSManagerAndEnhanced(dataSource, dsManager, useOptimizer, useEnhanced),
 		adapter:      parser.NewSQLAdapter(),
 		currentDB:    "", // Default to no database selected
 		user:         "",

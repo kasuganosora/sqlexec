@@ -34,11 +34,12 @@ func (l IsolationLevel) String() string {
 
 // SessionOptions contains configuration options for creating a session
 type SessionOptions struct {
-	DataSourceName string
-	Isolation      IsolationLevel
-	ReadOnly       bool
-	CacheEnabled   bool
-	QueryTimeout   time.Duration // 会话级查询超时, 覆盖DB配置
+	DataSourceName         string
+	Isolation            IsolationLevel
+	ReadOnly             bool
+	CacheEnabled         bool
+	QueryTimeout         time.Duration // 会话级查询超时, 覆盖DB配置
+	UseEnhancedOptimizer *bool        // 是否使用增强优化器（nil表示使用DB配置）
 }
 
 // Session represents a database session (like a MySQL connection)
