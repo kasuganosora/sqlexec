@@ -96,25 +96,35 @@ func (r *SemiJoinRewriteRule) rewriteExistsToJoin(plan LogicalPlan) LogicalPlan 
 			}
 		}
 
-		if rewritten {
-			// 创建新的 Selection 更新条件
-			return NewLogicalSelection(newConditions, selection.children[0])
+		// 递归处理子节点
+		newChild := r.rewriteExistsToJoin(selection.children[0])
+
+		if rewritten || newChild != selection.children[0] {
+			// 创建新的 Selection 更新条件和子节点
+			return NewLogicalSelection(newConditions, newChild)
 		}
 
 		return selection
 	}
 
-	// 递归处理子节点
+	// 递归处理所有子节点
 	children := plan.Children()
+	if len(children) == 0 {
+		return plan
+	}
+
+	newChildren := make([]LogicalPlan, len(children))
+	changed := false
+
 	for i, child := range children {
-		newChild := r.rewriteExistsToJoin(child)
-		if newChild != child {
-			newChildren := make([]LogicalPlan, len(children))
-			copy(newChildren, children)
-			newChildren[i] = newChild
-			plan.SetChildren(newChildren...)
-			break
+		newChildren[i] = r.rewriteExistsToJoin(child)
+		if newChildren[i] != child {
+			changed = true
 		}
+	}
+
+	if changed {
+		plan.SetChildren(newChildren...)
 	}
 
 	return plan
@@ -141,25 +151,35 @@ func (r *SemiJoinRewriteRule) rewriteInToJoin(plan LogicalPlan) LogicalPlan {
 			}
 		}
 
-		if rewritten {
-			// 创建新的 Selection 更新条件
-			return NewLogicalSelection(newConditions, selection.children[0])
+		// 递归处理子节点
+		newChild := r.rewriteInToJoin(selection.children[0])
+
+		if rewritten || newChild != selection.children[0] {
+			// 创建新的 Selection 更新条件和子节点
+			return NewLogicalSelection(newConditions, newChild)
 		}
 
 		return selection
 	}
 
-	// 递归处理子节点
+	// 递归处理所有子节点
 	children := plan.Children()
+	if len(children) == 0 {
+		return plan
+	}
+
+	newChildren := make([]LogicalPlan, len(children))
+	changed := false
+
 	for i, child := range children {
-		newChild := r.rewriteInToJoin(child)
-		if newChild != child {
-			newChildren := make([]LogicalPlan, len(children))
-			copy(newChildren, children)
-			newChildren[i] = newChild
-			plan.SetChildren(newChildren...)
-			break
+		newChildren[i] = r.rewriteInToJoin(child)
+		if newChildren[i] != child {
+			changed = true
 		}
+	}
+
+	if changed {
+		plan.SetChildren(newChildren...)
 	}
 
 	return plan

@@ -1,30 +1,34 @@
 package optimizer
 
-// LogicalSort 逻辑排序
+import (
+	"github.com/kasuganosora/sqlexec/pkg/parser"
+)
+
+// LogicalSort represents a logical sort operation
 type LogicalSort struct {
-	OrderBy  []OrderByItem
+	orderBy []*parser.OrderItem
 	children []LogicalPlan
 }
 
-// NewLogicalSort 创建逻辑排序
-func NewLogicalSort(orderBy []OrderByItem, child LogicalPlan) *LogicalSort {
+// NewLogicalSort creates a new LogicalSort node
+func NewLogicalSort(orderBy []*parser.OrderItem, child LogicalPlan) *LogicalSort {
 	return &LogicalSort{
-		OrderBy:  orderBy,
+		orderBy:  orderBy,
 		children: []LogicalPlan{child},
 	}
 }
 
-// Children 获取子节点
+// Children returns the child plans
 func (p *LogicalSort) Children() []LogicalPlan {
 	return p.children
 }
 
-// SetChildren 设置子节点
+// SetChildren sets the child plans
 func (p *LogicalSort) SetChildren(children ...LogicalPlan) {
 	p.children = children
 }
 
-// Schema 返回输出列
+// Schema returns the output columns
 func (p *LogicalSort) Schema() []ColumnInfo {
 	if len(p.children) > 0 {
 		return p.children[0].Schema()
@@ -32,24 +36,13 @@ func (p *LogicalSort) Schema() []ColumnInfo {
 	return []ColumnInfo{}
 }
 
-// GetOrderByItems 返回排序列表
-func (p *LogicalSort) GetOrderByItems() []*OrderByItem {
-	result := make([]*OrderByItem, 0, len(p.OrderBy))
-	for i := range p.OrderBy {
-		result = append(result, &p.OrderBy[i])
-	}
-	return result
+// OrderBy returns the order by items
+func (p *LogicalSort) OrderBy() []*parser.OrderItem {
+	return p.orderBy
 }
 
-// Explain 返回计划说明
+// Explain returns the plan description
 func (p *LogicalSort) Explain() string {
-	items := ""
-	orderByItems := p.GetOrderByItems()
-	for i, item := range orderByItems {
-		if i > 0 {
-			items += ", "
-		}
-		items += item.Column + " " + item.Direction
-	}
-	return "Sort(" + items + ")"
+	return "LogicalSort"
 }
+
