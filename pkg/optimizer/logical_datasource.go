@@ -14,6 +14,14 @@ type LogicalDataSource struct {
 	children             []LogicalPlan
 	pushedDownPredicates []*parser.Expression // 下推的谓词条件
 	pushedDownLimit      *LimitInfo           // 下推的Limit信息
+	pushedDownTopN      *TopNInfo            // 下推的TopN信息
+}
+
+// TopNInfo contains TopN pushdown information
+type TopNInfo struct {
+	SortItems []*parser.OrderItem // Sort items
+	Limit     int64            // Limit count
+	Offset    int64             // Offset count
 }
 
 // NewLogicalDataSource 创建逻辑数据源
@@ -89,4 +97,18 @@ func (p *LogicalDataSource) PushDownLimit(limit, offset int64) {
 // GetPushedDownLimit 获取下推的Limit
 func (p *LogicalDataSource) GetPushedDownLimit() *LimitInfo {
 	return p.pushedDownLimit
+}
+
+// SetPushDownTopN sets the TopN pushdown information
+func (p *LogicalDataSource) SetPushDownTopN(items []*parser.OrderItem, limit, offset int64) {
+	p.pushedDownTopN = &TopNInfo{
+		SortItems: items,
+		Limit:     limit,
+		Offset:    offset,
+	}
+}
+
+// GetPushedDownTopN gets the TopN pushdown information
+func (p *LogicalDataSource) GetPushedDownTopN() *TopNInfo {
+	return p.pushedDownTopN
 }

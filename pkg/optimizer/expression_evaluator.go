@@ -563,3 +563,93 @@ func (e *ExpressionEvaluator) isTrue(value interface{}) bool {
 		return true
 	}
 }
+
+// ExtractCorrelatedColumns extracts correlated columns from an expression
+// Returns columns that reference tables outside of current subquery scope
+func ExtractCorrelatedColumns(expr *parser.Expression, outerSchema []ColumnInfo) []CorrelatedColumn {
+	if expr == nil {
+		return nil
+	}
+
+	correlated := []CorrelatedColumn{}
+	
+	// Check if this expression references an outer column
+	if expr.Type == parser.ExprTypeColumn {
+		for _, col := range outerSchema {
+			if expr.Column == col.Name {
+				correlated = append(correlated, CorrelatedColumn{
+					Table:      "",
+					Column:     col.Name,
+					OuterLevel: 1,
+				})
+				break
+			}
+		}
+	}
+
+	// Recursively check left and right sub-expressions
+	correlated = append(correlated, ExtractCorrelatedColumns(expr.Left, outerSchema)...)
+	correlated = append(correlated, ExtractCorrelatedColumns(expr.Right, outerSchema)...)
+
+	// Check function arguments
+	for _, arg := range expr.Args {
+		correlated = append(correlated, ExtractCorrelatedColumns(&arg, outerSchema)...)
+	}
+
+	return correlated
+}
+
+// ReplaceCorrelatedColumns replaces correlated columns with join references
+// Mapping: correlated_column_name -> new_column_name
+func ReplaceCorrelatedColumns(expr *parser.Expression, mapping map[string]string) *parser.Expression {
+	if expr == nil {
+		return nil
+	}
+
+	newExpr := *expr
+	newExpr.Left = ReplaceCorrelatedColumns(expr.Left, mapping)
+	newExpr.Right = ReplaceCorrelatedColumns(expr.Right, mapping)
+	
+	// Replace column references
+	if expr.Type == parser.ExprTypeColumn {
+		if newCol, ok := mapping[expr.Column]; ok {
+			newExpr.Column = newCol
+		}
+	}
+
+	// Replace function arguments
+	if len(expr.Args) > 0 {
+		newArgs := make([]parser.Expression, 0, len(expr.Args))
+		for i, arg := range expr.Args {
+			replacedArg := ReplaceCorrelatedColumns(&arg, mapping)
+			newArgs[i] = *replacedArg
+		}
+		newExpr.Args = newArgs
+	}
+
+	return &newExpr
+}
+
+// Decorrelate decorrelates an expression by replacing correlated columns with join references
+// Returns decorrelated expression and mapping used
+func Decorrelate(expr *parser.Expression, outerSchema []ColumnInfo) (*parser.Expression, map[string]string) {
+	if expr == nil {
+		return nil, nil
+	}
+
+	correlatedCols := ExtractCorrelatedColumns(expr, outerSchema)
+	if len(correlatedCols) == 0 {
+		// No correlation, return as-is
+		return expr, nil
+	}
+
+	// Create mapping: correlated_column -> join_column
+	mapping := make(map[string]string)
+	for _, col := range correlatedCols {
+		mapping[col.Column] = "join_" + col.Column
+	}
+
+	// Replace correlated columns
+	decorrelated := ReplaceCorrelatedColumns(expr, mapping)
+	return decorrelated, mapping
+}

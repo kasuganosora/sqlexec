@@ -104,16 +104,24 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 			logicalPlan = NewLogicalAggregate(aggFuncs, stmt.GroupBy, logicalPlan)
 		}
 
-		// 应用 ORDER BY（Sort）
+		// Apply ORDER BY (Sort)
 		if len(stmt.OrderBy) > 0 {
-			orderItems := make([]OrderByItem, len(stmt.OrderBy))
+			sortItems := make([]parser.OrderItem, len(stmt.OrderBy))
 			for i, item := range stmt.OrderBy {
-				orderItems[i] = OrderByItem{
-					Column:    item.Column,
+				sortItems[i] = parser.OrderItem{
+					Expr: parser.Expression{
+						Type: parser.ExprTypeColumn,
+						Column: item.Column,
+					},
 					Direction: item.Direction,
 				}
 			}
-			logicalPlan = NewLogicalSort(orderItems, logicalPlan)
+			// Create pointer slice for NewLogicalSort
+			sortItemsPtr := make([]*parser.OrderItem, len(sortItems))
+			for i := range sortItems {
+				sortItemsPtr[i] = &sortItems[i]
+			}
+			logicalPlan = NewLogicalSort(sortItemsPtr, logicalPlan)
 		}
 
 		// 应用 LIMIT（Limit）
@@ -154,14 +162,22 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 
 	// 4. 应用 ORDER BY（Sort）
 	if len(stmt.OrderBy) > 0 {
-		orderItems := make([]OrderByItem, len(stmt.OrderBy))
+		sortItems := make([]parser.OrderItem, len(stmt.OrderBy))
 		for i, item := range stmt.OrderBy {
-			orderItems[i] = OrderByItem{
-				Column:    item.Column,
+			sortItems[i] = parser.OrderItem{
+				Expr: parser.Expression{
+					Type: parser.ExprTypeColumn,
+					Column: item.Column,
+				},
 				Direction: item.Direction,
 			}
 		}
-		logicalPlan = NewLogicalSort(orderItems, logicalPlan)
+		// Create pointer slice for NewLogicalSort
+		sortItemsPtr := make([]*parser.OrderItem, len(sortItems))
+		for i := range sortItems {
+			sortItemsPtr[i] = &sortItems[i]
+		}
+		logicalPlan = NewLogicalSort(sortItemsPtr, logicalPlan)
 	}
 
 	// 5. 应用 LIMIT（Limit）

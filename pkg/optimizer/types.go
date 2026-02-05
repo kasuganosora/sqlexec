@@ -60,6 +60,9 @@ const (
 	LeftOuterJoin
 	RightOuterJoin
 	FullOuterJoin
+	CrossJoin
+	SemiJoin
+	AntiSemiJoin
 )
 
 // String 返回 JoinType 的字符串表示
@@ -73,6 +76,12 @@ func (jt JoinType) String() string {
 		return "RIGHT OUTER JOIN"
 	case FullOuterJoin:
 		return "FULL OUTER JOIN"
+	case CrossJoin:
+		return "CROSS JOIN"
+	case SemiJoin:
+		return "SEMI JOIN"
+	case AntiSemiJoin:
+		return "ANTI SEMI JOIN"
 	default:
 		return "UNKNOWN"
 	}

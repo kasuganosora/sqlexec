@@ -465,14 +465,21 @@ func EnhancedRuleSet(estimator CardinalityEstimator) RuleSet {
 		&PredicatePushDownRule{}, // 基础谓词下推
 		// 增强的谓词下推规则（需要放在基础规则之后）
 		NewEnhancedPredicatePushdownRule(estimator),
+		NewEnhancedColumnPruningRule(), // 增强列裁剪规则
 		&ColumnPruningRule{},
 		&ProjectionEliminationRule{},
 		&LimitPushDownRule{},
+		NewTopNPushDownRule(),         // TopN下推规则
+		NewDeriveTopNFromWindowRule(), // 从窗口推导TopN规则
 		&ConstantFoldingRule{},
 		&JoinReorderRule{},
 		&JoinEliminationRule{},
 		&SemiJoinRewriteRule{},
-		NewORToUnionRule(), // OR转UNION规则
+		NewDecorrelateRule(estimator),         // 子查询去关联规则
+		NewSubqueryMaterializationRule(),      // 子查询物化规则
+		NewSubqueryFlatteningRule(),          // 子查询展开规则
+		NewORToUnionRule(),                  // OR转UNION规则
+		NewMaxMinEliminationRule(estimator),   // MaxMin消除规则
 	}
 	fmt.Println("  [DEBUG] EnhancedRuleSet: 创建增强规则集, 数量:", len(rules))
 	for i, r := range rules {

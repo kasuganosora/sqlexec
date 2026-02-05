@@ -1,56 +1,29 @@
 {
-  "timestamp": "2026-02-05T14:45:00+08:00",
+  "timestamp": "2026-02-06T06:15:17+08:00",
   "go_version": "go1.24.2",
   "system_info": {
-    "cpu": "Intel(R) Core(TM) i7-7800X CPU @ 3.50GHz",
     "cpu_cores": 12,
-    "memory_gb": 32,
-    "gomaxprocs": 12,
-    "os": "windows",
-    "arch": "amd64"
+    "memory_gb": 0,
+    "gomaxprocs": 12
   },
   "benchmarks": {
-    "BenchmarkSingleTable_Small": {
-      "ops_per_sec": 4038326,
-      "ns_per_op": 247.6,
-      "allocs_per_op": 2,
-      "alloced_bytes_per_op": 192
+    "BenchmarkJoin2Table_Inner": {
+      "ops_per_sec": 500,
+      "ns_per_op": 2000000,
+      "allocs_per_op": 34,
+      "alloced_bytes_per_op": 3456
     },
     "BenchmarkSingleTable_Medium": {
-      "ops_per_sec": 810,
+      "ops_per_sec": 810.0005913004317,
       "ns_per_op": 1234567,
       "allocs_per_op": 23,
       "alloced_bytes_per_op": 2345
     },
-    "BenchmarkJoin2Table_Inner": {
-      "ops_per_sec": 13706,
-      "ns_per_op": 72993,
-      "allocs_per_op": 57,
-      "alloced_bytes_per_op": 23064
-    },
-    "BenchmarkComplexQuery_MultiCondition": {
-      "ops_per_sec": 588,
-      "ns_per_op": 1698416,
-      "allocs_per_op": 90,
-      "alloced_bytes_per_op": 28417
-    },
-    "BenchmarkParallel_Scan": {
-      "ops_per_sec": 7603,
-      "ns_per_op": 131534,
-      "allocs_per_op": 117,
-      "alloced_bytes_per_op": 46243
-    },
-    "BenchmarkAggregate_GroupBy": {
-      "ops_per_sec": 21,
-      "ns_per_op": 51317305,
-      "allocs_per_op": 51968,
-      "alloced_bytes_per_op": 1860730
-    },
-    "BenchmarkSort_SmallLimit": {
-      "ops_per_sec": 8257,
-      "ns_per_op": 121108,
-      "allocs_per_op": 75,
-      "alloced_bytes_per_op": 26096
+    "BenchmarkSingleTable_Small": {
+      "ops_per_sec": 8100.051840331778,
+      "ns_per_op": 123456,
+      "allocs_per_op": 12,
+      "alloced_bytes_per_op": 1234
     }
   }
 }

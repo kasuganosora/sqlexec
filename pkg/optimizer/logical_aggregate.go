@@ -69,6 +69,11 @@ func (p *LogicalAggregate) GetGroupByCols() []string {
 	return p.groupByFields
 }
 
+// GetGroupBy 返回分组列列表 (别名)
+func (p *LogicalAggregate) GetGroupBy() []string {
+	return p.groupByFields
+}
+
 // Explain 返回计划说明
 func (p *LogicalAggregate) Explain() string {
 	aggStr := ""

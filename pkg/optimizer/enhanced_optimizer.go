@@ -212,35 +212,35 @@ func (eo *EnhancedOptimizer) Optimize(ctx context.Context, stmt *parser.SQLState
 
 // applyEnhancedRules 应用增强的优化规则
 func (eo *EnhancedOptimizer) applyEnhancedRules(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
-	// 应用新的规则
-	enhancedRules := []OptimizationRule{
-		// 1. 增强的谓词下推
-		NewEnhancedPredicatePushdownRule(eo.estimator),
+	// Use EnhancedRuleSet which contains all new rules
+	enhancedRuleSet := EnhancedRuleSet(eo.estimator)
 
-		// 2. OR转UNION规则
-		NewORToUnionRule(),
-
-		// 3. DP JOIN重排序
+	// Add advanced rules (DP Join Reorder, Bushy Tree, Index Selection)
+	advancedRules := []OptimizationRule{
+		// DP JOIN Reorder
 		&DPJoinReorderAdapter{
 			dpReorder: eo.dpJoinReorder,
 		},
-
-		// 4. Bushy Join Tree构建
+		// Bushy Join Tree
 		&BushyTreeAdapter{
 			bushyTree: eo.bushyTree,
 		},
-
-		// 5. 索引选择
+		// Index Selection
 		&IndexSelectionAdapter{
 			indexSelector: eo.indexSelector,
 			costModel:    eo.costModel,
 		},
 	}
 
-	// 应用规则
-	ruleSet := RuleSet(enhancedRules)
+	// Combine EnhancedRuleSet with advanced rules
+	allRules := append(enhancedRuleSet, advancedRules...)
+	ruleSet := RuleSet(allRules)
 
 	fmt.Println("  [ENHANCED] Applying enhanced optimization rules...")
+	fmt.Printf("  [ENHANCED] Total rules: %d\n", len(allRules))
+	for i, r := range allRules {
+		fmt.Printf("  [ENHANCED]   Rule %d: %s\n", i, r.Name())
+	}
 	optimizedPlan, err := ruleSet.Apply(ctx, plan, optCtx)
 	if err != nil {
 		return nil, err
