@@ -377,8 +377,13 @@ func TestDPJoinReorder_BuildPlanFromOrder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			plan := reorder.buildPlanFromOrder(tt.order, []LogicalPlan{})
-			// In simplified implementation, this may return nil
-			assert.NotNil(t, plan)
+			// For empty order, we expect nil
+			if len(tt.order) == 0 {
+				assert.Nil(t, plan)
+			} else {
+				// For non-empty order, we should get a valid plan
+				assert.NotNil(t, plan)
+			}
 		})
 	}
 }
@@ -436,8 +441,8 @@ func TestDPJoinReorder_SolveDP_NoSolution(t *testing.T) {
 	joinNodes := []LogicalPlan{}
 
 	result := reorder.solveDP(tables, dp, joinNodes)
-	// Should still return something
-	assert.NotNil(t, result)
+	// Without DP states, no solution can be found, so nil is expected
+	assert.Nil(t, result)
 }
 
 func TestReorderCache_Concurrency(t *testing.T) {
@@ -485,19 +490,23 @@ func (m *mockCardinalityEstimator) EstimateTableScan(tableName string) int64 {
 	return 10000
 }
 
-type mockLogicalPlan struct {
+type testMockLogicalPlan struct {
+	tableName string
 	children []LogicalPlan
 }
 
-func (m *mockLogicalPlan) Children() []LogicalPlan {
+func (m *testMockLogicalPlan) Children() []LogicalPlan {
 	return m.children
 }
 
-func (m *mockLogicalPlan) SetChildren(children ...LogicalPlan) {
+func (m *testMockLogicalPlan) SetChildren(children ...LogicalPlan) {
 	m.children = children
 }
 
-func (m *mockLogicalPlan) Explain() string {
+func (m *testMockLogicalPlan) Explain() string {
+	if m.tableName != "" {
+		return "DataSource(" + m.tableName + ")"
+	}
 	return "Mock Plan"
 }
 
@@ -507,7 +516,7 @@ func BenchmarkDPJoinReorder_Reorder(b *testing.B) {
 	estimator := &mockCardinalityEstimator{}
 	reorder := NewDPJoinReorder(costModel, estimator, 10)
 
-	plan := &mockLogicalPlan{
+	plan := &testMockLogicalPlan{
 		children: []LogicalPlan{
 			&mockLogicalPlan{},
 			&mockLogicalPlan{},

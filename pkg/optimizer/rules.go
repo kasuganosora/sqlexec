@@ -459,27 +459,32 @@ func DefaultRuleSet() RuleSet {
 	return rules
 }
 
-// EnhancedRuleSet 返回增强规则集（包含新规则）
+// EnhancedRuleSet 返回增强规则集（包含新规则和 hint-aware 规则）
 func EnhancedRuleSet(estimator CardinalityEstimator) RuleSet {
 	rules := RuleSet{
-		&PredicatePushDownRule{}, // 基础谓词下推
-		// 增强的谓词下推规则（需要放在基础规则之后）
+		// 基础优化规则
 		NewEnhancedPredicatePushdownRule(estimator),
-		NewEnhancedColumnPruningRule(), // 增强列裁剪规则
+		NewEnhancedColumnPruningRule(),
 		&ColumnPruningRule{},
 		&ProjectionEliminationRule{},
 		&LimitPushDownRule{},
-		NewTopNPushDownRule(),         // TopN下推规则
-		NewDeriveTopNFromWindowRule(), // 从窗口推导TopN规则
+		NewTopNPushDownRule(),
+		NewDeriveTopNFromWindowRule(),
 		&ConstantFoldingRule{},
+		// Hint-aware 规则
+		NewHintAwareJoinReorderRule(),
+		NewHintAwareIndexRule(),
+		NewHintAwareAggRule(),
+		// JOIN 优化规则
 		&JoinReorderRule{},
 		&JoinEliminationRule{},
 		&SemiJoinRewriteRule{},
-		NewDecorrelateRule(estimator),         // 子查询去关联规则
-		NewSubqueryMaterializationRule(),      // 子查询物化规则
-		NewSubqueryFlatteningRule(),          // 子查询展开规则
-		NewORToUnionRule(),                  // OR转UNION规则
-		NewMaxMinEliminationRule(estimator),   // MaxMin消除规则
+		// 子查询优化规则
+		NewDecorrelateRule(estimator),
+		NewSubqueryMaterializationRule(),
+		NewSubqueryFlatteningRule(),
+		NewORToUnionRule(),
+		NewMaxMinEliminationRule(estimator),
 	}
 	fmt.Println("  [DEBUG] EnhancedRuleSet: 创建增强规则集, 数量:", len(rules))
 	for i, r := range rules {

@@ -3,6 +3,7 @@ package optimizer
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -85,13 +86,11 @@ func (op *WindowOperator) executeWindowFunction(rows []domain.Row, wfDef *Window
 		// 5. 排序
 		sortedPartition := op.sortRows(partition, wf.Spec.OrderBy)
 
-		// 6. 计算窗口函数值
-		for i, row := range sortedPartition {
-			// 克隆行
-			newRow := make(domain.Row)
-			for k, v := range row {
-				newRow[k] = v
-			}
+// 6. 计算窗口函数值
+	for i, row := range sortedPartition {
+		// 克隆行
+		newRow := make(domain.Row)
+		maps.Copy(newRow, row)
 
 			// 计算窗口函数
 			value, err := op.computeWindowValue(sortedPartition, i, wf)

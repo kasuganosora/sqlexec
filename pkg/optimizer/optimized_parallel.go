@@ -88,6 +88,7 @@ func (ops *OptimizedParallelScanner) Execute(ctx context.Context, scanRange Scan
 		if options != nil {
 			scanOptions.Limit = options.Limit
 			scanOptions.Offset = options.Offset
+			scanOptions.SelectColumns = options.SelectColumns
 		}
 		// 使用 scanRange 的 offset 和 limit
 		scanOptions.Offset = int(offset)
@@ -193,6 +194,10 @@ func (ops *OptimizedParallelScanner) executeSingleRange(ctx context.Context, t S
 	// 直接使用分区的 offset 和 limit
 	scanOptions.Offset = int(t.Offset)
 	scanOptions.Limit = int(t.Limit)
+	// 传递列裁剪选项
+	if options != nil {
+		scanOptions.SelectColumns = options.SelectColumns
+	}
 
 	return ops.dataSource.Query(ctx, t.TableName, scanOptions)
 }

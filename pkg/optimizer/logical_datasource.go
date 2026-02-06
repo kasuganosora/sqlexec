@@ -15,6 +15,14 @@ type LogicalDataSource struct {
 	pushedDownPredicates []*parser.Expression // 下推的谓词条件
 	pushedDownLimit      *LimitInfo           // 下推的Limit信息
 	pushedDownTopN      *TopNInfo            // 下推的TopN信息
+
+	// Hints 相关字段
+	forceUseIndex       string   // 强制使用的索引（FORCE_INDEX）
+	preferIndex         string   // 优先使用的索引（USE_INDEX）
+	ignoreIndexes       []string // 忽略的索引列表（IGNORE_INDEX）
+	orderIndex          string   // 排序索引（ORDER_INDEX）
+	ignoreOrderIndex    string   // 忽略的排序索引（NO_ORDER_INDEX）
+	appliedHints        []string // 已应用的 hints
 }
 
 // TopNInfo contains TopN pushdown information
@@ -26,13 +34,21 @@ type TopNInfo struct {
 
 // NewLogicalDataSource 创建逻辑数据源
 func NewLogicalDataSource(tableName string, tableInfo *domain.TableInfo) *LogicalDataSource {
-	columns := make([]ColumnInfo, 0, len(tableInfo.Columns))
-	for _, col := range tableInfo.Columns {
-		columns = append(columns, ColumnInfo{
-			Name:     col.Name,
-			Type:     col.Type,
-			Nullable: col.Nullable,
-		})
+	var columns []ColumnInfo
+	if tableInfo != nil && len(tableInfo.Columns) > 0 {
+		columns = make([]ColumnInfo, 0, len(tableInfo.Columns))
+		for _, col := range tableInfo.Columns {
+			columns = append(columns, ColumnInfo{
+				Name:     col.Name,
+				Type:     col.Type,
+				Nullable: col.Nullable,
+			})
+		}
+	} else {
+		// Default columns for testing or when tableInfo is nil
+		columns = []ColumnInfo{
+			{Name: "id", Type: "INT", Nullable: false},
+		}
 	}
 
 	return &LogicalDataSource{

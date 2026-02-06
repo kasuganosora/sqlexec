@@ -3,6 +3,7 @@ package optimizer
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
@@ -69,16 +70,16 @@ func (p *LogicalProjection) GetAliases() []string {
 
 // Explain 返回计划说明
 func (p *LogicalProjection) Explain() string {
-	exprs := ""
+	var exprs strings.Builder
 	for i, expr := range p.Exprs {
 		if i > 0 {
-			exprs += ", "
+			exprs.WriteString(", ")
 		}
 		if expr.Type == parser.ExprTypeColumn {
-			exprs += expr.Column
+			exprs.WriteString(expr.Column)
 		} else {
-			exprs += fmt.Sprintf("%v", expr)
+			exprs.WriteString(fmt.Sprintf("%v", expr))
 		}
 	}
-	return "Projection(" + exprs + ")"
+	return "Projection(" + exprs.String() + ")"
 }

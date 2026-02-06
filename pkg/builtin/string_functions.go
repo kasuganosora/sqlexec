@@ -333,11 +333,11 @@ func stringConcat(args []interface{}) (interface{}, error) {
 		return "", nil
 	}
 	
-	result := ""
+	var result strings.Builder
 	for _, arg := range args {
-		result += toString(arg)
+		result.WriteString(toString(arg))
 	}
-	return result, nil
+	return result.String(), nil
 }
 
 func stringConcatWS(args []interface{}) (interface{}, error) {
@@ -350,11 +350,13 @@ func stringConcatWS(args []interface{}) (interface{}, error) {
 		return "", nil
 	}
 	
-	result := toString(args[1])
+	var result strings.Builder
+	result.WriteString(toString(args[1]))
 	for i := 2; i < len(args); i++ {
-		result += separator + toString(args[i])
+		result.WriteString(separator)
+		result.WriteString(toString(args[i]))
 	}
-	return result, nil
+	return result.String(), nil
 }
 
 func stringLength(args []interface{}) (interface{}, error) {
@@ -554,12 +556,12 @@ func stringLPad(args []interface{}) (interface{}, error) {
 	}
 	
 	paddingNeeded := int(length) - len(str)
-	padding := ""
-	for len(padding) < paddingNeeded {
-		padding += padStr
+	var padding strings.Builder
+	for padding.Len() < paddingNeeded {
+		padding.WriteString(padStr)
 	}
 	
-	return padding[:paddingNeeded] + str, nil
+	return padding.String()[:paddingNeeded] + str, nil
 }
 
 func stringRPad(args []interface{}) (interface{}, error) {
@@ -583,12 +585,12 @@ func stringRPad(args []interface{}) (interface{}, error) {
 	}
 	
 	paddingNeeded := int(length) - len(str)
-	padding := ""
-	for len(padding) < paddingNeeded {
-		padding += padStr
+	var padding strings.Builder
+	for padding.Len() < paddingNeeded {
+		padding.WriteString(padStr)
 	}
 	
-	return str + padding[:paddingNeeded], nil
+	return str + padding.String()[:paddingNeeded], nil
 }
 
 func stringPosition(args []interface{}) (interface{}, error) {

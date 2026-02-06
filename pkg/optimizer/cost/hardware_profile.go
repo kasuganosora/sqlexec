@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -224,23 +225,24 @@ func (hp *HardwareProfile) String() string {
 
 // Explain 返回详细的硬件配置说明
 func (hp *HardwareProfile) Explain() string {
-	explanation := fmt.Sprintf("=== Hardware Profile ===\n")
-	explanation += fmt.Sprintf("CPU:         %d cores @ %.2fGHz (Speed: %.2fx)\n", 
-		hp.CPUCores, hp.CPUFrequency, hp.CPUSpeed)
-	explanation += fmt.Sprintf("Memory:      %d / %d MB (Speed: %.2fx)\n",
-		hp.AvailableMemory, hp.TotalMemory, hp.MemorySpeed)
-	explanation += fmt.Sprintf("Disk:        %s @ %.2f MB/s (Seek: %.2fms)\n",
-		hp.DiskType, hp.DiskIO, hp.DiskSeekTime)
-	explanation += fmt.Sprintf("Network:     %.2f Mbps @ %.2fms latency (Factor: %.4fx)\n",
-		hp.NetworkBandwidth, hp.NetworkLatency, 0.01*1000.0/hp.NetworkBandwidth)
-	explanation += fmt.Sprintf("Environment:  %s, OS: %s, Arch: %s\n",
-		map[bool]string{true: "Cloud", false: "Local"}[hp.IsCloudEnv], hp.OS, hp.Architecture)
-	explanation += fmt.Sprintf("Cost Factors: IO=%.4f, CPU=%.4f, Mem=%.4f\n",
+	var explanation strings.Builder
+	explanation.WriteString(fmt.Sprintf("=== Hardware Profile ===\n"))
+	explanation.WriteString(fmt.Sprintf("CPU:         %d cores @ %.2fGHz (Speed: %.2fx)\n", 
+		hp.CPUCores, hp.CPUFrequency, hp.CPUSpeed))
+	explanation.WriteString(fmt.Sprintf("Memory:      %d / %d MB (Speed: %.2fx)\n",
+		hp.AvailableMemory, hp.TotalMemory, hp.MemorySpeed))
+	explanation.WriteString(fmt.Sprintf("Disk:        %s @ %.2f MB/s (Seek: %.2fms)\n",
+		hp.DiskType, hp.DiskIO, hp.DiskSeekTime))
+	explanation.WriteString(fmt.Sprintf("Network:     %.2f Mbps @ %.2fms latency (Factor: %.4fx)\n",
+		hp.NetworkBandwidth, hp.NetworkLatency, 0.01*1000.0/hp.NetworkBandwidth))
+	explanation.WriteString(fmt.Sprintf("Environment:  %s, OS: %s, Arch: %s\n",
+		map[bool]string{true: "Cloud", false: "Local"}[hp.IsCloudEnv], hp.OS, hp.Architecture))
+	explanation.WriteString(fmt.Sprintf("Cost Factors: IO=%.4f, CPU=%.4f, Mem=%.4f\n",
 		hp.CalculateCostFactors().IOFactor,
 		hp.CalculateCostFactors().CPUFactor,
-		hp.CalculateCostFactors().MemoryFactor)
+		hp.CalculateCostFactors().MemoryFactor))
 	
-	return explanation
+	return explanation.String()
 }
 
 // UpdateCacheHitRate 更新缓存命中率

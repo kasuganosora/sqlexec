@@ -286,7 +286,10 @@ func (e *SimpleCardinalityEstimator) EstimateJoin(left, right LogicalPlan, joinT
 	case InnerJoin:
 		// INNER JOIN: 假设每个左表行匹配右表的1/N个行
 		// 简化估计: min(left, right)
-		return min(leftCount, rightCount)
+		if leftCount < rightCount {
+			return leftCount
+		}
+		return rightCount
 
 	case LeftOuterJoin:
 		// LEFT JOIN: 输出 = 左表行数
@@ -301,7 +304,10 @@ func (e *SimpleCardinalityEstimator) EstimateJoin(left, right LogicalPlan, joinT
 		return leftCount + rightCount/2
 
 	default:
-		return min(leftCount, rightCount)
+		if leftCount < rightCount {
+			return leftCount
+		}
+		return rightCount
 	}
 }
 

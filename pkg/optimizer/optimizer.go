@@ -545,16 +545,17 @@ func ExplainPlan(plan PhysicalPlan) string {
 
 // explainPlan 递归解释计划
 func explainPlan(plan PhysicalPlan, depth int) string {
-	indent := ""
+	var builder strings.Builder
+	
 	for i := 0; i < depth; i++ {
-		indent += "  "
+		builder.WriteString("  ")
 	}
-
-	result := indent + plan.Explain() + "\n"
-
+	builder.WriteString(plan.Explain())
+	builder.WriteString("\n")
+	
 	for _, child := range plan.Children() {
-		result += explainPlan(child, depth+1)
+		builder.WriteString(explainPlan(child, depth+1))
 	}
-
-	return result
+	
+	return builder.String()
 }

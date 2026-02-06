@@ -2,6 +2,7 @@ package optimizer
 
 import (
 	"context"
+	"maps"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
@@ -189,10 +190,8 @@ func (r *DecorrelateRule) projectionSubquery(apply *LogicalApply, projection *Lo
 		decorrelated, exprMapping := Decorrelate(expr, outerSchema)
 		newExprs = append(newExprs, decorrelated)
 
-		// Merge mappings
-		for k, v := range exprMapping {
-			mapping[k] = v
-		}
+// Merge mappings
+	maps.Copy(mapping, exprMapping)
 	}
 
 	// Get inner child of projection

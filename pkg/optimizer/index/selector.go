@@ -3,6 +3,7 @@ package index
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/statistics"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -329,16 +330,17 @@ func (is *IndexSelection) String() string {
 func (is *IndexSelector) Explain(tableName string, filters []domain.Filter, requiredCols []string) string {
 	selection := is.SelectBestIndex(tableName, filters, requiredCols)
 	
-	explanation := fmt.Sprintf("=== Index Selection for '%s' ===\n", tableName)
-	explanation += fmt.Sprintf("Required Columns: %v\n", requiredCols)
-	explanation += fmt.Sprintf("Filters: %d\n\n", len(filters))
+	var explanation strings.Builder
+	explanation.WriteString(fmt.Sprintf("=== Index Selection for '%s' ===\n", tableName))
+	explanation.WriteString(fmt.Sprintf("Required Columns: %v\n", requiredCols))
+	explanation.WriteString(fmt.Sprintf("Filters: %d\n\n", len(filters)))
 	
 	for i, filter := range filters {
-		explanation += fmt.Sprintf("  Filter %d: %s %s %v\n", i+1, filter.Field, filter.Operator, filter.Value)
+		explanation.WriteString(fmt.Sprintf("  Filter %d: %s %s %v\n", i+1, filter.Field, filter.Operator, filter.Value))
 	}
 	
-	explanation += fmt.Sprintf("\nSelected: %s\n", selection.String())
-	explanation += fmt.Sprintf("Estimated Rows: %.0f\n", selection.EstimatedRows)
+	explanation.WriteString(fmt.Sprintf("\nSelected: %s\n", selection.String()))
+	explanation.WriteString(fmt.Sprintf("Estimated Rows: %.0f\n", selection.EstimatedRows))
 	
-	return explanation
+	return explanation.String()
 }

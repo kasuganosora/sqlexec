@@ -1,6 +1,7 @@
 package index
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -131,7 +132,7 @@ func TestIndexSelector_SelectBestIndex_NoIndices(t *testing.T) {
 	assert.NotNil(t, selection)
 	assert.Nil(t, selection.SelectedIndex)
 	assert.Equal(t, "No available index", selection.Reason)
-	assert.Equal(t, float64(^uint64(0)>>1), selection.Cost) // MaxFloat64
+	assert.Equal(t, math.MaxFloat64, selection.Cost)
 }
 
 func TestIndexSelector_SelectBestIndex_WithIndices(t *testing.T) {
@@ -160,7 +161,7 @@ func TestIndexSelector_SelectBestIndex_WithIndices(t *testing.T) {
 	assert.NotNil(t, selection)
 	assert.NotNil(t, selection.SelectedIndex)
 	assert.Equal(t, "idx_id", selection.SelectedIndex.Name)
-	assert.Less(t, selection.Cost, float64(^uint64(0)>>1))
+	assert.Less(t, selection.Cost, math.MaxFloat64)
 }
 
 func TestIndexSelector_SelectBestIndex_CoveringIndex(t *testing.T) {
@@ -309,7 +310,7 @@ func TestIndexSelector_IsIndexUsable(t *testing.T) {
 			index: &Index{
 				Columns: []string{"name"},
 			},
-			expected: true, // simplified: returns true for empty filters
+			expected: false, // no filter matches index column
 		},
 		{
 			name: "empty filters",

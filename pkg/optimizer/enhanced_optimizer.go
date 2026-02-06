@@ -24,6 +24,7 @@ type EnhancedOptimizer struct {
 	statsCache      *statistics.AutoRefreshStatisticsCache
 	parallelism     int
 	estimator       CardinalityEstimator
+	hintsParser     *parser.HintsParser // 添加 hints 解析器
 }
 
 // NewEnhancedOptimizer 创建增强的优化器
@@ -71,6 +72,7 @@ func NewEnhancedOptimizer(dataSource domain.DataSource, parallelism int) *Enhanc
 		statsCache:      autoRefreshStatsCache, // 修改为 autoRefreshStatsCache
 		parallelism:     parallelism,
 		estimator:       optimizerEstimatorAdapter, // 添加estimator
+		hintsParser:     parser.NewHintsParser(), // 初始化 hints 解析器
 	}
 }
 
@@ -178,29 +180,52 @@ func (a *costModelAdapter) ProjectCost(inputRows int64, projCols int) float64 {
 func (eo *EnhancedOptimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (PhysicalPlan, error) {
 	fmt.Println("=== Enhanced Optimizer Started ===")
 	
-	// 1. 转换为逻辑计划
+	// 1. 解析 Hints（如果 SQL 中有）
+	var hints *OptimizerHints
+	if stmt != nil && stmt.RawSQL != "" {
+		parsedHints, cleanSQLStr, err := eo.hintsParser.ExtractHintsFromSQL(stmt.RawSQL)
+		if err != nil {
+			fmt.Printf("  [HINTS] Warning: Failed to parse hints: %v\n", err)
+			hints = &OptimizerHints{} // 使用空 hints 继续
+		} else {
+			// 转换 ParsedHints 为 OptimizerHints
+			hints = convertParsedHints(parsedHints)
+			if hints != nil {
+				fmt.Printf("  [HINTS] Parsed hints from SQL\n")
+			}
+			// 更新 SQL（去除 hints）
+			if cleanSQLStr != "" {
+				stmt.RawSQL = cleanSQLStr
+			}
+		}
+	} else {
+		hints = &OptimizerHints{} // 使用空 hints
+	}
+	
+	// 2. 转换为逻辑计划
 	logicalPlan, err := eo.baseOptimizer.convertToLogicalPlan(stmt)
 	if err != nil {
 		return nil, fmt.Errorf("convert to logical plan failed: %w", err)
 	}
 	fmt.Printf("  [ENHANCED] Logical Plan: %s\n", logicalPlan.Explain())
 
-	// 2. 创建增强的优化上下文
+	// 3. 创建增强的优化上下文（包含 hints）
 	optCtx := &OptimizationContext{
 		DataSource:   eo.baseOptimizer.dataSource,
 		TableInfo:    make(map[string]*domain.TableInfo),
 		Stats:       make(map[string]*Statistics),
 		CostModel:   NewDefaultCostModel(),
+		Hints:       hints, // 添加 hints 到上下文
 	}
 
-	// 3. 应用增强的优化规则
+	// 4. 应用增强的优化规则（包含 hint-aware 规则）
 	optimizedPlan, err := eo.applyEnhancedRules(ctx, logicalPlan, optCtx)
 	if err != nil {
 		return nil, fmt.Errorf("apply enhanced rules failed: %w", err)
 	}
 	fmt.Printf("  [ENHANCED] Optimized Plan: %s\n", optimizedPlan.Explain())
 
-	// 4. 转换为物理计划（增强版）
+	// 5. 转换为物理计划（增强版）
 	physicalPlan, err := eo.convertToPhysicalPlanEnhanced(ctx, optimizedPlan, optCtx)
 	if err != nil {
 		return nil, fmt.Errorf("convert to physical plan failed: %w", err)
@@ -210,14 +235,14 @@ func (eo *EnhancedOptimizer) Optimize(ctx context.Context, stmt *parser.SQLState
 	return physicalPlan, nil
 }
 
-// applyEnhancedRules 应用增强的优化规则
+// applyEnhancedRules 应用增强的优化规则（支持 hints）
 func (eo *EnhancedOptimizer) applyEnhancedRules(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
-	// Use EnhancedRuleSet which contains all new rules
+	// Use EnhancedRuleSet which contains all new rules (including hint-aware rules)
 	enhancedRuleSet := EnhancedRuleSet(eo.estimator)
 
 	// Add advanced rules (DP Join Reorder, Bushy Tree, Index Selection)
 	advancedRules := []OptimizationRule{
-		// DP JOIN Reorder
+		// DP JOIN Reorder（当没有 hints 时使用）
 		&DPJoinReorderAdapter{
 			dpReorder: eo.dpJoinReorder,
 		},
@@ -302,6 +327,12 @@ func (eo *EnhancedOptimizer) convertDataSourceEnhanced(ctx context.Context, p *L
 			Offset: 0,
 		},
 	)
+
+	// 应用列裁剪 - 使用裁剪后的列
+	if len(p.Columns) < len(p.TableInfo.Columns) {
+		scan.Columns = p.Columns
+		fmt.Printf("  [ENHANCED] Applying column pruning: %d columns reduced to %d\n", len(p.TableInfo.Columns), len(p.Columns))
+	}
 
 	// 更新成本
 	scanCost := eo.costModel.ScanCost(tableName, 10000, useIndex) // 使用默认估算
@@ -805,4 +836,62 @@ func expressionToString(expr *parser.Expression) string {
 	}
 
 	return fmt.Sprintf("%v", expr.Value)
+}
+
+// convertParsedHints 将 parser.ParsedHints 转换为 optimizer.OptimizerHints
+func convertParsedHints(ph *parser.ParsedHints) *OptimizerHints {
+	if ph == nil {
+		return &OptimizerHints{}
+	}
+
+	return &OptimizerHints{
+		// JOIN hints
+		HashJoinTables:    ph.HashJoinTables,
+		MergeJoinTables:   ph.MergeJoinTables,
+		INLJoinTables:     ph.INLJoinTables,
+		INLHashJoinTables: ph.INLHashJoinTables,
+		INLMergeJoinTables: ph.INLMergeJoinTables,
+		NoHashJoinTables:  ph.NoHashJoinTables,
+		NoMergeJoinTables: ph.NoMergeJoinTables,
+		NoIndexJoinTables: ph.NoIndexJoinTables,
+		LeadingOrder:      ph.LeadingOrder,
+		StraightJoin:      ph.StraightJoin,
+
+		// INDEX hints
+		UseIndex:    copyStringMap(ph.UseIndex),
+		ForceIndex:  copyStringMap(ph.ForceIndex),
+		IgnoreIndex: copyStringMap(ph.IgnoreIndex),
+		OrderIndex:  ph.OrderIndex,
+		NoOrderIndex: ph.NoOrderIndex,
+
+		// AGG hints
+		HashAgg:      ph.HashAgg,
+		StreamAgg:    ph.StreamAgg,
+		MPP1PhaseAgg: ph.MPP1PhaseAgg,
+		MPP2PhaseAgg: ph.MPP2PhaseAgg,
+
+		// Subquery hints
+		SemiJoinRewrite: ph.SemiJoinRewrite,
+		NoDecorrelate:   ph.NoDecorrelate,
+		UseTOJA:         ph.UseTOJA,
+
+		// Global hints
+		QBName:                ph.QBName,
+		MaxExecutionTime:      ph.MaxExecutionTime,
+		MemoryQuota:           ph.MemoryQuota,
+		ReadConsistentReplica: ph.ReadConsistentReplica,
+		ResourceGroup:         ph.ResourceGroup,
+	}
+}
+
+// copyStringMap 深拷贝 map[string][]string
+func copyStringMap(src map[string][]string) map[string][]string {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string][]string)
+	for k, v := range src {
+		dst[k] = append([]string{}, v...)
+	}
+	return dst
 }

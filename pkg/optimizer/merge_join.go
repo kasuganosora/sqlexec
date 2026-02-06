@@ -3,6 +3,7 @@ package optimizer
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
@@ -257,9 +258,7 @@ func (p *PhysicalMergeJoin) mergeRow(left, right domain.Row) domain.Row {
 	merged := make(domain.Row)
 
 	// 添加左行数据
-	for k, v := range left {
-		merged[k] = v
-	}
+	maps.Copy(merged, left)
 
 	// 添加右行数据
 	for k, v := range right {
@@ -279,9 +278,7 @@ func (p *PhysicalMergeJoin) mergeRowWithNull(notNull, nullRow domain.Row) domain
 	merged := make(domain.Row)
 
 	// 添加非NULL行的数据
-	for k, v := range notNull {
-		merged[k] = v
-	}
+	maps.Copy(merged, notNull)
 
 	// 添加NULL行的数据（全部为NULL）
 	for k := range nullRow {

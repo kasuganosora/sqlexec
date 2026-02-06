@@ -54,7 +54,7 @@ type FunctionParam struct {
 	Type        string // 参数类型
 	Description string // 描述
 	Required    bool   // 是否必需
-	Default     interface{} // 默认值
+	Default     any // 默认值
 }
 
 // FunctionFilter 函数过滤器

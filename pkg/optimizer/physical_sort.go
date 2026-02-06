@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
@@ -113,16 +114,16 @@ func (p *PhysicalSort) Execute(ctx context.Context) (*domain.QueryResult, error)
 
 // Explain 返回计划说明
 func (p *PhysicalSort) Explain() string {
-	items := ""
+	var items strings.Builder
 	for i, item := range p.OrderByItems {
 		if i > 0 {
-			items += ", "
+			items.WriteString(", ")
 		}
 		direction := "ASC"
 		if item.Direction == "DESC" {
 			direction = "DESC"
 		}
-		items += fmt.Sprintf("%s %s", item.Column, direction)
+		items.WriteString(fmt.Sprintf("%s %s", item.Column, direction))
 	}
-	return fmt.Sprintf("Sort(%s, cost=%.2f)", items, p.cost)
+	return fmt.Sprintf("Sort(%s, cost=%.2f)", items.String(), p.cost)
 }

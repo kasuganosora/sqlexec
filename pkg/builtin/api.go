@@ -227,7 +227,7 @@ func (api *FunctionAPI) GenerateDocumentation() string {
 func (api *FunctionAPI) GenerateJSON() (string, error) {
 	functions := api.registry.List()
 	
-	data := map[string]interface{}{
+	data := map[string]any{
 		"functions": functions,
 		"count":     len(functions),
 		"categories": api.getCategoryStats(),
@@ -414,7 +414,7 @@ func (api *FunctionAPI) RegisterUDF(udf *UDFFunction) error {
 	
 	// 同时注册到函数注册表，以便在SQL中使用
 	// 类型转换：UDFHandler -> FunctionHandle
-	wrappedHandler := func(args []interface{}) (interface{}, error) {
+	wrappedHandler := func(args []any) (any, error) {
 		return udf.Handler(args)
 	}
 	

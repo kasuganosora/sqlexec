@@ -31,7 +31,7 @@ func NewExpressionEvaluatorWithoutAPI() *ExpressionEvaluator {
 }
 
 // Evaluate 计算表达式的值
-func (e *ExpressionEvaluator) Evaluate(expr *parser.Expression, row parser.Row) (interface{}, error) {
+func (e *ExpressionEvaluator) Evaluate(expr *parser.Expression, row parser.Row) (any, error) {
 	if expr == nil {
 		return nil, nil
 	}
@@ -62,7 +62,7 @@ func (e *ExpressionEvaluator) Evaluate(expr *parser.Expression, row parser.Row) 
 }
 
 // evaluateOperator 计算运算符表达式
-func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row parser.Row) (interface{}, error) {
+func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row parser.Row) (any, error) {
 	if expr.Operator == "" {
 		return nil, fmt.Errorf("operator is empty")
 	}
@@ -123,7 +123,7 @@ func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row pars
 	case "not in":
 		return !e.inValues(left, right), nil
 	case "between":
-		if vals, ok := right.([]interface{}); ok && len(vals) == 2 {
+		if vals, ok := right.([]any); ok && len(vals) == 2 {
 			return e.betweenValues(left, vals[0], vals[1]), nil
 		}
 		return false, nil
@@ -133,7 +133,7 @@ func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row pars
 }
 
 // evaluateLogicalOp 计算逻辑运算符
-func (e *ExpressionEvaluator) evaluateLogicalOp(expr *parser.Expression, row parser.Row) (interface{}, error) {
+func (e *ExpressionEvaluator) evaluateLogicalOp(expr *parser.Expression, row parser.Row) (any, error) {
 	if expr.Left == nil || expr.Right == nil {
 		return nil, fmt.Errorf("invalid logical operator expression")
 	}
@@ -167,7 +167,7 @@ func (e *ExpressionEvaluator) evaluateLogicalOp(expr *parser.Expression, row par
 }
 
 // evaluateUnaryOp 计算一元运算符
-func (e *ExpressionEvaluator) evaluateUnaryOp(expr *parser.Expression, row parser.Row) (interface{}, error) {
+func (e *ExpressionEvaluator) evaluateUnaryOp(expr *parser.Expression, row parser.Row) (any, error) {
 	if expr.Left == nil {
 		return nil, fmt.Errorf("invalid unary operator expression: missing operand")
 	}
@@ -196,7 +196,7 @@ func (e *ExpressionEvaluator) evaluateUnaryOp(expr *parser.Expression, row parse
 }
 
 // evaluateFunction 计算函数调用（支持自定义函数）
-func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row parser.Row) (interface{}, error) {
+func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row parser.Row) (any, error) {
 	if expr.Function == "" {
 		return nil, fmt.Errorf("function name is empty")
 	}
@@ -215,7 +215,7 @@ func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row pars
 	}
 
 	// 计算参数（带类型检查）
-	args := make([]interface{}, 0, len(expr.Args))
+	args := make([]any, 0, len(expr.Args))
 	for i, argExpr := range expr.Args {
 		argValue, err := e.Evaluate(&argExpr, row)
 		if err != nil {
@@ -240,7 +240,7 @@ func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row pars
 }
 
 // convertToExpectedType 将值转换为期望的类型
-func (e *ExpressionEvaluator) convertToExpectedType(value interface{}, params []builtin.FunctionParam, argIndex int) (interface{}, error) {
+func (e *ExpressionEvaluator) convertToExpectedType(value any, params []builtin.FunctionParam, argIndex int) (any, error) {
 	if argIndex >= len(params) {
 		return value, nil // 参数数量不匹配，返回原值
 	}
@@ -268,24 +268,24 @@ func (e *ExpressionEvaluator) convertToExpectedType(value interface{}, params []
 }
 
 // exists 检查值是否存在（替代 ! 运算符）
-func (e *ExpressionEvaluator) exists(v interface{}) bool {
+func (e *ExpressionEvaluator) exists(v any) bool {
 	if v == nil {
 		return false
 	}
 	switch v.(type) {
 	case string:
 		return len(v.(string)) > 0
-	case []interface{}:
-		return len(v.([]interface{})) > 0
-	case map[string]interface{}:
-		return len(v.(map[string]interface{})) > 0
+	case []any:
+		return len(v.([]any)) > 0
+	case map[string]any:
+		return len(v.(map[string]any)) > 0
 	default:
 		return true
 	}
 }
 
 // toInt 转换为int
-func (e *ExpressionEvaluator) toInt(v interface{}) (interface{}, error) {
+func (e *ExpressionEvaluator) toInt(v any) (any, error) {
 	if v == nil {
 		return nil, fmt.Errorf("cannot convert nil to int")
 	}
@@ -318,7 +318,7 @@ func (e *ExpressionEvaluator) toInt(v interface{}) (interface{}, error) {
 }
 
 // toInt64 转换为int64
-func (e *ExpressionEvaluator) toInt64(v interface{}) (interface{}, error) {
+func (e *ExpressionEvaluator) toInt64(v any) (any, error) {
 	if v == nil {
 		return nil, fmt.Errorf("cannot convert nil to int64")
 	}
@@ -351,7 +351,7 @@ func (e *ExpressionEvaluator) toInt64(v interface{}) (interface{}, error) {
 }
 
 // toFloat64 转换为float64
-func (e *ExpressionEvaluator) toFloat64(v interface{}) (interface{}, error) {
+func (e *ExpressionEvaluator) toFloat64(v any) (any, error) {
 	if v == nil {
 		return nil, fmt.Errorf("cannot convert nil to float64")
 	}
@@ -388,7 +388,7 @@ func (e *ExpressionEvaluator) toFloat64(v interface{}) (interface{}, error) {
 }
 
 // toString 转换为string
-func (e *ExpressionEvaluator) toString(v interface{}) (interface{}, error) {
+func (e *ExpressionEvaluator) toString(v any) (any, error) {
 	if v == nil {
 		return "", nil
 	}
@@ -408,7 +408,7 @@ func (e *ExpressionEvaluator) toString(v interface{}) (interface{}, error) {
 
 // compareValues 比较两个值
 // 返回 -1: a < b, 0: a == b, 1: a > b
-func (e *ExpressionEvaluator) compareValues(a, b interface{}) int {
+func (e *ExpressionEvaluator) compareValues(a, b any) int {
 	if a == nil && b == nil {
 		return 0
 	}
@@ -443,7 +443,7 @@ func (e *ExpressionEvaluator) compareValues(a, b interface{}) int {
 }
 
 // addValues 加法运算
-func (e *ExpressionEvaluator) addValues(a, b interface{}) (interface{}, error) {
+func (e *ExpressionEvaluator) addValues(a, b any) (any, error) {
 	aNum, aOk := toFloat64(a)
 	bNum, bOk := toFloat64(b)
 	if aOk && bOk {
@@ -457,7 +457,7 @@ func (e *ExpressionEvaluator) addValues(a, b interface{}) (interface{}, error) {
 }
 
 // subValues 减法运算
-func (e *ExpressionEvaluator) subValues(a, b interface{}) (interface{}, error) {
+func (e *ExpressionEvaluator) subValues(a, b any) (any, error) {
 	aNum, aOk := toFloat64(a)
 	bNum, bOk := toFloat64(b)
 	if aOk && bOk {
@@ -467,7 +467,7 @@ func (e *ExpressionEvaluator) subValues(a, b interface{}) (interface{}, error) {
 }
 
 // mulValues 乘法运算
-func (e *ExpressionEvaluator) mulValues(a, b interface{}) (interface{}, error) {
+func (e *ExpressionEvaluator) mulValues(a, b any) (any, error) {
 	aNum, aOk := toFloat64(a)
 	bNum, bOk := toFloat64(b)
 	if aOk && bOk {
@@ -477,7 +477,7 @@ func (e *ExpressionEvaluator) mulValues(a, b interface{}) (interface{}, error) {
 }
 
 // divValues 除法运算
-func (e *ExpressionEvaluator) divValues(a, b interface{}) (interface{}, error) {
+func (e *ExpressionEvaluator) divValues(a, b any) (any, error) {
 	aNum, aOk := toFloat64(a)
 	bNum, bOk := toFloat64(b)
 	if !aOk || !bOk {
@@ -523,8 +523,8 @@ func (e *ExpressionEvaluator) likeValues(value, pattern interface{}) bool {
 }
 
 // inValues IN 操作
-func (e *ExpressionEvaluator) inValues(value, values interface{}) bool {
-	valList, ok := values.([]interface{})
+func (e *ExpressionEvaluator) inValues(value, values any) bool {
+	valList, ok := values.([]any)
 	if !ok {
 		return false
 	}
@@ -538,12 +538,12 @@ func (e *ExpressionEvaluator) inValues(value, values interface{}) bool {
 }
 
 // betweenValues BETWEEN 操作
-func (e *ExpressionEvaluator) betweenValues(value, min, max interface{}) bool {
+func (e *ExpressionEvaluator) betweenValues(value, min, max any) bool {
 	return e.compareValues(value, min) >= 0 && e.compareValues(value, max) <= 0
 }
 
 // isTrue 判断值是否为真
-func (e *ExpressionEvaluator) isTrue(value interface{}) bool {
+func (e *ExpressionEvaluator) isTrue(value any) bool {
 	if value == nil {
 		return false
 	}

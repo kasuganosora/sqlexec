@@ -9,6 +9,8 @@ type LogicalAggregate struct {
 	aggFuncs      []*AggregationItem
 	groupByFields []string
 	children       []LogicalPlan
+	algorithm      AggregationAlgorithm // 聚合算法
+	appliedHints   []string           // 已应用的 hints
 }
 
 // NewLogicalAggregate 创建逻辑聚合

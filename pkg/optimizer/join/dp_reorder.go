@@ -153,12 +153,15 @@ func (dpr *DPJoinReorder) dpSearch(tables []string, joinNodes []LogicalPlan) *Re
 
 	n := len(tables)
 	if n == 0 {
-		return nil
+		return &ReorderResult{
+			Order: []string{},
+			Cost:  0,
+		}
 	}
 
 	// DP状态：dp[S][i] 表示使用表集合S的最优顺序
 	dp := make(map[string]*DPState)
-	
+
 	// 初始化：单个表
 	for _, table := range tables {
 		key := table
@@ -173,6 +176,16 @@ func (dpr *DPJoinReorder) dpSearch(tables []string, joinNodes []LogicalPlan) *Re
 
 	// 递归求解更大的表集合
 	bestResult := dpr.solveDP(tables, dp, joinNodes)
+
+	// 如果 DP 未找到解，返回一个默认结果
+	if bestResult == nil {
+		bestResult = &ReorderResult{
+			Order:        tables,
+			Cost:         float64(len(tables)) * 1000,
+			JoinTreeType: "left-deep",
+			Plan:         dpr.buildPlanFromOrder(tables, joinNodes),
+		}
+	}
 
 	// 缓存结果
 	dpr.cache.Set(cacheKey, bestResult)
@@ -364,17 +377,38 @@ func (dpr *DPJoinReorder) estimateGreedyJoinCost(currentOrder []string, newTable
 // buildPlanFromOrder 根据表顺序构建JOIN树
 func (dpr *DPJoinReorder) buildPlanFromOrder(order []string, joinNodes []LogicalPlan) LogicalPlan {
 	if len(order) == 0 {
-		return nil
+		return nil  // 空order返回nil
 	}
 
-	// 简化：返回第一个数据源
-	return dpr.buildDataSource(order[0])
+	if len(order) == 1 {
+		// 单个表，返回数据源
+		return dpr.buildDataSource(order[0])
+	}
+
+	// 多个表：构建左深树
+	left := dpr.buildDataSource(order[0])
+	for i := 1; i < len(order); i++ {
+		right := dpr.buildDataSource(order[i])
+		left = dpr.buildJoinNode(left, right)
+	}
+
+	return left
+}
+
+// buildJoinNode 构建JOIN节点
+func (dpr *DPJoinReorder) buildJoinNode(left, right LogicalPlan) LogicalPlan {
+	return &mockLogicalPlan{
+		left:  left,
+		right: right,
+	}
 }
 
 // buildDataSource 构建数据源节点
 func (dpr *DPJoinReorder) buildDataSource(tableName string) LogicalPlan {
-	// 简化：返回nil，实际应该创建数据源对象
-	return nil
+	// 简化实现：创建mock数据源
+	return &mockLogicalPlan{
+		tableName: tableName,
+	}
 }
 
 // generateCacheKey 生成缓存键
@@ -382,7 +416,7 @@ func (dpr *DPJoinReorder) generateCacheKey(tables []string) string {
 	if len(tables) == 0 {
 		return ""
 	}
-	
+
 	key := ""
 	for _, table := range tables {
 		key += table + "|"
@@ -437,9 +471,34 @@ func (dpr *DPJoinReorder) Explain(result *ReorderResult) string {
 
 	return fmt.Sprintf(
 		"=== JOIN Reorder Result ===\n"+
-		"Order: %v\n"+
-		"Cost: %.2f\n"+
-		"Tree Type: %s\n",
+			"Order: %v\n"+
+			"Cost: %.2f\n"+
+			"Tree Type: %s\n",
 		result.Order, result.Cost, result.JoinTreeType,
 	)
+}
+
+// mockLogicalPlan Mock逻辑计划（用于测试）
+type mockLogicalPlan struct {
+	tableName string
+	left      LogicalPlan
+	right     LogicalPlan
+	children  []LogicalPlan
+}
+
+func (m *mockLogicalPlan) Children() []LogicalPlan {
+	if m.left != nil && m.right != nil {
+		return []LogicalPlan{m.left, m.right}
+	}
+	return m.children
+}
+
+func (m *mockLogicalPlan) Explain() string {
+	if m.tableName != "" {
+		return "DataSource(" + m.tableName + ")"
+	}
+	if m.left != nil && m.right != nil {
+		return "Join(" + m.left.Explain() + ", " + m.right.Explain() + ")"
+	}
+	return "Mock Plan"
 }

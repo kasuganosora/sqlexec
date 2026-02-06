@@ -3,6 +3,8 @@ package optimizer
 import (
 	"context"
 	"fmt"
+	"maps"
+	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -118,6 +120,15 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 		if offset > 0 {
 			options.Offset = int(offset)
 		}
+		
+		// 如果应用了列裁剪，只选择需要的列
+		if len(p.Columns) < len(p.TableInfo.Columns) {
+			options.SelectColumns = make([]string, len(p.Columns))
+			for i, col := range p.Columns {
+				options.SelectColumns[i] = col.Name
+				fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 选择列 %s\n", col.Name)
+			}
+		}
 
 		result, err := p.parallelScanner.Execute(ctx, scanRange, options)
 		if err != nil {
@@ -127,6 +138,42 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 		}
 
 		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 并行扫描完成，返回 %d 行\n", len(result.Rows))
+		
+		// 如果应用了列裁剪，调整结果的Columns
+		if len(p.Columns) < len(p.TableInfo.Columns) {
+			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用列裁剪到结果，原列数=%d，裁剪后=%d\n", len(result.Columns), len(p.Columns))
+			// 只保留需要的列
+			columnMap := make(map[string]int)
+			for i, col := range p.Columns {
+				columnMap[col.Name] = i
+			}
+			
+			filteredRows := make([]domain.Row, len(result.Rows))
+			for i, row := range result.Rows {
+				filteredRow := make(domain.Row)
+				for _, col := range p.Columns {
+					if val, exists := row[col.Name]; exists {
+						filteredRow[col.Name] = val
+					}
+				}
+				filteredRows[i] = filteredRow
+			}
+			
+			// 更新结果的Columns
+			filteredColumns := make([]domain.ColumnInfo, len(p.Columns))
+			for i, col := range p.Columns {
+				filteredColumns[i] = domain.ColumnInfo{
+					Name:     col.Name,
+					Type:     col.Type,
+					Nullable: col.Nullable,
+				}
+			}
+			
+			result.Columns = filteredColumns
+			result.Rows = filteredRows
+			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 列裁剪完成\n")
+		}
+		
 		return result, nil
 	}
 
@@ -183,26 +230,35 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 			Total: total,
 		}
 		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Filter 完成，返回 %d 行（total=%d）\n", len(rows), total)
-	} else {
-		// 数据源不支持过滤或无过滤条件，使用 Query 方法
-		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 数据源不支持过滤或无过滤条件，使用 Query 方法\n")
-		
-		// 使用 QueryOptions 传递过滤和分页
-		options := &domain.QueryOptions{}
-		if len(p.filters) > 0 {
-			options.Filters = p.filters
-			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用过滤条件到 QueryOptions\n")
-			for i, filter := range p.filters {
-				fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
+		} else {
+			// 数据源不支持过滤或无过滤条件，使用 Query 方法
+			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 数据源不支持过滤或无过滤条件，使用 Query 方法\n")
+			
+			// 使用 QueryOptions 传递过滤和分页
+			options := &domain.QueryOptions{}
+			if len(p.filters) > 0 {
+				options.Filters = p.filters
+				fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用过滤条件到 QueryOptions\n")
+				for i, filter := range p.filters {
+					fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
+				}
 			}
-		}
-		if limit > 0 {
-			options.Limit = int(limit)
-		}
-		if offset > 0 {
-			options.Offset = int(offset)
-		}
-		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用分页参数: limit=%d, offset=%d\n", options.Limit, options.Offset)
+			if limit > 0 {
+				options.Limit = int(limit)
+			}
+			if offset > 0 {
+				options.Offset = int(offset)
+			}
+			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用分页参数: limit=%d, offset=%d\n", options.Limit, options.Offset)
+			
+			// 如果应用了列裁剪，只选择需要的列
+			if len(p.Columns) < len(p.TableInfo.Columns) {
+				options.SelectColumns = make([]string, len(p.Columns))
+				for i, col := range p.Columns {
+					options.SelectColumns[i] = col.Name
+					fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 选择列 %s\n", col.Name)
+				}
+			}
 
 		// 调用 Query 方法
 		result, err = p.dataSource.Query(ctx, p.TableName, options)
@@ -211,6 +267,36 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 			return nil, err
 		}
 		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Query 完成，返回 %d 行\n", len(result.Rows))
+	}
+
+	// 如果应用了列裁剪，调整结果的Columns
+	if len(p.Columns) < len(p.TableInfo.Columns) {
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用列裁剪到结果，原列数=%d，裁剪后=%d\n", len(result.Columns), len(p.Columns))
+		
+		filteredRows := make([]domain.Row, len(result.Rows))
+		for i, row := range result.Rows {
+			filteredRow := make(domain.Row)
+			for _, col := range p.Columns {
+				if val, exists := row[col.Name]; exists {
+					filteredRow[col.Name] = val
+				}
+			}
+			filteredRows[i] = filteredRow
+		}
+		
+		// 更新结果的Columns
+		filteredColumns := make([]domain.ColumnInfo, len(p.Columns))
+		for i, col := range p.Columns {
+			filteredColumns[i] = domain.ColumnInfo{
+				Name:     col.Name,
+				Type:     col.Type,
+				Nullable: col.Nullable,
+			}
+		}
+		
+		result.Columns = filteredColumns
+		result.Rows = filteredRows
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 列裁剪完成\n")
 	}
 
 	return result, nil
@@ -631,9 +717,7 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*domain.QueryResult, er
 				for _, leftRow := range leftRows {
 					// 合并左右行
 					merged := make(domain.Row)
-					for k, v := range leftRow {
-						merged[k] = v
-					}
+					maps.Copy(merged, leftRow)
 					for k, v := range rightRow {
 						// 如果列名冲突，添加前缀
 						newKey := k
@@ -653,13 +737,11 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*domain.QueryResult, er
 		for _, rightRow := range rightResult.Rows {
 			key := rightRow[rightJoinCol]
 			if leftRows, exists := hashTable[key]; exists {
-				// 有匹配：连接
-				for _, leftRow := range leftRows {
-					merged := make(domain.Row)
-					for k, v := range leftRow {
-						merged[k] = v
-					}
-					for k, v := range rightRow {
+// 有匹配：连接
+			for _, leftRow := range leftRows {
+				merged := make(domain.Row)
+				maps.Copy(merged, leftRow)
+				for k, v := range rightRow {
 						newKey := k
 						if _, exists := merged[newKey]; exists {
 							newKey = "right_" + k
@@ -683,12 +765,10 @@ func (p *PhysicalHashJoin) Execute(ctx context.Context) (*domain.QueryResult, er
 					break
 				}
 			}
-			if !matched {
-				merged := make(domain.Row)
-				for k, v := range leftRow {
-					merged[k] = v
-				}
-				for _, col := range rightResult.Columns {
+if !matched {
+			merged := make(domain.Row)
+			maps.Copy(merged, leftRow)
+			for _, col := range rightResult.Columns {
 					newKey := col.Name
 					if _, exists := merged[newKey]; exists {
 						newKey = "right_" + col.Name
@@ -713,9 +793,7 @@ case RightOuterJoin:
 				// 有匹配：连接
 				for _, leftRow := range leftRows {
 					merged := make(domain.Row)
-					for k, v := range leftRow {
-						merged[k] = v
-					}
+					maps.Copy(merged, leftRow)
 					for k, v := range rightRow {
 						newKey := k
 						if _, exists := merged[newKey]; exists {
@@ -1044,13 +1122,14 @@ func (p *PhysicalHashAggregate) calculateAggregation(agg *AggregationItem, rows 
 
 // Explain 返回计划说明
 func (p *PhysicalHashAggregate) Explain() string {
-	aggFuncs := ""
+	var aggFuncsBuilder strings.Builder
 	for i, agg := range p.AggFuncs {
 		if i > 0 {
-			aggFuncs += ", "
+			aggFuncsBuilder.WriteString(", ")
 		}
-		aggFuncs += agg.Type.String()
+		aggFuncsBuilder.WriteString(agg.Type.String())
 	}
+	aggFuncs := aggFuncsBuilder.String()
 	
 	groupBy := ""
 	if len(p.GroupByCols) > 0 {
