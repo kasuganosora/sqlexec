@@ -38,7 +38,7 @@ type CoreSession struct {
 func NewCoreSession(dataSource domain.DataSource) *CoreSession {
 	return &CoreSession{
 		dataSource: dataSource,
-		executor:   optimizer.NewOptimizedExecutorWithEnhanced(dataSource, true, true), // 默认启用增强优化器
+		executor:   optimizer.NewOptimizedExecutor(dataSource, true), // 默认启用增强优化器
 		adapter:    parser.NewSQLAdapter(),
 		tempTables: []string{},
 		closed:     false,
@@ -55,7 +55,7 @@ func NewCoreSessionWithDSManagerAndEnhanced(dataSource domain.DataSource, dsMana
 	return &CoreSession{
 		dataSource:   dataSource,
 		dsManager:    dsManager,
-		executor:     optimizer.NewOptimizedExecutorWithDSManagerAndEnhanced(dataSource, dsManager, useOptimizer, useEnhanced),
+		executor:     optimizer.NewOptimizedExecutorWithDSManager(dataSource, dsManager, useOptimizer),
 		adapter:      parser.NewSQLAdapter(),
 		currentDB:    "", // Default to no database selected
 		user:         "",

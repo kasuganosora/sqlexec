@@ -156,15 +156,9 @@ func (s *Session) Explain(sql string, args ...interface{}) (string, error) {
 		return "", NewError(ErrCodeInternal, "executor not available", nil)
 	}
 
-	optimizerIntf := executor.GetOptimizer()
-	if optimizerIntf == nil {
+	enhancedOptimizer := executor.GetOptimizer()
+	if enhancedOptimizer == nil {
 		return "", NewError(ErrCodeInternal, "optimizer not available", nil)
-	}
-
-	// Type assert to *optimizer.Optimizer
-	opt, ok := optimizerIntf.(*optimizer.Optimizer)
-	if !ok {
-		return "", NewError(ErrCodeInternal, "optimizer type assertion failed", nil)
 	}
 
 	// Build SQLStatement for optimizer
@@ -173,9 +167,9 @@ func (s *Session) Explain(sql string, args ...interface{}) (string, error) {
 		Select: parseResult.Statement.Select,
 	}
 
-	// Optimize to get physical plan
+	// Optimize to get physical plan using EnhancedOptimizer
 	ctx := context.Background()
-	physicalPlan, err := opt.Optimize(ctx, sqlStmt)
+	physicalPlan, err := enhancedOptimizer.Optimize(ctx, sqlStmt)
 	if err != nil {
 		return "", WrapError(err, ErrCodeInternal, "failed to generate execution plan")
 	}
