@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/types"
 )
 
 // Optimizer 优化器
@@ -25,8 +27,8 @@ func NewOptimizer(dataSource domain.DataSource) *Optimizer {
 	}
 }
 
-// Optimize 优化查询计划
-func (o *Optimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (PhysicalPlan, error) {
+// Optimize 优化查询计划（返回可序列化的Plan）
+func (o *Optimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (*plan.Plan, error) {
 	fmt.Println("  [DEBUG] Optimize: 步骤1 - 转换为逻辑计划")
 	// 1. 转换为逻辑计划
 	logicalPlan, err := o.convertToLogicalPlan(stmt)
@@ -50,15 +52,15 @@ func (o *Optimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (Ph
 	}
 	fmt.Println("  [DEBUG] Optimize: 优化规则应用完成")
 
-	// 3. 转换为物理计划
-	fmt.Println("  [DEBUG] Optimize: 步骤3 - 转换为物理计划")
-	physicalPlan, err := o.convertToPhysicalPlan(ctx, optimizedPlan, optCtx)
+	// 3. 转换为可序列化的Plan
+	fmt.Println("  [DEBUG] Optimize: 步骤3 - 转换为可序列化的Plan")
+	plan, err := o.convertToPlan(ctx, optimizedPlan, optCtx)
 	if err != nil {
-		return nil, fmt.Errorf("convert to physical plan failed: %w", err)
+		return nil, fmt.Errorf("convert to plan failed: %w", err)
 	}
-	fmt.Println("  [DEBUG] Optimize: 物理计划转换完成")
+	fmt.Println("  [DEBUG] Optimize: Plan转换完成")
 
-	return physicalPlan, nil
+	return plan, nil
 }
 
 // convertToLogicalPlan 将 SQL 语句转换为逻辑计划
@@ -219,17 +221,154 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 
 // convertInsert 转换 INSERT 语句
 func (o *Optimizer) convertInsert(stmt *parser.InsertStatement) (LogicalPlan, error) {
-	return nil, fmt.Errorf("INSERT statement not supported in optimizer yet")
+	// 验证表存在
+	_, err := o.dataSource.GetTableInfo(context.Background(), stmt.Table)
+	if err != nil {
+		return nil, fmt.Errorf("table '%s' does not exist: %v", stmt.Table, err)
+	}
+
+	// 转换 Values 中的值为 parser.Expression
+	values := make([][]parser.Expression, len(stmt.Values))
+	for i, row := range stmt.Values {
+		values[i] = make([]parser.Expression, len(row))
+		for j, val := range row {
+			values[i][j] = o.valueToExpression(val)
+		}
+	}
+
+	// 创建 LogicalInsert
+	insertPlan := NewLogicalInsert(stmt.Table, stmt.Columns, values)
+
+	// 处理 ON DUPLICATE KEY UPDATE
+	if stmt.OnDuplicate != nil {
+		updatePlan, err := o.convertUpdate(stmt.OnDuplicate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert ON DUPLICATE KEY UPDATE: %v", err)
+		}
+		if logicalUpdate, ok := updatePlan.(*LogicalUpdate); ok {
+			insertPlan.SetOnDuplicate(logicalUpdate)
+		}
+	}
+
+	fmt.Printf("  [DEBUG] convertInsert: INSERT into %s with %d rows\n", stmt.Table, len(values))
+	return insertPlan, nil
+}
+
+// valueToExpression 将 interface{} 值转换为 parser.Expression
+func (o *Optimizer) valueToExpression(val interface{}) parser.Expression {
+	if val == nil {
+		return parser.Expression{
+			Type:  parser.ExprTypeValue,
+			Value: nil,
+		}
+	}
+
+	switch v := val.(type) {
+	case int, int32, int64:
+		return parser.Expression{
+			Type:  parser.ExprTypeValue,
+			Value: v,
+		}
+	case float32, float64:
+		return parser.Expression{
+			Type:  parser.ExprTypeValue,
+			Value: v,
+		}
+	case string:
+		return parser.Expression{
+			Type:  parser.ExprTypeValue,
+			Value: v,
+		}
+	case bool:
+		return parser.Expression{
+			Type:  parser.ExprTypeValue,
+			Value: v,
+		}
+	default:
+		// 对于复杂类型，尝试序列化为字符串
+		return parser.Expression{
+			Type:  parser.ExprTypeValue,
+			Value: fmt.Sprintf("%v", val),
+		}
+	}
 }
 
 // convertUpdate 转换 UPDATE 语句
 func (o *Optimizer) convertUpdate(stmt *parser.UpdateStatement) (LogicalPlan, error) {
-	return nil, fmt.Errorf("UPDATE statement not supported in optimizer yet")
+	// 验证表存在
+	_, err := o.dataSource.GetTableInfo(context.Background(), stmt.Table)
+	if err != nil {
+		return nil, fmt.Errorf("table '%s' does not exist: %v", stmt.Table, err)
+	}
+
+	// 转换 SET 子句
+	set := make(map[string]parser.Expression)
+	for col, val := range stmt.Set {
+		set[col] = o.valueToExpression(val)
+	}
+
+	// 创建 LogicalUpdate
+	updatePlan := NewLogicalUpdate(stmt.Table, set)
+
+	// 设置 WHERE 条件
+	updatePlan.SetWhere(stmt.Where)
+
+	// 设置 ORDER BY
+	if len(stmt.OrderBy) > 0 {
+		orderItems := make([]*parser.OrderItem, len(stmt.OrderBy))
+		for i, item := range stmt.OrderBy {
+			orderItems[i] = &parser.OrderItem{
+				Expr: parser.Expression{
+					Type:   parser.ExprTypeColumn,
+					Column: item.Column,
+				},
+				Direction: item.Direction,
+			}
+		}
+		updatePlan.SetOrderBy(orderItems)
+	}
+
+	// 设置 LIMIT
+	updatePlan.SetLimit(stmt.Limit)
+
+	fmt.Printf("  [DEBUG] convertUpdate: UPDATE %s with %d columns\n", stmt.Table, len(set))
+	return updatePlan, nil
 }
 
 // convertDelete 转换 DELETE 语句
 func (o *Optimizer) convertDelete(stmt *parser.DeleteStatement) (LogicalPlan, error) {
-	return nil, fmt.Errorf("DELETE statement not supported in optimizer yet")
+	// 验证表存在
+	_, err := o.dataSource.GetTableInfo(context.Background(), stmt.Table)
+	if err != nil {
+		return nil, fmt.Errorf("table '%s' does not exist: %v", stmt.Table, err)
+	}
+
+	// 创建 LogicalDelete
+	deletePlan := NewLogicalDelete(stmt.Table)
+
+	// 设置 WHERE 条件
+	deletePlan.SetWhere(stmt.Where)
+
+	// 设置 ORDER BY
+	if len(stmt.OrderBy) > 0 {
+		orderItems := make([]*parser.OrderItem, len(stmt.OrderBy))
+		for i, item := range stmt.OrderBy {
+			orderItems[i] = &parser.OrderItem{
+				Expr: parser.Expression{
+					Type:   parser.ExprTypeColumn,
+					Column: item.Column,
+				},
+				Direction: item.Direction,
+			}
+		}
+		deletePlan.SetOrderBy(orderItems)
+	}
+
+	// 设置 LIMIT
+	deletePlan.SetLimit(stmt.Limit)
+
+	fmt.Printf("  [DEBUG] convertDelete: DELETE from %s\n", stmt.Table)
+	return deletePlan, nil
 }
 
 // extractConditions 从表达式中提取条件列表
@@ -473,8 +612,8 @@ func (o *Optimizer) mapOperator(parserOp string) string {
 	}
 }
 
-// convertToPhysicalPlan 将逻辑计划转换为物理计划
-func (o *Optimizer) convertToPhysicalPlan(ctx context.Context, logicalPlan LogicalPlan, optCtx *OptimizationContext) (PhysicalPlan, error) {
+// convertToPlan 将逻辑计划转换为可序列化的Plan
+func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, optCtx *OptimizationContext) (*plan.Plan, error) {
 	switch p := logicalPlan.(type) {
 	case *LogicalDataSource:
 		// 获取下推的谓词条件
@@ -482,65 +621,188 @@ func (o *Optimizer) convertToPhysicalPlan(ctx context.Context, logicalPlan Logic
 		filters := o.convertConditionsToFilters(pushedDownPredicates)
 		// 获取下推的Limit
 		limitInfo := p.GetPushedDownLimit()
-		fmt.Printf("  [DEBUG] convertToPhysicalPlan: DataSource(%s), 下推谓词数量: %d, 下推Limit: %v\n", p.TableName, len(filters), limitInfo != nil)
-		return NewPhysicalTableScan(p.TableName, p.TableInfo, o.dataSource, filters, limitInfo), nil
+		fmt.Printf("  [DEBUG] convertToPlan: DataSource(%s), 下推谓词数量: %d, 下推Limit: %v\n", p.TableName, len(filters), limitInfo != nil)
+		
+		// 构建列信息
+		columns := make([]types.ColumnInfo, 0, len(p.TableInfo.Columns))
+		for _, col := range p.TableInfo.Columns {
+			columns = append(columns, types.ColumnInfo{
+				Name:     col.Name,
+				Type:     col.Type,
+				Nullable: col.Nullable,
+			})
+		}
+		
+		return &plan.Plan{
+			ID:   fmt.Sprintf("scan_%s", p.TableName),
+			Type: plan.TypeTableScan,
+			OutputSchema: columns,
+			Children: []*plan.Plan{},
+			Config: &plan.TableScanConfig{
+				TableName:       p.TableName,
+				Columns:         columns,
+				Filters:         filters,
+				LimitInfo:       convertToTypesLimitInfo(limitInfo),
+				EnableParallel:  true,
+				MinParallelRows: 100,
+			},
+		}, nil
 	case *LogicalSelection:
-		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
+		child, err := o.convertToPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		// 转换条件为过滤器
-		filters := o.convertConditionsToFilters(p.GetConditions())
-		fmt.Println("  [DEBUG] convertToPhysicalPlan: Selection, 过滤器数量:", len(filters))
-		return NewPhysicalSelection(p.GetConditions(), filters, child, o.dataSource), nil
+		fmt.Println("  [DEBUG] convertToPlan: Selection")
+		return &plan.Plan{
+			ID:   fmt.Sprintf("sel_%d", len(p.GetConditions())),
+			Type: plan.TypeSelection,
+			OutputSchema: child.OutputSchema,
+			Children: []*plan.Plan{child},
+			Config: &plan.SelectionConfig{
+				Condition: p.GetConditions()[0],
+			},
+		}, nil
 	case *LogicalProjection:
-		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
+		child, err := o.convertToPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
 		exprs := p.GetExprs()
 		aliases := p.GetAliases()
-		fmt.Printf("  [DEBUG] convertToPhysicalPlan: Projection, 表达式数量: %d, 别名数量: %d\n", len(exprs), len(aliases))
-		for i, expr := range exprs {
-			fmt.Printf("  [DEBUG] convertToPhysicalPlan: 表达式%d: Type=%v, Column='%s'\n", i, expr.Type, expr.Column)
-			if i < len(aliases) {
-				fmt.Printf("  [DEBUG] convertToPhysicalPlan: 别名%d: '%s'\n", i, aliases[i])
-			}
-		}
-		return NewPhysicalProjection(exprs, aliases, child), nil
+		fmt.Printf("  [DEBUG] convertToPlan: Projection, 表达式数量: %d, 别名数量: %d\n", len(exprs), len(aliases))
+		
+		return &plan.Plan{
+			ID:   fmt.Sprintf("proj_%d", len(exprs)),
+			Type: plan.TypeProjection,
+			OutputSchema: child.OutputSchema,
+			Children: []*plan.Plan{child},
+			Config: &plan.ProjectionConfig{
+				Expressions: exprs,
+				Aliases:     aliases,
+			},
+		}, nil
 	case *LogicalLimit:
-		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
+		child, err := o.convertToPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		return NewPhysicalLimit(p.GetLimit(), p.GetOffset(), child), nil
+		return &plan.Plan{
+			ID:   fmt.Sprintf("limit_%d_%d", p.GetLimit(), p.GetOffset()),
+			Type: plan.TypeLimit,
+			OutputSchema: child.OutputSchema,
+			Children: []*plan.Plan{child},
+			Config: &plan.LimitConfig{
+				Limit:  p.GetLimit(),
+				Offset: p.GetOffset(),
+			},
+		}, nil
 	case *LogicalSort:
-		// 简化：暂时不实现排序
-		return o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
+		// 简化：暂时不实现排序，直接返回子节点
+		return o.convertToPlan(ctx, p.Children()[0], optCtx)
 	case *LogicalJoin:
-		left, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
+		left, err := o.convertToPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		right, err := o.convertToPhysicalPlan(ctx, p.Children()[1], optCtx)
+		right, err := o.convertToPlan(ctx, p.Children()[1], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		return NewPhysicalHashJoin(p.GetJoinType(), left, right, p.GetJoinConditions()), nil
+		joinConditions := p.GetJoinConditions()
+	// 转换JoinCondition
+	convertedConditions := make([]*types.JoinCondition, len(joinConditions))
+	for i, cond := range joinConditions {
+		convertedConditions[i] = &types.JoinCondition{
+			Left:     convertToTypesExpr(cond.Left),
+			Right:    convertToTypesExpr(cond.Right),
+			Operator: cond.Operator,
+		}
+	}
+
+		return &plan.Plan{
+			ID:   fmt.Sprintf("join_%s", joinConditions[0].Operator),
+			Type: plan.TypeHashJoin,
+			OutputSchema: left.OutputSchema,
+			Children: []*plan.Plan{left, right},
+			Config: &plan.HashJoinConfig{
+				JoinType:  types.JoinType(p.GetJoinType()),
+				LeftCond:  convertedConditions[0],
+				RightCond: convertedConditions[0],
+				BuildSide: "left",
+			},
+		}, nil
 	case *LogicalAggregate:
-		child, err := o.convertToPhysicalPlan(ctx, p.Children()[0], optCtx)
+		child, err := o.convertToPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
 			return nil, err
 		}
-		return NewOptimizedAggregate(p.GetAggFuncs(), p.GetGroupByCols(), child), nil
-	default:
+		// 转换aggFuncs到types.AggregationItem
+	aggFuncs := p.GetAggFuncs()
+	convertedAggFuncs := make([]*types.AggregationItem, len(aggFuncs))
+	for i, agg := range aggFuncs {
+		convertedAggFuncs[i] = &types.AggregationItem{
+			Type:     types.AggregationType(agg.Type),
+			Expr:     convertToTypesExpr(agg.Expr),
+			Alias:    agg.Alias,
+			Distinct: agg.Distinct,
+		}
+	}
+
+	return &plan.Plan{
+		ID:   fmt.Sprintf("agg_%d", len(p.GetGroupByCols())),
+		Type: plan.TypeAggregate,
+		OutputSchema: child.OutputSchema,
+		Children: []*plan.Plan{child},
+		Config: &plan.AggregateConfig{
+			AggFuncs:   convertedAggFuncs,
+			GroupByCols: p.GetGroupByCols(),
+		},
+	}, nil
+default:
 		return nil, fmt.Errorf("unsupported logical plan type: %T", p)
+	}
+}
+
+// convertToTypesLimitInfo 转换 LimitInfo
+func convertToTypesLimitInfo(limitInfo *LimitInfo) *types.LimitInfo {
+	if limitInfo == nil {
+		return nil
+	}
+	return &types.LimitInfo{
+		Limit:  limitInfo.Limit,
+		Offset: limitInfo.Offset,
 	}
 }
 
 // ExplainPlan 解释执行计划
 func ExplainPlan(plan PhysicalPlan) string {
 	return explainPlan(plan, 0)
+}
+
+// ExplainPlanV2 解释新架构的执行计划（plan.Plan）
+func ExplainPlanV2(plan *plan.Plan) string {
+	return explainPlanV2(plan, 0)
+}
+
+// explainPlanV2 递归解释新架构的计划
+func explainPlanV2(plan *plan.Plan, depth int) string {
+	var builder strings.Builder
+
+	for i := 0; i < depth; i++ {
+		builder.WriteString("  ")
+	}
+
+	builder.WriteString(plan.ID)
+	builder.WriteString(" [")
+	builder.WriteString(string(plan.Type))
+	builder.WriteString("]")
+	builder.WriteString("\n")
+
+	for _, child := range plan.Children {
+		builder.WriteString(explainPlanV2(child, depth+1))
+	}
+
+	return builder.String()
 }
 
 // explainPlan 递归解释计划

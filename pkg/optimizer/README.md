@@ -130,13 +130,15 @@ adapter := parser.NewSQLAdapter()
 parseResult, _ := adapter.Parse("SELECT * FROM products WHERE price > 100")
 
 // 优化查询
-physicalPlan, _ := opt.Optimize(context.Background(), parseResult.Statement)
+plan, _ := opt.Optimize(context.Background(), parseResult.Statement)
 
 // 查看执行计划
-fmt.Println(optimizer.ExplainPlan(physicalPlan))
+fmt.Println(optimizer.ExplainPlanV2(plan))
 
-// 执行查询
-result, _ := physicalPlan.Execute(context.Background())
+// 执行查询（使用executor）
+das := dataaccess.NewDataService(dataSource)
+exec := executor.NewExecutor(das)
+result, _ := exec.Execute(context.Background(), plan)
 fmt.Printf("返回 %d 行\n", len(result.Rows))
 ```
 

@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/builtin"
+	"github.com/kasuganosora/sqlexec/pkg/dataaccess"
+	"github.com/kasuganosora/sqlexec/pkg/executor"
 	"github.com/kasuganosora/sqlexec/pkg/information_schema"
+	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -30,6 +33,7 @@ type OptimizedExecutor struct {
 	dataSource    domain.DataSource
 	dsManager     *application.DataSourceManager
 	optimizer     interface{} // 支持 *Optimizer 或 *EnhancedOptimizer
+	planExecutor  executor.Executor // 新的执行器
 	useOptimizer  bool
 	useEnhanced   bool  // 是否使用增强优化器
 	currentDB     string
@@ -72,9 +76,15 @@ func NewOptimizedExecutorWithEnhanced(dataSource domain.DataSource, useOptimizer
 		opt = NewOptimizer(dataSource)
 	}
 
+	// 创建数据访问服务
+	dataAccessService := dataaccess.NewDataService(dataSource)
+	// 创建执行器
+	planExecutor := executor.NewExecutor(dataAccessService)
+
 	return &OptimizedExecutor{
 		dataSource:    dataSource,
 		optimizer:     opt,
+		planExecutor:  planExecutor,
 		useOptimizer:  useOptimizer,
 		useEnhanced:   useEnhanced,
 		currentDB:     "", // 默认为空字符串
@@ -110,10 +120,16 @@ func NewOptimizedExecutorWithDSManagerAndEnhanced(dataSource domain.DataSource, 
 		opt = NewOptimizer(dataSource)
 	}
 
+	// 创建数据访问服务
+	dataAccessService := dataaccess.NewDataService(dataSource)
+	// 创建执行器
+	planExecutor := executor.NewExecutor(dataAccessService)
+
 	return &OptimizedExecutor{
 		dataSource:    dataSource,
 		dsManager:     dsManager,
 		optimizer:     opt,
+		planExecutor:  planExecutor,
 		useOptimizer:  useOptimizer,
 		useEnhanced:   useEnhanced,
 		currentDB:     "default", // 默认数据库
@@ -755,24 +771,24 @@ func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *pars
 
 	// 2. 优化查询计划（根据 useEnhanced 选择优化器）
 	fmt.Println("  [DEBUG] 调用 Optimize...")
-	var physicalPlan PhysicalPlan
+	var executionPlan *plan.Plan
 	var err error
 
 	if e.useEnhanced {
 		if enhancedOpt, ok := e.optimizer.(*EnhancedOptimizer); ok {
-			physicalPlan, err = enhancedOpt.Optimize(ctx, sqlStmt)
+			executionPlan, err = enhancedOpt.Optimize(ctx, sqlStmt)
 		} else {
 			// Fallback to base optimizer
 			fmt.Println("  [DEBUG] Enhanced optimizer not available, using base optimizer")
 			if baseOpt, ok := e.optimizer.(*Optimizer); ok {
-				physicalPlan, err = baseOpt.Optimize(ctx, sqlStmt)
+				executionPlan, err = baseOpt.Optimize(ctx, sqlStmt)
 			} else {
 				return nil, fmt.Errorf("invalid optimizer type")
 			}
 		}
 	} else {
 		if baseOpt, ok := e.optimizer.(*Optimizer); ok {
-			physicalPlan, err = baseOpt.Optimize(ctx, sqlStmt)
+			executionPlan, err = baseOpt.Optimize(ctx, sqlStmt)
 		} else {
 			return nil, fmt.Errorf("invalid optimizer type")
 		}
@@ -783,13 +799,13 @@ func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *pars
 	}
 	fmt.Println("  [DEBUG] Optimize完成")
 
-	// 3. 执行物理计划
-	fmt.Println("  [DEBUG] 开始执行物理计划...")
-	result, err := physicalPlan.Execute(ctx)
+	// 3. 执行计划（使用新的 executor）
+	fmt.Println("  [DEBUG] 开始执行计划...")
+	result, err := e.executePlan(ctx, executionPlan)
 	if err != nil {
-		return nil, fmt.Errorf("execute physical plan failed: %w", err)
+		return nil, fmt.Errorf("execute plan failed: %w", err)
 	}
-	fmt.Println("  [DEBUG] 物理计划执行完成")
+	fmt.Println("  [DEBUG] 计划执行完成")
 
 	// 4. 设置列信息
 	tableInfo, err := e.dataSource.GetTableInfo(ctx, stmt.From)
@@ -823,6 +839,15 @@ func (e *OptimizedExecutor) getVirtualDataSource() domain.DataSource {
 	// 如果没有ACL Manager，使用不带ACL的provider
 	provider := information_schema.NewProvider(e.dsManager)
 	return virtual.NewVirtualDataSource(provider)
+}
+
+// executePlan 使用新的执行器执行计划
+func (e *OptimizedExecutor) executePlan(ctx context.Context, executionPlan *plan.Plan) (*domain.QueryResult, error) {
+	if e.planExecutor == nil {
+		return nil, fmt.Errorf("plan executor not initialized")
+	}
+	
+	return e.planExecutor.Execute(ctx, executionPlan)
 }
 
 // executeWithBuilder 使用 QueryBuilder 执行查询（传统路径）

@@ -187,7 +187,7 @@ func (s *Session) Explain(sql string, args ...interface{}) (string, error) {
 	// Generate execution plan using ExplainPlan
 	output := "Query Execution Plan\n====================\n\n"
 	output += fmt.Sprintf("SQL: %s\n\n", boundSQL)
-	output += optimizer.ExplainPlan(physicalPlan)
+	output += optimizer.ExplainPlanV2(physicalPlan)
 
 	// Cache explain result
 	if s.cacheEnabled {

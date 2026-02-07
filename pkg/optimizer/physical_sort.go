@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -65,51 +64,9 @@ func (p *PhysicalSort) Cost() float64 {
 }
 
 // Execute 执行排序
+// DEPRECATED: 执行逻辑已迁移到 pkg/executor 包，此方法保留仅为兼容性
 func (p *PhysicalSort) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	if len(p.children) == 0 {
-		return nil, fmt.Errorf("PhysicalSort has no child")
-	}
-
-	// 执行子节点
-	input, err := p.children[0].Execute(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(p.OrderByItems) == 0 {
-		// 没有排序条件，直接返回
-		return input, nil
-	}
-
-	// 复制行以避免修改原始数据
-	rows := make([]domain.Row, len(input.Rows))
-	copy(rows, input.Rows)
-
-	// 排序
-	sort.Slice(rows, func(i, j int) bool {
-		for _, item := range p.OrderByItems {
-			leftVal := rows[i][item.Column]
-			rightVal := rows[j][item.Column]
-
-			// 比较两个值
-			cmp := compareValues(leftVal, rightVal)
-			if cmp != 0 {
-				// DESC 需要反转比较结果
-				if item.Direction == "DESC" {
-					return cmp > 0
-				}
-				return cmp < 0
-			}
-		}
-		// 所有排序列都相等，保持原顺序
-		return i < j
-	})
-
-	return &domain.QueryResult{
-		Columns: input.Columns,
-		Rows:    rows,
-		Total:   input.Total,
-	}, nil
+	return nil, fmt.Errorf("PhysicalSort.Execute is deprecated. Please use pkg/executor instead")
 }
 
 // Explain 返回计划说明

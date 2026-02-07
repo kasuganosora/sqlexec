@@ -41,8 +41,14 @@ func (p *LogicalSort) OrderBy() []*parser.OrderItem {
 	return p.orderBy
 }
 
+// GetOrderBy returns the order by items
+func (p *LogicalSort) GetOrderBy() []*parser.OrderItem {
+	return p.orderBy
+}
+
 // Explain returns the plan description
 func (p *LogicalSort) Explain() string {
 	return "LogicalSort"
 }
+
 

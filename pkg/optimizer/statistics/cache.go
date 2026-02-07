@@ -1,6 +1,8 @@
 package statistics
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -263,3 +265,58 @@ func (arc *AutoRefreshStatisticsCache) Preload(tableNames []string) error {
 
 	return nil
 }
+
+// StartAutoRefresh 启动后台自动刷新goroutine
+func (arc *AutoRefreshStatisticsCache) StartAutoRefresh(ctx context.Context, interval time.Duration) {
+	go arc.autoRefreshLoop(ctx, interval)
+}
+
+// StopAutoRefresh 停止自动刷新goroutine（通过取消context）
+func (arc *AutoRefreshStatisticsCache) StopAutoRefresh() {
+	// 自动刷新循环会检查context取消状态，无需额外处理
+}
+
+// autoRefreshLoop 自动刷新循环
+func (arc *AutoRefreshStatisticsCache) autoRefreshLoop(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("  [STATS] Auto refresh stopped")
+			return
+		case <-ticker.C:
+			arc.refreshExpiredStats()
+		}
+	}
+}
+
+// refreshExpiredStats 刷新所有过期的统计信息
+func (arc *AutoRefreshStatisticsCache) refreshExpiredStats() {
+	arc.mu.RLock()
+	expiredTables := make([]string, 0)
+	now := time.Now()
+
+	for tableName, nextRefresh := range arc.refreshOn {
+		if now.After(nextRefresh) {
+			expiredTables = append(expiredTables, tableName)
+		}
+	}
+	arc.mu.RUnlock()
+
+	if len(expiredTables) > 0 {
+		fmt.Printf("  [STATS] Refreshing %d expired tables\n", len(expiredTables))
+
+		// 并发刷新过期表
+		for _, tableName := range expiredTables {
+			stats, err := arc.refresh(tableName)
+			if err != nil {
+				fmt.Printf("  [STATS] Failed to refresh %s: %v\n", tableName, err)
+			} else {
+				fmt.Printf("  [STATS] Refreshed %s: %d rows\n", tableName, stats.RowCount)
+			}
+		}
+	}
+}
+

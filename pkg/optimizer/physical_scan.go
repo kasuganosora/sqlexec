@@ -3,7 +3,6 @@ package optimizer
 import (
 	"context"
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
@@ -354,37 +353,9 @@ func (p *PhysicalSelection) Cost() float64 {
 }
 
 // Execute 执行过滤
+// DEPRECATED: 执行逻辑已迁移到 pkg/executor 包，此方法保留仅为兼容性
 func (p *PhysicalSelection) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	if len(p.children) == 0 {
-		return nil, fmt.Errorf("PhysicalSelection has no child")
-	}
-
-	// 先执行子节点
-	input, err := p.children[0].Execute(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// 手动应用过滤（简化实现）
-	filtered := []domain.Row{}
-	for _, row := range input.Rows {
-		match := true
-		for _, filter := range p.Filters {
-			if !matchesFilter(row, filter) {
-				match = false
-				break
-			}
-		}
-		if match {
-			filtered = append(filtered, row)
-		}
-	}
-
-	return &domain.QueryResult{
-		Columns: input.Columns,
-		Rows:    filtered,
-		Total:    int64(len(filtered)),
-	}, nil
+	return nil, fmt.Errorf("PhysicalSelection.Execute is deprecated. Please use pkg/executor instead")
 }
 
 // matchesFilter 检查行是否匹配过滤器（简化实现）
@@ -459,59 +430,9 @@ func (p *PhysicalProjection) Cost() float64 {
 }
 
 // Execute 执行投影
+// DEPRECATED: 执行逻辑已迁移到 pkg/executor 包，此方法保留仅为兼容性
 func (p *PhysicalProjection) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	if len(p.children) == 0 {
-		return nil, fmt.Errorf("PhysicalProjection has no child")
-	}
-
-	// 先执行子节点
-	input, err := p.children[0].Execute(ctx)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 输入行数: %d, 输入列数: %d\n", len(input.Rows), len(input.Columns))
-
-	// 应用投影（简化实现，只支持列选择）
-	output := []domain.Row{}
-	for rowIdx, row := range input.Rows {
-		newRow := make(domain.Row)
-		fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 处理行 %d, 原始keys: %v\n", rowIdx, getMapKeys(row))
-		for i, expr := range p.Exprs {
-			if expr.Type == parser.ExprTypeColumn {
-				fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 尝试提取列 %s (别名: %s)\n", expr.Column, p.Aliases[i])
-				if val, exists := row[expr.Column]; exists {
-					newRow[p.Aliases[i]] = val
-					fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 提取成功, 值: %v\n", val)
-				} else {
-					fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 列 %s 不存在于行中\n", expr.Column)
-					// 简化：不支持表达式计算
-					newRow[p.Aliases[i]] = nil
-				}
-			} else {
-				// 简化：不支持表达式计算
-				newRow[p.Aliases[i]] = nil
-			}
-		}
-		fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 新行keys: %v\n", getMapKeys(newRow))
-		output = append(output, newRow)
-	}
-
-	// 更新列信息
-	columns := make([]domain.ColumnInfo, len(p.Columns))
-	for i, col := range p.Columns {
-		columns[i] = domain.ColumnInfo{
-			Name:     col.Name,
-			Type:     col.Type,
-			Nullable: col.Nullable,
-		}
-	}
-
-	fmt.Printf("  [DEBUG] PhysicalProjection.Execute: 输出行数: %d, 输出列: %v\n", len(output), p.Aliases)
-	return &domain.QueryResult{
-		Columns: columns,
-		Rows:    output,
-		Total:    int64(len(output)),
-	}, nil
+	return nil, fmt.Errorf("PhysicalProjection.Execute is deprecated. Please use pkg/executor instead")
 }
 
 // getMapKeys 获取map的所有key
@@ -573,42 +494,9 @@ func (p *PhysicalLimit) Cost() float64 {
 }
 
 // Execute 执行限制
+// DEPRECATED: 执行逻辑已迁移到 pkg/executor 包，此方法保留仅为兼容性
 func (p *PhysicalLimit) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	if len(p.children) == 0 {
-		return nil, fmt.Errorf("PhysicalLimit has no child")
-	}
-
-	// 先执行子节点
-	input, err := p.children[0].Execute(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// 应用 OFFSET 和 LIMIT
-	start := p.Offset
-	if start < 0 {
-		start = 0
-	}
-	if start >= int64(len(input.Rows)) {
-		return &domain.QueryResult{
-			Columns: input.Columns,
-			Rows:    []domain.Row{},
-			Total:    0,
-		}, nil
-	}
-
-	end := start + p.Limit
-	if end > int64(len(input.Rows)) {
-		end = int64(len(input.Rows))
-	}
-
-	output := input.Rows[start:end]
-
-	return &domain.QueryResult{
-		Columns: input.Columns,
-		Rows:    output,
-		Total:    int64(len(output)),
-	}, nil
+	return nil, fmt.Errorf("PhysicalLimit.Execute is deprecated. Please use pkg/executor instead")
 }
 
 // Explain 返回计划说明
@@ -670,188 +558,9 @@ func (p *PhysicalHashJoin) Cost() float64 {
 }
 
 // Execute 执行哈希连接
+// DEPRECATED: 执行逻辑已迁移到 pkg/executor 包，此方法保留仅为兼容性
 func (p *PhysicalHashJoin) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	if len(p.children) != 2 {
-		return nil, fmt.Errorf("HashJoin requires exactly 2 children")
-	}
-
-	// 获取连接条件（简化：只支持单列等值连接）
-	leftJoinCol := ""
-	rightJoinCol := ""
-	if len(p.Conditions) > 0 && p.Conditions[0].Left != nil {
-		leftJoinCol = fmt.Sprintf("%v", p.Conditions[0].Left)
-	}
-	if len(p.Conditions) > 0 && p.Conditions[0].Right != nil {
-		rightJoinCol = fmt.Sprintf("%v", p.Conditions[0].Right)
-	}
-
-	// 1. 执行左表（构建端）
-	leftResult, err := p.children[0].Execute(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("left table execute error: %w", err)
-	}
-
-	// 2. 执行右表（探测端）
-	rightResult, err := p.children[1].Execute(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("right table execute error: %w", err)
-	}
-
-	// 3. 构建哈希表（从左表）
-	hashTable := make(map[interface{}][]domain.Row)
-	for _, row := range leftResult.Rows {
-		key := row[leftJoinCol]
-		hashTable[key] = append(hashTable[key], row)
-	}
-
-	// 4. 探测右表并产生结果
-	output := []domain.Row{}
-
-	// 根据连接类型处理
-	switch p.JoinType {
-	case InnerJoin:
-		// INNER JOIN：两边都有匹配
-		for _, rightRow := range rightResult.Rows {
-			key := rightRow[rightJoinCol]
-			if leftRows, exists := hashTable[key]; exists {
-				for _, leftRow := range leftRows {
-					// 合并左右行
-					merged := make(domain.Row)
-					maps.Copy(merged, leftRow)
-					for k, v := range rightRow {
-						// 如果列名冲突，添加前缀
-						newKey := k
-						if _, exists := merged[newKey]; exists {
-							newKey = "right_" + k
-						}
-						merged[newKey] = v
-					}
-					output = append(output, merged)
-				}
-			}
-		}
-	case LeftOuterJoin:
-		// LEFT JOIN：左边所有行，右边没有匹配的用NULL填充
-		// 跟踪右边已匹配的行
-		rightMatched := make(map[int]bool)
-		for _, rightRow := range rightResult.Rows {
-			key := rightRow[rightJoinCol]
-			if leftRows, exists := hashTable[key]; exists {
-// 有匹配：连接
-			for _, leftRow := range leftRows {
-				merged := make(domain.Row)
-				maps.Copy(merged, leftRow)
-				for k, v := range rightRow {
-						newKey := k
-						if _, exists := merged[newKey]; exists {
-							newKey = "right_" + k
-						}
-						merged[newKey] = v
-					}
-					output = append(output, merged)
-				}
-			// 标记右边已匹配的行 - 简化：不比较行内容
-			// 由于 map 不能直接比较，使用索引方式
-			rightMatched[len(rightResult.Rows)-1] = true
-			}
-		}
-		// 添加左边没有匹配的行
-		for _, leftRow := range leftResult.Rows {
-			leftKey := leftRow[leftJoinCol]
-			matched := false
-			for _, rightRow := range rightResult.Rows {
-				if rightRow[rightJoinCol] == leftKey {
-					matched = true
-					break
-				}
-			}
-if !matched {
-			merged := make(domain.Row)
-			maps.Copy(merged, leftRow)
-			for _, col := range rightResult.Columns {
-					newKey := col.Name
-					if _, exists := merged[newKey]; exists {
-						newKey = "right_" + col.Name
-					}
-					merged[newKey] = nil
-				}
-				output = append(output, merged)
-			}
-		}
-case RightOuterJoin:
-		// RIGHT JOIN：右边所有行，左边没有匹配的用NULL填充
-		// 重新构建左表的哈希表用于RIGHT JOIN
-		leftHashTable := make(map[interface{}][]domain.Row)
-		for _, row := range leftResult.Rows {
-			key := row[leftJoinCol]
-			leftHashTable[key] = append(leftHashTable[key], row)
-		}
-
-		for _, rightRow := range rightResult.Rows {
-			key := rightRow[rightJoinCol]
-			if leftRows, exists := leftHashTable[key]; exists {
-				// 有匹配：连接
-				for _, leftRow := range leftRows {
-					merged := make(domain.Row)
-					maps.Copy(merged, leftRow)
-					for k, v := range rightRow {
-						newKey := k
-						if _, exists := merged[newKey]; exists {
-							newKey = "right_" + k
-						}
-						merged[newKey] = v
-					}
-					output = append(output, merged)
-				}
-			} else {
-				// 无匹配：左边NULL + 右边行
-				merged := make(domain.Row)
-				for _, col := range leftResult.Columns {
-					merged[col.Name] = nil
-				}
-				for k, v := range rightRow {
-					newKey := k
-					if _, exists := merged[newKey]; exists {
-						newKey = "right_" + k
-					}
-					merged[newKey] = v
-				}
-				output = append(output, merged)
-			}
-		}
-
-default:
-		return nil, fmt.Errorf("unsupported join type: %s", p.JoinType)
-	}
-
-	// 合并列信息
-	columns := []domain.ColumnInfo{}
-	columns = append(columns, leftResult.Columns...)
-	for _, col := range rightResult.Columns {
-		// 检查列名是否冲突
-		conflict := false
-		for _, leftCol := range leftResult.Columns {
-			if leftCol.Name == col.Name {
-				conflict = true
-				break
-			}
-		}
-		if conflict {
-			columns = append(columns, domain.ColumnInfo{
-				Name:     "right_" + col.Name,
-				Type:     col.Type,
-				Nullable: true,
-			})
-		} else {
-			columns = append(columns, col)
-		}
-	}
-
-	return &domain.QueryResult{
-		Columns: columns,
-		Rows:    output,
-		Total:   int64(len(output)),
-	}, nil
+	return nil, fmt.Errorf("PhysicalHashJoin.Execute is deprecated. Please use pkg/executor instead")
 }
 
 // Explain 返回计划说明
@@ -929,195 +638,9 @@ func (p *PhysicalHashAggregate) Cost() float64 {
 }
 
 // Execute 执行哈希聚合
+// DEPRECATED: 执行逻辑已迁移到 pkg/executor 包，此方法保留仅为兼容性
 func (p *PhysicalHashAggregate) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	if len(p.children) == 0 {
-		return nil, fmt.Errorf("HashAggregate has no child")
-	}
-
-	// 执行子节点
-	input, err := p.children[0].Execute(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(p.AggFuncs) == 0 && len(p.GroupByCols) == 0 {
-		// 没有聚合函数也没有分组，直接返回
-		return input, nil
-	}
-
-	// 用于存储分组结果的哈希表
-	type groupKey struct {
-		values []interface{}
-	}
-	groups := make(map[interface{}]*aggregateGroup)
-
-	// 遍历所有行，进行分组和聚合
-	for _, row := range input.Rows {
-		// 构建分组键
-		key := make([]interface{}, len(p.GroupByCols))
-		for i, colName := range p.GroupByCols {
-			key[i] = row[colName]
-		}
-
-		// 将key转换为字符串作为map的key
-		keyStr := fmt.Sprintf("%v", key)
-
-		// 获取或创建分组
-		group, exists := groups[keyStr]
-		if !exists {
-			group = &aggregateGroup{
-				key:    key,
-				rows:   []domain.Row{},
-				values: make(map[string]interface{}),
-			}
-			groups[keyStr] = group
-		}
-
-		group.rows = append(group.rows, row)
-	}
-
-	// 为每个分组计算聚合函数
-	output := []domain.Row{}
-	for _, group := range groups {
-		row := make(domain.Row)
-
-		// 添加 GROUP BY 列
-		for i, colName := range p.GroupByCols {
-			if i < len(group.key) {
-				row[colName] = group.key[i]
-			}
-		}
-
-		// 计算聚合函数
-		for _, agg := range p.AggFuncs {
-			result := p.calculateAggregation(agg, group.rows)
-			colName := agg.Alias
-			if colName == "" {
-				colName = fmt.Sprintf("%s(%v)", agg.Type, agg.Expr)
-			}
-			row[colName] = result
-		}
-
-		output = append(output, row)
-	}
-
-	// 构建列信息
-	columns := []domain.ColumnInfo{}
-
-	// GROUP BY 列
-	for _, colName := range p.GroupByCols {
-		columns = append(columns, domain.ColumnInfo{
-			Name:     colName,
-			Type:     "unknown",
-			Nullable: true,
-		})
-	}
-
-	// 聚合函数列
-	for _, agg := range p.AggFuncs {
-		colName := agg.Alias
-		if colName == "" {
-			colName = fmt.Sprintf("%s(%v)", agg.Type, agg.Expr)
-		}
-		columns = append(columns, domain.ColumnInfo{
-			Name:     colName,
-			Type:     "unknown",
-			Nullable: true,
-		})
-	}
-
-	return &domain.QueryResult{
-		Columns: columns,
-		Rows:    output,
-		Total:   int64(len(output)),
-	}, nil
-}
-
-// aggregateGroup 表示一个分组
-type aggregateGroup struct {
-	key    []interface{}
-	rows   []domain.Row
-	values map[string]interface{}
-}
-
-// calculateAggregation 计算聚合函数
-func (p *PhysicalHashAggregate) calculateAggregation(agg *AggregationItem, rows []domain.Row) interface{} {
-	if len(rows) == 0 {
-		switch agg.Type {
-		case Count:
-			return int64(0)
-		case Sum, Avg, Max, Min:
-			return nil
-		}
-	}
-
-	// 获取聚合列名
-	colName := agg.Expr.Column
-	if colName == "" && agg.Expr.Function != "" {
-		colName = fmt.Sprintf("%s(%v)", agg.Expr.Function, agg.Expr.Args)
-	}
-
-	switch agg.Type {
-	case Count:
-		return int64(len(rows))
-	case Sum:
-		sum := 0.0
-		for _, row := range rows {
-			val := row[colName]
-			if val != nil {
-				fval, _ := utils.ToFloat64(val)
-				sum += fval
-			}
-		}
-		return sum
-	case Avg:
-		if len(rows) == 0 {
-			return nil
-		}
-		sum := 0.0
-		count := 0
-		for _, row := range rows {
-			val := row[colName]
-			if val != nil {
-				fval, _ := utils.ToFloat64(val)
-				sum += fval
-				count++
-			}
-		}
-		if count > 0 {
-			return sum / float64(count)
-		}
-		return nil
-	case Max:
-		var max interface{}
-		for _, row := range rows {
-			val := row[colName]
-			if val != nil && max == nil {
-				max = val
-			} else if val != nil && max != nil {
-				cmp := compareValues(val, max)
-				if cmp > 0 {
-					max = val
-				}
-			}
-		}
-		return max
-	case Min:
-		var min interface{}
-		for _, row := range rows {
-			val := row[colName]
-			if val != nil && min == nil {
-				min = val
-			} else if val != nil && min != nil {
-				cmp := compareValues(val, min)
-				if cmp < 0 {
-					min = val
-				}
-			}
-		}
-		return min
-	}
-	return nil
+	return nil, fmt.Errorf("PhysicalHashAggregate.Execute is deprecated. Please use pkg/executor instead")
 }
 
 // Explain 返回计划说明
@@ -1130,11 +653,11 @@ func (p *PhysicalHashAggregate) Explain() string {
 		aggFuncsBuilder.WriteString(agg.Type.String())
 	}
 	aggFuncs := aggFuncsBuilder.String()
-	
+
 	groupBy := ""
 	if len(p.GroupByCols) > 0 {
 		groupBy = fmt.Sprintf(", GROUP BY(%s)", fmt.Sprintf("%v", p.GroupByCols))
 	}
-	
+
 	return fmt.Sprintf("HashAggregate(funcs=[%s]%s, cost=%.2f)", aggFuncs, groupBy, p.cost)
 }

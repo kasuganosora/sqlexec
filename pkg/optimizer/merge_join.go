@@ -66,63 +66,9 @@ func (p *PhysicalMergeJoin) Cost() float64 {
 }
 
 // Execute 执行归并连接
+// DEPRECATED: 执行逻辑已迁移到 pkg/executor 包，此方法保留仅为兼容性
 func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	if len(p.children) != 2 {
-		return nil, fmt.Errorf("MergeJoin requires exactly 2 children")
-	}
-
-	// 1. 执行左表和右表
-	leftResult, err := p.children[0].Execute(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("left table execute error: %w", err)
-	}
-
-	rightResult, err := p.children[1].Execute(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("right table execute error: %w", err)
-	}
-
-	// 2. 获取连接条件
-	leftJoinCol, rightJoinCol := getJoinColumns(p.Conditions)
-	if leftJoinCol == "" || rightJoinCol == "" {
-		return nil, fmt.Errorf("invalid join conditions")
-	}
-
-	// 3. 对两边数据进行排序（如果是有序数据可以跳过这一步）
-	leftRows := p.sortByColumn(leftResult.Rows, leftJoinCol)
-	rightRows := p.sortByColumn(rightResult.Rows, rightJoinCol)
-
-	// 4. 执行两路归并
-	output := p.mergeRows(leftRows, rightRows, leftJoinCol, rightJoinCol, p.JoinType)
-
-	// 5. 合并列信息
-	columns := []domain.ColumnInfo{}
-	columns = append(columns, leftResult.Columns...)
-	for _, col := range rightResult.Columns {
-		// 检查列名冲突
-		conflict := false
-		for _, leftCol := range leftResult.Columns {
-			if leftCol.Name == col.Name {
-				conflict = true
-				break
-			}
-		}
-		if conflict {
-			columns = append(columns, domain.ColumnInfo{
-				Name:     "right_" + col.Name,
-				Type:     col.Type,
-				Nullable: col.Nullable,
-			})
-		} else {
-			columns = append(columns, col)
-		}
-	}
-
-	return &domain.QueryResult{
-		Columns: columns,
-		Rows:    output,
-		Total:    int64(len(output)),
-	}, nil
+	return nil, fmt.Errorf("PhysicalMergeJoin.Execute is deprecated. Please use pkg/executor instead")
 }
 
 // sortByColumn 按指定列排序行数据

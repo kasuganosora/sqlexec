@@ -38,9 +38,6 @@ type PhysicalPlan interface {
 	// Cost 返回执行成本
 	Cost() float64
 
-	// Execute 执行计划
-	Execute(ctx context.Context) (*domain.QueryResult, error)
-
 	// Explain 返回计划说明
 	Explain() string
 }

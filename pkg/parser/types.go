@@ -84,6 +84,7 @@ type SelectStatement struct {
 	OrderBy    []OrderByItem   `json:"order_by,omitempty"`
 	Limit      *int64          `json:"limit,omitempty"`
 	Offset     *int64          `json:"offset,omitempty"`
+	Hints      string          `json:"hints,omitempty"` // Raw hints string from SQL comment
 }
 
 // InsertStatement INSERT 语句

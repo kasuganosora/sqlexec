@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kasuganosora/sqlexec/pkg/dataaccess"
+	"github.com/kasuganosora/sqlexec/pkg/executor"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
@@ -206,13 +208,15 @@ func (bs *BenchmarkSuite) executeQuery(sql string) (*domain.QueryResult, error) 
 	}
 
 	// 优化查询
-	plan, err := bs.optimizer.Optimize(ctx, parseResult.Statement)
+	p, err := bs.optimizer.Optimize(ctx, parseResult.Statement)
 	if err != nil {
 		return nil, fmt.Errorf("optimize failed: %w", err)
 	}
 
-	// 执行计划
-	result, err := plan.Execute(ctx)
+	// 使用executor执行计划
+	das := dataaccess.NewDataService(bs.dataSource)
+	exec := executor.NewExecutor(das)
+	result, err := exec.Execute(ctx, p)
 	if err != nil {
 		return nil, fmt.Errorf("execute failed: %w", err)
 	}

@@ -475,6 +475,7 @@ func EnhancedRuleSet(estimator CardinalityEstimator) RuleSet {
 		NewHintAwareJoinReorderRule(),
 		NewHintAwareIndexRule(),
 		NewHintAwareAggRule(),
+		NewOrderByHintRule(estimator),
 		// JOIN 优化规则
 		&JoinReorderRule{},
 		&JoinEliminationRule{},

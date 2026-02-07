@@ -79,32 +79,9 @@ func (p *OptimizedAggregate) Cost() float64 {
 }
 
 // Execute 执行优化的聚合
+// DEPRECATED: 执行逻辑已迁移到 pkg/executor 包，此方法保留仅为兼容性
 func (p *OptimizedAggregate) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	if len(p.children) == 0 {
-		return nil, fmt.Errorf("OptimizedAggregate has no child")
-	}
-
-	// 执行子节点
-	input, err := p.children[0].Execute(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(p.AggFuncs) == 0 && len(p.GroupByCols) == 0 {
-		// 没有聚合函数也没有分组，直接返回
-		return input, nil
-	}
-
-	// 检查是否可以使用 Perfect Hash Aggregation
-	// 条件：单列分组，且列类型为整数
-	usePerfectHash := len(p.GroupByCols) == 1 && p.canUsePerfectHash(input, p.GroupByCols[0])
-
-	if usePerfectHash {
-		return p.executePerfectHashAggregate(input)
-	}
-
-	// 使用优化的 Hash Aggregation
-	return p.executeHashAggregate(input)
+	return nil, fmt.Errorf("OptimizedAggregate.Execute is deprecated. Please use pkg/executor instead")
 }
 
 // canUsePerfectHash 检查是否可以使用 Perfect Hash Aggregation
