@@ -8,6 +8,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // WindowOperator 窗口函数执行算子
@@ -49,28 +50,9 @@ func NewWindowOperator(child PhysicalPlan, windowFuncs []*parser.WindowExpressio
 }
 
 // Execute 执行窗口函数
+// DEPRECATED: 执行逻辑已迁移到 pkg/executor 包，此方法保留仅为兼容性
 func (op *WindowOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	op.ctx = ctx
-
-	// 1. 从子算子获取数据
-	result, err := op.child.Execute(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute child: %w", err)
-	}
-
-	if len(result.Rows) == 0 {
-		return result, nil
-	}
-
-	// 2. 处理每个窗口函数
-	for _, wfDef := range op.windowFuncs {
-		result.Rows, err = op.executeWindowFunction(result.Rows, wfDef)
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute window function %s: %w", wfDef.Expr.FuncName, err)
-		}
-	}
-
-	return result, nil
+	return nil, fmt.Errorf("WindowOperator.Execute is deprecated. Please use pkg/executor instead")
 }
 
 // executeWindowFunction 执行单个窗口函数
@@ -454,8 +436,8 @@ func (op *WindowOperator) computeSum(rows []domain.Row, start, end int, expr par
 		if err != nil {
 			continue
 		}
-		fval, ok := toFloat64(val)
-		if ok {
+		fval, err := utils.ToFloat64(val)
+		if err == nil {
 			sum += fval
 		}
 	}
@@ -471,8 +453,8 @@ func (op *WindowOperator) computeAvg(rows []domain.Row, start, end int, expr par
 		if err != nil {
 			continue
 		}
-		fval, ok := toFloat64(val)
-		if ok {
+		fval, err := utils.ToFloat64(val)
+		if err == nil {
 			sum += fval
 			count++
 		}

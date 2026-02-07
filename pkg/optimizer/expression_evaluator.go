@@ -3,11 +3,11 @@ package optimizer
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/builtin"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // ExpressionEvaluator 表达式求值器
@@ -95,17 +95,17 @@ func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row pars
 	// 根据运算符类型计算
 	switch strings.ToLower(expr.Operator) {
 	case "=":
-		return e.compareValues(left, right) == 0, nil
+		return utils.CompareValuesForSort(left, right) == 0, nil
 	case "!=", "<>":
-		return e.compareValues(left, right) != 0, nil
+		return utils.CompareValuesForSort(left, right) != 0, nil
 	case ">":
-		return e.compareValues(left, right) > 0, nil
+		return utils.CompareValuesForSort(left, right) > 0, nil
 	case ">=":
-		return e.compareValues(left, right) >= 0, nil
+		return utils.CompareValuesForSort(left, right) >= 0, nil
 	case "<":
-		return e.compareValues(left, right) < 0, nil
+		return utils.CompareValuesForSort(left, right) < 0, nil
 	case "<=":
-		return e.compareValues(left, right) <= 0, nil
+		return utils.CompareValuesForSort(left, right) <= 0, nil
 	case "+", "plus":
 		return e.addValues(left, right)
 	case "-", "minus":
@@ -180,7 +180,7 @@ func (e *ExpressionEvaluator) evaluateUnaryOp(expr *parser.Expression, row parse
 	switch strings.ToLower(expr.Operator) {
 	case "-":
 		// 负号
-		if num, ok := toFloat64(operand); ok {
+		if num, err := utils.ToFloat64(operand); err == nil {
 			return -num, nil
 		}
 		return nil, fmt.Errorf("cannot apply unary minus to non-numeric value")
@@ -255,13 +255,14 @@ func (e *ExpressionEvaluator) convertToExpectedType(value any, params []builtin.
 	// 类型转换映射
 	switch expectedType {
 	case "int", "integer":
-		return e.toInt(value)
+		result, err := utils.ToInt(value)
+		return result, err
 	case "bigint", "long":
-		return e.toInt64(value)
+		return utils.ToInt64(value)
 	case "decimal", "numeric", "number":
-		return e.toFloat64(value)
+		return utils.ToFloat64(value)
 	case "varchar", "char", "text", "string":
-		return e.toString(value)
+		return utils.ToString(value), nil
 	default:
 		return value, nil // 未知类型，返回原值
 	}
@@ -284,169 +285,11 @@ func (e *ExpressionEvaluator) exists(v any) bool {
 	}
 }
 
-// toInt 转换为int
-func (e *ExpressionEvaluator) toInt(v any) (any, error) {
-	if v == nil {
-		return nil, fmt.Errorf("cannot convert nil to int")
-	}
-	switch val := v.(type) {
-	case int:
-		return val, nil
-	case int8:
-		return int(val), nil
-	case int16:
-		return int(val), nil
-	case int32:
-		return int(val), nil
-	case int64:
-		return int(val), nil
-	case float32:
-		return int(float64(val)), nil
-	case float64:
-		return int(val), nil
-	case string:
-		// 尝试解析字符串
-		var result int
-		_, err := fmt.Sscanf(val, "%d", &result)
-		if err != nil {
-			return nil, fmt.Errorf("cannot convert string '%s' to int: %v", val, err)
-		}
-		return result, nil
-	default:
-		return nil, fmt.Errorf("cannot convert %T to int", reflect.TypeOf(v))
-	}
-}
-
-// toInt64 转换为int64
-func (e *ExpressionEvaluator) toInt64(v any) (any, error) {
-	if v == nil {
-		return nil, fmt.Errorf("cannot convert nil to int64")
-	}
-	switch val := v.(type) {
-	case int:
-		return int64(val), nil
-	case int8:
-		return int64(val), nil
-	case int16:
-		return int64(val), nil
-	case int32:
-		return int64(val), nil
-	case int64:
-		return val, nil
-	case float32:
-		return int64(val), nil
-	case float64:
-		return int64(val), nil
-	case string:
-		// 尝试解析字符串
-		var result int64
-		_, err := fmt.Sscanf(val, "%d", &result)
-		if err != nil {
-			return nil, fmt.Errorf("cannot convert string '%s' to int64: %v", val, err)
-		}
-		return result, nil
-	default:
-		return nil, fmt.Errorf("cannot convert %T to int64", reflect.TypeOf(v))
-	}
-}
-
-// toFloat64 转换为float64
-func (e *ExpressionEvaluator) toFloat64(v any) (any, error) {
-	if v == nil {
-		return nil, fmt.Errorf("cannot convert nil to float64")
-	}
-	switch val := v.(type) {
-	case int:
-		return float64(val), nil
-	case int8:
-		return float64(val), nil
-	case int16:
-		return float64(val), nil
-	case int32:
-		return float64(val), nil
-	case int64:
-		return float64(val), nil
-	case float32:
-		return float64(val), nil
-	case float64:
-		return val, nil
-	case string:
-		result, err := strconv.ParseFloat(val, 64)
-		if err == nil {
-			return result, nil
-		}
-		// 尝试解析整数
-		var intResult int64
-		_, intErr := fmt.Sscanf(val, "%d", &intResult)
-		if intErr == nil {
-			return float64(intResult), nil
-		}
-		return nil, err
-	default:
-		return nil, fmt.Errorf("cannot convert %T to float64", reflect.TypeOf(v))
-	}
-}
-
-// toString 转换为string
-func (e *ExpressionEvaluator) toString(v any) (any, error) {
-	if v == nil {
-		return "", nil
-	}
-	switch val := v.(type) {
-	case string:
-		return val, nil
-	case int, int8, int16, int32, int64:
-		return fmt.Sprintf("%d", val), nil
-	case float32, float64:
-		return fmt.Sprintf("%v", val), nil
-	case bool:
-		return fmt.Sprintf("%t", val), nil
-	default:
-		return fmt.Sprintf("%v", val), nil
-	}
-}
-
-// compareValues 比较两个值
-// 返回 -1: a < b, 0: a == b, 1: a > b
-func (e *ExpressionEvaluator) compareValues(a, b any) int {
-	if a == nil && b == nil {
-		return 0
-	}
-	if a == nil {
-		return -1
-	}
-	if b == nil {
-		return 1
-	}
-
-	// 尝试数值比较
-	aNum, aOk := toFloat64(a)
-	bNum, bOk := toFloat64(b)
-	if aOk && bOk {
-		if aNum < bNum {
-			return -1
-		} else if aNum > bNum {
-			return 1
-		}
-		return 0
-	}
-
-	// 字符串比较
-	aStr := fmt.Sprintf("%v", a)
-	bStr := fmt.Sprintf("%v", b)
-	if aStr < bStr {
-		return -1
-	} else if aStr > bStr {
-		return 1
-	}
-	return 0
-}
-
 // addValues 加法运算
 func (e *ExpressionEvaluator) addValues(a, b any) (any, error) {
-	aNum, aOk := toFloat64(a)
-	bNum, bOk := toFloat64(b)
-	if aOk && bOk {
+	aNum, aErr := utils.ToFloat64(a)
+	bNum, bErr := utils.ToFloat64(b)
+	if aErr == nil && bErr == nil {
 		return aNum + bNum, nil
 	}
 
@@ -458,9 +301,9 @@ func (e *ExpressionEvaluator) addValues(a, b any) (any, error) {
 
 // subValues 减法运算
 func (e *ExpressionEvaluator) subValues(a, b any) (any, error) {
-	aNum, aOk := toFloat64(a)
-	bNum, bOk := toFloat64(b)
-	if aOk && bOk {
+	aNum, aErr := utils.ToFloat64(a)
+	bNum, bErr := utils.ToFloat64(b)
+	if aErr == nil && bErr == nil {
 		return aNum - bNum, nil
 	}
 	return nil, fmt.Errorf("cannot subtract non-numeric values")
@@ -468,9 +311,9 @@ func (e *ExpressionEvaluator) subValues(a, b any) (any, error) {
 
 // mulValues 乘法运算
 func (e *ExpressionEvaluator) mulValues(a, b any) (any, error) {
-	aNum, aOk := toFloat64(a)
-	bNum, bOk := toFloat64(b)
-	if aOk && bOk {
+	aNum, aErr := utils.ToFloat64(a)
+	bNum, bErr := utils.ToFloat64(b)
+	if aErr == nil && bErr == nil {
 		return aNum * bNum, nil
 	}
 	return nil, fmt.Errorf("cannot multiply non-numeric values")
@@ -478,9 +321,9 @@ func (e *ExpressionEvaluator) mulValues(a, b any) (any, error) {
 
 // divValues 除法运算
 func (e *ExpressionEvaluator) divValues(a, b any) (any, error) {
-	aNum, aOk := toFloat64(a)
-	bNum, bOk := toFloat64(b)
-	if !aOk || !bOk {
+	aNum, aErr := utils.ToFloat64(a)
+	bNum, bErr := utils.ToFloat64(b)
+	if aErr != nil || bErr != nil {
 		return nil, fmt.Errorf("cannot divide non-numeric values")
 	}
 	if bNum == 0 {
@@ -529,8 +372,9 @@ func (e *ExpressionEvaluator) inValues(value, values any) bool {
 		return false
 	}
 
+
 	for _, v := range valList {
-		if e.compareValues(value, v) == 0 {
+		if utils.CompareValuesForSort(value, v) == 0 {
 			return true
 		}
 	}
@@ -539,8 +383,9 @@ func (e *ExpressionEvaluator) inValues(value, values any) bool {
 
 // betweenValues BETWEEN 操作
 func (e *ExpressionEvaluator) betweenValues(value, min, max any) bool {
-	return e.compareValues(value, min) >= 0 && e.compareValues(value, max) <= 0
+	return utils.CompareValuesForSort(value, min) >= 0 && utils.CompareValuesForSort(value, max) <= 0
 }
+
 
 // isTrue 判断值是否为真
 func (e *ExpressionEvaluator) isTrue(value any) bool {

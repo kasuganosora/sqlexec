@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // TableStatistics 表统计信息
@@ -206,9 +207,9 @@ func (e *SimpleCardinalityEstimator) estimateRangeSelectivity(operator string, v
 		return 0.1
 	}
 
-	minFloat, _ := toFloat64(minVal)
-	maxFloat, _ := toFloat64(maxVal)
-	valFloat, _ := toFloat64(value)
+	minFloat, _ := utils.ToFloat64(minVal)
+	maxFloat, _ := utils.ToFloat64(maxVal)
+	valFloat, _ := utils.ToFloat64(value)
 
 	if minFloat == maxFloat {
 		return 1.0
