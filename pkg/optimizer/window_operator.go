@@ -120,7 +120,7 @@ func (op *WindowOperator) computePartitionKey(row domain.Row, partitionBy []pars
 	keyParts := make([]interface{}, len(partitionBy))
 
 	for i, expr := range partitionBy {
-		value, err := op.evaluator.Evaluate(&expr, parser.Row(row))
+		value, err := op.evaluator.Evaluate(&expr, NewSimpleExpressionContext(parser.Row(row)))
 		if err != nil {
 			keyParts[i] = fmt.Sprintf("ERROR:%v", err)
 		} else {
@@ -152,8 +152,8 @@ func (op *WindowOperator) sortRows(rows []domain.Row, orderBy []parser.OrderItem
 // compareRows 比较两行
 func (op *WindowOperator) compareRows(row1, row2 domain.Row, orderBy []parser.OrderItem) bool {
 	for _, orderItem := range orderBy {
-		val1, err1 := op.evaluator.Evaluate(&orderItem.Expr, parser.Row(row1))
-		val2, err2 := op.evaluator.Evaluate(&orderItem.Expr, parser.Row(row2))
+		val1, err1 := op.evaluator.Evaluate(&orderItem.Expr, NewSimpleExpressionContext(parser.Row(row1)))
+		val2, err2 := op.evaluator.Evaluate(&orderItem.Expr, NewSimpleExpressionContext(parser.Row(row2)))
 
 		if err1 != nil || err2 != nil {
 			continue
@@ -255,7 +255,7 @@ func (op *WindowOperator) computeLag(rows []domain.Row, rowIndex int, args []par
 	// 获取偏移量(默认为1)
 	offset := 1
 	if len(args) > 0 {
-		val, err := op.evaluator.Evaluate(&args[0], nil)
+		val, err := op.evaluator.Evaluate(&args[0], NewSimpleExpressionContext(nil))
 		if err == nil {
 			if offsetInt, ok := val.(int64); ok {
 				offset = int(offsetInt)
@@ -284,7 +284,7 @@ func (op *WindowOperator) computeLead(rows []domain.Row, rowIndex int, args []pa
 	// 获取偏移量(默认为1)
 	offset := 1
 	if len(args) > 0 {
-		val, err := op.evaluator.Evaluate(&args[0], nil)
+		val, err := op.evaluator.Evaluate(&args[0], NewSimpleExpressionContext(nil))
 		if err == nil {
 			if offsetInt, ok := val.(int64); ok {
 				offset = int(offsetInt)
@@ -380,7 +380,7 @@ func (op *WindowOperator) getWindowBounds(rows []domain.Row, rowIndex int, frame
 
 // getFrameOffset 获取帧偏移
 func (op *WindowOperator) getFrameOffset(row domain.Row, expr parser.Expression) (int, bool) {
-	val, err := op.evaluator.Evaluate(&expr, parser.Row(row))
+	val, err := op.evaluator.Evaluate(&expr, NewSimpleExpressionContext(parser.Row(row)))
 	if err != nil {
 		return 0, false
 	}
@@ -412,7 +412,7 @@ func (op *WindowOperator) isEqual(row1, row2 domain.Row) bool {
 
 // getRowValue 获取行的指定列值
 func (op *WindowOperator) getRowValue(row domain.Row, expr parser.Expression) (interface{}, error) {
-	return op.evaluator.Evaluate(&expr, parser.Row(row))
+	return op.evaluator.Evaluate(&expr, NewSimpleExpressionContext(parser.Row(row)))
 }
 
 // 聚合函数
@@ -432,7 +432,7 @@ func (op *WindowOperator) computeCount(rows []domain.Row, start, end int) int64 
 func (op *WindowOperator) computeSum(rows []domain.Row, start, end int, expr parser.Expression) (interface{}, error) {
 	var sum float64
 	for i := start; i < end; i++ {
-		val, err := op.evaluator.Evaluate(&expr, parser.Row(rows[i]))
+		val, err := op.evaluator.Evaluate(&expr, NewSimpleExpressionContext(parser.Row(rows[i])))
 		if err != nil {
 			continue
 		}
@@ -449,7 +449,7 @@ func (op *WindowOperator) computeAvg(rows []domain.Row, start, end int, expr par
 	sum, count := 0.0, 0
 
 	for i := start; i < end; i++ {
-		val, err := op.evaluator.Evaluate(&expr, parser.Row(rows[i]))
+		val, err := op.evaluator.Evaluate(&expr, NewSimpleExpressionContext(parser.Row(rows[i])))
 		if err != nil {
 			continue
 		}
@@ -472,7 +472,7 @@ func (op *WindowOperator) computeMin(rows []domain.Row, start, end int, expr par
 	minVal := interface{}(nil)
 
 	for i := start; i < end; i++ {
-		val, err := op.evaluator.Evaluate(&expr, parser.Row(rows[i]))
+		val, err := op.evaluator.Evaluate(&expr, NewSimpleExpressionContext(parser.Row(rows[i])))
 		if err != nil {
 			continue
 		}
@@ -489,7 +489,7 @@ func (op *WindowOperator) computeMax(rows []domain.Row, start, end int, expr par
 	maxVal := interface{}(nil)
 
 	for i := start; i < end; i++ {
-		val, err := op.evaluator.Evaluate(&expr, parser.Row(rows[i]))
+		val, err := op.evaluator.Evaluate(&expr, NewSimpleExpressionContext(parser.Row(rows[i])))
 		if err != nil {
 			continue
 		}

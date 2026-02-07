@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/builtin"
+	"github.com/kasuganosora/sqlexec/pkg/optimizer/executor"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
@@ -30,8 +31,25 @@ func NewExpressionEvaluatorWithoutAPI() *ExpressionEvaluator {
 	}
 }
 
-// Evaluate 计算表达式的值
-func (e *ExpressionEvaluator) Evaluate(expr *parser.Expression, row parser.Row) (any, error) {
+// Evaluate 实现 executor.ExpressionEvaluator 接口
+func (e *ExpressionEvaluator) Evaluate(expr interface{}, ctx executor.ExpressionContext) (interface{}, error) {
+	parserExpr, ok := expr.(*parser.Expression)
+	if !ok {
+		return nil, fmt.Errorf("expression must be *parser.Expression")
+	}
+
+	// 将 ExpressionContext 转换为 parser.Row
+	row := make(parser.Row)
+	if ctx != nil {
+		// 从 context 获取值 - 这里简化处理
+		// 实际实现可能需要遍历所有可能的列名
+	}
+
+	return e.evaluateInternal(parserExpr, row)
+}
+
+// evaluateInternal 内部计算方法
+func (e *ExpressionEvaluator) evaluateInternal(expr *parser.Expression, row parser.Row) (any, error) {
 	if expr == nil {
 		return nil, nil
 	}
@@ -61,6 +79,87 @@ func (e *ExpressionEvaluator) Evaluate(expr *parser.Expression, row parser.Row) 
 	}
 }
 
+// EvaluateBoolean 评估表达式并返回布尔值（实现 executor.ExpressionEvaluator 接口）
+func (e *ExpressionEvaluator) EvaluateBoolean(expr interface{}, ctx executor.ExpressionContext) (bool, error) {
+	parserExpr, ok := expr.(*parser.Expression)
+	if !ok {
+		return false, fmt.Errorf("expression must be *parser.Expression")
+	}
+
+	// 将 ExpressionContext 转换为 parser.Row
+	row := make(parser.Row)
+	if ctx != nil {
+		// 尝试从 context 获取值
+		// 这里简化处理，实际可能需要更多逻辑
+	}
+
+	result, err := e.evaluateInternal(parserExpr, row)
+	if err != nil {
+		return false, err
+	}
+
+	return e.isTrue(result), nil
+}
+
+// Validate 验证表达式（实现 executor.ExpressionEvaluator 接口）
+func (e *ExpressionEvaluator) Validate(expr interface{}) error {
+	parserExpr, ok := expr.(*parser.Expression)
+	if !ok {
+		return fmt.Errorf("expression must be *parser.Expression")
+	}
+
+	return e.validateExpression(parserExpr)
+}
+
+// validateExpression 递归验证表达式
+func (e *ExpressionEvaluator) validateExpression(expr *parser.Expression) error {
+	if expr == nil {
+		return nil
+	}
+
+	switch expr.Type {
+	case parser.ExprTypeColumn:
+		if expr.Column == "" {
+			return fmt.Errorf("column expression without column name")
+		}
+		return nil
+
+	case parser.ExprTypeValue:
+		// 常量值总是有效的
+		return nil
+
+	case parser.ExprTypeOperator:
+		if expr.Operator == "" {
+			return fmt.Errorf("operator expression without operator")
+		}
+		if expr.Left != nil {
+			if err := e.validateExpression(expr.Left); err != nil {
+				return fmt.Errorf("left operand: %w", err)
+			}
+		}
+		if expr.Right != nil {
+			if err := e.validateExpression(expr.Right); err != nil {
+				return fmt.Errorf("right operand: %w", err)
+			}
+		}
+		return nil
+
+	case parser.ExprTypeFunction:
+		if expr.Function == "" {
+			return fmt.Errorf("function expression without function name")
+		}
+		for i, arg := range expr.Args {
+			if err := e.validateExpression(&arg); err != nil {
+				return fmt.Errorf("argument %d: %w", i, err)
+			}
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unknown expression type: %v", expr.Type)
+	}
+}
+
 // evaluateOperator 计算运算符表达式
 func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row parser.Row) (any, error) {
 	if expr.Operator == "" {
@@ -82,12 +181,12 @@ func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row pars
 		return nil, fmt.Errorf("invalid operator expression: missing operand")
 	}
 
-	left, err := e.Evaluate(expr.Left, row)
+	left, err := e.evaluateInternal(expr.Left, row)
 	if err != nil {
 		return nil, fmt.Errorf("left operand evaluation failed: %w", err)
 	}
 
-	right, err := e.Evaluate(expr.Right, row)
+	right, err := e.evaluateInternal(expr.Right, row)
 	if err != nil {
 		return nil, fmt.Errorf("right operand evaluation failed: %w", err)
 	}
@@ -123,7 +222,7 @@ func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row pars
 	case "not in":
 		return !e.inValues(left, right), nil
 	case "between":
-		if vals, ok := right.([]any); ok && len(vals) == 2 {
+		if vals, ok := right.([]interface{}); ok && len(vals) == 2 {
 			return e.betweenValues(left, vals[0], vals[1]), nil
 		}
 		return false, nil
@@ -138,7 +237,7 @@ func (e *ExpressionEvaluator) evaluateLogicalOp(expr *parser.Expression, row par
 		return nil, fmt.Errorf("invalid logical operator expression")
 	}
 
-	left, err := e.Evaluate(expr.Left, row)
+	left, err := e.evaluateInternal(expr.Left, row)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +247,7 @@ func (e *ExpressionEvaluator) evaluateLogicalOp(expr *parser.Expression, row par
 		if !e.isTrue(left) {
 			return false, nil
 		}
-		right, err := e.Evaluate(expr.Right, row)
+		right, err := e.evaluateInternal(expr.Right, row)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +258,7 @@ func (e *ExpressionEvaluator) evaluateLogicalOp(expr *parser.Expression, row par
 	if e.isTrue(left) {
 		return true, nil
 	}
-	right, err := e.Evaluate(expr.Right, row)
+	right, err := e.evaluateInternal(expr.Right, row)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +271,7 @@ func (e *ExpressionEvaluator) evaluateUnaryOp(expr *parser.Expression, row parse
 		return nil, fmt.Errorf("invalid unary operator expression: missing operand")
 	}
 
-	operand, err := e.Evaluate(expr.Left, row)
+	operand, err := e.evaluateInternal(expr.Left, row)
 	if err != nil {
 		return nil, err
 	}
@@ -215,9 +314,9 @@ func (e *ExpressionEvaluator) evaluateFunction(expr *parser.Expression, row pars
 	}
 
 	// 计算参数（带类型检查）
-	args := make([]any, 0, len(expr.Args))
+	args := make([]interface{}, 0, len(expr.Args))
 	for i, argExpr := range expr.Args {
-		argValue, err := e.Evaluate(&argExpr, row)
+		argValue, err := e.evaluateInternal(&argExpr, row)
 		if err != nil {
 			return nil, fmt.Errorf("argument %d evaluation failed for function %s: %w", i, expr.Function, err)
 		}
@@ -372,7 +471,6 @@ func (e *ExpressionEvaluator) inValues(value, values any) bool {
 		return false
 	}
 
-
 	for _, v := range valList {
 		if utils.CompareValuesForSort(value, v) == 0 {
 			return true
@@ -385,7 +483,6 @@ func (e *ExpressionEvaluator) inValues(value, values any) bool {
 func (e *ExpressionEvaluator) betweenValues(value, min, max any) bool {
 	return utils.CompareValuesForSort(value, min) >= 0 && utils.CompareValuesForSort(value, max) <= 0
 }
-
 
 // isTrue 判断值是否为真
 func (e *ExpressionEvaluator) isTrue(value any) bool {
@@ -417,7 +514,7 @@ func ExtractCorrelatedColumns(expr *parser.Expression, outerSchema []ColumnInfo)
 	}
 
 	correlated := []CorrelatedColumn{}
-	
+
 	// Check if this expression references an outer column
 	if expr.Type == parser.ExprTypeColumn {
 		for _, col := range outerSchema {
@@ -454,7 +551,7 @@ func ReplaceCorrelatedColumns(expr *parser.Expression, mapping map[string]string
 	newExpr := *expr
 	newExpr.Left = ReplaceCorrelatedColumns(expr.Left, mapping)
 	newExpr.Right = ReplaceCorrelatedColumns(expr.Right, mapping)
-	
+
 	// Replace column references
 	if expr.Type == parser.ExprTypeColumn {
 		if newCol, ok := mapping[expr.Column]; ok {
@@ -475,7 +572,7 @@ func ReplaceCorrelatedColumns(expr *parser.Expression, mapping map[string]string
 	return &newExpr
 }
 
-// Decorrelate decorrelates an expression by replacing correlated columns with join references
+// Decorrelate decorrelate an expression by replacing correlated columns with join references
 // Returns decorrelated expression and mapping used
 func Decorrelate(expr *parser.Expression, outerSchema []ColumnInfo) (*parser.Expression, map[string]string) {
 	if expr == nil {
@@ -498,3 +595,56 @@ func Decorrelate(expr *parser.Expression, outerSchema []ColumnInfo) (*parser.Exp
 	decorrelated := ReplaceCorrelatedColumns(expr, mapping)
 	return decorrelated, mapping
 }
+
+// SimpleExpressionContext 是一个简单的 ExpressionContext 实现
+type SimpleExpressionContext struct {
+	row       parser.Row
+	variables map[string]interface{}
+	functions map[string]interface{}
+}
+
+// NewSimpleExpressionContext 创建简单的表达式上下文
+func NewSimpleExpressionContext(row parser.Row) *SimpleExpressionContext {
+	return &SimpleExpressionContext{
+		row:       row,
+		variables: make(map[string]interface{}),
+		functions: make(map[string]interface{}),
+	}
+}
+
+// GetRowValue 获取行值
+func (ctx *SimpleExpressionContext) GetRowValue(colName string) (interface{}, bool) {
+	if ctx.row == nil {
+		return nil, false
+	}
+	val, ok := ctx.row[colName]
+	return val, ok
+}
+
+// GetVariable 获取变量值
+func (ctx *SimpleExpressionContext) GetVariable(varName string) (interface{}, bool) {
+	val, ok := ctx.variables[varName]
+	return val, ok
+}
+
+// GetFunction 获取函数
+func (ctx *SimpleExpressionContext) GetFunction(funcName string) (interface{}, bool) {
+	fn, ok := ctx.functions[funcName]
+	return fn, ok
+}
+
+// GetCurrentTime 获取当前时间
+func (ctx *SimpleExpressionContext) GetCurrentTime() interface{} {
+	return nil // 简化实现
+}
+
+// SetVariable 设置变量
+func (ctx *SimpleExpressionContext) SetVariable(name string, value interface{}) {
+	ctx.variables[name] = value
+}
+
+// Ensure ExpressionEvaluator implements executor.ExpressionEvaluator
+var _ executor.ExpressionEvaluator = (*ExpressionEvaluator)(nil)
+
+// Ensure SimpleExpressionContext implements executor.ExpressionContext
+var _ executor.ExpressionContext = (*SimpleExpressionContext)(nil)

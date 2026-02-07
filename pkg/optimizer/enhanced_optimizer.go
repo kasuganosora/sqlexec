@@ -28,6 +28,12 @@ type EnhancedOptimizer struct {
 	parallelism     int
 	estimator       CardinalityEstimator
 	hintsParser     *parser.HintsParser // 添加 hints 解析器
+	
+	// DI-compatible fields (using interfaces)
+	costModelV2      cost.CostModel
+	indexSelectorV2  interface{}
+	estimatorV2       cost.ExtendedCardinalityEstimator
+	containerV2      interface{}
 }
 
 // NewEnhancedOptimizer 创建增强的优化器

@@ -639,7 +639,8 @@ func (e *OptimizedExecutor) evaluateNoFromExpression(expr *parser.Expression, ro
 
 	case parser.ExprTypeOperator:
 		// 运算符表达式
-		return e.exprEvaluator.Evaluate(expr, row)
+		ctx := NewSimpleExpressionContext(row)
+		return e.exprEvaluator.Evaluate(expr, ctx)
 
 	default:
 		return nil, fmt.Errorf("unsupported expression type: %s", expr.Type)
@@ -720,7 +721,8 @@ func (e *OptimizedExecutor) evaluateFunctionExpression(expr *parser.Expression, 
 	}
 
 	// 对于其他函数，使用 ExpressionEvaluator
-	return e.exprEvaluator.Evaluate(expr, row)
+	ctx := NewSimpleExpressionContext(row)
+	return e.exprEvaluator.Evaluate(expr, ctx)
 }
 
 // inferType 推断值的类型

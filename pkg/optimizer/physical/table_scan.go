@@ -1,34 +1,39 @@
-package optimizer
+package physical
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/kasuganosora/sqlexec/pkg/parser"
+	"github.com/kasuganosora/sqlexec/pkg/optimizer"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
-// PhysicalTableScan 物理表扫描（已重构到pkg/optimizer/physical包）
-// 在重构完成前，暂时保留原始实现
+// PhysicalTableScan 物理表扫描算子
 type PhysicalTableScan struct {
-	TableName             string
-	Columns               []ColumnInfo
-	TableInfo             *domain.TableInfo
-	cost                  float64
-	children              []PhysicalPlan
-	dataSource            domain.DataSource
-	filters               []domain.Filter // 下推的过滤条件
-	limitInfo             *LimitInfo      // 下推的Limit信息
-	parallelScanner       *OptimizedParallelScanner // 并行扫描器
-	enableParallelScan    bool           // 是否启用并行扫描
-	minParallelScanRows   int64          // 启用并行扫描的最小行数
+	TableName          string
+	Columns            []optimizer.ColumnInfo
+	TableInfo          *domain.TableInfo
+	cost               float64
+	children           []PhysicalOperator
+	dataSource         domain.DataSource
+	filters            []domain.Filter // 下推的过滤条件
+	limitInfo          *LimitInfo      // 下推的Limit信息
+	parallelScanner    *optimizer.OptimizedParallelScanner // 并行扫描器
+	enableParallelScan bool           // 是否启用并行扫描
+	minParallelScanRows int64          // 启用并行扫描的最小行数
 }
 
-// NewPhysicalTableScan 创建物理表扫描
-func NewPhysicalTableScan(tableName string, tableInfo *domain.TableInfo, dataSource domain.DataSource, filters []domain.Filter, limitInfo *LimitInfo) *PhysicalTableScan {
-	columns := make([]ColumnInfo, 0, len(tableInfo.Columns))
+// NewPhysicalTableScan 创建物理表扫描算子
+func NewPhysicalTableScan(
+	tableName string,
+	tableInfo *domain.TableInfo,
+	dataSource domain.DataSource,
+	filters []domain.Filter,
+	limitInfo *LimitInfo,
+) *PhysicalTableScan {
+	columns := make([]optimizer.ColumnInfo, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
-		columns = append(columns, ColumnInfo{
+		columns = append(columns, optimizer.ColumnInfo{
 			Name:     col.Name,
 			Type:     col.Type,
 			Nullable: col.Nullable,
@@ -44,7 +49,7 @@ func NewPhysicalTableScan(tableName string, tableInfo *domain.TableInfo, dataSou
 	}
 
 	// 创建并行扫描器（自动选择最优并行度：min(CPU核心数, 8)，范围 [4, 8]）
-	parallelScanner := NewOptimizedParallelScanner(dataSource, 0)
+	parallelScanner := optimizer.NewOptimizedParallelScanner(dataSource, 0)
 
 	// 启用并行扫描的最小行数（100行，根据性能基准测试优化）
 	minParallelScanRows := int64(100)
@@ -58,7 +63,7 @@ func NewPhysicalTableScan(tableName string, tableInfo *domain.TableInfo, dataSou
 		Columns:             columns,
 		TableInfo:           tableInfo,
 		cost:                float64(rowCount),
-		children:            []PhysicalPlan{},
+		children:            []PhysicalOperator{},
 		dataSource:          dataSource,
 		filters:             filters,
 		limitInfo:           limitInfo,
@@ -68,121 +73,27 @@ func NewPhysicalTableScan(tableName string, tableInfo *domain.TableInfo, dataSou
 	}
 }
 
-// PhysicalSelection 物理过滤
-// 在重构完成前，暂时保留原始实现
-type PhysicalSelection struct {
-	Conditions []*parser.Expression
-	Filters    []domain.Filter
-	cost       float64
-	children   []PhysicalPlan
-	dataSource domain.DataSource
+// Children 获取子节点
+func (p *PhysicalTableScan) Children() []PhysicalOperator {
+	return p.children
 }
 
-// NewPhysicalSelection 创建物理过滤
-func NewPhysicalSelection(conditions []*parser.Expression, filters []domain.Filter, child PhysicalPlan, dataSource domain.DataSource) *PhysicalSelection {
-	inputCost := child.Cost()
-	cost := inputCost*1.2 + 10 // 过滤成本
-
-	return &PhysicalSelection{
-		Conditions: conditions,
-		Filters:    filters,
-		cost:       cost,
-		children:   []PhysicalPlan{child},
-		dataSource: dataSource,
-	}
+// SetChildren 设置子节点
+func (p *PhysicalTableScan) SetChildren(children ...PhysicalOperator) {
+	p.children = children
 }
 
-// PhysicalProjection 物理投影
-// 在重构完成前，暂时保留原始实现
-type PhysicalProjection struct {
-	Exprs    []*parser.Expression
-	Aliases  []string
-	Columns  []ColumnInfo
-	cost     float64
-	children []PhysicalPlan
+// Schema 返回输出列
+func (p *PhysicalTableScan) Schema() []optimizer.ColumnInfo {
+	return p.Columns
 }
 
-// NewPhysicalProjection 创建物理投影
-func NewPhysicalProjection(exprs []*parser.Expression, aliases []string, child PhysicalPlan) *PhysicalProjection {
-	inputCost := child.Cost()
-	cost := inputCost*1.1 + float64(len(exprs))*5 // 投影成本
-
-	columns := make([]ColumnInfo, len(exprs))
-	for i, expr := range exprs {
-		name := aliases[i]
-		if name == "" {
-			if expr.Type == parser.ExprTypeColumn {
-				name = expr.Column
-			} else {
-				name = fmt.Sprintf("expr_%d", i)
-			}
-		}
-		columns[i] = ColumnInfo{
-			Name:     name,
-			Type:     "unknown",
-			Nullable: true,
-		}
-	}
-
-	return &PhysicalProjection{
-		Exprs:    exprs,
-		Aliases:  aliases,
-		Columns:  columns,
-		cost:     cost,
-		children: []PhysicalPlan{child},
-	}
+// Cost 返回执行成本
+func (p *PhysicalTableScan) Cost() float64 {
+	return p.cost
 }
 
-// PhysicalLimit 物理限制
-// 在重构完成前，暂时保留原始实现
-type PhysicalLimit struct {
-	Limit    int64
-	Offset   int64
-	cost     float64
-	children []PhysicalPlan
-}
-
-// NewPhysicalLimit 创建物理限制
-func NewPhysicalLimit(limit, offset int64, child PhysicalPlan) *PhysicalLimit {
-	inputCost := child.Cost()
-	cost := inputCost + float64(limit)*0.01 // 限制操作成本很低
-
-	return &PhysicalLimit{
-		Limit:    limit,
-		Offset:   offset,
-		cost:     cost,
-		children: []PhysicalPlan{child},
-	}
-}
-
-// PhysicalHashJoin 物理哈希连接
-// 在重构完成前，暂时保留原始实现
-type PhysicalHashJoin struct {
-	JoinType   JoinType
-	Conditions []*JoinCondition
-	cost       float64
-	children   []PhysicalPlan
-}
-
-// NewPhysicalHashJoin 创建物理哈希连接
-func NewPhysicalHashJoin(joinType JoinType, left, right PhysicalPlan, conditions []*JoinCondition) *PhysicalHashJoin {
-	leftRows := int64(1000) // 假设
-	rightRows := int64(1000) // 假设
-
-	// Hash Join 成本 = 构建哈希表 + 探测
-	buildCost := float64(leftRows) * 0.1
-	probeCost := float64(rightRows) * 0.1
-	cost := left.Cost() + right.Cost() + buildCost + probeCost
-
-	return &PhysicalHashJoin{
-		JoinType:   joinType,
-		Conditions: conditions,
-		cost:       cost,
-		children:   []PhysicalPlan{left, right},
-	}
-}
-
-// Execute 执行扫描
+// Execute 执行扫描（保留为兼容性接口）
 func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 开始查询表 %s, 过滤器数: %d, Limit: %v\n", p.TableName, len(p.filters), p.limitInfo)
 
@@ -199,7 +110,7 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 使用 OptimizedParallelScanner 进行并行扫描\n")
 
 		// 使用并行扫描器执行查询
-		scanRange := ScanRange{
+		scanRange := optimizer.ScanRange{
 			TableName: p.TableName,
 			Offset:    offset,
 			Limit:     limit,
@@ -218,6 +129,7 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 			options.SelectColumns = make([]string, len(p.Columns))
 			for i, col := range p.Columns {
 				options.SelectColumns[i] = col.Name
+				fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 选择列 %s\n", col.Name)
 			}
 		}
 
@@ -232,6 +144,13 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 
 		// 如果应用了列裁剪，调整结果的Columns
 		if len(p.Columns) < len(p.TableInfo.Columns) {
+			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用列裁剪到结果，原列数=%d，裁剪后=%d\n", len(result.Columns), len(p.Columns))
+			// 只保留需要的列
+			columnMap := make(map[string]int)
+			for i, col := range p.Columns {
+				columnMap[col.Name] = i
+			}
+
 			filteredRows := make([]domain.Row, len(result.Rows))
 			for i, row := range result.Rows {
 				filteredRow := make(domain.Row)
@@ -255,6 +174,7 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 
 			result.Columns = filteredColumns
 			result.Rows = filteredRows
+			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 列裁剪完成\n")
 		}
 
 		return result, nil
@@ -282,6 +202,11 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 
 	if isFilterable && len(p.filters) > 0 {
 		// 数据源支持过滤，调用 Filter 方法
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 数据源支持过滤，调用 Filter 方法\n")
+		for i, filter := range p.filters {
+			fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
+		}
+
 		// 构建过滤条件
 		var filter domain.Filter
 		if len(p.filters) == 1 {
@@ -298,6 +223,7 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 		// 调用 Filter 方法
 		rows, total, filterErr := filterableDS.Filter(ctx, p.TableName, filter, int(offset), int(limit))
 		if filterErr != nil {
+			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Filter 方法失败 %v\n", filterErr)
 			return nil, filterErr
 		}
 
@@ -306,11 +232,19 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 			Rows:  rows,
 			Total: total,
 		}
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Filter 完成，返回 %d 行（total=%d）\n", len(rows), total)
 	} else {
 		// 数据源不支持过滤或无过滤条件，使用 Query 方法
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 数据源不支持过滤或无过滤条件，使用 Query 方法\n")
+
+		// 使用 QueryOptions 传递过滤和分页
 		options := &domain.QueryOptions{}
 		if len(p.filters) > 0 {
 			options.Filters = p.filters
+			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用过滤条件到 QueryOptions\n")
+			for i, filter := range p.filters {
+				fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
+			}
 		}
 		if limit > 0 {
 			options.Limit = int(limit)
@@ -318,24 +252,30 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 		if offset > 0 {
 			options.Offset = int(offset)
 		}
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用分页参数: limit=%d, offset=%d\n", options.Limit, options.Offset)
 
 		// 如果应用了列裁剪，只选择需要的列
 		if len(p.Columns) < len(p.TableInfo.Columns) {
 			options.SelectColumns = make([]string, len(p.Columns))
 			for i, col := range p.Columns {
 				options.SelectColumns[i] = col.Name
+				fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 选择列 %s\n", col.Name)
 			}
 		}
 
 		// 调用 Query 方法
 		result, err = p.dataSource.Query(ctx, p.TableName, options)
 		if err != nil {
+			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Query 方法失败 %v\n", err)
 			return nil, err
 		}
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Query 完成，返回 %d 行\n", len(result.Rows))
 	}
 
 	// 如果应用了列裁剪，调整结果的Columns
 	if len(p.Columns) < len(p.TableInfo.Columns) {
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用列裁剪到结果，原列数=%d，裁剪后=%d\n", len(result.Columns), len(p.Columns))
+
 		filteredRows := make([]domain.Row, len(result.Rows))
 		for i, row := range result.Rows {
 			filteredRow := make(domain.Row)
@@ -359,38 +299,23 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 
 		result.Columns = filteredColumns
 		result.Rows = filteredRows
+		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 列裁剪完成\n")
 	}
 
 	return result, nil
 }
 
-// Cost 返回执行成本
-func (p *PhysicalTableScan) Cost() float64 {
-	return p.cost
+// Explain 返回计划说明
+func (p *PhysicalTableScan) Explain() string {
+	return fmt.Sprintf("TableScan(%s, cost=%.2f)", p.TableName, p.cost)
 }
 
-// PhysicalHashAggregate 物理哈希聚合
-// 在重构完成前，暂时保留原始实现
-type PhysicalHashAggregate struct {
-	AggFuncs   []*AggregationItem
-	GroupByCols []string
-	cost        float64
-	children    []PhysicalPlan
+// GetParallelScanner 获取并行扫描器（用于测试）
+func (p *PhysicalTableScan) GetParallelScanner() *optimizer.OptimizedParallelScanner {
+	return p.parallelScanner
 }
 
-// NewPhysicalHashAggregate 创建物理哈希聚合
-func NewPhysicalHashAggregate(aggFuncs []*AggregationItem, groupByCols []string, child PhysicalPlan) *PhysicalHashAggregate {
-	inputRows := int64(1000) // 假设
-
-	// Hash Agg 成本 = 分组 + 聚合
-	groupCost := float64(inputRows) * float64(len(groupByCols)) * 0.05
-	aggCost := float64(inputRows) * float64(len(aggFuncs)) * 0.05
-	cost := child.Cost() + groupCost + aggCost
-
-	return &PhysicalHashAggregate{
-		AggFuncs:   aggFuncs,
-		GroupByCols: groupByCols,
-		cost:        cost,
-		children:    []PhysicalPlan{child},
-	}
+// IsParallelScanEnabled 是否启用了并行扫描
+func (p *PhysicalTableScan) IsParallelScanEnabled() bool {
+	return p.enableParallelScan
 }

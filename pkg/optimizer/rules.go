@@ -354,7 +354,7 @@ func (r *ConstantFoldingRule) foldProjectionConstants(projection *LogicalProject
 }
 
 // foldJoinConstants 折叠 Join 中的常量
-func (r *ConstantFoldingRule) foldJoinConstants(join *LogicalJoin, evaluator *ExpressionEvaluator) (LogicalPlan, error) {
+func (r *ConstantFoldingRule) foldJoinConstants(join *LogicalJoin, _ *ExpressionEvaluator) (LogicalPlan, error) {
 	// 简化：不处理
 	return join, nil
 }
@@ -390,7 +390,7 @@ func (r *ConstantFoldingRule) tryFoldExpression(expr *parser.Expression, evaluat
 					Type:     parser.ExprTypeOperator,
 					Operator: expr.Operator,
 					Left:     &parser.Expression{Type: parser.ExprTypeValue, Value: leftFolded},
-				}, parser.Row{})
+				}, NewSimpleExpressionContext(parser.Row{}))
 				if err == nil {
 					return &parser.Expression{
 						Type:  parser.ExprTypeValue,
@@ -420,7 +420,7 @@ func (r *ConstantFoldingRule) tryFoldExpression(expr *parser.Expression, evaluat
 					Operator: expr.Operator,
 					Left:     &parser.Expression{Type: parser.ExprTypeValue, Value: leftFolded},
 					Right:    &parser.Expression{Type: parser.ExprTypeValue, Value: rightFolded},
-				}, parser.Row{})
+				}, NewSimpleExpressionContext(parser.Row{}))
 				if err == nil {
 					return &parser.Expression{
 						Type:  parser.ExprTypeValue,
@@ -509,6 +509,34 @@ func NewRuleExecutor(rules RuleSet) *RuleExecutor {
 // Execute 执行所有规则
 func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
 	fmt.Println("  [DEBUG] RuleExecutor: 开始执行规则, 规则数量:", len(re.rules))
+	
+	// 首先递归处理所有子节点（后序遍历，自底向上）
+	children := plan.Children()
+	if len(children) > 0 {
+		fmt.Println("  [DEBUG] RuleExecutor: 处理子节点, 子节点数:", len(children))
+		newChildren := make([]LogicalPlan, len(children))
+		anyChildChanged := false
+		
+		for i, child := range children {
+			fmt.Println("  [DEBUG] RuleExecutor: 递归处理子节点", i, "类型:", child.Explain())
+			newChild, err := re.Execute(ctx, child, optCtx)
+			if err != nil {
+				return nil, err
+			}
+			newChildren[i] = newChild
+			if newChild != child {
+				anyChildChanged = true
+				fmt.Println("  [DEBUG] RuleExecutor: 子节点", i, "已更新")
+			}
+		}
+		
+		// 如果有子节点发生变化，更新当前节点的子节点
+		if anyChildChanged {
+			plan.SetChildren(newChildren...)
+		}
+	}
+	
+	// 然后在处理完的节点上应用规则（避免无限递归）
 	current := plan
 	maxIterations := 10 // 防止无限循环
 	iterations := 0
@@ -528,24 +556,6 @@ func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *O
 					current = newPlan
 					changed = true
 					fmt.Println("  [DEBUG] RuleExecutor: 规则", rule.Name(), "已应用")
-				}
-			}
-
-			// 递归应用到子节点
-			children := current.Children()
-			fmt.Println("  [DEBUG] RuleExecutor: 处理子节点, 子节点数:", len(children))
-			for i, child := range children {
-				fmt.Println("  [DEBUG] RuleExecutor: 递归处理子节点", i, "类型:", child.Explain())
-				newChild, err := re.Execute(ctx, child, optCtx)
-				if err != nil {
-					return nil, err
-				}
-				if newChild != child {
-					children = current.Children()
-					children[i] = newChild
-					current.SetChildren(children...)
-					changed = true
-					fmt.Println("  [DEBUG] RuleExecutor: 子节点", i, "已更新")
 				}
 			}
 		}

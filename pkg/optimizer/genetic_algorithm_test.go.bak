@@ -14,10 +14,10 @@ func TestNewGeneticAlgorithm(t *testing.T) {
 	ga := NewGeneticAlgorithm(config)
 
 	assert.NotNil(t, ga)
-	assert.Equal(t, config.PopulationSize, ga.PopulationSize)
-	assert.Equal(t, config.MaxGenerations, ga.MaxGenerations)
-	assert.Equal(t, config.MutationRate, ga.MutationRate)
-	assert.Equal(t, config.CrossoverRate, ga.CrossoverRate)
+	assert.Equal(t, config.PopulationSize, ga.GetConfig().PopulationSize)
+	assert.Equal(t, config.MaxGenerations, ga.GetConfig().MaxGenerations)
+	assert.Equal(t, config.MutationRate, ga.GetConfig().MutationRate)
+	assert.Equal(t, config.CrossoverRate, ga.GetConfig().CrossoverRate)
 }
 
 // TestInitializePopulation 测试种群初始化
@@ -36,12 +36,13 @@ func TestInitializePopulation(t *testing.T) {
 		"t1(c)": 0.4,
 	}
 
-	pop := ga.InitializePopulation(candidates, benefits)
+	geneticCandidates := ConvertGeneticCandidates(candidates)
+	pop := ga.InitializePopulation(geneticCandidates, benefits)
 
 	assert.NotNil(t, pop)
-	assert.Equal(t, ga.PopulationSize, len(pop.Individuals))
-	assert.NotNil(t, ga.candidates)
-	assert.Equal(t, 3, len(ga.candidates))
+	assert.Equal(t, ga.GetConfig().PopulationSize, len(pop.Individuals))
+	assert.NotNil(t, ga.GetCandidates())
+	assert.Equal(t, 3, len(ga.GetCandidates()))
 }
 
 // TestCalculateFitness 测试适应度计算
@@ -87,9 +88,9 @@ func TestCheckConstraints(t *testing.T) {
 		{TableName: "t1", Columns: []string{"d", "e", "f"}, Priority: 2},
 	}
 
-	ga.candidates = candidates
-	ga.maxIndexes = 3
-	ga.maxColumns = 3
+	ga.SetCandidatesForTest(candidates, nil)
+	ga.config.MaxIndexes = 3
+	ga.config.MaxColumns = 3
 
 	// 测试满足约束
 	ind1 := &Individual{Genes: []bool{true, false, false}}
@@ -101,7 +102,7 @@ func TestCheckConstraints(t *testing.T) {
 	assert.False(t, ga.checkConstraints(ind2))
 
 	// 测试列数超限
-	ga.maxColumns = 2
+	ga.config.MaxColumns = 2
 	ind3 := &Individual{Genes: []bool{false, false, true}}
 	assert.False(t, ga.checkConstraints(ind3))
 }
@@ -123,10 +124,10 @@ func TestSelect(t *testing.T) {
 	pop := ga.InitializePopulation(candidates, benefits)
 
 	// 选择操作
-	newPop := ga.Select(pop, 2)
+	newPop := ga.selector.Select(pop, 2)
 
 	assert.NotNil(t, newPop)
-	assert.Equal(t, ga.PopulationSize, len(newPop.Individuals))
+	assert.Equal(t, ga.config.PopulationSize, len(newPop.Individuals))
 }
 
 // TestCrossover 测试交叉操作
@@ -136,7 +137,7 @@ func TestCrossover(t *testing.T) {
 	parent1 := &Individual{Genes: []bool{true, true, false, false}}
 	parent2 := &Individual{Genes: []bool{false, false, true, true}}
 
-	child1, child2 := ga.Crossover(parent1, parent2)
+	child1, child2 := ga.crossover.Crossover(parent1, parent2)
 
 	assert.NotNil(t, child1)
 	assert.NotNil(t, child2)
@@ -150,7 +151,7 @@ func TestMutate(t *testing.T) {
 
 	original := &Individual{Genes: []bool{true, false, true, false}}
 
-	mutated := ga.Mutate(original)
+	mutated := ga.mutator.Mutate(original)
 
 	assert.NotNil(t, mutated)
 	assert.Equal(t, len(original.Genes), len(mutated.Genes))
@@ -229,8 +230,8 @@ func TestRun(t *testing.T) {
 	ga := NewGeneticAlgorithm(nil)
 
 	// 使用较小的种群和代数以加快测试
-	ga.PopulationSize = 10
-	ga.MaxGenerations = 5
+	ga.config.PopulationSize = 10
+	ga.config.MaxGenerations = 5
 
 	candidates := []*IndexCandidate{
 		{TableName: "t1", Columns: []string{"a"}, Priority: 4},
@@ -247,18 +248,20 @@ func TestRun(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	solution := ga.Run(ctx, candidates, benefits)
+	geneticCandidates := ConvertGeneticCandidates(candidates)
+	solution := ga.Run(ctx, geneticCandidates, benefits)
+	solution = ConvertGeneticResults(solution)
 
 	assert.NotNil(t, solution)
 	// 解应该不为空且满足约束
-	assert.LessOrEqual(t, len(solution), ga.maxIndexes)
+	assert.LessOrEqual(t, len(solution), ga.config.MaxIndexes)
 }
 
 // BenchmarkGeneticAlgorithm 基准测试
 func BenchmarkGeneticAlgorithm(b *testing.B) {
 	ga := NewGeneticAlgorithm(nil)
-	ga.PopulationSize = 50
-	ga.MaxGenerations = 20
+	ga.config.PopulationSize = 50
+	ga.config.MaxGenerations = 20
 
 	candidates := make([]*IndexCandidate, 20)
 	for i := 0; i < 20; i++ {
@@ -279,14 +282,16 @@ func BenchmarkGeneticAlgorithm(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ga.Run(ctx, candidates, benefits)
+		geneticCandidates := ConvertGeneticCandidates(candidates)
+		result := ga.Run(ctx, geneticCandidates, benefits)
+		ConvertGeneticResults(result)
 	}
 }
 
 // TestTournamentSelect 测试锦标赛选择
 func TestTournamentSelect(t *testing.T) {
 	ga := NewGeneticAlgorithm(nil)
-	ga.TournamentSize = 3
+	ga.config.TournamentSize = 3
 
 	pop := &Population{
 		Individuals: []*Individual{
@@ -302,8 +307,11 @@ func TestTournamentSelect(t *testing.T) {
 	highFitnessCount := 0
 	iterations := 100
 
+	// 创建选择算子用于测试
+	selector := NewDefaultSelectionOperator(ga.config.PopulationSize, ga.config.SelectionStrategy, ga.config.TournamentSize, ga.rng)
+
 	for i := 0; i < iterations; i++ {
-		selected := ga.tournamentSelect(pop.Individuals)
+		selected := selector.tournamentSelect(pop.Individuals)
 		if selected.Fitness >= 0.5 {
 			highFitnessCount++
 		}
@@ -371,7 +379,7 @@ func TestCalculateConvergenceMetrics(t *testing.T) {
 // TestAdaptParameters 测试自适应参数调整
 func TestAdaptParameters(t *testing.T) {
 	ga := NewGeneticAlgorithm(nil)
-	ga.AdaptiveEnabled = true
+	ga.config.AdaptiveEnabled = true
 	ga.windowSize = 5
 
 	// 模拟已收敛状态（历史记录变化很小）
@@ -381,24 +389,24 @@ func TestAdaptParameters(t *testing.T) {
 	}
 
 	// 设置初始参数
-	ga.MutationRate = 0.1
-	ga.CrossoverRate = 0.8
+	ga.config.MutationRate = 0.1
+	ga.config.CrossoverRate = 0.8
 
 	// 在收敛状态下调整参数（generation >= 5）
 	ga.AdaptParameters(10, 0.005, 0.0001)
 
 	// 应该提高变异率以引入多样性
-	if ga.MutationRate <= 0.1 {
-		t.Errorf("Expected higher mutation rate when converged, got %.3f", ga.MutationRate)
+	if ga.config.MutationRate <= 0.1 {
+		t.Errorf("Expected higher mutation rate when converged, got %.3f", ga.config.MutationRate)
 	}
 
 	// 应该降低交叉率
-	if ga.CrossoverRate >= 0.8 {
-		t.Errorf("Expected lower crossover rate when converged, got %.3f", ga.CrossoverRate)
+	if ga.config.CrossoverRate >= 0.8 {
+		t.Errorf("Expected lower crossover rate when converged, got %.3f", ga.config.CrossoverRate)
 	}
 
 	fmt.Printf("After convergence adjustment - MutationRate: %.3f, CrossoverRate: %.3f\n",
-		ga.MutationRate, ga.CrossoverRate)
+		ga.config.MutationRate, ga.config.CrossoverRate)
 }
 
 // TestSelectionStrategies 测试不同选择策略
@@ -427,7 +435,9 @@ func TestSelectionStrategies(t *testing.T) {
 	config1.SelectionStrategy = "roulette"
 	config1.MaxGenerations = 10
 	ga1 := NewGeneticAlgorithm(config1)
-	result1 := ga1.Run(ctx, candidates, benefits)
+	geneticCandidates1 := ConvertGeneticCandidates(candidates)
+	geneticResult1 := ga1.Run(ctx, geneticCandidates1, benefits)
+	result1 := ConvertGeneticResults(geneticResult1)
 
 	// 测试锦标赛选择
 	config2 := DefaultGeneticAlgorithmConfig()
@@ -435,7 +445,9 @@ func TestSelectionStrategies(t *testing.T) {
 	config2.TournamentSize = 3
 	config2.MaxGenerations = 10
 	ga2 := NewGeneticAlgorithm(config2)
-	result2 := ga2.Run(ctx, candidates, benefits)
+	geneticCandidates2 := ConvertGeneticCandidates(candidates)
+	geneticResult2 := ga2.Run(ctx, geneticCandidates2, benefits)
+	result2 := ConvertGeneticResults(geneticResult2)
 
 	// 验证两种策略都能产生有效的解
 	if len(result1) == 0 {
@@ -466,15 +478,15 @@ func TestGeneticAlgorithmConfig(t *testing.T) {
 
 	ga := NewGeneticAlgorithm(config)
 
-	assert.Equal(t, 100, ga.PopulationSize)
-	assert.Equal(t, 200, ga.MaxGenerations)
-	assert.Equal(t, 0.15, ga.MutationRate)
-	assert.Equal(t, 0.75, ga.CrossoverRate)
-	assert.Equal(t, 10, ga.maxIndexes)
-	assert.Equal(t, int64(500*1024*1024), ga.maxTotalSize)
-	assert.Equal(t, 4, ga.maxColumns)
-	assert.True(t, ga.AdaptiveEnabled)
-	assert.Equal(t, "tournament", ga.SelectionStrategy)
-	assert.Equal(t, 7, ga.TournamentSize)
+	assert.Equal(t, 100, ga.config.PopulationSize)
+	assert.Equal(t, 200, ga.config.MaxGenerations)
+	assert.Equal(t, 0.15, ga.config.MutationRate)
+	assert.Equal(t, 0.75, ga.config.CrossoverRate)
+	assert.Equal(t, 10, ga.config.MaxIndexes)
+	assert.Equal(t, int64(500*1024*1024), ga.config.MaxTotalSize)
+	assert.Equal(t, 4, ga.config.MaxColumns)
+	assert.True(t, ga.config.AdaptiveEnabled)
+	assert.Equal(t, "tournament", ga.config.SelectionStrategy)
+	assert.Equal(t, 7, ga.config.TournamentSize)
 }
 

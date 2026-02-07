@@ -429,8 +429,10 @@ func (ia *IndexAdvisor) searchOptimalIndexes(
 
 	ga := NewGeneticAlgorithm(gaConfig)
 
-	// 运行遗传算法
-	return ga.Run(ctx, candidates, benefits)
+	// 运行遗传算法（需要类型转换）
+	geneticCandidates := ConvertGeneticCandidates(candidates)
+	geneticResults := ga.Run(ctx, geneticCandidates, benefits)
+	return ConvertGeneticResults(geneticResults)
 }
 
 // generateRecommendations 生成推荐结果
