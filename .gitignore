@@ -62,3 +62,4 @@ users.json
 
 # CodeBuddy configuration and workspace files
 .codebuddy/
+*.log
