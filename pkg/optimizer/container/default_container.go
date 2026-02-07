@@ -222,6 +222,11 @@ func (c *defaultContainer) BuildExpressionEvaluator() interface{} {
 	return nil
 }
 
+// GetDataSource returns the data source used by the container.
+func (c *defaultContainer) GetDataSource() domain.DataSource {
+	return c.dataSource
+}
+
 // adapter implementations
 
 type costCardinalityAdapter struct {

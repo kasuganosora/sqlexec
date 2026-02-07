@@ -2,6 +2,7 @@ package cost
 
 import (
 	"github.com/kasuganosora/sqlexec/pkg/parser"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // CostModel is the interface for cost estimation models.
@@ -19,15 +20,15 @@ type CostModel interface {
 	// selectivity: fraction of rows that pass the filter (0-1)
 	// filters: list of filter conditions
 	// Returns the estimated cost.
-	FilterCost(inputRows int64, selectivity float64, filters []interface{}) float64
+	FilterCost(inputRows int64, selectivity float64, filters []domain.Filter) float64
 
 	// JoinCost estimates the cost of a join operation.
-	// leftRows: estimated number of rows from left input
-	// rightRows: estimated number of rows from right input
+	// left: left input (can be row count or plan)
+	// right: right input (can be row count or plan)
 	// joinType: type of join (inner, left, right, etc.)
 	// conditions: join conditions
 	// Returns the estimated cost.
-	JoinCost(leftRows, rightRows int64, joinType JoinType, conditions []*parser.Expression) float64
+	JoinCost(left, right interface{}, joinType JoinType, conditions []*parser.Expression) float64
 
 	// AggregateCost estimates the cost of aggregation.
 	// inputRows: number of input rows
@@ -44,9 +45,8 @@ type CostModel interface {
 
 	// SortCost estimates the cost of sorting.
 	// inputRows: number of input rows
-	// sortCols: number of sort columns
 	// Returns the estimated cost.
-	SortCost(inputRows int64, sortCols int) float64
+	SortCost(inputRows int64) float64
 
 	// GetCostFactors returns the cost factors used by the model.
 	// This is useful for debugging and analysis.

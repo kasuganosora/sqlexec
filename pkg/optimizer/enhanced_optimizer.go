@@ -17,23 +17,17 @@ import (
 )
 
 // EnhancedOptimizer 增强的优化器
-// 集成所有新的优化模块
+// 集成所有新的优化模块，使用接口实现依赖注入
 type EnhancedOptimizer struct {
 	baseOptimizer    *Optimizer
-	costModel       *cost.AdaptiveCostModel
+	costModel       cost.CostModel
 	indexSelector   *index.IndexSelector
 	dpJoinReorder   *join.DPJoinReorder
 	bushyTree      *join.BushyJoinTreeBuilder
 	statsCache      *statistics.AutoRefreshStatisticsCache
 	parallelism     int
 	estimator       CardinalityEstimator
-	hintsParser     *parser.HintsParser // 添加 hints 解析器
-	
-	// DI-compatible fields (using interfaces)
-	costModelV2      cost.CostModel
-	indexSelectorV2  interface{}
-	estimatorV2       cost.ExtendedCardinalityEstimator
-	containerV2      interface{}
+	hintsParser     *parser.HintsParser
 }
 
 // NewEnhancedOptimizer 创建增强的优化器
@@ -98,9 +92,9 @@ func (a *cardinalityEstimatorAdapter) EstimateFilter(tableName string, filters [
 	return a.estimator.EstimateFilter(tableName, filters)
 }
 
-// joinCostModelAdapter 将 cost.AdaptiveCostModel 适配为 join.CostModel
+// joinCostModelAdapter 将 cost.CostModel 适配为 join.CostModel
 type joinCostModelAdapter struct {
-	costModel *cost.AdaptiveCostModel
+	costModel cost.CostModel
 }
 
 func (a *joinCostModelAdapter) ScanCost(tableName string, rowCount int64, useIndex bool) float64 {
@@ -237,9 +231,9 @@ func extractTableName(plan LogicalPlan) string {
 	return ""
 }
 
-// costModelAdapter 将 cost.AdaptiveCostModel 适配为 optimizer.CostModel
+// costModelAdapter 将 cost.CostModel 适配为 optimizer.CostModel
 type costModelAdapter struct {
-	costModel *cost.AdaptiveCostModel
+	costModel cost.CostModel
 }
 
 func (a *costModelAdapter) ScanCost(tableName string, rowCount int64) float64 {
@@ -1045,7 +1039,7 @@ func (a *BushyTreeAdapter) containsJoin(plan LogicalPlan) bool {
 // IndexSelectionAdapter 索引选择适配器
 type IndexSelectionAdapter struct {
 	indexSelector *index.IndexSelector
-	costModel    *cost.AdaptiveCostModel
+	costModel    cost.CostModel
 }
 
 func (a *IndexSelectionAdapter) Name() string {

@@ -1,5 +1,9 @@
 package container
 
+import (
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+)
+
 // Container is a dependency injection container that manages services.
 // It provides methods to register and retrieve services by name.
 type Container interface {
@@ -49,4 +53,7 @@ type Container interface {
 	// BuildExpressionEvaluator builds an expression evaluator.
 	// Returns an ExpressionEvaluator instance.
 	BuildExpressionEvaluator() interface{}
+
+	// GetDataSource returns the data source used by the container.
+	GetDataSource() domain.DataSource
 }
