@@ -132,17 +132,27 @@ func (s *DataService) Query(ctx context.Context, tableName string, options *Quer
 		return nil, fmt.Errorf("route failed: %w", err)
 	}
 
+	// 获取表信息
+	tableInfo, err := ds.GetTableInfo(ctx, tableName)
+	if err != nil {
+		return nil, fmt.Errorf("get table info failed: %w", err)
+	}
+
 	// 构建查询选项
 	queryOptions := &domain.QueryOptions{
-		SelectColumns: options.SelectColumns,
-		Offset:        options.Offset,
-		Limit:         options.Limit,
+		Offset: options.Offset,
+		Limit:  options.Limit,
 	}
 
 	// 查询数据
 	result, err := ds.Query(ctx, tableName, queryOptions)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
+	}
+
+	// 应用列选择
+	if len(options.SelectColumns) > 0 {
+		result = s.selectColumns(result, options.SelectColumns, tableInfo)
 	}
 
 	return result, nil
