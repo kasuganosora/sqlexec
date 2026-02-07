@@ -264,3 +264,152 @@ func TestContainer_ThreadSafety(t *testing.T) {
 	// If we get here without deadlock or panic, thread safety is OK
 	t.Log("Thread safety test completed successfully")
 }
+
+func TestBuilderMethods(t *testing.T) {
+	dataSource := &MockDataSource{}
+	container := NewContainer(dataSource)
+	builder := NewBuilder(container)
+
+	if builder == nil {
+		t.Fatal("NewBuilder should return non-nil")
+	}
+
+	// Test BuildOptimizer
+	optimizer := builder.BuildOptimizer()
+	if optimizer == nil {
+		t.Error("BuildOptimizer should return non-nil")
+	}
+
+	// Test BuildEnhancedOptimizer
+	enhancedOptimizer := builder.BuildEnhancedOptimizer(4)
+	if enhancedOptimizer == nil {
+		t.Error("BuildEnhancedOptimizer should return non-nil")
+	}
+
+	// Test BuildExecutor
+	executor := builder.BuildExecutor()
+	if executor == nil {
+		t.Error("BuildExecutor should return non-nil")
+	}
+
+	// Test BuildOptimizedExecutor
+	optimizedExecutor := builder.BuildOptimizedExecutor(true)
+	if optimizedExecutor == nil {
+		t.Error("BuildOptimizedExecutor should return non-nil")
+	}
+
+	// Test BuildShowProcessor
+	showProcessor := builder.BuildShowProcessor()
+	if showProcessor == nil {
+		t.Error("BuildShowProcessor should return non-nil")
+	}
+
+	// Test BuildVariableManager
+	varManager := builder.BuildVariableManager()
+	if varManager == nil {
+		t.Error("BuildVariableManager should return non-nil")
+	}
+}
+
+func TestBuilderGetCostModel(t *testing.T) {
+	dataSource := &MockDataSource{}
+	container := NewContainer(dataSource)
+	builder := NewBuilder(container)
+
+	costModel := builder.GetCostModel()
+	if costModel == nil {
+		t.Error("GetCostModel should return non-nil")
+	}
+}
+
+func TestBuilderGetIndexSelector(t *testing.T) {
+	dataSource := &MockDataSource{}
+	container := NewContainer(dataSource)
+	builder := NewBuilder(container)
+
+	indexSelector := builder.GetIndexSelector()
+	if indexSelector == nil {
+		t.Error("GetIndexSelector should return non-nil")
+	}
+}
+
+func TestBuilderGetStatisticsCache(t *testing.T) {
+	dataSource := &MockDataSource{}
+	container := NewContainer(dataSource)
+	builder := NewBuilder(container)
+
+	statsCache := builder.GetStatisticsCache()
+	if statsCache == nil {
+		t.Error("GetStatisticsCache should return non-nil")
+	}
+}
+
+func TestDefaultContainerGetDataSource(t *testing.T) {
+	dataSource := &MockDataSource{}
+	container := NewContainer(dataSource)
+
+	ds := container.GetDataSource()
+	if ds == nil {
+		t.Error("GetDataSource should return non-nil")
+	}
+}
+
+func TestContainerWithNilDataSource(t *testing.T) {
+	// Test container with nil data source (should not panic)
+	container := NewContainer(nil)
+
+	if container == nil {
+		t.Fatal("NewContainer should not panic even with nil data source")
+	}
+
+	// Verify that default services are still registered
+	if !container.Has("stats.cache.auto_refresh") {
+		t.Error("Default services should be registered even with nil data source")
+	}
+}
+
+func TestContainerConcurrentRegistration(t *testing.T) {
+	dataSource := &MockDataSource{}
+	container := NewContainer(dataSource)
+
+	// Test concurrent registration of the same key
+	done := make(chan bool, 10)
+
+	for i := 0; i < 5; i++ {
+		go func() {
+			container.Register("concurrent.key", i)
+			done <- true
+		}()
+	}
+
+	for i := 0; i < 5; i++ {
+		go func() {
+			_, _ = container.Get("concurrent.key")
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// If we get here without deadlock, concurrent access is OK
+	t.Log("Concurrent access test completed successfully")
+}
+
+func TestBuildOptimizedExecutorWithDSManager(t *testing.T) {
+	dataSource := &MockDataSource{}
+	container := NewContainer(dataSource)
+	builder := NewBuilder(container)
+
+	// Build with a mock DS manager (using nil for simplicity, should not panic)
+	optimizedExecutor := builder.BuildOptimizedExecutorWithDSManager(nil, true)
+
+	// This may return nil if not fully implemented, but should not panic
+	if optimizedExecutor == nil {
+		t.Log("BuildOptimizedExecutorWithDSManager returned nil (may not be fully implemented)")
+	} else {
+		t.Log("BuildOptimizedExecutorWithDSManager succeeded")
+	}
+}

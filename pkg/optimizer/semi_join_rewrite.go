@@ -2,6 +2,7 @@ package optimizer
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
@@ -66,17 +67,40 @@ func isSubquery(expr *parser.Expression, queryType string) bool {
 
 // Apply 应用规则：重写半连接
 func (r *SemiJoinRewriteRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
+	fmt.Println("  [DEBUG] SemiJoinRewriteRule.Apply: 开始, 计划类型:", plan.Explain())
+
 	// 1. 查找EXISTS子查询并重写为JOIN
+	fmt.Println("  [DEBUG] SemiJoinRewriteRule.Apply: 开始重写EXISTS子查询")
 	plan = r.rewriteExistsToJoin(plan)
+	fmt.Println("  [DEBUG] SemiJoinRewriteRule.Apply: EXISTS重写完成")
 
 	// 2. 查找IN子查询并重写为JOIN
+	fmt.Println("  [DEBUG] SemiJoinRewriteRule.Apply: 开始重写IN子查询")
 	plan = r.rewriteInToJoin(plan)
+	fmt.Println("  [DEBUG] SemiJoinRewriteRule.Apply: IN重写完成")
 
+	fmt.Println("  [DEBUG] SemiJoinRewriteRule.Apply: 完成")
 	return plan, nil
 }
 
 // rewriteExistsToJoin 将EXISTS子查询重写为JOIN + DISTINCT
 func (r *SemiJoinRewriteRule) rewriteExistsToJoin(plan LogicalPlan) LogicalPlan {
+	fmt.Println("  [DEBUG] rewriteExistsToJoin: 开始")
+	result := r.rewriteExistsToJoinWithVisited(plan, make(map[LogicalPlan]bool))
+	fmt.Println("  [DEBUG] rewriteExistsToJoin: 完成")
+	return result
+}
+
+// rewriteExistsToJoinWithVisited 使用visited集合防止无限递归
+func (r *SemiJoinRewriteRule) rewriteExistsToJoinWithVisited(plan LogicalPlan, visited map[LogicalPlan]bool) LogicalPlan {
+	// 防止无限递归
+	if visited[plan] {
+		fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 检测到已访问节点, 返回")
+		return plan
+	}
+	visited[plan] = true
+	fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 处理节点", plan.Explain())
+
 	if selection, ok := plan.(*LogicalSelection); ok {
 		rewritten := false
 
@@ -97,41 +121,70 @@ func (r *SemiJoinRewriteRule) rewriteExistsToJoin(plan LogicalPlan) LogicalPlan 
 		}
 
 		// 递归处理子节点
-		newChild := r.rewriteExistsToJoin(selection.children[0])
+		fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 递归处理Selection的子节点")
+		newChild := r.rewriteExistsToJoinWithVisited(selection.children[0], visited)
 
-		if rewritten || newChild != selection.children[0] {
+		if rewritten {
 			// 创建新的 Selection 更新条件和子节点
+			fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 创建新的Selection")
 			return NewLogicalSelection(newConditions, newChild)
 		}
 
-		return selection
+		fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 未重写, 返回原Selection")
+		return plan
 	}
 
 	// 递归处理所有子节点
 	children := plan.Children()
 	if len(children) == 0 {
+		fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 无子节点, 返回")
 		return plan
 	}
 
+	fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 处理", len(children), "个子节点")
 	newChildren := make([]LogicalPlan, len(children))
 	changed := false
 
 	for i, child := range children {
-		newChildren[i] = r.rewriteExistsToJoin(child)
-		if newChildren[i] != child {
+		originalChild := child
+		fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 处理子节点", i)
+		newChildren[i] = r.rewriteExistsToJoinWithVisited(child, visited)
+		if newChildren[i] != originalChild {
 			changed = true
+			fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 子节点", i, "已改变")
 		}
 	}
 
-	if changed {
-		plan.SetChildren(newChildren...)
+	// 如果没有任何改变，直接返回原计划
+	if !changed {
+		fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 无改变, 返回原计划")
+		return plan
 	}
+
+	fmt.Println("  [DEBUG] rewriteExistsToJoinWithVisited: 更新子节点并返回")
+	plan.SetChildren(newChildren...)
 
 	return plan
 }
 
 // rewriteInToJoin 将IN子查询重写为JOIN
 func (r *SemiJoinRewriteRule) rewriteInToJoin(plan LogicalPlan) LogicalPlan {
+	fmt.Println("  [DEBUG] rewriteInToJoin: 开始")
+	result := r.rewriteInToJoinWithVisited(plan, make(map[LogicalPlan]bool))
+	fmt.Println("  [DEBUG] rewriteInToJoin: 完成")
+	return result
+}
+
+// rewriteInToJoinWithVisited 使用visited集合防止无限递归
+func (r *SemiJoinRewriteRule) rewriteInToJoinWithVisited(plan LogicalPlan, visited map[LogicalPlan]bool) LogicalPlan {
+	// 防止无限递归
+	if visited[plan] {
+		fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 检测到已访问节点, 返回")
+		return plan
+	}
+	visited[plan] = true
+	fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 处理节点", plan.Explain())
+
 	if selection, ok := plan.(*LogicalSelection); ok {
 		rewritten := false
 
@@ -152,35 +205,48 @@ func (r *SemiJoinRewriteRule) rewriteInToJoin(plan LogicalPlan) LogicalPlan {
 		}
 
 		// 递归处理子节点
-		newChild := r.rewriteInToJoin(selection.children[0])
+		fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 递归处理Selection的子节点")
+		newChild := r.rewriteInToJoinWithVisited(selection.children[0], visited)
 
-		if rewritten || newChild != selection.children[0] {
+		if rewritten {
 			// 创建新的 Selection 更新条件和子节点
+			fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 创建新的Selection")
 			return NewLogicalSelection(newConditions, newChild)
 		}
 
-		return selection
+		fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 未重写, 返回原Selection")
+		return plan
 	}
 
 	// 递归处理所有子节点
 	children := plan.Children()
 	if len(children) == 0 {
+		fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 无子节点, 返回")
 		return plan
 	}
 
+	fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 处理", len(children), "个子节点")
 	newChildren := make([]LogicalPlan, len(children))
 	changed := false
 
 	for i, child := range children {
-		newChildren[i] = r.rewriteInToJoin(child)
-		if newChildren[i] != child {
+		originalChild := child
+		fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 处理子节点", i)
+		newChildren[i] = r.rewriteInToJoinWithVisited(child, visited)
+		if newChildren[i] != originalChild {
 			changed = true
+			fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 子节点", i, "已改变")
 		}
 	}
 
-	if changed {
-		plan.SetChildren(newChildren...)
+	// 如果没有任何改变，直接返回原计划
+	if !changed {
+		fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 无改变, 返回原计划")
+		return plan
 	}
+
+	fmt.Println("  [DEBUG] rewriteInToJoinWithVisited: 更新子节点并返回")
+	plan.SetChildren(newChildren...)
 
 	return plan
 }

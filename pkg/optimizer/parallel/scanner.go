@@ -84,7 +84,7 @@ func (ps *ParallelScanner) Execute(ctx context.Context, scanRange ScanRange, opt
 	}
 
 	// 收集结果
-	results := make([]*ScanResult, 0, len(ranges))
+	results := make([]*ScanResult, 0)
 	completed := 0
 
 	for {
@@ -93,7 +93,7 @@ func (ps *ParallelScanner) Execute(ctx context.Context, scanRange ScanRange, opt
 			return nil, ctx.Err()
 		case result := <-resultChan:
 			if result != nil {
-				results[completed] = result
+				results = append(results, result)
 				completed++
 			}
 		case err := <-errChan:
@@ -125,9 +125,16 @@ func (ps *ParallelScanner) divideScanRange(tableName string, offset, limit int64
 		r := ScanRange{
 			TableName: tableName,
 			Offset:    offset + int64(i)*rowsPerWorker,
-			Limit:     rowsPerWorker,
 		}
-		ranges[i] = r
+
+		// 最后一个 worker 获取剩余的所有行
+		if i == parallelism-1 {
+			r.Limit = limit - int64(i)*rowsPerWorker
+		} else {
+			r.Limit = rowsPerWorker
+		}
+
+		ranges = append(ranges, r)
 	}
 
 	return ranges

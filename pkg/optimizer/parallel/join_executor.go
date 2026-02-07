@@ -52,183 +52,169 @@ func (phje *ParallelHashJoinExecutor) Execute(ctx context.Context) (*domain.Quer
 		phje.joinType, len(phje.left.Rows), len(phje.right.Rows),
 		phje.buildParallel, phje.probeParallel)
 
-	// 并行构建和探测哈希表
-	resultChan := make(chan *domain.QueryResult, 2)
-	errChan := make(chan error, 2)
-
-	// 并行构建哈希表
-	go phje.buildHashTable(ctx, resultChan, errChan)
-	// 并行探测哈希表
-	go phje.probeHashTable(ctx, resultChan, errChan)
-
-	// 等待结果
-	var results [2]*domain.QueryResult
-	for i := 0; i < 2; i++ {
-		select {
-		case result := <-resultChan:
-			if result != nil {
-				results[i] = result
-			}
-		case err := <-errChan:
-			if err != nil {
-				return nil, err
-			}
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-
-	// 合并结果
-	merged := phje.mergeJoinResults(results)
-
-	fmt.Printf("  [PARALLEL JOIN] Completed: %d rows\n", len(merged.Rows))
-	return merged, nil
-}
-
-// buildHashTable 构建哈希表（可并行）
-func (phje *ParallelHashJoinExecutor) buildHashTable(ctx context.Context, resultChan chan<- *domain.QueryResult, errChan chan<- error) {
 	// 确定连接列
 	phje.joinCols = phje.extractJoinColumns()
 	if len(phje.joinCols.Left) == 0 || len(phje.joinCols.Right) == 0 {
-		errChan <- fmt.Errorf("no join columns specified")
-		return
+		return nil, fmt.Errorf("no join columns specified")
 	}
 
 	// 构建哈希表
-	phje.hashTable = make(map[uint64][]domain.Row)
-	phje.hashTableReady = make(chan struct{})
-	
-	// 使用parallelism
-	parallelism := phje.buildParallel
+	phje.hashTable = phje.buildHash(ctx, phje.left.Rows, phje.joinCols.Left, phje.buildParallel)
+	if phje.hashTable == nil {
+		// 可能是上下文取消导致
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("failed to build hash table")
+	}
+
+	// 探测哈希表
+	results := phje.probeHash(ctx, phje.right.Rows, phje.joinCols.Right, phje.probeParallel)
+	if results == nil {
+		// 可能是上下文取消导致
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("failed to probe hash table")
+	}
+
+	mergedResult := &domain.QueryResult{
+		Rows:    results,
+		Columns: phje.mergeColumns(phje.left.Columns, phje.right.Columns),
+		Total:   int64(len(results)),
+	}
+
+	fmt.Printf("  [PARALLEL JOIN] Completed: %d rows\n", len(results))
+	return mergedResult, nil
+}
+
+// buildHash 并行构建哈希表（同步方法）
+func (phje *ParallelHashJoinExecutor) buildHash(ctx context.Context, rows []domain.Row, cols []string, parallelism int) map[uint64][]domain.Row {
 	if parallelism <= 0 {
 		parallelism = 1
 	}
 
-	rowCount := len(phje.left.Rows)
+	rowCount := len(rows)
+	hashTable := make(map[uint64][]domain.Row)
+	mu := sync.Mutex{}
+	ctxCancelChan := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(parallelism)
+
 	rowsPerWorker := rowCount / parallelism
 
-	// 并行构建
-	var wg sync.WaitGroup
-	workerErrs := make(chan error, parallelism)
-
 	for i := 0; i < parallelism; i++ {
-		wg.Add(1)
-		
 		start := i * rowsPerWorker
 		end := start + rowsPerWorker
 		if end > rowCount {
 			end = rowCount
 		}
 
-		go func(workerIdx int, start, end int) {
+		go func(workerIdx, start, end int) {
 			defer wg.Done()
-			
-			for rowIdx := start; rowIdx < end; rowIdx++ {
-				row := phje.left.Rows[rowIdx]
-				
-				// 计算哈希键
-				key := phje.computeHashKey(row, phje.joinCols.Left)
 
-			phje.hashTable[key] = append(phje.hashTable[key], row)
+			for rowIdx := start; rowIdx < end; rowIdx++ {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ctxCancelChan:
+					return
+				default:
+					row := rows[rowIdx]
+					key := phje.computeHashKey(row, cols)
+
+					mu.Lock()
+					hashTable[key] = append(hashTable[key], row)
+					mu.Unlock()
+				}
 			}
 		}(i, start, end)
 	}
 
-	// 等待构建完成
+	// 等待所有 worker 完成或上下文取消
+	done := make(chan struct{})
 	go func() {
 		wg.Wait()
-
-		// 检查错误
-		close(workerErrs)
-		for err := range workerErrs {
-			if err != nil {
-				errChan <- err
-				return
-			}
-		}
-
-		// 构建完成，通知探测阶段可以开始
-		close(phje.hashTableReady)
+		close(done)
 	}()
+
+	select {
+	case <-done:
+		// 所有 worker 完成，返回哈希表
+		return hashTable
+	case <-ctx.Done():
+		// 上下文被取消，关闭取消通道通知所有 worker
+		close(ctxCancelChan)
+		wg.Wait()  // 等待所有 worker 退出
+		return nil
+	}
 }
 
-// probeHashTable 探测哈希表（可并行）
-func (phje *ParallelHashJoinExecutor) probeHashTable(ctx context.Context, resultChan chan<- *domain.QueryResult, errChan chan<- error) {
-	// 等待哈希表构建完成
-	select {
-	case <-ctx.Done():
-		errChan <- ctx.Err()
-		return
-	case <-phje.hashTableReady:
-		// 哈希表已构建完成，开始探测
-	}
-
-	// 探测阶段
-	parallelism := phje.probeParallel
+// probeHash 并行探测哈希表（同步方法）
+func (phje *ParallelHashJoinExecutor) probeHash(ctx context.Context, rows []domain.Row, cols []string, parallelism int) []domain.Row {
 	if parallelism <= 0 {
 		parallelism = 1
 	}
 
-	// 并行探测
-	rowCount := len(phje.right.Rows)
-	rowsPerWorker := rowCount / parallelism
+	rowCount := len(rows)
 	results := make([]domain.Row, 0, rowCount)
 	mu := sync.Mutex{}
-
+	ctxCancelChan := make(chan struct{})
 	var wg sync.WaitGroup
-	workerErrs := make(chan error, parallelism)
+	wg.Add(parallelism)
+
+	rowsPerWorker := rowCount / parallelism
 
 	for i := 0; i < parallelism; i++ {
-		wg.Add(1)
-
 		start := i * rowsPerWorker
 		end := start + rowsPerWorker
 		if end > rowCount {
 			end = rowCount
 		}
 
-		go func(workerIdx int, start, end int) {
+		go func(workerIdx, start, end int) {
 			defer wg.Done()
 
 			for rowIdx := start; rowIdx < end; rowIdx++ {
-				row := phje.right.Rows[rowIdx]
+				select {
+				case <-ctx.Done():
+					return
+				case <-ctxCancelChan:
+					return
+				default:
+					row := rows[rowIdx]
+					key := phje.computeHashKey(row, cols)
 
-				// 计算哈希键
-				key := phje.computeHashKey(row, phje.joinCols.Right)
-
-				// 查找匹配的行
-				if matchedRows, exists := phje.hashTable[key]; exists {
-					for _, leftRow := range matchedRows {
-						mu.Lock()
-						merged := phje.mergeRows(leftRow, row, phje.left.Columns, phje.right.Columns)
-						results = append(results, merged)
-						mu.Unlock()
+					if matchedRows, exists := phje.hashTable[key]; exists {
+						for _, leftRow := range matchedRows {
+							mu.Lock()
+							merged := phje.mergeRows(leftRow, row, phje.left.Columns, phje.right.Columns)
+							results = append(results, merged)
+							mu.Unlock()
+						}
 					}
 				}
 			}
 		}(i, start, end)
 	}
 
-	// 等待探测完成
+	// 等待所有 worker 完成或上下文取消
+	done := make(chan struct{})
 	go func() {
 		wg.Wait()
-
-		// 检查错误
-		close(workerErrs)
-		for err := range workerErrs {
-			if err != nil {
-				errChan <- err
-				return
-			}
-		}
-
-		// 探测完成
-		resultChan <- &domain.QueryResult{
-			Rows:    results,
-			Columns: phje.mergeColumns(phje.left.Columns, phje.right.Columns),
-			Total:   int64(len(results)),
-		}
+		close(done)
 	}()
+
+	select {
+	case <-done:
+		// 所有 worker 完成，返回结果
+		return results
+	case <-ctx.Done():
+		// 上下文被取消，关闭取消通道通知所有 worker
+		close(ctxCancelChan)
+		wg.Wait()  // 等待所有 worker 退出
+		return nil
+	}
 }
 
 // mergeJoinResults 合并JOIN结果（简化）
