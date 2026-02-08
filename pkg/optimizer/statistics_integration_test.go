@@ -2,6 +2,7 @@ package optimizer
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/statistics"
@@ -462,16 +463,16 @@ func TestGetStatisticsSummary(t *testing.T) {
 		t.Error("Expected non-empty summary")
 	}
 
-	// 检查摘要包含关键信息
-	if !contains(summary, "test_table") {
+	// Verify summary contains key information
+	if !strings.Contains(summary, "test_table") {
 		t.Error("Expected summary to contain table name")
 	}
 
-	if !contains(summary, "RowCount") {
+	if !strings.Contains(summary, "RowCount") {
 		t.Error("Expected summary to contain RowCount")
 	}
 
-	if !contains(summary, "100000") {
+	if !strings.Contains(summary, "100000") {
 		t.Error("Expected summary to contain row count value")
 	}
 }

@@ -2,13 +2,14 @@ package optimizer
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
-// MockDataSource 用于测试的 mock 数据源
+// MockDataSource is a mock data source for testing
 type MockDataSource struct {
 	data      []domain.Row
 	columns   []domain.ColumnInfo
@@ -16,7 +17,7 @@ type MockDataSource struct {
 	mu        sync.Mutex
 }
 
-// NewMockDataSource 创建 mock 数据源
+// NewMockDataSource creates a new mock data source
 func NewMockDataSource(rows int) *MockDataSource {
 	columns := []domain.ColumnInfo{
 		{Name: "id", Type: "int64"},
@@ -37,32 +38,32 @@ func NewMockDataSource(rows int) *MockDataSource {
 	}
 }
 
-// Connect 实现 DataSource 接口
+// Connect implements DataSource interface
 func (m *MockDataSource) Connect(ctx context.Context) error {
 	return nil
 }
 
-// IsConnected 实现 DataSource 接口
+// IsConnected implements DataSource interface
 func (m *MockDataSource) IsConnected() bool {
 	return true
 }
 
-// IsWritable 实现 DataSource 接口
+// IsWritable implements DataSource interface
 func (m *MockDataSource) IsWritable() bool {
 	return false
 }
 
-// GetConfig 实现 DataSource 接口
+// GetConfig implements DataSource interface
 func (m *MockDataSource) GetConfig() *domain.DataSourceConfig {
 	return &domain.DataSourceConfig{}
 }
 
-// GetTables 实现 DataSource 接口
+// GetTables implements DataSource interface
 func (m *MockDataSource) GetTables(ctx context.Context) ([]string, error) {
 	return []string{"test_table"}, nil
 }
 
-// Query 实现 DataSource 接口
+// Query implements DataSource interface
 func (m *MockDataSource) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) {
 	m.mu.Lock()
 	m.callCount++
@@ -101,7 +102,7 @@ func (m *MockDataSource) Query(ctx context.Context, tableName string, options *d
 	}, nil
 }
 
-// GetTableInfo 实现 DataSource 接口
+// GetTableInfo implements DataSource interface
 func (m *MockDataSource) GetTableInfo(ctx context.Context, tableName string) (*domain.TableInfo, error) {
 	return &domain.TableInfo{
 		Name:    tableName,
@@ -109,62 +110,62 @@ func (m *MockDataSource) GetTableInfo(ctx context.Context, tableName string) (*d
 	}, nil
 }
 
-// Insert 实现 DataSource 接口
+// Insert implements DataSource interface
 func (m *MockDataSource) Insert(ctx context.Context, tableName string, rows []domain.Row, options *domain.InsertOptions) (int64, error) {
 	return 0, nil
 }
 
-// Update 实现 DataSource 接口
+// Update implements DataSource interface
 func (m *MockDataSource) Update(ctx context.Context, tableName string, filters []domain.Filter, updates domain.Row, options *domain.UpdateOptions) (int64, error) {
 	return 0, nil
 }
 
-// Delete 实现 DataSource 接口
+// Delete implements DataSource interface
 func (m *MockDataSource) Delete(ctx context.Context, tableName string, filters []domain.Filter, options *domain.DeleteOptions) (int64, error) {
 	return 0, nil
 }
 
-// CreateTable 实现 DataSource 接口
+// CreateTable implements DataSource interface
 func (m *MockDataSource) CreateTable(ctx context.Context, tableInfo *domain.TableInfo) error {
 	return nil
 }
 
-// DropTable 实现 DataSource 接口
+// DropTable implements DataSource interface
 func (m *MockDataSource) DropTable(ctx context.Context, tableName string) error {
 	return nil
 }
 
-// TruncateTable 实现 DataSource 接口
+// TruncateTable implements DataSource interface
 func (m *MockDataSource) TruncateTable(ctx context.Context, tableName string) error {
 	return nil
 }
 
-// Execute 实现 DataSource 接口
+// Execute implements DataSource interface
 func (m *MockDataSource) Execute(ctx context.Context, sql string) (*domain.QueryResult, error) {
 	return nil, nil
 }
 
-// Close 实现 DataSource 接口
+// Close implements DataSource interface
 func (m *MockDataSource) Close(ctx context.Context) error {
 	return nil
 }
 
-// GetCallCount 获取 Query 调用次数
+// GetCallCount returns the number of Query calls
 func (m *MockDataSource) GetCallCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.callCount
 }
 
-// TestOptimizedParallelScannerBasic 测试基本并行扫描功能
+// TestOptimizedParallelScannerBasic tests basic parallel scanning functionality
 func TestOptimizedParallelScannerBasic(t *testing.T) {
-	// 创建 mock 数据源
+	// Create mock data source
 	dataSource := NewMockDataSource(100)
 
-	// 创建并行扫描器（4 个 worker）
+	// Create parallel scanner (4 workers)
 	scanner := NewOptimizedParallelScanner(dataSource, 4)
 
-	// 执行扫描
+	// Execute scan
 	scanRange := ScanRange{
 		TableName: "test_table",
 		Offset:    0,
@@ -176,7 +177,7 @@ func TestOptimizedParallelScannerBasic(t *testing.T) {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
-	// 验证结果
+	// Verify results
 	if result.Total != 100 {
 		t.Errorf("Expected Total=100, got %d", result.Total)
 	}
@@ -185,7 +186,7 @@ func TestOptimizedParallelScannerBasic(t *testing.T) {
 		t.Errorf("Expected 100 rows, got %d", len(result.Rows))
 	}
 
-	// 验证数据正确性
+	// Verify data correctness
 	for i, row := range result.Rows {
 		expectedID := int64(i + 1)
 		actualID, ok := row["id"].(int64)
@@ -195,15 +196,15 @@ func TestOptimizedParallelScannerBasic(t *testing.T) {
 	}
 }
 
-// TestOptimizedParallelScannerLargeDataset 测试大数据集的并行扫描
+// TestOptimizedParallelScannerLargeDataset tests parallel scanning of large datasets
 func TestOptimizedParallelScannerLargeDataset(t *testing.T) {
-	// 创建大数据集（10000 行）
+	// Create large dataset (10000 rows)
 	dataSource := NewMockDataSource(10000)
 
-	// 创建并行扫描器（8 个 worker）
+	// Create parallel scanner (8 workers)
 	scanner := NewOptimizedParallelScanner(dataSource, 8)
 
-	// 执行扫描
+	// Execute scan
 	scanRange := ScanRange{
 		TableName: "test_table",
 		Offset:    0,
@@ -215,7 +216,7 @@ func TestOptimizedParallelScannerLargeDataset(t *testing.T) {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
-	// 验证结果
+	// Verify results
 	if result.Total != 10000 {
 		t.Errorf("Expected Total=10000, got %d", result.Total)
 	}
@@ -224,22 +225,22 @@ func TestOptimizedParallelScannerLargeDataset(t *testing.T) {
 		t.Errorf("Expected 10000 rows, got %d", len(result.Rows))
 	}
 
-	// 验证调用了多次 Query（因为使用了并行扫描）
+	// Verify multiple Query calls (parallel scanning)
 	callCount := dataSource.GetCallCount()
 	if callCount < 2 {
 		t.Errorf("Expected at least 2 Query calls (parallel), got %d", callCount)
 	}
 }
 
-// TestOptimizedParallelScannerSmallDataset 测试小数据集（应该使用串行扫描）
+// TestOptimizedParallelScannerSmallDataset tests small dataset (should use serial scanning)
 func TestOptimizedParallelScannerSmallDataset(t *testing.T) {
-	// 创建小数据集（500 行 < batchSize）
+	// Create small dataset (500 rows < batchSize)
 	dataSource := NewMockDataSource(500)
 
-	// 创建并行扫描器
+	// Create parallel scanner
 	scanner := NewOptimizedParallelScanner(dataSource, 4)
 
-	// 执行扫描
+	// Execute scan
 	scanRange := ScanRange{
 		TableName: "test_table",
 		Offset:    0,
@@ -251,27 +252,27 @@ func TestOptimizedParallelScannerSmallDataset(t *testing.T) {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
-	// 验证结果
+	// Verify results
 	if result.Total != 500 {
 		t.Errorf("Expected Total=500, got %d", result.Total)
 	}
 
-	// 验证只调用了一次 Query（串行扫描）
+	// Verify only one Query call (serial scanning)
 	callCount := dataSource.GetCallCount()
 	if callCount != 1 {
 		t.Errorf("Expected 1 Query call (serial), got %d", callCount)
 	}
 }
 
-// TestOptimizedParallelScannerWithOffsetAndLimit 测试带 offset 和 limit 的扫描
+// TestOptimizedParallelScannerWithOffsetAndLimit tests scanning with offset and limit
 func TestOptimizedParallelScannerWithOffsetAndLimit(t *testing.T) {
-	// 创建数据源
+	// Create data source
 	dataSource := NewMockDataSource(1000)
 
-	// 创建并行扫描器
+	// Create parallel scanner
 	scanner := NewOptimizedParallelScanner(dataSource, 4)
 
-	// 执行扫描：offset=100, limit=200
+	// Execute scan: offset=100, limit=200
 	scanRange := ScanRange{
 		TableName: "test_table",
 		Offset:    100,
@@ -283,7 +284,7 @@ func TestOptimizedParallelScannerWithOffsetAndLimit(t *testing.T) {
 		t.Fatalf("Execute failed: %v", err)
 	}
 
-	// 验证结果
+	// Verify results
 	if result.Total != 200 {
 		t.Errorf("Expected Total=200, got %d", result.Total)
 	}
@@ -292,27 +293,27 @@ func TestOptimizedParallelScannerWithOffsetAndLimit(t *testing.T) {
 		t.Errorf("Expected 200 rows, got %d", len(result.Rows))
 	}
 
-	// 验证 offset 正确：第一行的 id 应该是 101
+	// Verify offset correctness: first row id should be 101
 	firstRowID, ok := result.Rows[0]["id"].(int64)
 	if !ok || firstRowID != 101 {
 		t.Errorf("Expected first row id=101, got %v", firstRowID)
 	}
 }
 
-// TestOptimizedParallelScannerParallelism 测试不同并行度
+// TestOptimizedParallelScannerParallelism tests different parallelism levels
 func TestOptimizedParallelScannerParallelism(t *testing.T) {
-	// 测试不同的并行度（最大为8）
+	// Test different parallelism levels (max is 8)
 	parallelisms := []int{1, 2, 4, 8}
 
 	for _, parallelism := range parallelisms {
 		t.Run(parallelismName(parallelism), func(t *testing.T) {
-			// 创建新的数据源
+			// Create new data source
 			dataSource := NewMockDataSource(5000)
 
-			// 创建并行扫描器
+			// Create parallel scanner
 			scanner := NewOptimizedParallelScanner(dataSource, parallelism)
 
-			// 执行扫描
+			// Execute scan
 			scanRange := ScanRange{
 				TableName: "test_table",
 				Offset:    0,
@@ -324,12 +325,12 @@ func TestOptimizedParallelScannerParallelism(t *testing.T) {
 				t.Fatalf("Execute failed: %v", err)
 			}
 
-			// 验证结果
+			// Verify results
 			if result.Total != 5000 {
 				t.Errorf("Expected Total=5000, got %d", result.Total)
 			}
 
-		// 验证并行度（注意：大于8的值会被限制为8）
+		// Verify parallelism (note: values > 8 are capped to 8)
 		expectedParallelism := parallelism
 		if parallelism > 8 {
 			expectedParallelism = 8
@@ -338,7 +339,7 @@ func TestOptimizedParallelScannerParallelism(t *testing.T) {
 			t.Errorf("Expected parallelism=%d, got %d", expectedParallelism, scanner.GetParallelism())
 		}
 
-			// 验证 Query 调用次数应该等于并行度（或更少）
+			// Verify Query call count should equal parallelism (or less)
 			callCount := dataSource.GetCallCount()
 			if callCount > parallelism {
 				t.Errorf("Expected callCount <= parallelism (%d), got %d", parallelism, callCount)
@@ -347,40 +348,40 @@ func TestOptimizedParallelScannerParallelism(t *testing.T) {
 	}
 }
 
-// TestOptimizedParallelScannerSetParallelism 测试设置并行度
+// TestOptimizedParallelScannerSetParallelism tests setting parallelism
 func TestOptimizedParallelScannerSetParallelism(t *testing.T) {
 	dataSource := NewMockDataSource(1000)
 
-	// 创建并行扫描器
+	// Create parallel scanner
 	scanner := NewOptimizedParallelScanner(dataSource, 4)
 
-	// 修改并行度
+	// Modify parallelism
 	scanner.SetParallelism(8)
 
-	// 验证并行度已修改
+	// Verify parallelism modified
 	if scanner.GetParallelism() != 8 {
 		t.Errorf("Expected parallelism=8, got %d", scanner.GetParallelism())
 	}
 
-	// 测试设置有效并行度（在范围内）
+	// Test setting valid parallelism (within range)
 	scanner.SetParallelism(6)
 	if scanner.GetParallelism() != 6 {
 		t.Errorf("Expected parallelism=6, got %d", scanner.GetParallelism())
 	}
 
-	// 测试设置最大并行度（会被限制为8）
+	// Test setting max parallelism (capped to 8)
 	scanner.SetParallelism(32)
 	if scanner.GetParallelism() != 8 {
 		t.Errorf("Expected parallelism=8 (max), got %d", scanner.GetParallelism())
 	}
 
-	// 测试设置超过最大值的并行度（应该被限制为8）
+	// Test setting parallelism beyond max (should be capped to 8)
 	scanner.SetParallelism(100)
 	if scanner.GetParallelism() != 8 {
 		t.Errorf("Expected parallelism=8 (capped), got %d", scanner.GetParallelism())
 	}
 
-	// 测试自动选择并行度（传入0或负数）
+	// Test auto-select parallelism (pass 0 or negative)
 	scanner.SetParallelism(0)
 	if scanner.GetParallelism() < 1 {
 		t.Errorf("Expected auto-selected parallelism >= 1, got %d", scanner.GetParallelism())
@@ -390,7 +391,7 @@ func TestOptimizedParallelScannerSetParallelism(t *testing.T) {
 	}
 }
 
-// TestOptimizedParallelScannerExplain 测试 Explain 方法
+// TestOptimizedParallelScannerExplain tests Explain method
 func TestOptimizedParallelScannerExplain(t *testing.T) {
 	dataSource := NewMockDataSource(1000)
 	scanner := NewOptimizedParallelScanner(dataSource, 4)
@@ -400,7 +401,7 @@ func TestOptimizedParallelScannerExplain(t *testing.T) {
 		t.Error("Expected non-empty Explain output")
 	}
 
-	// 验证 Explain 包含关键信息
+	// Verify Explain contains key information
 	expectedContains := []string{
 		"OptimizedParallelScanner",
 		"parallelism",
@@ -408,13 +409,13 @@ func TestOptimizedParallelScannerExplain(t *testing.T) {
 	}
 
 	for _, expected := range expectedContains {
-		if !contains(explain, expected) {
+		if !strings.Contains(explain, expected) {
 			t.Errorf("Explain output should contain '%s', got: %s", expected, explain)
 		}
 	}
 }
 
-// parallelismName 生成测试名称
+// parallelismName generates test names
 func parallelismName(p int) string {
 	switch p {
 	case 1:
@@ -432,25 +433,12 @@ func parallelismName(p int) string {
 	}
 }
 
-// contains 检查字符串是否包含子串
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
 // ============================================================================
-// BenchmarkParallelScan 并行扫描性能基准测试
+// BenchmarkParallelScan Parallel Scan Performance Benchmark
 // ============================================================================
 
-// BenchmarkParallelScan_Small 并行扫描 - 小数据集
+
+// BenchmarkParallelScan_Small Parallel Scan - Small Dataset
 func BenchmarkParallelScan_Small(b *testing.B) {
 	dataSource := NewMockDataSource(100)
 	scanner := NewOptimizedParallelScanner(dataSource, 4)
@@ -472,7 +460,7 @@ func BenchmarkParallelScan_Small(b *testing.B) {
 	}
 }
 
-// BenchmarkParallelScan_Medium 并行扫描 - 中等数据集
+// BenchmarkParallelScan_Medium Parallel Scan - Medium Dataset
 func BenchmarkParallelScan_Medium(b *testing.B) {
 	dataSource := NewMockDataSource(1000)
 	scanner := NewOptimizedParallelScanner(dataSource, 8)
@@ -494,7 +482,7 @@ func BenchmarkParallelScan_Medium(b *testing.B) {
 	}
 }
 
-// BenchmarkParallelScan_Large 并行扫描 - 大数据集
+// BenchmarkParallelScan_Large Parallel Scan - Large Dataset
 func BenchmarkParallelScan_Large(b *testing.B) {
 	dataSource := NewMockDataSource(10000)
 	scanner := NewOptimizedParallelScanner(dataSource, 8)
@@ -516,7 +504,7 @@ func BenchmarkParallelScan_Large(b *testing.B) {
 	}
 }
 
-// BenchmarkParallelScan_VeryLarge 并行扫描 - 超大数据集
+// BenchmarkParallelScan_VeryLarge Parallel Scan - Very Large Dataset
 func BenchmarkParallelScan_VeryLarge(b *testing.B) {
 	dataSource := NewMockDataSource(50000)
 	scanner := NewOptimizedParallelScanner(dataSource, 12)
@@ -538,7 +526,7 @@ func BenchmarkParallelScan_VeryLarge(b *testing.B) {
 	}
 }
 
-// BenchmarkParallelScan_Parallelism2 并行扫描 - 2 个 worker
+// BenchmarkParallelScan_Parallelism2 Parallel Scan - 2 Workers
 func BenchmarkParallelScan_Parallelism2(b *testing.B) {
 	dataSource := NewMockDataSource(10000)
 	scanner := NewOptimizedParallelScanner(dataSource, 2)
@@ -560,7 +548,7 @@ func BenchmarkParallelScan_Parallelism2(b *testing.B) {
 	}
 }
 
-// BenchmarkParallelScan_Parallelism4 并行扫描 - 4 个 worker
+// BenchmarkParallelScan_Parallelism4 Parallel Scan - 4 Workers
 func BenchmarkParallelScan_Parallelism4(b *testing.B) {
 	dataSource := NewMockDataSource(10000)
 	scanner := NewOptimizedParallelScanner(dataSource, 4)
@@ -582,7 +570,7 @@ func BenchmarkParallelScan_Parallelism4(b *testing.B) {
 	}
 }
 
-// BenchmarkParallelScan_Parallelism8 并行扫描 - 8 个 worker
+// BenchmarkParallelScan_Parallelism8 Parallel Scan - 8 Workers
 func BenchmarkParallelScan_Parallelism8(b *testing.B) {
 	dataSource := NewMockDataSource(10000)
 	scanner := NewOptimizedParallelScanner(dataSource, 8)
@@ -604,7 +592,7 @@ func BenchmarkParallelScan_Parallelism8(b *testing.B) {
 	}
 }
 
-// BenchmarkParallelScan_Parallelism16 并行扫描 - 16 个 worker
+// BenchmarkParallelScan_Parallelism16 Parallel Scan - 16 Workers
 func BenchmarkParallelScan_Parallelism16(b *testing.B) {
 	dataSource := NewMockDataSource(10000)
 	scanner := NewOptimizedParallelScanner(dataSource, 16)
@@ -626,7 +614,7 @@ func BenchmarkParallelScan_Parallelism16(b *testing.B) {
 	}
 }
 
-// BenchmarkParallelScan_WithOffsetAndLimit 并行扫描 - 带偏移量和限制
+// BenchmarkParallelScan_WithOffsetAndLimit Parallel Scan - With Offset and Limit
 func BenchmarkParallelScan_WithOffsetAndLimit(b *testing.B) {
 	dataSource := NewMockDataSource(10000)
 	scanner := NewOptimizedParallelScanner(dataSource, 8)
@@ -648,9 +636,9 @@ func BenchmarkParallelScan_WithOffsetAndLimit(b *testing.B) {
 	}
 }
 
-// BenchmarkParallelScan_Compare 并行扫描 vs 串行扫描性能对比
+// BenchmarkParallelScan_Compare Parallel Scan vs Serial Scan Performance Comparison
 func BenchmarkParallelScan_Compare(b *testing.B) {
-	// 小数据集对比
+	// Small dataset comparison
 	b.Run("Small/Parallel", func(b *testing.B) {
 		dataSource := NewMockDataSource(100)
 		scanner := NewOptimizedParallelScanner(dataSource, 4)
@@ -668,7 +656,7 @@ func BenchmarkParallelScan_Compare(b *testing.B) {
 		}
 	})
 
-	// 中等数据集对比
+	// Medium dataset comparison
 	b.Run("Medium/Parallel", func(b *testing.B) {
 		dataSource := NewMockDataSource(1000)
 		scanner := NewOptimizedParallelScanner(dataSource, 8)
@@ -686,7 +674,7 @@ func BenchmarkParallelScan_Compare(b *testing.B) {
 		}
 	})
 
-	// 大数据集对比
+	// Large dataset comparison
 	b.Run("Large/Parallel", func(b *testing.B) {
 		dataSource := NewMockDataSource(10000)
 		scanner := NewOptimizedParallelScanner(dataSource, 8)
