@@ -154,3 +154,68 @@ func TestTiDBVectorDistanceFunctions(t *testing.T) {
 		})
 	}
 }
+
+// TestWithClausePreprocess 测试 WITH 子句预处理
+func TestWithClausePreprocess(t *testing.T) {
+	adapter := NewSQLAdapter()
+
+	testCases := []struct {
+		name           string
+		sql            string
+		expectVector   bool
+		expectIndexType string
+		expectMetric   string
+		expectDim      int
+		expectColumn   string
+	}{
+		{
+			name:           "WITH clause after USING HNSW",
+			sql:            "CREATE VECTOR INDEX idx_emb ON articles(embedding) USING HNSW WITH (metric='cosine', dim=768, M=8)",
+			expectVector:   true,
+			expectIndexType: "VECTOR",
+			expectMetric:   "cosine",
+			expectDim:      768,
+			expectColumn:   "embedding",
+		},
+		{
+			name:           "WITH clause without USING (default HNSW)",
+			sql:            "CREATE VECTOR INDEX idx_emb ON articles(embedding) WITH (metric='cosine', dim=512)",
+			expectVector:   true,
+			expectIndexType: "VECTOR",
+			expectMetric:   "cosine",
+			expectDim:      512,
+			expectColumn:   "embedding",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := adapter.Parse(tc.sql)
+			require.NoError(t, err, "解析SQL应该成功: %s", tc.sql)
+			require.True(t, result.Success, "解析应该成功")
+
+			createIndexStmt := result.Statement.CreateIndex
+			require.NotNil(t, createIndexStmt, "应该解析出 CreateIndexStatement")
+
+			// 验证向量索引标识
+			require.Equal(t, tc.expectVector, createIndexStmt.IsVectorIndex, "IsVectorIndex")
+
+			// 验证索引类型
+			require.Equal(t, tc.expectIndexType, createIndexStmt.IndexType, "IndexType")
+
+			// 验证列名
+			require.Equal(t, tc.expectColumn, createIndexStmt.ColumnName, "ColumnName")
+
+			if tc.expectVector {
+				// 验证度量类型
+				require.Equal(t, tc.expectMetric, createIndexStmt.VectorMetric, "VectorMetric")
+
+				// 验证维度
+				if tc.expectDim > 0 {
+					require.Equal(t, tc.expectDim, createIndexStmt.VectorDim, "VectorDim")
+				}
+			}
+		})
+	}
+}
+

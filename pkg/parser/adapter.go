@@ -34,7 +34,10 @@ func NewSQLAdapter() *SQLAdapter {
 
 // Parse 解析 SQL 语句
 func (a *SQLAdapter) Parse(sql string) (*ParseResult, error) {
-	stmtNodes, _, err := a.parser.Parse(sql, "", "")
+	// 预处理 SQL：将 WITH 子句转换为 COMMENT 子句
+	preprocessedSQL := preprocessWithClause(sql)
+	
+	stmtNodes, _, err := a.parser.Parse(preprocessedSQL, "", "")
 	if err != nil {
 		return &ParseResult{
 			Success: false,

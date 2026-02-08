@@ -23,7 +23,10 @@ func NewParser() *Parser {
 
 // ParseSQL 解析 SQL 语句，返回 AST 节点列表
 func (p *Parser) ParseSQL(sql string) ([]ast.StmtNode, error) {
-	stmtNodes, warnings, err := p.parser.ParseSQL(sql)
+	// 预处理 SQL：将 WITH 子句转换为 COMMENT 子句
+	preprocessedSQL := preprocessWithClause(sql)
+	
+	stmtNodes, warnings, err := p.parser.ParseSQL(preprocessedSQL)
 	if err != nil {
 		return nil, fmt.Errorf("解析 SQL 失败: %w", err)
 	}
@@ -46,6 +49,77 @@ func (p *Parser) ParseOneStmt(sql string) (ast.StmtNode, error) {
 		return nil, fmt.Errorf("未解析到 SQL 语句")
 	}
 	return stmts[0], nil
+}
+
+// preprocessWithClause 预处理 SQL 语句，将 WITH 子句转换为 COMMENT 子句
+// 例如：CREATE VECTOR INDEX idx ON articles(embedding) USING HNSW WITH (metric='cosine', dim=768)
+// 转换为：CREATE VECTOR INDEX idx ON articles(embedding) USING HNSW COMMENT 'metric=cosine, dim=768'
+func preprocessWithClause(sql string) string {
+	// 查找 CREATE [VECTOR] INDEX 语句中的 WITH 子句
+	// 正则表达式匹配：USING xxx WITH (...)
+	// 优先匹配 VECTOR INDEX，然后匹配普通 INDEX
+	
+	// 使用字符串操作来查找和替换
+	upperSQL := strings.ToUpper(sql)
+	
+	// 查找 "WITH (" 的位置
+	withIndex := strings.Index(upperSQL, "WITH (")
+	if withIndex == -1 {
+		return sql
+	}
+	
+	// 查找对应的右括号
+	depth := 0
+	start := withIndex + 5 // 跳过 "WITH "
+	end := -1
+	
+	for i := start; i < len(sql); i++ {
+		if sql[i] == '(' {
+			depth++
+		} else if sql[i] == ')' {
+			depth--
+			if depth == 0 {
+				end = i
+				break
+			}
+		}
+	}
+	
+	if end == -1 {
+		return sql
+	}
+	
+	// 提取 WITH 子句的内容
+	withContent := sql[start+1 : end] // 去掉括号
+	
+	// 移除参数值中的单引号（因为 parseWithClause 会自动处理）
+	// 例如：metric='cosine' -> metric=cosine
+	withContent = strings.ReplaceAll(withContent, "'", "")
+	
+	// 查找 WITH 前面的关键字（USING 或直接就是索引定义）
+	beforeWith := strings.TrimSpace(sql[:withIndex])
+	
+	// 判断是否有 USING 关键字
+	var usingKeyword string
+	if usingIdx := strings.LastIndex(strings.ToUpper(beforeWith), "USING"); usingIdx != -1 {
+		usingKeyword = "USING"
+	}
+	
+	// 构建新的 SQL：将 WITH (...) 替换为 COMMENT '...'
+	newSQL := sql[:withIndex]
+	
+	if usingKeyword != "" {
+		// 如果有 USING，添加 COMMENT
+		newSQL += "COMMENT '" + withContent + "'"
+	} else {
+		// 如果没有 USING，先添加 USING HNSW（默认），再添加 COMMENT
+		newSQL += "USING HNSW COMMENT '" + withContent + "'"
+	}
+	
+	// 添加 WITH 后面的内容
+	newSQL += sql[end+1:]
+	
+	return newSQL
 }
 
 // ParseOneStmtText 解析 SQL 文本（去除注释和空白）
