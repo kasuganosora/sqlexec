@@ -8,6 +8,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/executor/operators"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 )
 
 // Executor 执行器接口
@@ -19,6 +20,7 @@ type Executor interface {
 // BaseExecutor 基础执行器
 type BaseExecutor struct {
 	dataAccessService dataaccess.Service
+	indexManager      *memory.IndexManager
 	runtime           *Runtime
 }
 
@@ -26,6 +28,16 @@ type BaseExecutor struct {
 func NewExecutor(dataAccessService dataaccess.Service) Executor {
 	return &BaseExecutor{
 		dataAccessService: dataAccessService,
+		indexManager:      memory.NewIndexManager(),
+		runtime:           NewRuntime(),
+	}
+}
+
+// NewExecutorWithIndexManager 创建带索引管理器的执行器
+func NewExecutorWithIndexManager(dataAccessService dataaccess.Service, indexManager *memory.IndexManager) Executor {
+	return &BaseExecutor{
+		dataAccessService: dataAccessService,
+		indexManager:      indexManager,
 		runtime:           NewRuntime(),
 	}
 }
@@ -72,6 +84,8 @@ func (e *BaseExecutor) buildOperator(p *plan.Plan) (operators.Operator, error) {
 		return operators.NewSortOperator(p, e.dataAccessService)
 	case plan.TypeUnion:
 		return operators.NewUnionOperator(p, e.dataAccessService)
+	case plan.TypeVectorScan:
+		return operators.NewVectorScanOperator(p, e.dataAccessService, e.indexManager)
 	default:
 		return nil, fmt.Errorf("unsupported plan type: %s", p.Type)
 	}

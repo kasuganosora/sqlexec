@@ -65,6 +65,15 @@ type ColumnInfo struct {
 	GeneratedType    string   `json:"generated_type,omitempty"`    // "STORED" (第一阶段) 或 "VIRTUAL" (第二阶段)
 	GeneratedExpr    string   `json:"generated_expr,omitempty"`     // 表达式字符串
 	GeneratedDepends []string `json:"generated_depends,omitempty"` // 依赖的列名
+
+	// Vector Columns 支持
+	VectorDim  int    `json:"vector_dim,omitempty"`   // 向量维度
+	VectorType string `json:"vector_type,omitempty"`  // 向量类型（如 "float32"）
+}
+
+// IsVectorType 检查是否为向量类型
+func (c ColumnInfo) IsVectorType() bool {
+	return c.VectorDim > 0
 }
 
 // ForeignKeyInfo 外键信息
@@ -180,15 +189,23 @@ type Constraint struct {
 	Enabled    bool                  `json:"enabled"`
 }
 
+// VectorIndexConfig 向量索引配置
+type VectorIndexConfig struct {
+	MetricType string                 `json:"metric_type"`
+	Dimension  int                    `json:"dimension"`
+	Params     map[string]interface{} `json:"params,omitempty"`
+}
+
 // Index 索引信息
 type Index struct {
-	Name     string      `json:"name"`
-	Table    string      `json:"table"`
-	Columns  []string    `json:"columns"`
-	Type     IndexType   `json:"type"`
-	Unique   bool        `json:"unique"`
-	Primary  bool        `json:"primary"`
-	Enabled  bool        `json:"enabled"`
+	Name         string             `json:"name"`
+	Table        string             `json:"table"`
+	Columns      []string           `json:"columns"`
+	Type         IndexType          `json:"type"`
+	Unique       bool               `json:"unique"`
+	Primary      bool               `json:"primary"`
+	Enabled      bool               `json:"enabled"`
+	VectorConfig *VectorIndexConfig `json:"vector_config,omitempty"` // 向量索引配置
 }
 
 // Schema 模式信息

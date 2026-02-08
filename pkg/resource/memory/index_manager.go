@@ -15,10 +15,11 @@ type IndexManager struct {
 
 // TableIndexes 单个表的索引集合
 type TableIndexes struct {
-	tableName string
-	indexes   map[string]Index   // columnName -> Index
-	columnMap map[string]Index      // columnName -> Index
-	mu        sync.RWMutex
+	tableName     string
+	indexes       map[string]Index       // indexName -> Index（传统索引）
+	columnMap     map[string]Index       // columnName -> Index（传统索引快速查找）
+	vectorIndexes map[string]VectorIndex // columnName -> VectorIndex（向量索引）
+	mu            sync.RWMutex
 }
 
 // NewIndexManager 创建索引管理器
@@ -37,10 +38,11 @@ func (m *IndexManager) CreateIndex(tableName, columnName string, indexType Index
 	tableIdxs, ok := m.tables[tableName]
 	if !ok {
 		tableIdxs = &TableIndexes{
-			tableName: tableName,
-			indexes:   make(map[string]Index),
-			columnMap: make(map[string]Index),
-			mu:        sync.RWMutex{},
+			tableName:     tableName,
+			indexes:       make(map[string]Index),
+			columnMap:     make(map[string]Index),
+			vectorIndexes: make(map[string]VectorIndex),
+			mu:            sync.RWMutex{},
 		}
 		m.tables[tableName] = tableIdxs
 	}
@@ -71,6 +73,112 @@ func (m *IndexManager) CreateIndex(tableName, columnName string, indexType Index
 	tableIdxs.columnMap[columnName] = idx
 
 	return idx, nil
+}
+
+// CreateVectorIndex 创建向量索引
+func (m *IndexManager) CreateVectorIndex(
+	tableName, columnName string,
+	metricType VectorMetricType,
+	indexType IndexType,
+	dimension int,
+	params map[string]interface{},
+) (VectorIndex, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	tableIdxs, ok := m.tables[tableName]
+	if !ok {
+		tableIdxs = &TableIndexes{
+			tableName:     tableName,
+			indexes:       make(map[string]Index),
+			columnMap:     make(map[string]Index),
+			vectorIndexes: make(map[string]VectorIndex),
+			mu:            sync.RWMutex{},
+		}
+		m.tables[tableName] = tableIdxs
+	}
+
+	tableIdxs.mu.Lock()
+	defer tableIdxs.mu.Unlock()
+
+	// 检查列是否已有向量索引
+	if _, exists := tableIdxs.vectorIndexes[columnName]; exists {
+		return nil, fmt.Errorf("vector index already exists for column: %s", columnName)
+	}
+
+	// 创建索引配置
+	config := &VectorIndexConfig{
+		MetricType: metricType,
+		Dimension:  dimension,
+		Params:     params,
+	}
+
+	// 根据类型创建向量索引
+	var idx VectorIndex
+	var err error
+	switch indexType {
+	case IndexTypeVectorHNSW:
+		idx, err = NewHNSWIndex(columnName, config)
+	case IndexTypeVectorFlat:
+		idx, err = NewFlatIndex(columnName, config)
+	default:
+		return nil, fmt.Errorf("unsupported vector index type: %s", indexType)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// 存储索引
+	tableIdxs.vectorIndexes[columnName] = idx
+
+	return idx, nil
+}
+
+// GetVectorIndex 获取向量索引
+func (m *IndexManager) GetVectorIndex(tableName, columnName string) (VectorIndex, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	tableIdxs, ok := m.tables[tableName]
+	if !ok {
+		return nil, fmt.Errorf("table not found: %s", tableName)
+	}
+
+	tableIdxs.mu.RLock()
+	defer tableIdxs.mu.RUnlock()
+
+	idx, exists := tableIdxs.vectorIndexes[columnName]
+	if !exists {
+		return nil, fmt.Errorf("vector index not found for column: %s", columnName)
+	}
+
+	return idx, nil
+}
+
+// DropVectorIndex 删除向量索引
+func (m *IndexManager) DropVectorIndex(tableName, columnName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	tableIdxs, ok := m.tables[tableName]
+	if !ok {
+		return fmt.Errorf("table not found: %s", tableName)
+	}
+
+	tableIdxs.mu.Lock()
+	defer tableIdxs.mu.Unlock()
+
+	idx, exists := tableIdxs.vectorIndexes[columnName]
+	if !exists {
+		return fmt.Errorf("vector index not found for column: %s", columnName)
+	}
+
+	// 关闭索引
+	_ = idx.Close()
+	delete(tableIdxs.vectorIndexes, columnName)
+
+	return nil
 }
 
 // GetIndex 获取指定列的索引
@@ -130,6 +238,19 @@ func (m *IndexManager) DropIndex(tableName, indexName string) error {
 func (m *IndexManager) DropTableIndexes(tableName string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	tableIdxs, ok := m.tables[tableName]
+	if !ok {
+		return nil
+	}
+
+	tableIdxs.mu.Lock()
+	defer tableIdxs.mu.Unlock()
+
+	// 关闭所有向量索引
+	for _, idx := range tableIdxs.vectorIndexes {
+		_ = idx.Close()
+	}
 
 	delete(m.tables, tableName)
 	return nil

@@ -7,6 +7,7 @@ import (
 
 	domain "github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/generated"
+	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 )
 
 // QueryBuilder 查询构建器
@@ -424,7 +425,12 @@ func (b *QueryBuilder) executeCreateIndex(ctx context.Context, stmt *CreateIndex
 		return nil, fmt.Errorf("data source is read-only, CREATE INDEX operation not allowed")
 	}
 
-	// 检查数据源是否支持索引操作
+	// 如果是向量索引，使用专门的创建方法
+	if stmt.IsVectorIndex {
+		return b.executeCreateVectorIndex(ctx, stmt)
+	}
+
+	// 检查数据源是否支持传统索引操作
 	indexManager, ok := b.dataSource.(interface {
 		CreateIndex(tableName, columnName string, indexType string, unique bool) error
 	})
@@ -454,6 +460,87 @@ func (b *QueryBuilder) executeCreateIndex(ctx context.Context, stmt *CreateIndex
 	return &domain.QueryResult{
 		Total: 0,
 	}, nil
+}
+
+// executeCreateVectorIndex 执行 CREATE VECTOR INDEX
+func (b *QueryBuilder) executeCreateVectorIndex(ctx context.Context, stmt *CreateIndexStatement) (*domain.QueryResult, error) {
+	// 检查数据源是否支持向量索引操作
+	vectorIndexManager, ok := b.dataSource.(interface {
+		CreateVectorIndex(tableName, columnName string, metricType string, indexType string, dimension int, params map[string]interface{}) error
+	})
+	if !ok {
+		// 尝试使用 memory.IndexManager 接口
+		indexManager, ok := b.dataSource.(interface {
+			CreateVectorIndex(tableName, columnName string, metricType memory.VectorMetricType, indexType memory.IndexType, dimension int, params map[string]interface{}) (memory.VectorIndex, error)
+		})
+		if !ok {
+			return nil, fmt.Errorf("data source does not support CREATE VECTOR INDEX")
+		}
+		
+		// 转换参数
+		metricType := convertToVectorMetricType(stmt.VectorMetric)
+		indexType := convertToVectorIndexType(stmt.VectorIndexType)
+		dimension := stmt.VectorDim
+		
+		// 合并参数
+		params := make(map[string]interface{})
+		if stmt.VectorParams != nil {
+			for k, v := range stmt.VectorParams {
+				params[k] = v
+			}
+		}
+		
+		// 调用向量索引创建方法
+		_, err := indexManager.CreateVectorIndex(stmt.TableName, stmt.ColumnName, metricType, indexType, dimension, params)
+		if err != nil {
+			return nil, fmt.Errorf("create vector index failed: %w", err)
+		}
+		
+		return &domain.QueryResult{
+			Total: 0,
+		}, nil
+	}
+
+	// 调用数据源的 CreateVectorIndex 方法
+	err := vectorIndexManager.CreateVectorIndex(
+		stmt.TableName,
+		stmt.ColumnName,
+		stmt.VectorMetric,
+		stmt.VectorIndexType,
+		stmt.VectorDim,
+		stmt.VectorParams,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create vector index failed: %w", err)
+	}
+
+	return &domain.QueryResult{
+		Total: 0,
+	}, nil
+}
+
+// convertToVectorMetricType 转换度量类型字符串为枚举值
+func convertToVectorMetricType(metric string) memory.VectorMetricType {
+	switch strings.ToLower(metric) {
+	case "l2", "euclidean":
+		return memory.VectorMetricL2
+	case "ip", "inner_product", "inner":
+		return memory.VectorMetricIP
+	default:
+		return memory.VectorMetricCosine
+	}
+}
+
+// convertToVectorIndexType 转换索引类型字符串为枚举值
+func convertToVectorIndexType(indexType string) memory.IndexType {
+	switch strings.ToLower(indexType) {
+	case "flat", "vector_flat":
+		return memory.IndexTypeVectorFlat
+	case "ivf_flat", "vector_ivf_flat":
+		return memory.IndexTypeVectorIVFFlat
+	default:
+		return memory.IndexTypeVectorHNSW
+	}
 }
 
 // executeDropIndex 执行 DROP INDEX

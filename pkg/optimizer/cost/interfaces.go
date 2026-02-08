@@ -52,6 +52,13 @@ type CostModel interface {
 	// This is useful for debugging and analysis.
 	// Returns a pointer to AdaptiveCostFactor containing the current cost factors.
 	GetCostFactors() *AdaptiveCostFactor
+
+	// VectorSearchCost estimates the cost of a vector search operation.
+	// indexType: the type of vector index (hnsw, flat, etc.)
+	// rowCount: estimated number of vectors in the index
+	// k: number of nearest neighbors to search
+	// Returns the estimated cost.
+	VectorSearchCost(indexType string, rowCount int64, k int) float64
 }
 
 // ExtendedCardinalityEstimator is an extended interface for cardinality estimation.

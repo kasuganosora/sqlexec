@@ -147,9 +147,16 @@ type CreateIndexStatement struct {
 	IndexName  string   `json:"index_name"`
 	TableName  string   `json:"table_name"`
 	ColumnName string   `json:"column_name"`
-	IndexType  string   `json:"index_type"` // BTREE, HASH, FULLTEXT
+	IndexType  string   `json:"index_type"` // BTREE, HASH, FULLTEXT, VECTOR
 	Unique     bool     `json:"unique"`
 	IfExists   bool   `json:"if_exists"`
+	
+	// Vector Index 配置
+	IsVectorIndex   bool              `json:"is_vector_index,omitempty"`
+	VectorIndexType string            `json:"vector_index_type,omitempty"` // hnsw, ivf_flat, flat
+	VectorMetric    string            `json:"vector_metric,omitempty"`     // cosine, l2, inner_product
+	VectorDim       int               `json:"vector_dim,omitempty"`
+	VectorParams    map[string]interface{} `json:"vector_params,omitempty"`
 }
 
 // DropIndexStatement DROP INDEX 语句
@@ -274,6 +281,15 @@ type ColumnInfo struct {
 	GeneratedType    string   `json:"generated_type,omitempty"`    // "STORED" (第一阶段) 或 "VIRTUAL" (第二阶段)
 	GeneratedExpr    string   `json:"generated_expr,omitempty"`      // 表达式字符串
 	GeneratedDepends []string `json:"generated_depends,omitempty"` // 依赖的列名
+	
+	// Vector Columns 支持
+	VectorDim  int    `json:"vector_dim,omitempty"`   // 向量维度
+	VectorType string `json:"vector_type,omitempty"`  // 向量类型（如 "float32"）
+}
+
+// IsVectorType 检查是否为向量类型
+func (c ColumnInfo) IsVectorType() bool {
+	return c.VectorDim > 0 || c.Type == "VECTOR"
 }
 
 // CreateUserStatement CREATE USER 语句

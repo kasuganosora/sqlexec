@@ -51,6 +51,8 @@ mariadb-server/
 tidb/
 duckdb/
 tidb-repo/
+milvus
+milvus/
 
 # Temporary files
 *.tmp

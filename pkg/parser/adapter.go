@@ -645,6 +645,14 @@ func (a *SQLAdapter) convertCreateTableStmt(stmt *ast.CreateTableStmt) (*CreateS
 			Default:  nil,
 		}
 
+		// 检查是否为 VECTOR 类型
+		colTypeStr := col.Tp.String()
+		if isVectorType(colTypeStr) {
+			colInfo.Type = "VECTOR"
+			colInfo.VectorDim = extractVectorDimension(colTypeStr)
+			colInfo.VectorType = "float32"
+		}
+
 		// 从 Options 解析列属性
 		for _, opt := range col.Options {
 			switch opt.Tp {
@@ -686,6 +694,37 @@ func (a *SQLAdapter) convertCreateTableStmt(stmt *ast.CreateTableStmt) (*CreateS
 	}
 
 	return createStmt, nil
+}
+
+// isVectorType 检查是否为 VECTOR 类型
+func isVectorType(typeStr string) bool {
+	upperType := strings.ToUpper(typeStr)
+	return strings.HasPrefix(upperType, "VECTOR") || strings.HasPrefix(upperType, "ARRAY<")
+}
+
+// extractVectorDimension 从 VECTOR(dim) 中提取维度
+func extractVectorDimension(typeStr string) int {
+	// 处理 VECTOR(dim) 格式
+	start := strings.Index(typeStr, "(")
+	end := strings.Index(typeStr, ")")
+	if start != -1 && end != -1 && end > start+1 {
+		dimStr := typeStr[start+1 : end]
+		var dim int
+		if _, err := fmt.Sscanf(dimStr, "%d", &dim); err == nil {
+			return dim
+		}
+	}
+	// 处理 ARRAY<FLOAT, dim> 格式
+	if strings.Contains(strings.ToUpper(typeStr), "ARRAY<") {
+		parts := strings.Split(typeStr, ",")
+		if len(parts) == 2 {
+			var dim int
+			if _, err := fmt.Sscanf(parts[1], "%d>", &dim); err == nil {
+				return dim
+			}
+		}
+	}
+	return 0
 }
 
 // convertDropTableStmt 转换 DROP TABLE 语句
@@ -1073,14 +1112,67 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 		createIndexStmt.TableName = stmt.Table.Name.String()
 	}
 
-	// 获取索引类型（BTREE, HASH, FULLTEXT）
+	// 获取索引类型（BTREE, HASH, FULLTEXT, VECTOR）
 	// 默认为 BTREE
-	if stmt.IndexOption != nil {
-		createIndexStmt.IndexType = "BTREE" // 默认值
-		// 注意：TiDB 的 IndexOption 可能包含索引类型信息
-		// 这里简化处理，实际可能需要更复杂的解析
-	} else {
-		createIndexStmt.IndexType = "BTREE"
+	createIndexStmt.IndexType = "BTREE"
+	
+	// 检查是否为向量索引（通过 USING 子句或索引名）
+	indexType := "btree"
+	if stmt.IndexOption != nil && stmt.IndexOption.Tp != 0 {
+		// 根据 TiDB 的索引类型常量转换
+		switch stmt.IndexOption.Tp {
+		case ast.IndexTypeHash:
+			indexType = "hash"
+		case ast.IndexTypeBtree:
+			indexType = "btree"
+		case ast.IndexTypeRtree:
+			indexType = "rtree"
+		}
+	}
+	createIndexStmt.IndexType = strings.ToUpper(indexType)
+	
+	// 检查 USING 子句中是否有向量索引类型
+	if stmt.IndexOption != nil && stmt.IndexOption.ParserName.O != "" {
+		usingType := strings.ToLower(stmt.IndexOption.ParserName.O)
+		switch usingType {
+		case "hnsw", "ivf_flat", "flat", "vector_hnsw", "vector_ivf_flat", "vector_flat":
+			createIndexStmt.IsVectorIndex = true
+			createIndexStmt.VectorIndexType = usingType
+			createIndexStmt.IndexType = "VECTOR"
+		}
+	}
+	
+	// 如果 USING 子句没有指定，检查索引名是否包含向量索引标记
+	if !createIndexStmt.IsVectorIndex {
+		if strings.Contains(strings.ToUpper(stmt.IndexName), "VECTOR") ||
+		   strings.Contains(strings.ToUpper(stmt.IndexName), "HNSW") ||
+		   strings.Contains(strings.ToUpper(stmt.IndexName), "IVF") ||
+		   strings.Contains(strings.ToUpper(stmt.IndexName), "FLAT") {
+			createIndexStmt.IsVectorIndex = true
+			createIndexStmt.VectorIndexType = "hnsw" // 默认
+			createIndexStmt.IndexType = "VECTOR"
+		}
+	}
+
+	// 解析 WITH 子句中的参数
+	if createIndexStmt.IsVectorIndex && stmt.IndexOption != nil && stmt.IndexOption.Comment != "" {
+		// 解析 COMMENT 中的 JSON 参数，如 WITH (metric='cosine', dim=128)
+		params := parseWithClause(stmt.IndexOption.Comment)
+		if params != nil {
+			createIndexStmt.VectorParams = params
+			
+			// 从参数中提取度量类型
+			if metric, ok := params["metric"].(string); ok {
+				createIndexStmt.VectorMetric = metric
+			} else {
+				createIndexStmt.VectorMetric = "cosine" // 默认
+			}
+			
+			// 从参数中提取维度
+			if dim, ok := params["dim"].(float64); ok {
+				createIndexStmt.VectorDim = int(dim)
+			}
+		}
 	}
 
 	// 获取列名（从 IndexPartSpecifications）
@@ -1099,6 +1191,44 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 	}
 
 	return createIndexStmt, nil
+}
+
+// parseWithClause 解析 WITH 子句中的参数
+// 格式: "metric='cosine', dim=128, M=16, ef=200"
+func parseWithClause(comment string) map[string]interface{} {
+	params := make(map[string]interface{})
+	
+	// 清理字符串
+	comment = strings.Trim(comment, " ")
+	if comment == "" {
+		return params
+	}
+	
+	// 分割参数
+	parts := strings.Split(comment, ",")
+	for _, part := range parts {
+		part = strings.Trim(part, " ")
+		// 分割键值
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) == 2 {
+			key := strings.Trim(kv[0], " ")
+			value := strings.Trim(kv[1], " ")
+			
+			// 移除引号
+			value = strings.Trim(value, "'\"")
+			
+			// 尝试解析为数字
+			if intVal, err := strconv.Atoi(value); err == nil {
+				params[key] = intVal
+			} else if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
+				params[key] = floatVal
+			} else {
+				params[key] = value
+			}
+		}
+	}
+	
+	return params
 }
 
 // convertDropIndexStmt 转换 DROP INDEX 语句

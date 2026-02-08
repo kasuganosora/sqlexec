@@ -21,6 +21,7 @@ const (
 	TypeUpdate     PlanType = "Update"
 	TypeDelete     PlanType = "Delete"
 	TypeUnion      PlanType = "Union"
+	TypeVectorScan PlanType = "VectorScan"
 )
 
 // Plan 可序列化的执行计划（不含数据源引用）

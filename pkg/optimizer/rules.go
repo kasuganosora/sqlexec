@@ -451,6 +451,7 @@ func DefaultRuleSet() RuleSet {
 		&JoinReorderRule{},
 		&JoinEliminationRule{},
 		&SemiJoinRewriteRule{},
+		NewVectorIndexRule(), // 添加向量索引规则
 	}
 	fmt.Println("  [DEBUG] DefaultRuleSet: 创建规则集, 数量:", len(rules))
 	for i, r := range rules {

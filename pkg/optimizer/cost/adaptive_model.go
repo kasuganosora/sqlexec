@@ -227,6 +227,42 @@ func (acm *AdaptiveCostModel) SortCost(inputRows int64) float64 {
 	return float64(inputRows) * math.Log2(float64(inputRows)) * acm.factors.CPUFactor
 }
 
+// VectorSearchCost 计算向量搜索成本
+func (acm *AdaptiveCostModel) VectorSearchCost(indexType string, rowCount int64, k int) float64 {
+	if rowCount <= 0 {
+		return 0
+	}
+
+	switch indexType {
+	case "vector_hnsw", "hnsw":
+		// HNSW索引成本：log(N) * k * ef_search
+		// 近似为 O(log N) 的搜索复杂度
+		logN := math.Log2(float64(rowCount))
+		searchCost := logN * float64(k) * acm.factors.CPUFactor
+		// 加上内存访问成本
+		memoryCost := logN * float64(k) * acm.factors.MemoryFactor * 0.01
+		return searchCost + memoryCost
+
+	case "vector_flat", "flat":
+		// Flat索引（暴力搜索）成本：N * k
+		scanCost := float64(rowCount) * acm.factors.CPUFactor
+		// 排序成本：k * log(k) * N（找到top k）
+		sortCost := float64(k) * math.Log2(float64(k)) * acm.factors.CPUFactor
+		return scanCost + sortCost
+
+	case "vector_ivf_flat", "ivf_flat":
+		// IVF-Flat索引成本：N/nlist * k
+		// 假设 nlist = sqrt(N)
+		nlist := math.Sqrt(float64(rowCount))
+		scanCost := (float64(rowCount) / nlist) * acm.factors.CPUFactor
+		return scanCost
+
+	default:
+		// 默认使用暴力搜索成本
+		return float64(rowCount) * acm.factors.CPUFactor
+	}
+}
+
 // estimateIndexHeight 估算索引高度
 func (acm *AdaptiveCostModel) estimateIndexHeight(tableName string) int {
 	// 基于B+树索引，高度 ≈ log2(行数)
