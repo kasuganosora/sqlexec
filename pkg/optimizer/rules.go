@@ -7,22 +7,22 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
 
-// PredicatePushDownRule 谓词下推规则
-// 将 Selection 节点尽可能下推到 DataSource
+// PredicatePushDownRule predicate pushdown rule
+// Pushes Selection node predicates down to DataSource as much as possible
 type PredicatePushDownRule struct{}
 
-// Name 返回规则名称
+// Name returns rule name
 func (r *PredicatePushDownRule) Name() string {
 	return "PredicatePushDown"
 }
 
-// Match 检查规则是否匹配
+// Match checks if rule matches
 func (r *PredicatePushDownRule) Match(plan LogicalPlan) bool {
 	_, ok := plan.(*LogicalSelection)
 	return ok
 }
 
-// Apply 应用规则
+// Apply applies the rule
 func (r *PredicatePushDownRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
 	selection, ok := plan.(*LogicalSelection)
 	if !ok {
@@ -35,23 +35,23 @@ func (r *PredicatePushDownRule) Apply(ctx context.Context, plan LogicalPlan, opt
 
 	child := selection.children[0]
 
-	// 如果子节点是 DataSource，将谓词标记到DataSource上（下推成功）
+	// If child node is DataSource, mark predicates to DataSource (pushdown success)
 	if dataSource, ok := child.(*LogicalDataSource); ok {
-		// 将Selection的条件标记到DataSource，表示可以在扫描时过滤
+		// Mark Selection conditions to DataSource for filtering during scan
 		dataSource.PushDownPredicates(selection.Conditions())
-		// 返回child，消除Selection节点（条件已下推到DataSource）
+		// Return child, eliminate Selection node (conditions pushed down to DataSource)
 		return child, nil
 	}
 
-	// 如果子节点是 Selection，合并条件
+	// If child node is Selection, merge conditions
 	if childSelection, ok := child.(*LogicalSelection); ok {
-		// 合并条件列表
+		// Merge condition lists
 		mergedConditions := append(selection.Conditions(), childSelection.Conditions()...)
 		return NewLogicalSelection(mergedConditions, childSelection.Children()[0]), nil
 	}
 
-	// 尝试下推到其他节点
-	// 简化实现：不下推
+	// Try to push down to other nodes
+	// Simplified implementation: no pushdown
 	return plan, nil
 }
 
