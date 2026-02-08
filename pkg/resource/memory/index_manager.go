@@ -121,6 +121,22 @@ func (m *IndexManager) CreateVectorIndex(
 		idx, err = NewHNSWIndex(columnName, config)
 	case IndexTypeVectorFlat:
 		idx, err = NewFlatIndex(columnName, config)
+	case IndexTypeVectorIVFFlat:
+		idx, err = NewIVFFlatIndex(columnName, config)
+	case IndexTypeVectorIVFSQ8:
+		idx, err = NewIVFSQ8Index(columnName, config)
+	case IndexTypeVectorIVFPQ:
+		idx, err = NewIVFPQIndex(columnName, config)
+	case IndexTypeVectorHNSWSQ:
+		idx, err = NewHNSWSQIndex(columnName, config)
+	case IndexTypeVectorHNSWPQ:
+		idx, err = NewHNSWPQIndex(columnName, config)
+case IndexTypeVectorIVFRabitQ:
+	idx, err = NewIVFRabitQIndex(columnName, config)
+case IndexTypeVectorHNSWPRQ:
+	idx, err = NewHNSWPRQIndex(columnName, config)
+case IndexTypeVectorAISAQ:
+	idx, err = NewAISAQIndex(columnName, config)
 	default:
 		return nil, fmt.Errorf("unsupported vector index type: %s", indexType)
 	}
