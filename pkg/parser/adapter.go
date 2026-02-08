@@ -1112,24 +1112,67 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 		createIndexStmt.TableName = stmt.Table.Name.String()
 	}
 
-	// 获取索引类型（BTREE, HASH, FULLTEXT, VECTOR）
-	// 默认为 BTREE
-	createIndexStmt.IndexType = "BTREE"
+// 获取索引类型（BTREE, HASH, FULLTEXT, VECTOR）
+// 默认为 BTREE
+createIndexStmt.IndexType = "BTREE"
 	
-	// 检查是否为向量索引（通过 USING 子句或索引名）
-	indexType := "btree"
-	if stmt.IndexOption != nil && stmt.IndexOption.Tp != 0 {
-		// 根据 TiDB 的索引类型常量转换
-		switch stmt.IndexOption.Tp {
-		case ast.IndexTypeHash:
-			indexType = "hash"
-		case ast.IndexTypeBtree:
-			indexType = "btree"
-		case ast.IndexTypeRtree:
-			indexType = "rtree"
-		}
+// 检查是否为向量索引（通过 KeyType 或 USING 子句）
+indexType := "btree"
+isVectorIndex := false
+
+// 优先检查 TiDB 的 KeyType
+if stmt.KeyType == ast.IndexKeyTypeVector {
+	isVectorIndex = true
+	createIndexStmt.IsVectorIndex = true
+	createIndexStmt.IndexType = "VECTOR"
+	// 注意：不在这里设置默认 metric，让它由表达式或 COMMENT 决定
+} else if stmt.IndexOption != nil && stmt.IndexOption.Tp != 0 {
+	// 根据 TiDB 的索引类型常量转换
+	switch stmt.IndexOption.Tp {
+	case ast.IndexTypeHash:
+		indexType = "hash"
+	case ast.IndexTypeBtree:
+		indexType = "btree"
+	case ast.IndexTypeRtree:
+		indexType = "rtree"
 	}
 	createIndexStmt.IndexType = strings.ToUpper(indexType)
+}
+
+// 如果不是 TiDB KeyType 向量索引，检查 USING 子句
+if !isVectorIndex {
+	// 检查 USING 子句中是否有向量索引类型
+	if stmt.IndexOption != nil && stmt.IndexOption.ParserName.O != "" {
+		usingType := strings.ToLower(stmt.IndexOption.ParserName.O)
+		switch usingType {
+		case "flat", "vector_flat",
+			"hnsw", "vector_hnsw",
+			"ivf_flat", "vector_ivf_flat",
+			"ivf_sq8", "vector_ivf_sq8",
+			"ivf_pq", "vector_ivf_pq",
+			"hnsw_sq", "vector_hnsw_sq",
+			"hnsw_pq", "vector_hnsw_pq",
+			"ivf_rabitq", "vector_ivf_rabitq",
+			"hnsw_prq", "vector_hnsw_prq",
+			"aisaq", "vector_aisaq":
+			createIndexStmt.IsVectorIndex = true
+			createIndexStmt.VectorIndexType = usingType
+			createIndexStmt.IndexType = "VECTOR"
+		}
+	}
+
+	// 如果 USING 子句没有指定，检查索引名是否包含向量索引标记
+	if !createIndexStmt.IsVectorIndex {
+		if strings.Contains(strings.ToUpper(stmt.IndexName), "VECTOR") ||
+		   strings.Contains(strings.ToUpper(stmt.IndexName), "HNSW") ||
+		   strings.Contains(strings.ToUpper(stmt.IndexName), "IVF") ||
+		   strings.Contains(strings.ToUpper(stmt.IndexName), "FLAT") {
+			createIndexStmt.IsVectorIndex = true
+			createIndexStmt.VectorIndexType = "hnsw" // 默认
+			createIndexStmt.IndexType = "VECTOR"
+		}
+	}
+}
 	
 	// 检查 USING 子句中是否有向量索引类型
 	if stmt.IndexOption != nil && stmt.IndexOption.ParserName.O != "" {
@@ -1163,35 +1206,55 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 		}
 	}
 
-	// 解析 WITH 子句中的参数
-	if createIndexStmt.IsVectorIndex && stmt.IndexOption != nil && stmt.IndexOption.Comment != "" {
-		// 解析 COMMENT 中的 JSON 参数，如 WITH (metric='cosine', dim=128)
-		params := parseWithClause(stmt.IndexOption.Comment)
-		if params != nil {
-			createIndexStmt.VectorParams = params
-			
-			// 从参数中提取度量类型
-			if metric, ok := params["metric"].(string); ok {
-				createIndexStmt.VectorMetric = metric
-			} else {
-				createIndexStmt.VectorMetric = "cosine" // 默认
-			}
-			
-			// 从参数中提取维度
-			if dim, ok := params["dim"].(float64); ok {
-				createIndexStmt.VectorDim = int(dim)
-			}
+// 解析 WITH/COMMENT 子句中的参数
+if createIndexStmt.IsVectorIndex && stmt.IndexOption != nil && stmt.IndexOption.Comment != "" {
+	// 解析 COMMENT 中的 JSON 参数，如 WITH (metric='cosine', dim=128) 或 JSON 格式
+	params := parseWithClause(stmt.IndexOption.Comment)
+	if params != nil {
+		createIndexStmt.VectorParams = params
+		
+		// 从参数中提取度量类型
+		if metric, ok := params["metric"].(string); ok {
+			createIndexStmt.VectorMetric = metric
+		} else {
+			createIndexStmt.VectorMetric = "cosine" // 默认
+		}
+		
+		// 从参数中提取维度（支持 int 和 float64）
+		if dim, ok := params["dim"].(int); ok {
+			createIndexStmt.VectorDim = dim
+		} else if dim, ok := params["dim"].(float64); ok {
+			createIndexStmt.VectorDim = int(dim)
 		}
 	}
+}
 
 	// 获取列名（从 IndexPartSpecifications）
 	if len(stmt.IndexPartSpecifications) > 0 {
 		// 获取第一个列名（简化处理，不支持多列索引）
 		spec := stmt.IndexPartSpecifications[0]
 		if spec.Column != nil {
+			// 传统列索引
 			createIndexStmt.ColumnName = spec.Column.Name.String()
+		} else if spec.Expr != nil {
+			// TiDB 向量索引语法：CREATE VECTOR INDEX idx ((VEC_COSINE_DISTANCE(embedding)))
+			// 解析表达式提取列名和度量类型
+			columnName, metric, err := extractVectorDistanceFunc(spec.Expr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid vector index expression: %w", err)
+			}
+			createIndexStmt.ColumnName = columnName
+			// 如果之前没有设置度量类型，使用函数名推导的度量类型
+			if createIndexStmt.VectorMetric == "" {
+				createIndexStmt.VectorMetric = metric
+			}
+			// 标记为向量索引
+			createIndexStmt.IsVectorIndex = true
+			if createIndexStmt.IndexType != "VECTOR" {
+				createIndexStmt.IndexType = "VECTOR"
+			}
 		} else {
-			// 如果 Column 为 nil，可能是表达式索引或其他情况
+			// 如果 Column 和 Expr 都为 nil，报错
 			return nil, fmt.Errorf("invalid index specification: column is required")
 		}
 	} else {
@@ -1200,6 +1263,46 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 	}
 
 	return createIndexStmt, nil
+}
+
+// extractVectorDistanceFunc 从表达式中提取向量距离函数的信息
+// 支持 TiDB 语法：VEC_COSINE_DISTANCE(embedding), VEC_L2_DISTANCE(embedding), VEC_INNER_PRODUCT(embedding)
+func extractVectorDistanceFunc(expr ast.ExprNode) (columnName string, metric string, err error) {
+	// 检查是否为函数调用表达式
+	funcExpr, ok := expr.(*ast.FuncCallExpr)
+	if !ok {
+		return "", "", fmt.Errorf("not a function expression")
+	}
+
+	// 获取函数名
+	funcName := strings.ToUpper(funcExpr.FnName.String())
+	var metricType string
+
+	// 解析距离度量类型
+	switch funcName {
+	case "VEC_COSINE_DISTANCE":
+		metricType = "cosine"
+	case "VEC_L2_DISTANCE":
+		metricType = "l2"
+	case "VEC_INNER_PRODUCT":
+		metricType = "inner_product"
+	default:
+		return "", "", fmt.Errorf("unsupported vector distance function: %s", funcName)
+	}
+
+	// 提取列名（函数的第一个参数）
+	if len(funcExpr.Args) == 0 {
+		return "", "", fmt.Errorf("vector distance function requires column name argument")
+	}
+
+	// 第一个参数应该是列名
+	colExpr, ok := funcExpr.Args[0].(*ast.ColumnNameExpr)
+	if !ok {
+		return "", "", fmt.Errorf("vector distance function argument must be a column name")
+	}
+
+	columnName = colExpr.Name.String()
+	return columnName, metricType, nil
 }
 
 // parseWithClause 解析 WITH 子句中的参数
@@ -1228,10 +1331,13 @@ func parseWithClause(comment string) map[string]interface{} {
 			
 			// 尝试解析为数字
 			if intVal, err := strconv.Atoi(value); err == nil {
+				// 先尝试解析为整数
 				params[key] = intVal
 			} else if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
+				// 尝试解析为浮点数
 				params[key] = floatVal
 			} else {
+				// 作为字符串保存
 				params[key] = value
 			}
 		}
