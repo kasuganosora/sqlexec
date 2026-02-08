@@ -169,6 +169,28 @@ func compareBetween(a, b interface{}) (bool, error) {
 	return true, nil
 }
 
+// MapOperator 映射parser操作符到标准操作符
+// 支持的parser操作符: gt, gte, lt, lte, eq, ne, ===, !=
+// 返回标准SQL操作符: >, >=, <, <=, =, !=
+func MapOperator(parserOp string) string {
+	switch parserOp {
+	case "gt":
+		return ">"
+	case "gte":
+		return ">="
+	case "lt":
+		return "<"
+	case "lte":
+		return "<="
+	case "eq", "===":
+		return "="
+	case "ne", "!=":
+		return "!="
+	default:
+		return parserOp
+	}
+}
+
 // compareLike checks if value matches pattern
 func compareLike(a, b interface{}) (bool, error) {
 	aStr := fmt.Sprintf("%v", a)

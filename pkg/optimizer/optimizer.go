@@ -3,7 +3,6 @@ package optimizer
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
@@ -254,45 +253,6 @@ func (o *Optimizer) convertInsert(stmt *parser.InsertStatement) (LogicalPlan, er
 	return insertPlan, nil
 }
 
-// valueToExpression 将 interface{} 值转换为 parser.Expression
-func (o *Optimizer) valueToExpression(val interface{}) parser.Expression {
-	if val == nil {
-		return parser.Expression{
-			Type:  parser.ExprTypeValue,
-			Value: nil,
-		}
-	}
-
-	switch v := val.(type) {
-	case int, int32, int64:
-		return parser.Expression{
-			Type:  parser.ExprTypeValue,
-			Value: v,
-		}
-	case float32, float64:
-		return parser.Expression{
-			Type:  parser.ExprTypeValue,
-			Value: v,
-		}
-	case string:
-		return parser.Expression{
-			Type:  parser.ExprTypeValue,
-			Value: v,
-		}
-	case bool:
-		return parser.Expression{
-			Type:  parser.ExprTypeValue,
-			Value: v,
-		}
-	default:
-		// 对于复杂类型，尝试序列化为字符串
-		return parser.Expression{
-			Type:  parser.ExprTypeValue,
-			Value: fmt.Sprintf("%v", val),
-		}
-	}
-}
-
 // convertUpdate 转换 UPDATE 语句
 func (o *Optimizer) convertUpdate(stmt *parser.UpdateStatement) (LogicalPlan, error) {
 	// 验证表存在
@@ -369,247 +329,6 @@ func (o *Optimizer) convertDelete(stmt *parser.DeleteStatement) (LogicalPlan, er
 
 	fmt.Printf("  [DEBUG] convertDelete: DELETE from %s\n", stmt.Table)
 	return deletePlan, nil
-}
-
-// extractConditions 从表达式中提取条件列表
-func (o *Optimizer) extractConditions(expr *parser.Expression) []*parser.Expression {
-	conditions := []*parser.Expression{expr}
-	// 简化实现，不处理复杂表达式
-	return conditions
-}
-
-// extractAggFuncs 提取聚合函数
-// 从 SELECT 列中识别并提取聚合函数（如 COUNT, SUM, AVG, MAX, MIN）
-func (o *Optimizer) extractAggFuncs(cols []parser.SelectColumn) []*AggregationItem {
-	aggFuncs := []*AggregationItem{}
-
-	for _, col := range cols {
-		// 跳过通配符
-		if col.IsWildcard {
-			continue
-		}
-
-		// 检查表达式类型
-		if col.Expr == nil {
-			continue
-		}
-
-		// 解析聚合函数
-		if aggItem := o.parseAggregationFunction(col.Expr); aggItem != nil {
-			// 如果有别名，使用别名；否则使用聚合函数名称
-			if col.Alias != "" {
-				aggItem.Alias = col.Alias
-			} else {
-				// 生成默认别名（如 "COUNT_id", "SUM_amount"）
-				aggItem.Alias = fmt.Sprintf("%s_%s", aggItem.Type.String(),
-					expressionToString(col.Expr))
-			}
-			aggFuncs = append(aggFuncs, aggItem)
-		}
-	}
-
-	return aggFuncs
-}
-
-// parseAggregationFunction 解析单个聚合函数
-func (o *Optimizer) parseAggregationFunction(expr *parser.Expression) *AggregationItem {
-	if expr == nil {
-		return nil
-	}
-
-	// 检查是否是函数调用（Type == ExprTypeFunction 或函数名）
-	funcName := ""
-	var funcExpr *parser.Expression
-
-	// 尝试从表达式提取函数名和参数
-	if expr.Type == parser.ExprTypeFunction {
-		// 假设表达式中有 FunctionName 和 Args 字段
-		if name, ok := expr.Value.(string); ok {
-			funcName = name
-		}
-		funcExpr = expr
-	} else if expr.Type == parser.ExprTypeColumn {
-		// 可能是列名，也可能包含函数调用
-		colName := expr.Column
-		// 解析函数名（如 "COUNT(id)" -> "COUNT"）
-		if idx := strings.Index(colName, "("); idx > 0 {
-			funcName = strings.ToUpper(colName[:idx])
-		}
-	}
-
-	// 匹配聚合函数类型
-	var aggType AggregationType
-	isDistinct := false
-
-	// 检查 DISTINCT 关键字
-	if strings.Contains(strings.ToUpper(o.expressionToString(expr)), "DISTINCT") {
-		isDistinct = true
-	}
-
-	switch strings.ToUpper(funcName) {
-	case "COUNT":
-		aggType = Count
-	case "SUM":
-		aggType = Sum
-	case "AVG":
-		aggType = Avg
-	case "MAX":
-		aggType = Max
-	case "MIN":
-		aggType = Min
-	default:
-		// 不是聚合函数
-		return nil
-	}
-
-	// 构建聚合项
-	return &AggregationItem{
-		Type:     aggType,
-		Expr:     funcExpr,
-		Alias:    "",
-		Distinct: isDistinct,
-	}
-}
-
-// expressionToString 将表达式转换为字符串
-func (o *Optimizer) expressionToString(expr *parser.Expression) string {
-	if expr == nil {
-		return ""
-	}
-
-	if expr.Type == parser.ExprTypeColumn {
-		return expr.Column
-	}
-
-	if expr.Type == parser.ExprTypeValue {
-		return fmt.Sprintf("%v", expr.Value)
-	}
-
-	if expr.Type == parser.ExprTypeOperator {
-		left := o.expressionToString(expr.Left)
-		right := o.expressionToString(expr.Right)
-		if left != "" && right != "" {
-			return fmt.Sprintf("%s %s %s", left, expr.Operator, right)
-		}
-		if left != "" {
-			return fmt.Sprintf("%s %s", expr.Operator, left)
-		}
-	}
-
-	return fmt.Sprintf("%v", expr.Value)
-}
-
-// isWildcard 检查是否是通配符
-func isWildcard(cols []parser.SelectColumn) bool {
-	if len(cols) == 1 && cols[0].IsWildcard {
-		return true
-	}
-	return false
-}
-
-// convertConditionsToFilters 将条件表达式转换为过滤器
-func (o *Optimizer) convertConditionsToFilters(conditions []*parser.Expression) []domain.Filter {
-	filters := []domain.Filter{}
-
-	for _, cond := range conditions {
-		if cond == nil {
-			continue
-		}
-
-		// 提取 AND 条件中的所有独立条件
-		conditionFilters := o.extractFiltersFromCondition(cond)
-		filters = append(filters, conditionFilters...)
-	}
-
-	fmt.Println("  [DEBUG] convertConditionsToFilters: 生成的过滤器数量:", len(filters))
-	return filters
-}
-
-// extractFiltersFromCondition 从条件中提取所有过滤器（处理 AND 表达式）
-func (o *Optimizer) extractFiltersFromCondition(expr *parser.Expression) []domain.Filter {
-	filters := []domain.Filter{}
-	
-	if expr == nil {
-		return filters
-	}
-
-	// 如果是 AND 操作符，递归处理两边
-	if expr.Type == parser.ExprTypeOperator && expr.Operator == "and" {
-		if expr.Left != nil {
-			filters = append(filters, o.extractFiltersFromCondition(expr.Left)...)
-		}
-		if expr.Right != nil {
-			filters = append(filters, o.extractFiltersFromCondition(expr.Right)...)
-		}
-		return filters
-	}
-
-	// 否则，转换为单个过滤器
-	filter := o.convertExpressionToFilter(expr)
-	if filter != nil {
-		filters = append(filters, *filter)
-	}
-
-	return filters
-}
-
-// convertExpressionToFilter 将表达式转换为过滤器
-func (o *Optimizer) convertExpressionToFilter(expr *parser.Expression) *domain.Filter {
-	if expr == nil || expr.Type != parser.ExprTypeOperator {
-		return nil
-	}
-
-		// 处理二元比较表达式 (e.g., age > 30, name = 'Alice')
-		if expr.Left != nil && expr.Right != nil && expr.Operator != "" {
-			// 左边是列名
-			if expr.Left.Type == parser.ExprTypeColumn && expr.Left.Column != "" {
-				// 右边是常量值
-				if expr.Right.Type == parser.ExprTypeValue {
-					// 映射操作符
-					operator := o.mapOperator(expr.Operator)
-					return &domain.Filter{
-						Field:    expr.Left.Column,
-						Operator:  operator,
-						Value:     expr.Right.Value,
-					}
-				}
-			}
-		}
-
-		// 处理 AND 逻辑表达式
-		if expr.Operator == "and" && expr.Left != nil && expr.Right != nil {
-			leftFilter := o.convertExpressionToFilter(expr.Left)
-			rightFilter := o.convertExpressionToFilter(expr.Right)
-			if leftFilter != nil {
-				return leftFilter
-			}
-			if rightFilter != nil {
-				return rightFilter
-			}
-		}
-
-	return nil
-}
-
-// mapOperator 映射parser操作符到domain.Filter操作符
-func (o *Optimizer) mapOperator(parserOp string) string {
-	// 转换parser操作符到domain.Filter操作符
-	switch parserOp {
-	case "gt":
-		return ">"
-	case "gte":
-		return ">="
-	case "lt":
-		return "<"
-	case "lte":
-		return "<="
-	case "eq", "===":
-		return "="
-	case "ne", "!=":
-		return "!="
-	default:
-		return parserOp
-	}
 }
 
 // convertToPlan 将逻辑计划转换为可序列化的Plan
@@ -697,8 +416,26 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 			},
 		}, nil
 	case *LogicalSort:
-		// 简化：暂时不实现排序，直接返回子节点
-		return o.convertToPlan(ctx, p.Children()[0], optCtx)
+		if len(p.Children()) == 0 {
+			return nil, fmt.Errorf("sort has no child")
+		}
+		child, err := o.convertToPlan(ctx, p.Children()[0], optCtx)
+		if err != nil {
+			return nil, err
+		}
+		
+		// 直接使用 parser.OrderItem
+		orderItems := p.GetOrderBy()
+		
+		return &plan.Plan{
+			ID:           fmt.Sprintf("sort_%d", len(orderItems)),
+			Type:         plan.TypeSort,
+			OutputSchema: child.OutputSchema,
+			Children:     []*plan.Plan{child},
+			Config: &plan.SortConfig{
+				OrderByItems: orderItems,
+			},
+		}, nil
 	case *LogicalJoin:
 		left, err := o.convertToPlan(ctx, p.Children()[0], optCtx)
 		if err != nil {
@@ -774,50 +511,4 @@ func convertToTypesLimitInfo(limitInfo *LimitInfo) *types.LimitInfo {
 	}
 }
 
-// ExplainPlan 解释执行计划
-func ExplainPlan(plan PhysicalPlan) string {
-	return explainPlan(plan, 0)
-}
 
-// ExplainPlanV2 解释新架构的执行计划（plan.Plan）
-func ExplainPlanV2(plan *plan.Plan) string {
-	return explainPlanV2(plan, 0)
-}
-
-// explainPlanV2 递归解释新架构的计划
-func explainPlanV2(plan *plan.Plan, depth int) string {
-	var builder strings.Builder
-
-	for i := 0; i < depth; i++ {
-		builder.WriteString("  ")
-	}
-
-	builder.WriteString(plan.ID)
-	builder.WriteString(" [")
-	builder.WriteString(string(plan.Type))
-	builder.WriteString("]")
-	builder.WriteString("\n")
-
-	for _, child := range plan.Children {
-		builder.WriteString(explainPlanV2(child, depth+1))
-	}
-
-	return builder.String()
-}
-
-// explainPlan 递归解释计划
-func explainPlan(plan PhysicalPlan, depth int) string {
-	var builder strings.Builder
-	
-	for i := 0; i < depth; i++ {
-		builder.WriteString("  ")
-	}
-	builder.WriteString(plan.Explain())
-	builder.WriteString("\n")
-	
-	for _, child := range plan.Children() {
-		builder.WriteString(explainPlan(child, depth+1))
-	}
-	
-	return builder.String()
-}

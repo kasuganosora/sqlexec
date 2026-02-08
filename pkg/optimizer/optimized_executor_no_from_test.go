@@ -1,7 +1,6 @@
 package optimizer
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
@@ -13,8 +12,6 @@ import (
 func TestHandleNoFromQuery(t *testing.T) {
 	executor := NewOptimizedExecutor(nil, false)
 	executor.SetCurrentDB("testdb")
-
-	ctx := context.Background()
 
 	tests := []struct {
 		name        string
@@ -186,7 +183,8 @@ func TestHandleNoFromQuery(t *testing.T) {
 				t.Fatal("Expected SELECT statement")
 			}
 
-			result, err := executor.handleNoFromQuery(ctx, parseResult.Statement.Select)
+			exprExecutor := NewExpressionExecutor(executor.GetCurrentDB(), executor.functionAPI, executor.exprEvaluator)
+			result, err := exprExecutor.HandleNoFromQuery(parseResult.Statement.Select)
 			if tt.expectError {
 				if err == nil {
 					t.Error("Expected error, got nil")
@@ -196,7 +194,13 @@ func TestHandleNoFromQuery(t *testing.T) {
 					t.Fatalf("Unexpected error: %v", err)
 				}
 				if tt.checkResult != nil {
-					tt.checkResult(t, result)
+					// 转换 Result 为 QueryResult
+					qr := &domain.QueryResult{
+						Columns: result.Columns,
+						Rows:    convertToDomainRows(result.Rows),
+						Total:   result.Total,
+					}
+					tt.checkResult(t, qr)
 				}
 			}
 		})
