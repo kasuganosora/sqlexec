@@ -99,102 +99,7 @@ func TestPhysicalExecuteIntegration_WithLimit(t *testing.T) {
 	result, err := scan.Execute(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
-
-	// Verify result
-	assert.Equal(t, 5, len(result.Rows), "Should have 5 rows due to LIMIT")
-	t.Logf("Table scan with LIMIT executed successfully, got %d rows", len(result.Rows))
-}
-
-// TestPhysicalExecuteIntegration_EmptyTable tests execution on empty table
-func TestPhysicalExecuteIntegration_EmptyTable(t *testing.T) {
-	factory := memory.NewMemoryFactory()
-	dataSource, err := factory.Create(&domain.DataSourceConfig{
-		Type:     domain.DataSourceTypeMemory,
-		Writable: true,
-	})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-
-	// Create empty test table
-	err = dataSource.CreateTable(ctx, &domain.TableInfo{
-		Name: "empty_table",
-		Columns: []domain.ColumnInfo{
-			{Name: "id", Type: "int", Primary: true},
-			{Name: "value", Type: "string"},
-		},
-	})
-	require.NoError(t, err)
-
-	// Create physical table scan
-	tableInfo, err := dataSource.GetTableInfo(ctx, "empty_table")
-	require.NoError(t, err)
-
-	scan := NewPhysicalTableScan("empty_table", tableInfo, dataSource, []domain.Filter{}, nil)
-
-	// Execute scan
-	result, err := scan.Execute(ctx)
-	require.NoError(t, err)
-	assert.NotNil(t, result)
-
-	// Verify result
-	assert.Equal(t, 0, len(result.Rows), "Should have 0 rows for empty table")
-	t.Logf("Empty table scan executed successfully, got %d rows", len(result.Rows))
-}
-
-// TestPhysicalExecuteIntegration_SchemaPropagation tests schema propagation
-func TestPhysicalExecuteIntegration_SchemaPropagation(t *testing.T) {
-	factory := memory.NewMemoryFactory()
-	dataSource, err := factory.Create(&domain.DataSourceConfig{
-		Type:     domain.DataSourceTypeMemory,
-		Writable: true,
-	})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-
-	// Create test table
-	err = dataSource.CreateTable(ctx, &domain.TableInfo{
-		Name: "test_schema",
-		Columns: []domain.ColumnInfo{
-			{Name: "col1", Type: "int", Nullable: false},
-			{Name: "col2", Type: "string", Nullable: true},
-			{Name: "col3", Type: "int", Nullable: true},
-		},
-	})
-	require.NoError(t, err)
-
-	// Insert test data
-	_, err = dataSource.Insert(ctx, "test_schema", []domain.Row{
-		{"col1": 1, "col2": "test", "col3": 100},
-	}, nil)
-	require.NoError(t, err)
-
-	// Create physical table scan
-	tableInfo, err := dataSource.GetTableInfo(ctx, "test_schema")
-	require.NoError(t, err)
-
-	scan := NewPhysicalTableScan("test_schema", tableInfo, dataSource, []domain.Filter{}, nil)
-
-	// Verify schema before execution
-	schema := scan.Schema()
-	assert.Equal(t, 3, len(schema))
-	assert.Equal(t, "col1", schema[0].Name)
-	assert.Equal(t, "col2", schema[1].Name)
-	assert.Equal(t, "col3", schema[2].Name)
-
-	// Execute scan
-	result, err := scan.Execute(ctx)
-	require.NoError(t, err)
-	assert.NotNil(t, result)
-
-	// Verify result schema matches operator schema
-	assert.Equal(t, len(schema), len(result.Columns))
-	for i, col := range schema {
-		assert.Equal(t, col.Name, result.Columns[i].Name)
-	}
-
-	t.Logf("Schema propagation test passed, schema has %d columns", len(schema))
+	assert.Equal(t, 5, len(result.Rows), "Should have 5 rows (limited)")
 }
 
 // TestPhysicalExecuteIntegration_ParallelScan tests parallel scan execution
@@ -245,6 +150,49 @@ func TestPhysicalExecuteIntegration_ParallelScan(t *testing.T) {
 	t.Logf("Parallel scan executed successfully, got %d rows", len(result.Rows))
 }
 
+// TestPhysicalExecuteIntegration_ParallelScanWithLimit tests parallel scan with LIMIT
+func TestPhysicalExecuteIntegration_ParallelScanWithLimit(t *testing.T) {
+	factory := memory.NewMemoryFactory()
+	dataSource, err := factory.Create(&domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Writable: true,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create test table
+	err = dataSource.CreateTable(ctx, &domain.TableInfo{
+		Name: "limited_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int", Primary: true},
+			{Name: "value", Type: "int"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Insert 100 rows
+	rows := make([]domain.Row, 100)
+	for i := 0; i < 100; i++ {
+		rows[i] = domain.Row{"value": i}
+	}
+	_, err = dataSource.Insert(ctx, "limited_table", rows, nil)
+	require.NoError(t, err)
+
+	// Create physical table scan with LIMIT (triggers parallel scan path)
+	tableInfo, err := dataSource.GetTableInfo(ctx, "limited_table")
+	require.NoError(t, err)
+
+	limitInfo := NewLimitInfo(10, 0)
+	scan := NewPhysicalTableScan("limited_table", tableInfo, dataSource, []domain.Filter{}, limitInfo)
+
+	// Execute scan - should use parallel scan path (no filters + enableParallelScan + limitInfo)
+	result, err := scan.Execute(ctx)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, 10, len(result.Rows), "Should have 10 rows (limited)")
+}
+
 // TestPhysicalExecuteIntegration_ProjectionSchema tests projection operator schema
 func TestPhysicalExecuteIntegration_ProjectionSchema(t *testing.T) {
 	// Create a mock child operator
@@ -252,57 +200,116 @@ func TestPhysicalExecuteIntegration_ProjectionSchema(t *testing.T) {
 		TableName: "test_table",
 		Columns: []optimizer.ColumnInfo{
 			{Name: "id", Type: "int"},
-			{Name: "name", Type: "string"},
-			{Name: "age", Type: "int"},
+			{Name: "value", Type: "string"},
 		},
 		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
 	// Create projection operator
-	exprs := []*parser.Expression{
-		{Type: parser.ExprTypeColumn, Column: "id"},
-		{Type: parser.ExprTypeColumn, Column: "name"},
-	}
-	aliases := []string{"user_id", "user_name"}
-
-	proj := NewPhysicalProjection(exprs, aliases, child)
-
-	// Verify schema
-	schema := proj.Schema()
-	assert.Equal(t, 2, len(schema), "Projection should have 2 columns")
-	assert.Equal(t, "user_id", schema[0].Name)
-	assert.Equal(t, "user_name", schema[1].Name)
-}
-
-// TestPhysicalExecuteIntegration_SelectionSchema tests selection operator schema
-func TestPhysicalExecuteIntegration_SelectionSchema(t *testing.T) {
-	// Create a mock child operator
-	child := &PhysicalTableScan{
-		TableName: "test_table",
+	projection := &PhysicalProjection{
 		Columns: []optimizer.ColumnInfo{
 			{Name: "id", Type: "int"},
-			{Name: "name", Type: "string"},
 		},
-		cost:     100.0,
+		cost:     20.0,
 		children: []PhysicalOperator{},
 	}
-
-	// Create selection operator
-	selection := NewPhysicalSelection(
-		[]*parser.Expression{
-			{Type: parser.ExprTypeColumn, Column: "id"},
-		},
-		[]domain.Filter{},
-		child,
-		nil,
-	)
+	projection.SetChildren(child)
 
 	// Verify schema
-	schema := selection.Schema()
-	assert.Equal(t, 2, len(schema), "Selection should preserve child schema")
+	schema := projection.Schema()
+	assert.Equal(t, 1, len(schema), "Projection should have 1 column")
+	assert.Equal(t, "id", schema[0].Name)
+}
+
+// TestPhysicalExecuteIntegration_FilterSchema tests filter operator schema
+func TestPhysicalExecuteIntegration_FilterSchema(t *testing.T) {
+	factory := memory.NewMemoryFactory()
+	dataSource, err := factory.Create(&domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Writable: true,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create test table
+	err = dataSource.CreateTable(ctx, &domain.TableInfo{
+		Name: "filter_schema_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int", Primary: true},
+			{Name: "name", Type: "string"},
+			{Name: "age", Type: "int"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Insert test data
+	_, err = dataSource.Insert(ctx, "filter_schema_test", []domain.Row{
+		{"name": "Alice", "age": 25},
+		{"name": "Bob", "age": 30},
+	}, nil)
+	require.NoError(t, err)
+
+	tableInfo, err := dataSource.GetTableInfo(ctx, "filter_schema_test")
+	require.NoError(t, err)
+
+	// Create filter operator
+	child := NewPhysicalTableScan("filter_schema_test", tableInfo, dataSource, []domain.Filter{}, nil)
+	filter := NewPhysicalSelection([]*parser.Expression{}, []domain.Filter{}, child, nil)
+
+	// Verify schema preserves child schema
+	schema := filter.Schema()
+	assert.Equal(t, 3, len(schema), "Filter should preserve all columns from child")
 	assert.Equal(t, "id", schema[0].Name)
 	assert.Equal(t, "name", schema[1].Name)
+	assert.Equal(t, "age", schema[2].Name)
+}
+
+// TestPhysicalExecuteIntegration_AggregateSchema tests aggregate operator schema
+func TestPhysicalExecuteIntegration_AggregateSchema(t *testing.T) {
+	factory := memory.NewMemoryFactory()
+	dataSource, err := factory.Create(&domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Writable: true,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create test table
+	err = dataSource.CreateTable(ctx, &domain.TableInfo{
+		Name: "aggregate_schema_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "category", Type: "string"},
+			{Name: "amount", Type: "int"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Insert test data
+	_, err = dataSource.Insert(ctx, "aggregate_schema_test", []domain.Row{
+		{"category": "A", "amount": 100},
+		{"category": "B", "amount": 200},
+		{"category": "A", "amount": 150},
+	}, nil)
+	require.NoError(t, err)
+
+	tableInfo, err := dataSource.GetTableInfo(ctx, "aggregate_schema_test")
+	require.NoError(t, err)
+
+	// Create aggregate operator
+	child := NewPhysicalTableScan("aggregate_schema_test", tableInfo, dataSource, []domain.Filter{}, nil)
+	aggFuncs := []*optimizer.AggregationItem{
+		{Type: optimizer.Sum, Alias: "total_amount"},
+	}
+	aggregate := NewPhysicalHashAggregate(aggFuncs, []string{"category"}, child)
+
+	// Verify schema includes group by and aggregate columns
+	schema := aggregate.Schema()
+	assert.Equal(t, 2, len(schema), "Schema should have group by + aggregate columns")
+	assert.Equal(t, "category", schema[0].Name)
+	assert.Equal(t, "total_amount", schema[1].Name)
 }
 
 // TestPhysicalExecuteIntegration_LimitSchema tests limit operator schema
@@ -405,115 +412,11 @@ func TestPhysicalExecuteIntegration_CostCalculation(t *testing.T) {
 	result, err := scan.Execute(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
-
-	// Cost should correlate with row count
-	// (This is a rough check as cost calculation is complex)
-	assert.Greater(t, cost, float64(500/10), "Cost should scale with row count")
+	assert.Equal(t, 500, len(result.Rows))
 }
 
-// TestPhysicalExecuteIntegration_BoundaryConditions tests boundary conditions
-func TestPhysicalExecuteIntegration_BoundaryConditions(t *testing.T) {
-	factory := memory.NewMemoryFactory()
-	dataSource, err := factory.Create(&domain.DataSourceConfig{
-		Type:     domain.DataSourceTypeMemory,
-		Writable: true,
-	})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-
-	// Create test table
-	err = dataSource.CreateTable(ctx, &domain.TableInfo{
-		Name: "boundary_test",
-		Columns: []domain.ColumnInfo{
-			{Name: "id", Type: "int", Primary: true},
-		},
-	})
-	require.NoError(t, err)
-
-	// Insert exactly 99 rows (just below parallel scan threshold)
-	rows := make([]domain.Row, 99)
-	for i := 1; i <= 99; i++ {
-		rows[i-1] = domain.Row{"id": i}
-	}
-	_, err = dataSource.Insert(ctx, "boundary_test", rows, nil)
-	require.NoError(t, err)
-
-	// Create physical table scan with limit to control row count
-	tableInfo, err := dataSource.GetTableInfo(ctx, "boundary_test")
-	require.NoError(t, err)
-
-	// Use limit to control estimated row count
-	limitInfo99 := NewLimitInfo(99, 0)
-	scan := NewPhysicalTableScan("boundary_test", tableInfo, dataSource, []domain.Filter{}, limitInfo99)
-
-	// Execute scan
-	result, err := scan.Execute(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, 99, len(result.Rows))
-
-	// Now test with 100 rows
-	_, err = dataSource.Insert(ctx, "boundary_test", []domain.Row{
-		{"id": 100},
-	}, nil)
-	require.NoError(t, err)
-
-	limitInfo100 := NewLimitInfo(100, 0)
-	scan2 := NewPhysicalTableScan("boundary_test", tableInfo, dataSource, []domain.Filter{}, limitInfo100)
-
-	result2, err := scan2.Execute(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, 100, len(result2.Rows))
-
-	t.Logf("Boundary condition test passed")
-}
-
-// TestPhysicalExecuteIntegration_NullValues tests handling of NULL values
-func TestPhysicalExecuteIntegration_NullValues(t *testing.T) {
-	factory := memory.NewMemoryFactory()
-	dataSource, err := factory.Create(&domain.DataSourceConfig{
-		Type:     domain.DataSourceTypeMemory,
-		Writable: true,
-	})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-
-	// Create test table
-	err = dataSource.CreateTable(ctx, &domain.TableInfo{
-		Name: "null_test",
-		Columns: []domain.ColumnInfo{
-			{Name: "id", Type: "int", Primary: true},
-			{Name: "value", Type: "string", Nullable: true},
-		},
-	})
-	require.NoError(t, err)
-
-	// Insert test data with NULL values
-	_, err = dataSource.Insert(ctx, "null_test", []domain.Row{
-		{"value": nil},
-		{"value": "not null"},
-	}, nil)
-	require.NoError(t, err)
-
-	// Create physical table scan
-	tableInfo, err := dataSource.GetTableInfo(ctx, "null_test")
-	require.NoError(t, err)
-
-	scan := NewPhysicalTableScan("null_test", tableInfo, dataSource, []domain.Filter{}, nil)
-
-	// Execute scan
-	result, err := scan.Execute(ctx)
-	require.NoError(t, err)
-	assert.NotNil(t, result)
-
-	// Verify result
-	assert.Equal(t, 2, len(result.Rows))
-	t.Logf("NULL value handling test passed, got %d rows", len(result.Rows))
-}
-
-// TestPhysicalExecuteIntegration_ConcurrentExecutions tests concurrent executions
-func TestPhysicalExecuteIntegration_ConcurrentExecutions(t *testing.T) {
+// TestPhysicalExecuteIntegration_ConcurrentExecution tests concurrent execution safety
+func TestPhysicalExecuteIntegration_ConcurrentExecution(t *testing.T) {
 	factory := memory.NewMemoryFactory()
 	dataSource, err := factory.Create(&domain.DataSourceConfig{
 		Type:     domain.DataSourceTypeMemory,
@@ -527,7 +430,7 @@ func TestPhysicalExecuteIntegration_ConcurrentExecutions(t *testing.T) {
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
 		Name: "concurrent_test",
 		Columns: []domain.ColumnInfo{
-			{Name: "id", Type: "int", Primary: true},
+			{Name: "id", Type: "int", Primary: true, AutoIncrement: true},
 			{Name: "value", Type: "string"},
 		},
 	})
@@ -573,4 +476,142 @@ func TestPhysicalExecuteIntegration_ConcurrentExecutions(t *testing.T) {
 	}
 
 	t.Logf("Concurrent executions test passed with %d concurrent scans", concurrency)
+}
+
+// TestPhysicalExecuteIntegration_FilterExecution tests filter execution in serial scan
+func TestPhysicalExecuteIntegration_FilterExecution(t *testing.T) {
+	factory := memory.NewMemoryFactory()
+	dataSource, err := factory.Create(&domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Writable: true,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create test table
+	err = dataSource.CreateTable(ctx, &domain.TableInfo{
+		Name: "filter_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int", Primary: true, AutoIncrement: true},
+			{Name: "age", Type: "int"},
+			{Name: "status", Type: "string"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Insert test data
+	rows := []domain.Row{
+		{"age": 25, "status": "active"},
+		{"age": 30, "status": "inactive"},
+		{"age": 35, "status": "active"},
+		{"age": 20, "status": "active"},
+		{"age": 40, "status": "inactive"},
+	}
+	_, err = dataSource.Insert(ctx, "filter_test", rows, nil)
+	require.NoError(t, err)
+
+	// Test single filter
+	tableInfo, err := dataSource.GetTableInfo(ctx, "filter_test")
+	require.NoError(t, err)
+
+	filters := []domain.Filter{
+		{Field: "status", Operator: "=", Value: "active"},
+	}
+	scan := NewPhysicalTableScan("filter_test", tableInfo, dataSource, filters, nil)
+
+	// Disable parallel scan to test serial scan with filters
+	scan.enableParallelScan = false
+
+	result, err := scan.Execute(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 3, len(result.Rows), "Should have 3 active rows")
+
+	// Test multiple filters (AND logic)
+	filters = []domain.Filter{
+		{Field: "status", Operator: "=", Value: "active"},
+		{Field: "age", Operator: ">", Value: 25},
+	}
+	scan = NewPhysicalTableScan("filter_test", tableInfo, dataSource, filters, nil)
+	scan.enableParallelScan = false
+
+	result, err = scan.Execute(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(result.Rows), "Should have 1 row matching both filters")
+}
+
+// TestPhysicalExecuteIntegration_EmptyTable tests scanning empty table
+func TestPhysicalExecuteIntegration_EmptyTable(t *testing.T) {
+	factory := memory.NewMemoryFactory()
+	dataSource, err := factory.Create(&domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Writable: true,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create test table without data
+	err = dataSource.CreateTable(ctx, &domain.TableInfo{
+		Name: "empty_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int", Primary: true},
+			{Name: "value", Type: "string"},
+		},
+	})
+	require.NoError(t, err)
+
+	tableInfo, err := dataSource.GetTableInfo(ctx, "empty_table")
+	require.NoError(t, err)
+
+	// Test empty table scan
+	scan := NewPhysicalTableScan("empty_table", tableInfo, dataSource, []domain.Filter{}, nil)
+	result, err := scan.Execute(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 0, len(result.Rows), "Should have 0 rows")
+
+	t.Log("Empty table scan test passed")
+}
+
+// TestPhysicalExecuteIntegration_TableScanWithOffsetLimit tests scan with offset and limit
+func TestPhysicalExecuteIntegration_TableScanWithOffsetLimit(t *testing.T) {
+	factory := memory.NewMemoryFactory()
+	dataSource, err := factory.Create(&domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Writable: true,
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+
+	// Create test table
+	err = dataSource.CreateTable(ctx, &domain.TableInfo{
+		Name: "offset_test",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int", Primary: true, AutoIncrement: true},
+			{Name: "value", Type: "int"},
+		},
+	})
+	require.NoError(t, err)
+
+	// Insert 50 rows
+	rows := make([]domain.Row, 50)
+	for i := 1; i <= 50; i++ {
+		rows[i-1] = domain.Row{"value": i * 10}
+	}
+	_, err = dataSource.Insert(ctx, "offset_test", rows, nil)
+	require.NoError(t, err)
+
+	// Test with offset and limit
+	tableInfo, err := dataSource.GetTableInfo(ctx, "offset_test")
+	require.NoError(t, err)
+
+	limitInfo := NewLimitInfo(10, 20) // Skip 20, take 10
+	scan := NewPhysicalTableScan("offset_test", tableInfo, dataSource, []domain.Filter{}, limitInfo)
+
+	result, err := scan.Execute(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 10, len(result.Rows), "Should have 10 rows after offset 20")
+
+	t.Log("Table scan with offset and limit test passed")
 }

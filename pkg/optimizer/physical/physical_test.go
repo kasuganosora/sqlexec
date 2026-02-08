@@ -619,6 +619,26 @@ func TestPhysicalSelection_NoConditions(t *testing.T) {
 	}
 }
 
+func TestPhysicalSelection_NoChildren(t *testing.T) {
+	// Test PhysicalSelection without children (Schema() returns empty)
+	sel := &PhysicalSelection{
+		Conditions: []*parser.Expression{},
+		Filters:    []domain.Filter{},
+		cost:       50.0,
+		children:   []PhysicalOperator{}, // No children
+	}
+
+	schema := sel.Schema()
+	if len(schema) != 0 {
+		t.Errorf("Expected empty schema when no children, got %d columns", len(schema))
+	}
+
+	explanation := sel.Explain()
+	if explanation == "" {
+		t.Error("Explain should return non-empty string even with no children")
+	}
+}
+
 func TestNewPhysicalHashJoin(t *testing.T) {
 	left := &PhysicalTableScan{
 		TableName: "users",
@@ -654,6 +674,47 @@ func TestNewPhysicalHashJoin(t *testing.T) {
 	explanation := join.Explain()
 	if explanation == "" {
 		t.Error("Explain should return non-empty string")
+	}
+}
+
+func TestPhysicalHashAggregate_Children(t *testing.T) {
+	child := &PhysicalTableScan{
+		TableName: "test_table",
+		Columns:   []optimizer.ColumnInfo{{Name: "id", Type: "int"}},
+		cost:      100.0,
+		children:  []PhysicalOperator{},
+	}
+
+	agg := NewPhysicalHashAggregate(
+		[]*optimizer.AggregationItem{
+			{Type: optimizer.Count, Alias: "cnt"},
+		},
+		[]string{},
+		child,
+	)
+
+	// Test Children method
+	children := agg.Children()
+	if len(children) != 1 {
+		t.Errorf("Expected 1 child, got %d", len(children))
+	}
+
+	// Test SetChildren method
+	newChild := &PhysicalTableScan{
+		TableName: "new_table",
+		Columns:   []optimizer.ColumnInfo{{Name: "x", Type: "int"}},
+		cost:      50.0,
+		children:  []PhysicalOperator{},
+	}
+	agg.SetChildren(newChild)
+
+	children = agg.Children()
+	if len(children) != 1 {
+		t.Errorf("Expected 1 child after SetChildren, got %d", len(children))
+	}
+
+	if children[0].(*PhysicalTableScan).TableName != "new_table" {
+		t.Error("Child not set correctly")
 	}
 }
 
