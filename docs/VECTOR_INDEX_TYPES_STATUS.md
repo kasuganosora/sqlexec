@@ -18,8 +18,6 @@
 | **IVF_PQ** | `IndexTypeVectorIVFPQ` | ❌ 未实现 | IVF + 乘积量化 |
 | **HNSW_SQ** | `IndexTypeVectorHNSWSQ` | ❌ 未实现 | HNSW + 标量量化 |
 | **HNSW_PQ** | `IndexTypeVectorHNSWPQ` | ❌ 未实现 | HNSW + 乘积量化 |
-| **DISKANN** | `IndexTypeVectorDISKANN` | ❌ 未实现 | 基于磁盘的 ANN 搜索 |
-| **SCANN** | `IndexTypeVectorSCANN` | ❌ 未实现 | 硬件加速的 ANN |
 
 ### 未定义 ❌
 
@@ -89,19 +87,7 @@
 - **适用场景**: 超大规模 HNSW，内存严格限制
 - **实现状态**: 未实现
 
-### 8. DISKANN (Disk-based ANN)
-- **特性**: 基于磁盘的 ANN 搜索
-- **优点**: 支持 PB 级数据，内存占用极小
-- **缺点**: 延迟较高（IO 瓶颈）
-- **适用场景**: 超大规模数据集（1B+），无法全部装入内存
-- **实现状态**: 未实现
-
-### 9. SCANN (Scalable Nearest Neighbors)
-- **特性**: 硬件加速的 ANN
-- **优点**: 超高吞吐，低延迟
-- **缺点**: 需要 GPU/TPU，复杂度高
-- **适用场景**: 实时高吞吐场景
-- **实现状态**: 未实现
+### 8. IVF_RABITQ (未定义)
 
 ### 10. IVF_RABITQ (未定义)
 - **特性**: IVF + RABITQ 量化
@@ -129,10 +115,6 @@
 4. **IVF_PQ** - 超大规模优化
 5. **HNSW_PQ** - HNSW 极致优化
 
-### 低优先级（特殊场景）
-6. **DISKANN** - PB 级数据
-7. **SCANN** - 硬件加速
-
 ## 性能对比（预期）
 
 | 索引类型 | 召回率 | 内存占用 | 查询速度 | 构建时间 |
@@ -144,8 +126,6 @@
 | IVF_PQ | 85-95% | 极低 (-90%) | 超快 | 慢 |
 | HNSW_SQ | 90-95% | 低 (-75%) | 快 | 中 |
 | HNSW_PQ | 85-95% | 极低 (-90%) | 超快 | 慢 |
-| DISKANN | 90-95% | 极小 (-99%) | 慢 (IO) | 慢 |
-| SCANN | 95-99% | 中 | 超快 | 慢 |
 
 ## 当前代码结构
 

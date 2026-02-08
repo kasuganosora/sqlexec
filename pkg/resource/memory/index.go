@@ -10,18 +10,16 @@ import (
 type IndexType string
 
 const (
-	IndexTypeBTree         IndexType = "btree"
-	IndexTypeHash          IndexType = "hash"
-	IndexTypeFullText      IndexType = "fulltext"
-	IndexTypeVectorFlat    IndexType = "vector_flat"
+	IndexTypeBTree        IndexType = "btree"
+	IndexTypeHash         IndexType = "hash"
+	IndexTypeFullText     IndexType = "fulltext"
+	IndexTypeVectorFlat   IndexType = "vector_flat"
 	IndexTypeVectorIVFFlat IndexType = "vector_ivf_flat"
-	IndexTypeVectorHNSW    IndexType = "vector_hnsw"
-	IndexTypeVectorIVFSQ8  IndexType = "vector_ivf_sq8"
-	IndexTypeVectorIVFPQ   IndexType = "vector_ivf_pq"
-	IndexTypeVectorHNSWSQ  IndexType = "vector_hnsw_sq"
-	IndexTypeVectorHNSWPQ  IndexType = "vector_hnsw_pq"
-	IndexTypeVectorDISKANN IndexType = "vector_diskann"
-	IndexTypeVectorSCANN  IndexType = "vector_scann"
+	IndexTypeVectorHNSW   IndexType = "vector_hnsw"
+	IndexTypeVectorIVFSQ8 IndexType = "vector_ivf_sq8"
+	IndexTypeVectorIVFPQ  IndexType = "vector_ivf_pq"
+	IndexTypeVectorHNSWSQ IndexType = "vector_hnsw_sq"
+	IndexTypeVectorHNSWPQ IndexType = "vector_hnsw_pq"
 )
 
 // IsVectorIndex 检查是否为向量索引
@@ -29,8 +27,7 @@ func (t IndexType) IsVectorIndex() bool {
 	switch t {
 	case IndexTypeVectorHNSW, IndexTypeVectorIVFFlat, IndexTypeVectorFlat,
 		IndexTypeVectorIVFSQ8, IndexTypeVectorIVFPQ,
-		IndexTypeVectorHNSWSQ, IndexTypeVectorHNSWPQ,
-		IndexTypeVectorDISKANN, IndexTypeVectorSCANN:
+		IndexTypeVectorHNSWSQ, IndexTypeVectorHNSWPQ:
 		return true
 	default:
 		return false
