@@ -1135,7 +1135,16 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 	if stmt.IndexOption != nil && stmt.IndexOption.ParserName.O != "" {
 		usingType := strings.ToLower(stmt.IndexOption.ParserName.O)
 		switch usingType {
-		case "hnsw", "ivf_flat", "flat", "vector_hnsw", "vector_ivf_flat", "vector_flat":
+		case "flat", "vector_flat",
+			"hnsw", "vector_hnsw",
+			"ivf_flat", "vector_ivf_flat",
+			"ivf_sq8", "vector_ivf_sq8",
+			"ivf_pq", "vector_ivf_pq",
+			"hnsw_sq", "vector_hnsw_sq",
+			"hnsw_pq", "vector_hnsw_pq",
+			"ivf_rabitq", "vector_ivf_rabitq",
+			"hnsw_prq", "vector_hnsw_prq",
+			"aisaq", "vector_aisaq":
 			createIndexStmt.IsVectorIndex = true
 			createIndexStmt.VectorIndexType = usingType
 			createIndexStmt.IndexType = "VECTOR"

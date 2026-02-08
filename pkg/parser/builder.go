@@ -536,8 +536,24 @@ func convertToVectorIndexType(indexType string) memory.IndexType {
 	switch strings.ToLower(indexType) {
 	case "flat", "vector_flat":
 		return memory.IndexTypeVectorFlat
+	case "hnsw", "vector_hnsw":
+		return memory.IndexTypeVectorHNSW
 	case "ivf_flat", "vector_ivf_flat":
 		return memory.IndexTypeVectorIVFFlat
+	case "ivf_sq8", "vector_ivf_sq8":
+		return memory.IndexTypeVectorIVFSQ8
+	case "ivf_pq", "vector_ivf_pq":
+		return memory.IndexTypeVectorIVFPQ
+	case "hnsw_sq", "vector_hnsw_sq":
+		return memory.IndexTypeVectorHNSWSQ
+	case "hnsw_pq", "vector_hnsw_pq":
+		return memory.IndexTypeVectorHNSWPQ
+	case "ivf_rabitq", "vector_ivf_rabitq":
+		return memory.IndexTypeVectorIVFRabitQ
+	case "hnsw_prq", "vector_hnsw_prq":
+		return memory.IndexTypeVectorHNSWPRQ
+	case "aisaq", "vector_aisaq":
+		return memory.IndexTypeVectorAISAQ
 	default:
 		return memory.IndexTypeVectorHNSW
 	}
