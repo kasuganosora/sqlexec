@@ -340,3 +340,71 @@ func (m *IndexManager) GetTableIndexes(tableName string) ([]*IndexInfo, error) {
 
 	return infos, nil
 }
+
+// CreateAdvancedFullTextIndex 创建高级全文索引
+func (m *IndexManager) CreateAdvancedFullTextIndex(
+	tableName, columnName string,
+	config *AdvancedFullTextIndexConfig,
+) (*AdvancedFullTextIndex, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	tableIdxs, ok := m.tables[tableName]
+	if !ok {
+		tableIdxs = &TableIndexes{
+			tableName:     tableName,
+			indexes:       make(map[string]Index),
+			columnMap:     make(map[string]Index),
+			vectorIndexes: make(map[string]VectorIndex),
+			mu:            sync.RWMutex{},
+		}
+		m.tables[tableName] = tableIdxs
+	}
+
+	tableIdxs.mu.Lock()
+	defer tableIdxs.mu.Unlock()
+
+	// 检查列是否已有索引
+	if _, exists := tableIdxs.columnMap[columnName]; exists {
+		return nil, fmt.Errorf("index already exists for column: %s", columnName)
+	}
+
+	// 创建高级全文索引
+	idx, err := NewAdvancedFullTextIndex(tableName, columnName, config)
+	if err != nil {
+		return nil, err
+	}
+
+	// 存储索引
+	tableIdxs.indexes[idx.GetIndexInfo().Name] = idx
+	tableIdxs.columnMap[columnName] = idx
+
+	return idx, nil
+}
+
+// GetFullTextIndex 获取全文索引
+func (m *IndexManager) GetFullTextIndex(tableName, columnName string) (*AdvancedFullTextIndex, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	tableIdxs, ok := m.tables[tableName]
+	if !ok {
+		return nil, fmt.Errorf("table not found: %s", tableName)
+	}
+
+	tableIdxs.mu.RLock()
+	defer tableIdxs.mu.RUnlock()
+
+	idx, exists := tableIdxs.columnMap[columnName]
+	if !exists {
+		return nil, fmt.Errorf("index not found for column: %s", columnName)
+	}
+
+	// 尝试转换为高级全文索引
+	ftIdx, ok := idx.(*AdvancedFullTextIndex)
+	if !ok {
+		return nil, fmt.Errorf("index is not a full-text index")
+	}
+
+	return ftIdx, nil
+}
