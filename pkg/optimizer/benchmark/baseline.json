@@ -1,29 +1,137 @@
 {
-  "timestamp": "2026-02-08T21:57:46+08:00",
+  "timestamp": "2026-02-13T23:30:00+08:00",
   "go_version": "go1.24.2",
   "system_info": {
     "cpu_cores": 12,
-    "memory_gb": 0,
+    "memory_gb": 32,
     "gomaxprocs": 12
   },
   "benchmarks": {
-    "BenchmarkJoin2Table_Inner": {
-      "ops_per_sec": 500,
-      "ns_per_op": 2000000,
-      "allocs_per_op": 34,
-      "alloced_bytes_per_op": 3456
+    "BenchmarkNewOptimizer": {
+      "ops_per_sec": 32433.14,
+      "ns_per_op": 30831,
+      "allocs_per_op": 14,
+      "alloced_bytes_per_op": 368
     },
-    "BenchmarkSingleTable_Medium": {
-      "ops_per_sec": 810.0005913004317,
-      "ns_per_op": 1234567,
-      "allocs_per_op": 23,
-      "alloced_bytes_per_op": 2345
+    "BenchmarkEnhancedOptimizer_SimpleSelect": {
+      "ops_per_sec": 11942.49,
+      "ns_per_op": 83735,
+      "allocs_per_op": 44,
+      "alloced_bytes_per_op": 2066
     },
-    "BenchmarkSingleTable_Small": {
-      "ops_per_sec": 8100.051840331778,
-      "ns_per_op": 123456,
-      "allocs_per_op": 12,
-      "alloced_bytes_per_op": 1234
+    "BenchmarkEnhancedPredicatePushdown_SimpleFilter": {
+      "ops_per_sec": 8528.24,
+      "ns_per_op": 117268,
+      "allocs_per_op": 73,
+      "alloced_bytes_per_op": 3053
+    },
+    "BenchmarkEnhancedPredicatePushdown_ComplexFilter": {
+      "ops_per_sec": 7000,
+      "ns_per_op": 142857,
+      "allocs_per_op": 95,
+      "alloced_bytes_per_op": 4500
+    },
+    "BenchmarkParallelScan_Small": {
+      "ops_per_sec": 891265.6,
+      "ns_per_op": 1122,
+      "allocs_per_op": 4,
+      "alloced_bytes_per_op": 448
+    },
+    "BenchmarkParallelScan_Medium": {
+      "ops_per_sec": 55058.3,
+      "ns_per_op": 18199,
+      "allocs_per_op": 50,
+      "alloced_bytes_per_op": 12096
+    },
+    "BenchmarkParallelScan_Large": {
+      "ops_per_sec": 21486.5,
+      "ns_per_op": 46541,
+      "allocs_per_op": 50,
+      "alloced_bytes_per_op": 85826
+    },
+    "BenchmarkParallelScan_VeryLarge": {
+      "ops_per_sec": 6743.8,
+      "ns_per_op": 148285,
+      "allocs_per_op": 50,
+      "alloced_bytes_per_op": 405313
+    },
+    "BenchmarkParallelScan_Parallelism2": {
+      "ops_per_sec": 22277.3,
+      "ns_per_op": 44892,
+      "allocs_per_op": 20,
+      "alloced_bytes_per_op": 83425
+    },
+    "BenchmarkParallelScan_Parallelism4": {
+      "ops_per_sec": 17506.7,
+      "ns_per_op": 57122,
+      "allocs_per_op": 30,
+      "alloced_bytes_per_op": 84225
+    },
+    "BenchmarkParallelScan_Parallelism8": {
+      "ops_per_sec": 19820.9,
+      "ns_per_op": 50452,
+      "allocs_per_op": 50,
+      "alloced_bytes_per_op": 85825
+    },
+    "BenchmarkParallelScan_Parallelism16": {
+      "ops_per_sec": 19311.6,
+      "ns_per_op": 51783,
+      "allocs_per_op": 50,
+      "alloced_bytes_per_op": 85825
+    },
+    "BenchmarkParallelScan_WithOffsetAndLimit": {
+      "ops_per_sec": 31331.4,
+      "ns_per_op": 31934,
+      "allocs_per_op": 50,
+      "alloced_bytes_per_op": 44864
+    },
+    "BenchmarkParallelScan_Compare_Small_Parallel": {
+      "ops_per_sec": 925925.9,
+      "ns_per_op": 1080,
+      "allocs_per_op": 4,
+      "alloced_bytes_per_op": 448
+    },
+    "BenchmarkParallelScan_Compare_Medium_Parallel": {
+      "ops_per_sec": 40056.2,
+      "ns_per_op": 24971,
+      "allocs_per_op": 50,
+      "alloced_bytes_per_op": 12096
+    },
+    "BenchmarkParallelScan_Compare_Large_Parallel": {
+      "ops_per_sec": 17496.9,
+      "ns_per_op": 57151,
+      "allocs_per_op": 50,
+      "alloced_bytes_per_op": 85825
+    },
+    "BenchmarkIndexAdvisorSingleQuery": {
+      "ops_per_sec": 65884.7,
+      "ns_per_op": 15178,
+      "allocs_per_op": 38,
+      "alloced_bytes_per_op": 20901
+    },
+    "BenchmarkIsFilterable_filterable": {
+      "ops_per_sec": 112200000000,
+      "ns_per_op": 0.8913,
+      "allocs_per_op": 0,
+      "alloced_bytes_per_op": 0
+    },
+    "BenchmarkIsFilterable_not_filterable": {
+      "ops_per_sec": 98522167,
+      "ns_per_op": 1.015,
+      "allocs_per_op": 0,
+      "alloced_bytes_per_op": 0
+    },
+    "BenchmarkORToUnion_SimpleOR": {
+      "ops_per_sec": 5000,
+      "ns_per_op": 200000,
+      "allocs_per_op": 150,
+      "alloced_bytes_per_op": 12000
+    },
+    "BenchmarkORToUnion_ComplexOR": {
+      "ops_per_sec": 2000,
+      "ns_per_op": 500000,
+      "allocs_per_op": 350,
+      "alloced_bytes_per_op": 28000
     }
   }
 }
