@@ -131,3 +131,13 @@ func NewErrUnsupportedOperation(dataSourceType, operation string) *ErrUnsupporte
 func NewErrConstraintViolation(constraint, message string) *ErrConstraintViolation {
 	return &ErrConstraintViolation{Constraint: constraint, Message: message}
 }
+
+// NewErrColumnAlreadyExists 创建列已存在错误
+func NewErrColumnAlreadyExists(columnName string) *ErrColumnNotFound {
+	return &ErrColumnNotFound{ColumnName: columnName}
+}
+
+// NewErrColumnNotFound 创建列不存在错误
+func NewErrColumnNotFound(columnName string) *ErrColumnNotFound {
+	return &ErrColumnNotFound{ColumnName: columnName}
+}

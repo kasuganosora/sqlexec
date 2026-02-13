@@ -112,6 +112,28 @@ func GetGlobalManager() *Manager {
 	return globalManager
 }
 
+// ResetGlobalManager resets the global manager to nil, allowing it to be recreated.
+// This is primarily intended for testing purposes to ensure test isolation.
+// WARNING: This closes the existing manager if one exists. Make sure no
+// transactions are active when calling this function.
+func ResetGlobalManager() {
+	if globalManager != nil {
+		_ = globalManager.Close()
+	}
+	globalManager = nil
+	globalOnce = sync.Once{}
+}
+
+// ResetGlobalManagerWithConfig resets the global manager with a specific config.
+// This is primarily intended for testing purposes.
+func ResetGlobalManagerWithConfig(cfg *Config) {
+	ResetGlobalManager()
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	globalManager = NewManager(cfg)
+}
+
 // Close 关闭管理器
 func (m *Manager) Close() error {
 	m.mu.Lock()

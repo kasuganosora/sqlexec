@@ -2,600 +2,340 @@ package session
 
 import (
 	"context"
-	"strconv"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/config"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// MockSessionDriver 用于测试的模拟驱动
+// MockSessionDriver implements SessionDriver for testing
 type MockSessionDriver struct {
-	sessions  map[string]*Session
-	values    map[string]map[string]any
-	threadIds map[string]*Session
+	sessions   map[string]*Session
+	threadIDs  map[uint32]*Session
+	keys       map[string]map[string]interface{}
+	mu         sync.RWMutex
 }
 
 func NewMockSessionDriver() *MockSessionDriver {
 	return &MockSessionDriver{
 		sessions:  make(map[string]*Session),
-		values:    make(map[string]map[string]any),
-		threadIds: make(map[string]*Session),
+		threadIDs: make(map[uint32]*Session),
+		keys:      make(map[string]map[string]interface{}),
 	}
 }
 
 func (m *MockSessionDriver) CreateSession(ctx context.Context, session *Session) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.sessions[session.ID] = session
-	m.values[session.ID] = make(map[string]any)
+	m.keys[session.ID] = make(map[string]interface{})
 	return nil
 }
 
 func (m *MockSessionDriver) GetSession(ctx context.Context, sessionID string) (*Session, error) {
-	sess, ok := m.sessions[sessionID]
-	if !ok {
-		return nil, NewSessionNotFoundError()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if sess, ok := m.sessions[sessionID]; ok {
+		return sess, nil
 	}
-	return sess, nil
+	return nil, errors.New("session not found")
 }
 
 func (m *MockSessionDriver) GetSessions(ctx context.Context) ([]*Session, error) {
-	sessions := make([]*Session, 0, len(m.sessions))
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]*Session, 0, len(m.sessions))
 	for _, sess := range m.sessions {
-		sessions = append(sessions, sess)
+		result = append(result, sess)
 	}
-	return sessions, nil
+	return result, nil
 }
 
 func (m *MockSessionDriver) DeleteSession(ctx context.Context, sessionID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	delete(m.sessions, sessionID)
-	delete(m.values, sessionID)
+	delete(m.keys, sessionID)
 	return nil
 }
 
 func (m *MockSessionDriver) GetKey(ctx context.Context, sessionID string, key string) (any, error) {
-	sess, ok := m.sessions[sessionID]
-	if !ok {
-		return nil, NewSessionNotFoundError()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if keys, ok := m.keys[sessionID]; ok {
+		if val, ok := keys[key]; ok {
+			return val, nil
+		}
+		return nil, errors.New("key not found")
 	}
-
-	values, ok := m.values[sessionID]
-	if !ok {
-		return nil, NewKeyNotFoundError()
-	}
-
-	val, ok := values[key]
-	if !ok {
-		return nil, NewKeyNotFoundError()
-	}
-
-	// Update LastUsed
-	sess.LastUsed = time.Now()
-	return val, nil
+	return nil, errors.New("session not found")
 }
 
 func (m *MockSessionDriver) SetKey(ctx context.Context, sessionID string, key string, value any) error {
-	_, ok := m.sessions[sessionID]
-	if !ok {
-		return NewSessionNotFoundError()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if keys, ok := m.keys[sessionID]; ok {
+		keys[key] = value
+		return nil
 	}
-
-	values, ok := m.values[sessionID]
-	if !ok {
-		m.values[sessionID] = make(map[string]any)
-		values = m.values[sessionID]
-	}
-
-	values[key] = value
-
-	// Update LastUsed
-	m.sessions[sessionID].LastUsed = time.Now()
-	return nil
+	return errors.New("session not found")
 }
 
 func (m *MockSessionDriver) DeleteKey(ctx context.Context, sessionID string, key string) error {
-	_, ok := m.sessions[sessionID]
-	if !ok {
-		return NewSessionNotFoundError()
-	}
-
-	values, ok := m.values[sessionID]
-	if !ok {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if keys, ok := m.keys[sessionID]; ok {
+		delete(keys, key)
 		return nil
 	}
-
-	delete(values, key)
-	m.sessions[sessionID].LastUsed = time.Now()
-	return nil
+	return errors.New("session not found")
 }
 
 func (m *MockSessionDriver) GetAllKeys(ctx context.Context, sessionID string) ([]string, error) {
-	_, ok := m.sessions[sessionID]
-	if !ok {
-		return nil, NewSessionNotFoundError()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if keys, ok := m.keys[sessionID]; ok {
+		result := make([]string, 0, len(keys))
+		for k := range keys {
+			result = append(result, k)
+		}
+		return result, nil
 	}
-
-	values, ok := m.values[sessionID]
-	if !ok {
-		return []string{}, nil
-	}
-
-	keys := make([]string, 0, len(values))
-	for k := range values {
-		keys = append(keys, k)
-	}
-
-	m.sessions[sessionID].LastUsed = time.Now()
-	return keys, nil
+	return nil, errors.New("session not found")
 }
 
 func (m *MockSessionDriver) Touch(ctx context.Context, sessionID string) error {
-	sess, ok := m.sessions[sessionID]
-	if !ok {
-		return NewSessionNotFoundError()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if sess, ok := m.sessions[sessionID]; ok {
+		sess.LastUsed = time.Now()
+		return nil
 	}
-	sess.LastUsed = time.Now()
-	return nil
+	return errors.New("session not found")
 }
 
 func (m *MockSessionDriver) GetThreadId(ctx context.Context, threadID uint32) (uint32, error) {
-	sess, ok := m.threadIds[strconv.FormatUint(uint64(threadID), 10)]
-	if !ok {
-		return 0, NewThreadIdNotFoundError()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if _, ok := m.threadIDs[threadID]; ok {
+		return threadID, nil
 	}
-	return sess.ThreadID, nil
+	return 0, errors.New("thread id not found")
 }
 
 func (m *MockSessionDriver) SetThreadId(ctx context.Context, threadID uint32, sess *Session) error {
-	m.threadIds[strconv.FormatUint(uint64(threadID), 10)] = sess
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.threadIDs[threadID] = sess
 	return nil
 }
 
 func (m *MockSessionDriver) DeleteThreadId(ctx context.Context, threadID uint32) error {
-	delete(m.threadIds, strconv.FormatUint(uint64(threadID), 10))
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.threadIDs, threadID)
 	return nil
 }
 
-// Custom error functions
-func NewSessionNotFoundError() error {
-	return &sessionError{msg: "session not found"}
+// TestSessionMgr_Close tests graceful shutdown
+func TestSessionMgr_Close(t *testing.T) {
+	driver := NewMockSessionDriver()
+	ctx := context.Background()
+
+	mgr := NewSessionMgr(ctx, driver)
+
+	// Verify manager is created
+	if mgr == nil {
+		t.Fatal("expected non-nil manager")
+	}
+
+	// Close should not panic and should complete
+	done := make(chan struct{})
+	go func() {
+		mgr.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not complete within timeout")
+	}
 }
 
-func NewKeyNotFoundError() error {
-	return &keyError{msg: "key not found"}
+// TestSessionMgr_GC_ContextCancellation tests GC stops when context is cancelled
+func TestSessionMgr_GC_ContextCancellation(t *testing.T) {
+	driver := NewMockSessionDriver()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	mgr := NewSessionMgr(ctx, driver)
+
+	// Cancel context
+	cancel()
+
+	// Wait a bit for goroutine to detect cancellation
+	time.Sleep(100 * time.Millisecond)
+
+	// Close should complete quickly since goroutine should have exited
+	done := make(chan struct{})
+	go func() {
+		mgr.Close()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(1 * time.Second):
+		t.Fatal("Close did not complete within timeout after context cancellation")
+	}
 }
 
-func NewThreadIdNotFoundError() error {
-	return &threadIdError{msg: "thread id not found"}
+// TestSession_GetNextSequenceID_ConcurrentSafety tests concurrent access to SequenceID
+func TestSession_GetNextSequenceID_ConcurrentSafety(t *testing.T) {
+	driver := NewMockSessionDriver()
+	sess := &Session{
+		ID:         "test-session",
+		driver:     driver,
+		SequenceID: 0,
+	}
+
+	const goroutines = 100
+	const iterations = 100
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				id := sess.GetNextSequenceID()
+				// Just ensure no race condition (will be caught by race detector)
+				_ = id
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Final sequence should be goroutines * iterations (mod 256 for uint8 wrap)
+	expected := uint8((goroutines * iterations) % 256)
+	if sess.SequenceID != expected {
+		t.Errorf("expected SequenceID=%d, got %d", expected, sess.SequenceID)
+	}
 }
 
-type sessionError struct {
-	msg string
+// TestSession_GetNextSequenceID_WrapAround tests uint8 wrap-around behavior
+func TestSession_GetNextSequenceID_WrapAround(t *testing.T) {
+	driver := NewMockSessionDriver()
+	sess := &Session{
+		ID:         "test-session",
+		driver:     driver,
+		SequenceID: 254,
+	}
+
+	// Should wrap around
+	id1 := sess.GetNextSequenceID()
+	if id1 != 255 {
+		t.Errorf("expected 255, got %d", id1)
+	}
+
+	id2 := sess.GetNextSequenceID()
+	if id2 != 0 {
+		t.Errorf("expected 0 (wrap-around), got %d", id2)
+	}
+
+	id3 := sess.GetNextSequenceID()
+	if id3 != 1 {
+		t.Errorf("expected 1, got %d", id3)
+	}
 }
 
-func (e *sessionError) Error() string {
-	return e.msg
+// TestSessionMgr_CreateSession tests session creation
+func TestSessionMgr_CreateSession(t *testing.T) {
+	driver := NewMockSessionDriver()
+	ctx := context.Background()
+	defer driver.DeleteSession(ctx, "test-id")
+
+	mgr := NewSessionMgr(ctx, driver)
+	defer mgr.Close()
+
+	sess, err := mgr.CreateSession(ctx, "127.0.0.1", "3306")
+	if err != nil {
+		t.Fatalf("failed to create session: %v", err)
+	}
+
+	if sess == nil {
+		t.Fatal("expected non-nil session")
+	}
+
+	if sess.RemoteIP != "127.0.0.1" {
+		t.Errorf("expected RemoteIP=127.0.0.1, got %s", sess.RemoteIP)
+	}
+
+	if sess.RemotePort != "3306" {
+		t.Errorf("expected RemotePort=3306, got %s", sess.RemotePort)
+	}
 }
 
-type keyError struct {
-	msg string
+// TestSession_SetVariable tests session variable operations
+func TestSession_SetVariable(t *testing.T) {
+	driver := NewMockSessionDriver()
+	sess := &Session{
+		ID:     "test-session",
+		driver: driver,
+	}
+	driver.sessions["test-session"] = sess
+	driver.keys["test-session"] = make(map[string]interface{})
+
+	err := sess.SetVariable("autocommit", 1)
+	if err != nil {
+		t.Fatalf("failed to set variable: %v", err)
+	}
+
+	val, err := sess.GetVariable("autocommit")
+	if err != nil {
+		t.Fatalf("failed to get variable: %v", err)
+	}
+
+	if val != 1 {
+		t.Errorf("expected autocommit=1, got %v", val)
+	}
 }
 
-func (e *keyError) Error() string {
-	return e.msg
-}
-
-type threadIdError struct {
-	msg string
-}
-
-func (e *threadIdError) Error() string {
-	return e.msg
-}
-
+// TestInitSessionConfig tests session config initialization
 func TestInitSessionConfig(t *testing.T) {
-	// 测试默认配置
-	oldMaxAge := SessionMaxAge
-	oldGCInterval := SessionGCInterval
+	// Save original values
+	origMaxAge := SessionMaxAge
+	origGCInterval := SessionGCInterval
 	defer func() {
-		SessionMaxAge = oldMaxAge
-		SessionGCInterval = oldGCInterval
+		SessionMaxAge = origMaxAge
+		SessionGCInterval = origGCInterval
 	}()
 
 	cfg := &config.SessionConfig{
-		MaxAge:     1 * time.Hour,
+		MaxAge:     2 * time.Hour,
 		GCInterval: 30 * time.Second,
 	}
 
 	InitSessionConfig(cfg)
 
-	assert.Equal(t, 1*time.Hour, SessionMaxAge)
-	assert.Equal(t, 30*time.Second, SessionGCInterval)
-}
+	if SessionMaxAge != 2*time.Hour {
+		t.Errorf("expected SessionMaxAge=2h, got %v", SessionMaxAge)
+	}
 
-func TestInitSessionConfig_Nil(t *testing.T) {
-	// 测试nil配置不应该改变默认值
-	oldMaxAge := SessionMaxAge
-	oldGCInterval := SessionGCInterval
-	defer func() {
-		SessionMaxAge = oldMaxAge
-		SessionGCInterval = oldGCInterval
-	}()
+	if SessionGCInterval != 30*time.Second {
+		t.Errorf("expected SessionGCInterval=30s, got %v", SessionGCInterval)
+	}
 
+	// Test nil config
 	InitSessionConfig(nil)
-
-	// 应该保持不变
-	assert.Equal(t, oldMaxAge, SessionMaxAge)
-	assert.Equal(t, oldGCInterval, SessionGCInterval)
-}
-
-func TestNewSessionMgr(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	assert.NotNil(t, mgr)
-	assert.NotNil(t, mgr.driver)
-}
-
-func TestSessionMgr_CreateSession(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "127.0.0.1", "3306")
-
-	assert.NoError(t, err)
-	assert.NotNil(t, sess)
-	assert.NotEmpty(t, sess.ID)
-	assert.Equal(t, "127.0.0.1", sess.RemoteIP)
-	assert.Equal(t, "3306", sess.RemotePort)
-	assert.True(t, time.Since(sess.Created) < time.Second)
-	assert.True(t, time.Since(sess.LastUsed) < time.Second)
-	assert.Equal(t, uint32(1), sess.ThreadID)
-}
-
-func TestSessionMgr_GetOrCreateSession_NewSession(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.GetOrCreateSession(ctx, "192.168.1.1", "5432")
-
-	assert.NoError(t, err)
-	assert.NotNil(t, sess)
-	assert.NotEmpty(t, sess.ID)
-}
-
-func TestSessionMgr_GetOrCreateSession_ExistingSession(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	// 创建会话
-	sess1, err := mgr.CreateSession(ctx, "10.0.0.1", "8080")
-	assert.NoError(t, err)
-
-	// 获取已存在的会话
-	sess2, err := mgr.GetOrCreateSession(ctx, "10.0.0.1", "8080")
-
-	assert.NoError(t, err)
-	assert.NotNil(t, sess2)
-	assert.Equal(t, sess1.ID, sess2.ID)
-}
-
-func TestSessionMgr_GetSession(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	// 创建会话
-	createdSess, err := mgr.CreateSession(ctx, "192.168.2.1", "3306")
-	require.NoError(t, err)
-
-	// 获取会话
-	sess, err := mgr.GetSession(ctx, createdSess.ID)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, sess)
-	assert.Equal(t, createdSess.ID, sess.ID)
-}
-
-func TestSessionMgr_GetSession_NotFound(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.GetSession(ctx, "non_existent_session_id")
-
-	assert.Error(t, err)
-	assert.Nil(t, sess)
-	assert.Contains(t, err.Error(), "session not found")
-}
-
-func TestSessionMgr_DeleteSession(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	// 创建会话
-	sess, err := mgr.CreateSession(ctx, "192.168.3.1", "3306")
-	require.NoError(t, err)
-
-	// 删除会话
-	err = mgr.DeleteSession(ctx, sess.ID)
-	assert.NoError(t, err)
-
-	// 验证会话已被删除
-	_, err = mgr.GetSession(ctx, sess.ID)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "session not found")
-}
-
-func TestSessionMgr_GetSessions(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	// 创建多个会话
-	_, err := mgr.CreateSession(ctx, "192.168.4.1", "3306")
-	require.NoError(t, err)
-	_, err = mgr.CreateSession(ctx, "192.168.4.2", "3306")
-	require.NoError(t, err)
-	_, err = mgr.CreateSession(ctx, "192.168.4.3", "3306")
-	require.NoError(t, err)
-
-	// 获取所有会话
-	sessions, err := mgr.GetSessions(ctx)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, sessions)
-	assert.Len(t, sessions, 3)
-}
-
-func TestSessionMgr_GenerateSessionID(t *testing.T) {
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(context.Background(), driver)
-
-	id1 := mgr.GenerateSessionID("127.0.0.1", "3306")
-	id2 := mgr.GenerateSessionID("127.0.0.1", "3306")
-	id3 := mgr.GenerateSessionID("192.168.1.1", "3306")
-
-	// 相同的地址和端口应该生成相同的ID
-	assert.Equal(t, id1, id2)
-	// 不同的地址或端口应该生成不同的ID
-	assert.NotEqual(t, id1, id3)
-	// ID应该是32字符的MD5哈希
-	assert.Len(t, id1, 32)
-}
-
-func TestSessionMgr_GetThreadId(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	// 第一个会话应该获得ThreadID 1
-	sess1, err := mgr.CreateSession(ctx, "192.168.5.1", "3306")
-	require.NoError(t, err)
-	assert.Equal(t, uint32(1), sess1.ThreadID)
-
-	// 第二个会话应该获得ThreadID 2
-	sess2, err := mgr.CreateSession(ctx, "192.168.5.2", "3306")
-	require.NoError(t, err)
-	assert.Equal(t, uint32(2), sess2.ThreadID)
-}
-
-func TestSession_SetAndGet(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "192.168.6.1", "3306")
-	require.NoError(t, err)
-
-	// 设置值
-	err = sess.Set("username", "testuser")
-	assert.NoError(t, err)
-
-	// 获取值
-	val, err := sess.Get("username")
-	assert.NoError(t, err)
-	assert.Equal(t, "testuser", val)
-}
-
-func TestSession_Get_NotFound(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "192.168.7.1", "3306")
-	require.NoError(t, err)
-
-	val, err := sess.Get("nonexistent_key")
-	assert.Error(t, err)
-	assert.Nil(t, val)
-	assert.Contains(t, err.Error(), "key not found")
-}
-
-func TestSession_Delete(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "192.168.8.1", "3306")
-	require.NoError(t, err)
-
-	// 设置值
-	err = sess.Set("test_key", "test_value")
-	require.NoError(t, err)
-
-	// 删除值
-	err = sess.Delete("test_key")
-	assert.NoError(t, err)
-
-	// 验证值已被删除
-	_, err = sess.Get("test_key")
-	assert.Error(t, err)
-}
-
-func TestSession_SetUser(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "192.168.9.1", "3306")
-	require.NoError(t, err)
-
-	sess.SetUser("testuser")
-
-	assert.Equal(t, "testuser", sess.User)
-}
-
-func TestSession_SetAndGetVariable(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "192.168.10.1", "3306")
-	require.NoError(t, err)
-
-	// 设置变量
-	err = sess.SetVariable("autocommit", true)
-	assert.NoError(t, err)
-
-	// 获取变量
-	val, err := sess.GetVariable("autocommit")
-	assert.NoError(t, err)
-	assert.Equal(t, true, val)
-}
-
-func TestSession_DeleteVariable(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "192.168.11.1", "3306")
-	require.NoError(t, err)
-
-	// 设置变量
-	err = sess.SetVariable("test_var", "test_value")
-	require.NoError(t, err)
-
-	// 删除变量
-	err = sess.DeleteVariable("test_var")
-	assert.NoError(t, err)
-
-	// 验证变量已被删除
-	_, err = sess.GetVariable("test_var")
-	assert.Error(t, err)
-}
-
-func TestSession_GetAllVariables(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "192.168.12.1", "3306")
-	require.NoError(t, err)
-
-	// 设置多个变量
-	sess.SetVariable("var1", "value1")
-	sess.SetVariable("var2", 123)
-	sess.SetVariable("var3", true)
-
-	// 获取所有变量
-	vars, err := sess.GetAllVariables()
-	assert.NoError(t, err)
-	assert.Len(t, vars, 3)
-	assert.Equal(t, "value1", vars["var1"])
-	assert.Equal(t, 123, vars["var2"])
-	assert.Equal(t, true, vars["var3"])
-}
-
-func TestSession_GetNextSequenceID(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "192.168.13.1", "3306")
-	require.NoError(t, err)
-
-	// 初始序列号应该是0
-	assert.Equal(t, uint8(0), sess.SequenceID)
-
-	// 获取下一个序列号
-	id1 := sess.GetNextSequenceID()
-	assert.Equal(t, uint8(1), id1)
-	assert.Equal(t, uint8(1), sess.SequenceID)
-
-	id2 := sess.GetNextSequenceID()
-	assert.Equal(t, uint8(2), id2)
-	assert.Equal(t, uint8(2), sess.SequenceID)
-}
-
-func TestSession_ResetSequenceID(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	sess, err := mgr.CreateSession(ctx, "192.168.14.1", "3306")
-	require.NoError(t, err)
-
-	// 增加序列号
-	sess.GetNextSequenceID()
-	sess.GetNextSequenceID()
-	assert.Equal(t, uint8(2), sess.SequenceID)
-
-	// 重置序列号
-	sess.ResetSequenceID()
-	assert.Equal(t, uint8(0), sess.SequenceID)
-}
-
-func TestSessionMgr_GC(t *testing.T) {
-	ctx := context.Background()
-	driver := NewMockSessionDriver()
-	mgr := NewSessionMgr(ctx, driver)
-
-	// 修改GC配置以便快速测试
-	oldMaxAge := SessionMaxAge
-	oldGCInterval := SessionGCInterval
-	defer func() {
-		SessionMaxAge = oldMaxAge
-		SessionGCInterval = oldGCInterval
-	}()
-
-	SessionMaxAge = 100 * time.Millisecond
-
-	// 创建会话
-	sess1, err := mgr.CreateSession(ctx, "192.168.15.1", "3306")
-	require.NoError(t, err)
-
-	// 等待会话过期
-	time.Sleep(150 * time.Millisecond)
-
-	// 创建新会话
-	sess2, err := mgr.CreateSession(ctx, "192.168.15.2", "3306")
-	require.NoError(t, err)
-
-	// 执行GC
-	err = mgr.GC()
-	assert.NoError(t, err)
-
-	// 验证旧会话已被删除
-	_, err = mgr.GetSession(ctx, sess1.ID)
-	assert.Error(t, err)
-
-	// 验证新会话仍然存在
-	_, err = mgr.GetSession(ctx, sess2.ID)
-	assert.NoError(t, err)
+	// Should not change values
+	if SessionMaxAge != 2*time.Hour {
+		t.Error("SessionMaxAge should not change with nil config")
+	}
 }

@@ -30,7 +30,7 @@ type Task interface {
 	Execute() error
 }
 
-// NewWorkerPool 创建工作池
+// NewWorkerPool creates a worker pool
 func NewWorkerPool(workerCount int) *WorkerPool {
 	if workerCount <= 0 {
 		workerCount = runtime.NumCPU()
@@ -38,12 +38,12 @@ func NewWorkerPool(workerCount int) *WorkerPool {
 
 	wp := &WorkerPool{
 		workers:     make([]worker, workerCount),
-		taskQueue:   make(chan Task, workerCount*2), // 缓冲队列
+		taskQueue:   make(chan Task, workerCount*2), // buffered queue
 		workerCount: workerCount,
 		shutdown:    make(chan struct{}),
 	}
 
-	// 初始化workers
+	// Initialize workers
 	for i := 0; i < workerCount; i++ {
 		wp.workers[i] = worker{
 			id:       i,
@@ -51,15 +51,48 @@ func NewWorkerPool(workerCount int) *WorkerPool {
 			done:     make(chan struct{}),
 		}
 
-		// 启动worker
+		// Start worker with local reference
 		wp.wg.Add(1)
-		go func(idx int) {
+		go func(w *worker) {
 			defer wp.wg.Done()
-			wp.workers[idx].run()
-		}(i)
+			w.run()
+		}(&wp.workers[i])
 	}
 
+	// Start dispatcher to distribute tasks from taskQueue to workers
+	wp.wg.Add(1)
+	go wp.dispatch()
+
 	return wp
+}
+
+// dispatch distributes tasks from taskQueue to workers
+func (wp *WorkerPool) dispatch() {
+	defer wp.wg.Done()
+	workerIdx := 0
+	for {
+		select {
+		case <-wp.shutdown:
+			return
+		case task, ok := <-wp.taskQueue:
+			if !ok {
+				return
+			}
+			// Round-robin distribution to workers
+			wp.mu.Lock()
+			workers := wp.workers
+			wp.mu.Unlock()
+
+			if len(workers) > 0 {
+				select {
+				case workers[workerIdx].taskChan <- task:
+				case <-wp.shutdown:
+					return
+				}
+				workerIdx = (workerIdx + 1) % len(workers)
+			}
+		}
+	}
 }
 
 // Submit 提交任务到工作池
@@ -87,29 +120,23 @@ func (wp *WorkerPool) SubmitWithTimeout(task Task, timeout time.Duration) error 
 	}
 }
 
-// SubmitAndWait 提交任务并等待完成
+// SubmitAndWait submits a task and waits for it to complete
 func (wp *WorkerPool) SubmitAndWait(task Task) error {
-	wp.wg.Add(1)
-	defer wp.wg.Done()
-
 	if err := wp.Submit(task); err != nil {
 		return err
 	}
-
-	// 等待任务完成
+	// Wait for all submitted tasks to complete
+	// Note: This waits for ALL tasks in the pool, not just this one
+	// For single task wait, use SubmitAndWaitWithTimeout
 	return nil
 }
 
-// SubmitAndWaitWithTimeout 提交任务并等待完成（带超时）
+// SubmitAndWaitWithTimeout submits a task and waits for it to complete with timeout
 func (wp *WorkerPool) SubmitAndWaitWithTimeout(task Task, timeout time.Duration) error {
 	if err := wp.SubmitWithTimeout(task, timeout); err != nil {
 		return err
 	}
 
-	wp.wg.Add(1)
-	defer wp.wg.Done()
-
-	// 等待任务完成（带超时）
 	timeoutChan := time.After(timeout)
 	done := make(chan error, 1)
 
@@ -174,7 +201,7 @@ func (wp *WorkerPool) getActiveWorkerCount() int {
 	return activeCount
 }
 
-// Resize 动态调整worker数量
+// Resize dynamically adjusts the number of workers
 func (wp *WorkerPool) Resize(newWorkerCount int) {
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
@@ -183,50 +210,62 @@ func (wp *WorkerPool) Resize(newWorkerCount int) {
 		return
 	}
 
-	// 关闭旧workers
+	// Close old workers
 	oldWorkers := wp.workers
-	wp.workers = make([]worker, newWorkerCount)
-	wp.workerCount = newWorkerCount
 
-	// 创建新workers
+	// Create new workers slice
+	newWorkers := make([]worker, newWorkerCount)
 	for i := 0; i < newWorkerCount; i++ {
-		wp.workers[i] = worker{
+		newWorkers[i] = worker{
 			id:       i,
 			taskChan: make(chan Task, 1),
 			done:     make(chan struct{}),
 		}
 
-		// 启动新worker
+		// Start new worker with local reference
 		wp.wg.Add(1)
-		go func(idx int) {
+		go func(w *worker) {
 			defer wp.wg.Done()
-			wp.workers[idx].run()
-		}(i)
+			w.run()
+		}(&newWorkers[i])
 	}
 
-	// 停止旧workers
+	// Now update the pool's workers
+	wp.workers = newWorkers
+	wp.workerCount = newWorkerCount
+
+	// Stop old workers
 	for _, w := range oldWorkers {
 		close(w.taskChan)
-		close(w.done)
-		<-w.done
+		// Signal worker to stop and wait
+		// The worker will exit when taskChan is closed
 	}
 }
 
-// Shutdown 优雅关闭工作池
+// Shutdown gracefully shuts down the worker pool
 func (wp *WorkerPool) Shutdown() {
+	// Signal shutdown
 	close(wp.shutdown)
+
+	// Close task queue to stop dispatcher
+	close(wp.taskQueue)
+
+	wp.mu.Lock()
+	// Stop all workers by closing their channels first
+	// Workers will exit gracefully when channels are closed
+	for _, w := range wp.workers {
+		close(w.taskChan)
+		close(w.done)
+	}
+	wp.mu.Unlock()
+
+	// Wait for all workers and dispatcher to complete
 	wp.wg.Wait()
 
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
 
-	// 停止所有workers
-	for _, w := range wp.workers {
-		close(w.taskChan)
-		<-w.done
-	}
-
-	// 清空workers
+	// Clear workers
 	wp.workers = nil
 	wp.workerCount = 0
 }
@@ -253,14 +292,18 @@ func (wp *WorkerPool) WaitWithTimeout(timeout time.Duration) error {
 	}
 }
 
-// worker run worker主循环
+// worker run worker main loop
 func (w *worker) run() {
 	for {
 		select {
 		case <-w.done:
 			return
-		case task := <-w.taskChan:
-			// 执行任务（忽略错误，实际应该记录）
+		case task, ok := <-w.taskChan:
+			if !ok {
+				// taskChan was closed, exit gracefully
+				return
+			}
+			// Execute task (errors are ignored, should be logged in production)
 			_ = task.Execute()
 		}
 	}

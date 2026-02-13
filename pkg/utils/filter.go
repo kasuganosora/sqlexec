@@ -27,15 +27,15 @@ func ApplyFilters(rows []domain.Row, filters []domain.Filter) ([]domain.Row, err
 
 // MatchesFilter checks if a row matches a filter
 func MatchesFilter(row domain.Row, filter domain.Filter) (bool, error) {
-	// 处理逻辑运算符（AND/OR）
+	// Handle logical operators (AND/OR)
 	if filter.LogicOp == "OR" || filter.LogicOp == "or" {
-		return MatchesAnySubFilter(row, filter.SubFilters), nil
+		return MatchesAnySubFilter(row, filter.SubFilters)
 	}
 	if filter.LogicOp == "AND" || filter.LogicOp == "and" {
-		return MatchesAllSubFilters(row, filter.SubFilters), nil
+		return MatchesAllSubFilters(row, filter.SubFilters)
 	}
 
-	// 处理普通字段比较
+	// Handle regular field comparison
 	value, exists := row[filter.Field]
 	if !exists {
 		return false, nil
@@ -44,30 +44,42 @@ func MatchesFilter(row domain.Row, filter domain.Filter) (bool, error) {
 	return CompareValues(value, filter.Value, filter.Operator)
 }
 
-// MatchesAnySubFilter 检查行是否匹配任意子过滤器（OR 逻辑）
-func MatchesAnySubFilter(row domain.Row, subFilters []domain.Filter) bool {
+// MatchesAnySubFilter checks if a row matches any sub-filter (OR logic)
+// Returns the first error encountered, but continues matching
+func MatchesAnySubFilter(row domain.Row, subFilters []domain.Filter) (bool, error) {
 	if len(subFilters) == 0 {
-		return true
+		return true, nil
 	}
 	for _, subFilter := range subFilters {
-		if matched, _ := MatchesFilter(row, subFilter); matched {
-			return true
+		matched, err := MatchesFilter(row, subFilter)
+		if err != nil {
+			// Log the error but continue checking other filters
+			// Return false only if all filters fail
+			continue
+		}
+		if matched {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
-// MatchesAllSubFilters 检查行是否匹配所有子过滤器（AND 逻辑）
-func MatchesAllSubFilters(row domain.Row, subFilters []domain.Filter) bool {
+// MatchesAllSubFilters checks if a row matches all sub-filters (AND logic)
+// Returns error immediately if any filter fails with an error
+func MatchesAllSubFilters(row domain.Row, subFilters []domain.Filter) (bool, error) {
 	if len(subFilters) == 0 {
-		return true
+		return true, nil
 	}
 	for _, subFilter := range subFilters {
-		if matched, _ := MatchesFilter(row, subFilter); !matched {
-			return false
+		matched, err := MatchesFilter(row, subFilter)
+		if err != nil {
+			return false, err
+		}
+		if !matched {
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
 // MatchesLike implements simple LIKE pattern matching

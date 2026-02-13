@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/config"
@@ -19,7 +20,9 @@ var (
 )
 
 type SessionMgr struct {
-	driver SessionDriver
+	driver   SessionDriver
+	stopChan chan struct{}
+	wg       sync.WaitGroup
 }
 
 // InitSessionConfig 初始化会话配置
@@ -33,19 +36,33 @@ func InitSessionConfig(cfg *config.SessionConfig) {
 
 func NewSessionMgr(ctx context.Context, driver SessionDriver) *SessionMgr {
 	sess := &SessionMgr{
-		driver: driver,
+		driver:   driver,
+		stopChan: make(chan struct{}),
 	}
 
+	sess.wg.Add(1)
 	go func() {
+		defer sess.wg.Done()
+		ticker := time.NewTicker(SessionGCInterval)
+		defer ticker.Stop()
 		for {
-			if ctx.Err() != nil {
+			select {
+			case <-sess.stopChan:
 				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				sess.GC()
 			}
-			time.Sleep(SessionGCInterval)
-			sess.GC()
 		}
 	}()
 	return sess
+}
+
+// Close gracefully stops the GC goroutine
+func (m *SessionMgr) Close() {
+	close(m.stopChan)
+	m.wg.Wait()
 }
 
 func (m *SessionMgr) GetOrCreateSession(ctx context.Context, addr string, port string) (sess *Session, err error) {
@@ -175,16 +192,17 @@ func (m *SessionMgr) GC() (err error) {
 }
 
 type Session struct {
-	driver     SessionDriver
-	ID         string    `json:"id"`
-	ThreadID   uint32    `json:"thread_id"`
-	User       string    `json:"user"`
-	Created    time.Time `json:"created"`
-	LastUsed   time.Time `json:"last_used"`
-	RemoteIP   string    `json:"remote_ip"`
-	RemotePort string    `json:"remote_port"`
-	SequenceID uint8     `json:"sequence_id"` // 添加序列号字段
-	APISession interface{} `json:"api_session"` // API 层会话（避免循环导入）
+	driver       SessionDriver
+	ID           string    `json:"id"`
+	ThreadID     uint32    `json:"thread_id"`
+	User         string    `json:"user"`
+	Created      time.Time `json:"created"`
+	LastUsed     time.Time `json:"last_used"`
+	RemoteIP     string    `json:"remote_ip"`
+	RemotePort   string    `json:"remote_port"`
+	SequenceID   uint8     `json:"sequence_id"`    // Sequence number
+	sequenceMu   sync.Mutex                       // Mutex for SequenceID
+	APISession   interface{} `json:"api_session"`  // API layer session (avoid circular import)
 }
 
 // Get 获取会话值
@@ -257,8 +275,11 @@ func (s *Session) GetAllVariables() (map[string]interface{}, error) {
 	return vars, nil
 }
 
-// GetNextSequenceID 获取下一个序列号并递增
+// GetNextSequenceID gets the next sequence number and increments it
+// Uses mutex for thread-safe increment
 func (s *Session) GetNextSequenceID() uint8 {
+	s.sequenceMu.Lock()
+	defer s.sequenceMu.Unlock()
 	s.SequenceID++
 	return s.SequenceID
 }

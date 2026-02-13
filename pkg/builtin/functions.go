@@ -141,3 +141,19 @@ func RegisterGlobal(info *FunctionInfo) error {
 func GetGlobal(name string) (*FunctionInfo, bool) {
 	return globalRegistry.Get(name)
 }
+
+// ResetGlobalRegistry resets the global registry to a fresh state.
+// This is primarily intended for testing purposes to ensure test isolation.
+// WARNING: This is not thread-safe and should only be called when no other
+// goroutines are accessing the registry.
+func ResetGlobalRegistry() {
+	globalRegistry = NewFunctionRegistry()
+}
+
+// ResetGlobalRegistryWith allows resetting the global registry with a custom registry.
+// This is primarily intended for testing purposes.
+func ResetGlobalRegistryWith(registry *FunctionRegistry) {
+	if registry != nil {
+		globalRegistry = registry
+	}
+}
