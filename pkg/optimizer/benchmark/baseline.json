@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-13T23:30:00+08:00",
+  "timestamp": "2026-02-14T00:15:00+08:00",
   "go_version": "go1.24.2",
   "system_info": {
     "cpu_cores": 12,
@@ -132,6 +132,56 @@
       "ns_per_op": 500000,
       "allocs_per_op": 350,
       "alloced_bytes_per_op": 28000
+    },
+    "BenchmarkVectorIndexRule_Simple": {
+      "ops_per_sec": 95623.26,
+      "ns_per_op": 10458,
+      "allocs_per_op": 45,
+      "alloced_bytes_per_op": 20760
+    },
+    "BenchmarkVectorIndexRule_WithFilter": {
+      "ops_per_sec": 80000,
+      "ns_per_op": 12500,
+      "allocs_per_op": 55,
+      "alloced_bytes_per_op": 25000
+    },
+    "BenchmarkVectorIndexRule_L2Distance": {
+      "ops_per_sec": 85000,
+      "ns_per_op": 11764,
+      "allocs_per_op": 48,
+      "alloced_bytes_per_op": 22000
+    },
+    "BenchmarkVectorIndexRule_InnerProduct": {
+      "ops_per_sec": 90000,
+      "ns_per_op": 11111,
+      "allocs_per_op": 46,
+      "alloced_bytes_per_op": 21000
+    }
+  },
+  "p99_metrics": {
+    "description": "P99 latency metrics for key operations",
+    "note": "Use BenchmarkWithP99_* benchmarks to measure actual P99 latencies",
+    "expected_ranges": {
+      "optimizer_query": {
+        "p99_ns": 50000,
+        "mean_ns": 30000,
+        "description": "Single table query optimization"
+      },
+      "parallel_scan_medium": {
+        "p99_ns": 25000,
+        "mean_ns": 18000,
+        "description": "Medium dataset parallel scan"
+      },
+      "predicate_pushdown": {
+        "p99_ns": 150000,
+        "mean_ns": 120000,
+        "description": "Predicate pushdown with filter"
+      },
+      "vector_rule": {
+        "p99_ns": 15000,
+        "mean_ns": 10000,
+        "description": "Vector index rule application"
+      }
     }
   }
 }

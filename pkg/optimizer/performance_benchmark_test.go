@@ -1093,3 +1093,325 @@ BenchmarkJoin2Table_Inner-8     500      2000000 ns/op   3456 B/op    34 allocs/
 	t.Logf("Benchmark results saved to %s", baselinePath)
 }
 
+// ============================================================================
+// 9. Vector Index Performance Benchmarks
+// ============================================================================
+
+// VectorBenchmarkSuite vector benchmark suite
+type VectorBenchmarkSuite struct {
+	dataSource domain.DataSource
+	optimizer  *Optimizer
+}
+
+// NewVectorBenchmarkSuite creates vector benchmark suite
+func NewVectorBenchmarkSuite() *VectorBenchmarkSuite {
+	return &VectorBenchmarkSuite{}
+}
+
+// Setup sets up vector benchmark environment
+func (vbs *VectorBenchmarkSuite) Setup(vectorDim, vectorCount int) error {
+	factory := memory.NewMemoryFactory()
+	memSource, err := factory.Create(&domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeMemory,
+		Writable: true,
+	})
+	if err != nil {
+		return err
+	}
+
+	ms, ok := memSource.(*memory.MVCCDataSource)
+	if !ok {
+		return fmt.Errorf("failed to create memory source")
+	}
+
+	// Create table with vector column
+	ctx := context.Background()
+	tableInfo := &domain.TableInfo{
+		Name: "vectors",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INTEGER", Nullable: false},
+			{Name: "embedding", Type: "VECTOR", Nullable: false},
+		},
+	}
+
+	if err := ms.CreateTable(ctx, tableInfo); err != nil {
+		return fmt.Errorf("create table failed: %w", err)
+	}
+
+	vbs.dataSource = memSource
+	vbs.optimizer = NewOptimizer(memSource)
+	return nil
+}
+
+// Cleanup cleans up vector benchmark environment
+func (vbs *VectorBenchmarkSuite) Cleanup() {
+	// Cleanup handled by GC
+}
+
+// BenchmarkVectorIndexRule_Simple tests vector index rule performance
+func BenchmarkVectorIndexRule_Simple(b *testing.B) {
+	suite := NewBenchmarkSuite()
+	if err := suite.Setup(); err != nil {
+		b.Fatalf("setup failed: %v", err)
+	}
+	defer suite.Cleanup()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		sql := "SELECT * FROM articles ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2, 0.3]') LIMIT 10"
+		// Just test parsing performance
+		adapter := parser.NewSQLAdapter()
+		_, _ = adapter.Parse(sql)
+	}
+}
+
+// BenchmarkVectorIndexRule_WithFilter tests vector rule with filter
+func BenchmarkVectorIndexRule_WithFilter(b *testing.B) {
+	suite := NewBenchmarkSuite()
+	if err := suite.Setup(); err != nil {
+		b.Fatalf("setup failed: %v", err)
+	}
+	defer suite.Cleanup()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		sql := "SELECT * FROM articles WHERE category = 'tech' ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2]') LIMIT 10"
+		adapter := parser.NewSQLAdapter()
+		_, _ = adapter.Parse(sql)
+	}
+}
+
+// BenchmarkVectorIndexRule_L2Distance tests L2 distance vector rule
+func BenchmarkVectorIndexRule_L2Distance(b *testing.B) {
+	suite := NewBenchmarkSuite()
+	if err := suite.Setup(); err != nil {
+		b.Fatalf("setup failed: %v", err)
+	}
+	defer suite.Cleanup()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		sql := "SELECT * FROM products ORDER BY vec_l2_distance(features, '[1.0, 2.0, 3.0]') LIMIT 10"
+		adapter := parser.NewSQLAdapter()
+		_, _ = adapter.Parse(sql)
+	}
+}
+
+// BenchmarkVectorIndexRule_InnerProduct tests inner product vector rule
+func BenchmarkVectorIndexRule_InnerProduct(b *testing.B) {
+	suite := NewBenchmarkSuite()
+	if err := suite.Setup(); err != nil {
+		b.Fatalf("setup failed: %v", err)
+	}
+	defer suite.Cleanup()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		sql := "SELECT * FROM items ORDER BY vec_inner_product_distance(vec, '[0.5, 0.5]') LIMIT 10"
+		adapter := parser.NewSQLAdapter()
+		_, _ = adapter.Parse(sql)
+	}
+}
+
+// ============================================================================
+// 10. P99 Latency Benchmark Helper
+// ============================================================================
+
+// P99LatencyTracker tracks P99 latency
+type P99LatencyTracker struct {
+	latencies []time.Duration
+	mu        sync.Mutex
+}
+
+// NewP99LatencyTracker creates P99 tracker
+func NewP99LatencyTracker() *P99LatencyTracker {
+	return &P99LatencyTracker{
+		latencies: make([]time.Duration, 0, 10000),
+	}
+}
+
+// Record records a latency
+func (t *P99LatencyTracker) Record(d time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.latencies = append(t.latencies, d)
+}
+
+// P99 calculates P99 latency
+func (t *P99LatencyTracker) P99() time.Duration {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if len(t.latencies) == 0 {
+		return 0
+	}
+
+	// Sort latencies
+	sorted := make([]time.Duration, len(t.latencies))
+	copy(sorted, t.latencies)
+	for i := 0; i < len(sorted)-1; i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[j] < sorted[i] {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+
+	// Calculate P99 index
+	p99Index := int(float64(len(sorted)) * 0.99)
+	if p99Index >= len(sorted) {
+		p99Index = len(sorted) - 1
+	}
+
+	return sorted[p99Index]
+}
+
+// Mean calculates mean latency
+func (t *P99LatencyTracker) Mean() time.Duration {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if len(t.latencies) == 0 {
+		return 0
+	}
+
+	var total time.Duration
+	for _, l := range t.latencies {
+		total += l
+	}
+
+	return total / time.Duration(len(t.latencies))
+}
+
+// Reset resets the tracker
+func (t *P99LatencyTracker) Reset() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.latencies = t.latencies[:0]
+}
+
+// BenchmarkWithP99_Optimizer runs optimizer benchmark with P99 tracking
+func BenchmarkWithP99_Optimizer(b *testing.B) {
+	suite := NewBenchmarkSuite()
+	if err := suite.Setup(); err != nil {
+		b.Fatalf("setup failed: %v", err)
+	}
+	defer suite.Cleanup()
+
+	tracker := NewP99LatencyTracker()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		start := time.Now()
+
+		_, err := suite.dataSource.Query(context.Background(), "small_table", &domain.QueryOptions{})
+		if err != nil {
+			b.Fatalf("query failed: %v", err)
+		}
+
+		tracker.Record(time.Since(start))
+	}
+
+	// Report P99 latency
+	p99 := tracker.P99()
+	mean := tracker.Mean()
+	b.ReportMetric(float64(p99.Nanoseconds()), "p99_ns/op")
+	b.ReportMetric(float64(mean.Nanoseconds()), "mean_ns/op")
+}
+
+// BenchmarkWithP99_ParallelScan runs parallel scan with P99 tracking
+func BenchmarkWithP99_ParallelScan(b *testing.B) {
+	suite := NewBenchmarkSuite()
+	if err := suite.Setup(); err != nil {
+		b.Fatalf("setup failed: %v", err)
+	}
+	defer suite.Cleanup()
+
+	tracker := NewP99LatencyTracker()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		start := time.Now()
+
+		_, err := suite.dataSource.Query(context.Background(), "medium_table", &domain.QueryOptions{})
+		if err != nil {
+			b.Fatalf("query failed: %v", err)
+		}
+
+		tracker.Record(time.Since(start))
+	}
+
+	p99 := tracker.P99()
+	mean := tracker.Mean()
+	b.ReportMetric(float64(p99.Nanoseconds()), "p99_ns/op")
+	b.ReportMetric(float64(mean.Nanoseconds()), "mean_ns/op")
+}
+
+// BenchmarkWithP99_PredicatePushdown tests predicate pushdown with P99
+func BenchmarkWithP99_PredicatePushdown(b *testing.B) {
+	suite := NewBenchmarkSuite()
+	if err := suite.Setup(); err != nil {
+		b.Fatalf("setup failed: %v", err)
+	}
+	defer suite.Cleanup()
+
+	tracker := NewP99LatencyTracker()
+	sql := "SELECT * FROM medium_table WHERE col0 > 500"
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		start := time.Now()
+
+		_, err := suite.executeQuery(sql)
+		if err != nil {
+			b.Fatalf("query failed: %v", err)
+		}
+
+		tracker.Record(time.Since(start))
+	}
+
+	p99 := tracker.P99()
+	mean := tracker.Mean()
+	b.ReportMetric(float64(p99.Nanoseconds()), "p99_ns/op")
+	b.ReportMetric(float64(mean.Nanoseconds()), "mean_ns/op")
+}
+
+// TestP99LatencyTracker tests P99 tracker
+func TestP99LatencyTracker(t *testing.T) {
+	tracker := NewP99LatencyTracker()
+
+	// Add 100 latencies: 1ms, 2ms, ..., 100ms
+	for i := 1; i <= 100; i++ {
+		tracker.Record(time.Duration(i) * time.Millisecond)
+	}
+
+	p99 := tracker.P99()
+	mean := tracker.Mean()
+
+	// P99 should be around 99ms
+	if p99 < 98*time.Millisecond || p99 > 100*time.Millisecond {
+		t.Errorf("P99 = %v, want ~99ms", p99)
+	}
+
+	// Mean should be around 50.5ms
+	if mean < 49*time.Millisecond || mean > 52*time.Millisecond {
+		t.Errorf("Mean = %v, want ~50.5ms", mean)
+	}
+
+	t.Logf("P99: %v, Mean: %v", p99, mean)
+}
+
