@@ -12,12 +12,22 @@ type MVCCTransaction struct {
 	txnID int64
 }
 
+// GetID returns the transaction ID
+func (t *MVCCTransaction) GetID() int64 {
+	return t.txnID
+}
+
 func (t *MVCCTransaction) Commit(ctx context.Context) error {
 	return t.ds.CommitTx(ctx, t.txnID)
 }
 
 func (t *MVCCTransaction) Rollback(ctx context.Context) error {
 	return t.ds.RollbackTx(ctx, t.txnID)
+}
+
+// GetContext returns a context with transaction ID
+func (t *MVCCTransaction) GetContext(ctx context.Context) context.Context {
+	return SetTransactionID(ctx, t.txnID)
 }
 
 func (t *MVCCTransaction) Execute(ctx context.Context, sql string) (*domain.QueryResult, error) {

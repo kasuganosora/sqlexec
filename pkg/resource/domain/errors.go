@@ -141,3 +141,91 @@ func NewErrColumnAlreadyExists(columnName string) *ErrColumnNotFound {
 func NewErrColumnNotFound(columnName string) *ErrColumnNotFound {
 	return &ErrColumnNotFound{ColumnName: columnName}
 }
+
+// ErrTransactionNotFound transaction not found error
+type ErrTransactionNotFound struct {
+	TxnID int64
+}
+
+func (e *ErrTransactionNotFound) Error() string {
+	return fmt.Sprintf("transaction not found: %d", e.TxnID)
+}
+
+// NewErrTransactionNotFound creates transaction not found error
+func NewErrTransactionNotFound(txnID int64) *ErrTransactionNotFound {
+	return &ErrTransactionNotFound{TxnID: txnID}
+}
+
+// ErrSnapshotNotFound snapshot not found error
+type ErrSnapshotNotFound struct {
+	TxnID int64
+}
+
+func (e *ErrSnapshotNotFound) Error() string {
+	return fmt.Sprintf("transaction snapshot not found: %d", e.TxnID)
+}
+
+// NewErrSnapshotNotFound creates snapshot not found error
+func NewErrSnapshotNotFound(txnID int64) *ErrSnapshotNotFound {
+	return &ErrSnapshotNotFound{TxnID: txnID}
+}
+
+// ErrTableAlreadyExists table already exists error
+type ErrTableAlreadyExists struct {
+	TableName string
+}
+
+func (e *ErrTableAlreadyExists) Error() string {
+	return fmt.Sprintf("table %s already exists", e.TableName)
+}
+
+// NewErrTableAlreadyExists creates table already exists error
+func NewErrTableAlreadyExists(tableName string) *ErrTableAlreadyExists {
+	return &ErrTableAlreadyExists{TableName: tableName}
+}
+
+// ErrIndexCreationFailed index creation failed error
+type ErrIndexCreationFailed struct {
+	TableName  string
+	ColumnName string
+	Reason     string
+}
+
+func (e *ErrIndexCreationFailed) Error() string {
+	return fmt.Sprintf("create index failed on %s.%s: %s", e.TableName, e.ColumnName, e.Reason)
+}
+
+// NewErrIndexCreationFailed creates index creation failed error
+func NewErrIndexCreationFailed(tableName, columnName, reason string) *ErrIndexCreationFailed {
+	return &ErrIndexCreationFailed{TableName: tableName, ColumnName: columnName, Reason: reason}
+}
+
+// ErrIndexDropFailed drop index failed error
+type ErrIndexDropFailed struct {
+	TableName string
+	IndexName string
+	Reason    string
+}
+
+func (e *ErrIndexDropFailed) Error() string {
+	return fmt.Sprintf("drop index %s on %s failed: %s", e.IndexName, e.TableName, e.Reason)
+}
+
+// NewErrIndexDropFailed creates drop index failed error
+func NewErrIndexDropFailed(tableName, indexName, reason string) *ErrIndexDropFailed {
+	return &ErrIndexDropFailed{TableName: tableName, IndexName: indexName, Reason: reason}
+}
+
+// ErrGeneratedColumnValidation generated column validation error
+type ErrGeneratedColumnValidation struct {
+	Message string
+}
+
+func (e *ErrGeneratedColumnValidation) Error() string {
+	return fmt.Sprintf("generated column validation failed: %s", e.Message)
+}
+
+// NewErrGeneratedColumnValidation creates generated column validation error
+func NewErrGeneratedColumnValidation(message string) *ErrGeneratedColumnValidation {
+	return &ErrGeneratedColumnValidation{Message: message}
+}
