@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/workerpool"
 )
 
 // OptimizedParallelScanner 优化的并行扫描器
@@ -15,7 +16,10 @@ import (
 type OptimizedParallelScanner struct {
 	dataSource  domain.DataSource
 	parallelism int
-	batchSize   int // 批量大小
+	batchSize   int            // 批量大小
+	scanPool    *workerpool.Pool // worker pool for parallel scanning
+	rowPool     *workerpool.RowPool // row pool for memory reuse
+	once        sync.Once      // for lazy initialization
 }
 
 // NewOptimizedParallelScanner 创建优化的并行扫描器
@@ -59,6 +63,31 @@ func NewOptimizedParallelScanner(dataSource domain.DataSource, parallelism int) 
 	}
 }
 
+// initPool lazily initializes the worker pool
+func (ops *OptimizedParallelScanner) initPool() {
+	ops.once.Do(func() {
+		pool, err := workerpool.New(workerpool.Config{
+			Size:                 ops.parallelism,
+			QueueSize:            ops.parallelism * 2,
+			IdleTimeout:          30000000000, // 30 seconds in nanoseconds
+			EnableDynamicScaling: false,
+		})
+		if err == nil {
+			pool.Start()
+			ops.scanPool = pool
+		}
+		ops.rowPool = workerpool.NewRowPool()
+	})
+}
+
+// Close releases resources
+func (ops *OptimizedParallelScanner) Close() error {
+	if ops.scanPool != nil {
+		return ops.scanPool.Close()
+	}
+	return nil
+}
+
 // ScanRange 扫描范围
 type ScanRange struct {
 	TableName string
@@ -68,6 +97,9 @@ type ScanRange struct {
 
 // Execute 优化的并行执行扫描
 func (ops *OptimizedParallelScanner) Execute(ctx context.Context, scanRange ScanRange, options *domain.QueryOptions) (*domain.QueryResult, error) {
+	// Initialize worker pool lazily
+	ops.initPool()
+
 	limit := scanRange.Limit
 	if limit <= 0 {
 		limit = 10000 // 默认
@@ -157,8 +189,55 @@ func (ops *OptimizedParallelScanner) divideIntoBatches(tableName string, offset,
 // executeWithWorkerPool 使用 worker pool 执行任务
 func (ops *OptimizedParallelScanner) executeWithWorkerPool(ctx context.Context, tasks []ScanRange, options *domain.QueryOptions) []*ScanResult {
 	results := make([]*ScanResult, len(tasks))
+
+	// Use the worker pool if available
+	if ops.scanPool != nil && ops.scanPool.IsRunning() {
+		var wg sync.WaitGroup
+		var mu sync.Mutex
+
+		wg.Add(len(tasks))
+
+		for i, task := range tasks {
+			idx := i
+			t := task
+
+			go func() {
+				defer wg.Done()
+
+				err := ops.scanPool.SubmitWait(ctx, func(ctx context.Context) error {
+					// Execute the scan
+					result, err := ops.executeSingleRange(ctx, t, options)
+					if err != nil {
+						if os.Getenv("PARALLEL_SCAN_DEBUG") == "1" {
+							fmt.Printf("  [WARN] Worker %d failed: %v\n", idx, err)
+						}
+						mu.Lock()
+						results[idx] = &ScanResult{Error: err}
+						mu.Unlock()
+						return err
+					}
+
+					mu.Lock()
+					results[idx] = &ScanResult{Result: result}
+					mu.Unlock()
+					return nil
+				})
+
+				if err != nil {
+					mu.Lock()
+					results[idx] = &ScanResult{Error: err}
+					mu.Unlock()
+				}
+			}()
+		}
+
+		wg.Wait()
+		return results
+	}
+
+	// Fallback to original channel-based semaphore implementation
 	var wg sync.WaitGroup
-	var workerPool = make(chan struct{}, ops.parallelism) // 限制并发度
+	var workerPool = make(chan struct{}, ops.parallelism)
 
 	for i, task := range tasks {
 		wg.Add(1)
@@ -166,11 +245,9 @@ func (ops *OptimizedParallelScanner) executeWithWorkerPool(ctx context.Context, 
 		go func(idx int, t ScanRange) {
 			defer wg.Done()
 
-			// 获取 worker 信号量
 			workerPool <- struct{}{}
 			defer func() { <-workerPool }()
 
-			// 执行扫描
 			result, err := ops.executeSingleRange(ctx, t, options)
 			if err != nil {
 				if os.Getenv("PARALLEL_SCAN_DEBUG") == "1" {
