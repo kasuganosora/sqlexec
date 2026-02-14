@@ -65,3 +65,9 @@ users.json
 # CodeBuddy configuration and workspace files
 .codebuddy/
 *.log
+
+# Claude Code
+.claude/
+
+# Coverage reports
+coverage_*.html
