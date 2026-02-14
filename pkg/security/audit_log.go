@@ -28,9 +28,11 @@ const (
 	EventTypeUpdate     AuditEventType = "update"
 	EventTypeDelete     AuditEventType = "delete"
 	EventTypeDDL        AuditEventType = "ddl"
-	EventTypePermission AuditEventType = "permission"
-	EventTypeInjection  AuditEventType = "injection"
-	EventTypeError      AuditEventType = "error"
+	EventTypePermission  AuditEventType = "permission"
+	EventTypeInjection   AuditEventType = "injection"
+	EventTypeError       AuditEventType = "error"
+	EventTypeAPIRequest  AuditEventType = "api_request"
+	EventTypeMCPToolCall AuditEventType = "mcp_tool_call"
 )
 
 // AuditEvent 审计事件
@@ -264,6 +266,50 @@ func (al *AuditLogger) LogError(user, database, message string, err error) {
 		Success:   false,
 		Metadata: map[string]interface{}{
 			"error": err.Error(),
+		},
+	}
+
+	al.Log(event)
+}
+
+// LogAPIRequest 记录 HTTP API 请求
+func (al *AuditLogger) LogAPIRequest(clientName, ip, method, path, sql, database string, duration int64, success bool) {
+	event := &AuditEvent{
+		ID:        generateEventID(),
+		Timestamp: time.Now(),
+		Level:     AuditLevelInfo,
+		EventType: EventTypeAPIRequest,
+		User:      clientName,
+		Database:  database,
+		Query:     sql,
+		Message:   fmt.Sprintf("%s %s", method, path),
+		Success:   success,
+		Duration:  duration,
+		Metadata: map[string]interface{}{
+			"ip":     ip,
+			"method": method,
+			"path":   path,
+		},
+	}
+
+	al.Log(event)
+}
+
+// LogMCPToolCall 记录 MCP 工具调用
+func (al *AuditLogger) LogMCPToolCall(clientName, ip, toolName string, args map[string]interface{}, duration int64, success bool) {
+	event := &AuditEvent{
+		ID:        generateEventID(),
+		Timestamp: time.Now(),
+		Level:     AuditLevelInfo,
+		EventType: EventTypeMCPToolCall,
+		User:      clientName,
+		Message:   fmt.Sprintf("MCP tool: %s", toolName),
+		Success:   success,
+		Duration:  duration,
+		Metadata: map[string]interface{}{
+			"ip":        ip,
+			"tool_name": toolName,
+			"args":      args,
 		},
 	}
 

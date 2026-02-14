@@ -20,6 +20,22 @@ type Config struct {
 	MVCC          MVCCConfig          `json:"mvcc"`
 	Session       SessionConfig       `json:"session"`
 	Optimizer     OptimizerConfig     `json:"optimizer"`
+	HTTPAPI       HTTPAPIConfig       `json:"http_api"`
+	MCP           MCPConfig           `json:"mcp"`
+}
+
+// HTTPAPIConfig HTTP REST API 配置
+type HTTPAPIConfig struct {
+	Enabled bool   `json:"enabled"`
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
+}
+
+// MCPConfig MCP 协议配置
+type MCPConfig struct {
+	Enabled bool   `json:"enabled"`
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
 }
 
 // ServerConfig 服务器配置
@@ -192,6 +208,16 @@ func DefaultConfig() *Config {
 		},
 		Optimizer: OptimizerConfig{
 			Enabled: true,
+		},
+		HTTPAPI: HTTPAPIConfig{
+			Enabled: false,
+			Host:    "0.0.0.0",
+			Port:    8080,
+		},
+		MCP: MCPConfig{
+			Enabled: false,
+			Host:    "0.0.0.0",
+			Port:    8081,
 		},
 	}
 }

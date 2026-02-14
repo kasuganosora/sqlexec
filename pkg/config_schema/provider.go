@@ -27,6 +27,7 @@ func NewProvider(dsManager *application.DataSourceManager, configDir string) *Pr
 // initializeTables registers all config virtual tables
 func (p *Provider) initializeTables() {
 	p.tables["datasource"] = NewDatasourceTable(p.dsManager, p.configDir)
+	p.tables["api_client"] = NewAPIClientTable(p.configDir)
 }
 
 // GetVirtualTable returns a virtual table by name

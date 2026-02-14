@@ -222,6 +222,16 @@ func (s *Server) SetDB(db *api.DB) {
 	s.db = db
 }
 
+// GetDB 返回服务器的 DB 实例
+func (s *Server) GetDB() *api.DB {
+	return s.db
+}
+
+// GetConfigDir 返回配置目录路径
+func (s *Server) GetConfigDir() string {
+	return s.configDir
+}
+
 func (s *Server) Start() (err error) {
 	acceptChan := make(chan net.Conn)
 	errChan := make(chan error, 1)
