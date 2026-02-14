@@ -60,12 +60,18 @@ func (a *ExcelAdapter) Connect(ctx context.Context) error {
 		return fmt.Errorf("failed to open Excel file %q: %w", a.filePath, err)
 	}
 
-	a.file = file
+	// Ensure file is closed on any error path. Only on success do we
+	// retain the handle in a.file for later use / writeBack.
+	success := false
+	defer func() {
+		if !success {
+			file.Close()
+		}
+	}()
 
 	// 确定使用的工作表
 	sheets := file.GetSheetList()
 	if len(sheets) == 0 {
-		file.Close()
 		return fmt.Errorf("no sheets found in excel file")
 	}
 
@@ -79,7 +85,6 @@ func (a *ExcelAdapter) Connect(ctx context.Context) error {
 			}
 		}
 		if !found {
-			file.Close()
 			return fmt.Errorf("sheet not found: %s", a.sheetName)
 		}
 	} else {
@@ -90,12 +95,10 @@ func (a *ExcelAdapter) Connect(ctx context.Context) error {
 	// 读取所有行
 	rows, err := file.GetRows(a.sheetName)
 	if err != nil {
-		file.Close()
 		return fmt.Errorf("failed to read excel rows: %w", err)
 	}
 
 	if len(rows) == 0 {
-		file.Close()
 		return fmt.Errorf("sheet is empty: %s", a.sheetName)
 	}
 
@@ -105,7 +108,7 @@ func (a *ExcelAdapter) Connect(ctx context.Context) error {
 
 	// 推断列信息（传入headers）
 	columns := a.inferColumnTypes(headers, dataRows)
-	
+
 	// 转换为Row格式
 	convertedRows := a.convertToRows(headers, columns, dataRows)
 
@@ -118,16 +121,16 @@ func (a *ExcelAdapter) Connect(ctx context.Context) error {
 
 	// 加载到MVCC内存源
 	if err := a.LoadTable(a.sheetName, tableInfo, convertedRows); err != nil {
-		file.Close()
 		return fmt.Errorf("failed to load Excel data: %w", err)
 	}
 
 	// 连接MVCC数据源
 	if err := a.MVCCDataSource.Connect(ctx); err != nil {
-		file.Close()
 		return err
 	}
 
+	a.file = file
+	success = true
 	return nil
 }
 
@@ -324,16 +327,15 @@ func (a *ExcelAdapter) convertToRows(headers []string, columns []domain.ColumnIn
 	result := make([]domain.Row, len(rows))
 
 	for i, row := range rows {
-		rowMap := make(domain.Row)
-		for j, value := range row {
-			if j >= len(columns) {
-				break
-			}
-
+		rowMap := make(domain.Row, len(columns))
+		for j := 0; j < len(columns); j++ {
 			colName := columns[j].Name
-			colType := columns[j].Type
-			parsedValue := a.parseValue(value, colType)
-			rowMap[colName] = parsedValue
+			if j < len(row) {
+				rowMap[colName] = a.parseValue(row[j], columns[j].Type)
+			} else {
+				// Excel omits trailing empty cells; fill with nil
+				rowMap[colName] = nil
+			}
 		}
 		result[i] = rowMap
 	}
@@ -423,7 +425,13 @@ func (a *ExcelAdapter) writeBack() (retErr error) {
 		return fmt.Errorf("failed to rename temp sheet: %w", err)
 	}
 
-	a.file.SetActiveSheet(tmpIndex)
+	// Look up the sheet index by name after delete+rename, since the
+	// original tmpIndex may be stale after DeleteSheet shifted indices.
+	if idx, err := a.file.GetSheetIndex(a.sheetName); err == nil {
+		a.file.SetActiveSheet(idx)
+	} else {
+		a.file.SetActiveSheet(tmpIndex)
+	}
 
 	// 保存文件
 	return a.file.SaveAs(a.filePath)
