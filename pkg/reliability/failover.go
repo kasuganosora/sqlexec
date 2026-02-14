@@ -41,6 +41,7 @@ type FailoverManager struct {
 	failureTimeout time.Duration
 	stopChan       chan struct{}
 	stopped        bool
+	started        bool
 	mu             sync.RWMutex
 }
 
@@ -139,6 +140,12 @@ func (fm *FailoverManager) selectActiveNode() {
 
 // Start 启动故障转移管理器
 func (fm *FailoverManager) Start() {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+	if fm.started || fm.stopped {
+		return
+	}
+	fm.started = true
 	go fm.runHealthCheck()
 }
 

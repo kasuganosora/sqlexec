@@ -63,6 +63,9 @@ func (v *ViewsTable) Query(ctx context.Context, filters []domain.Filter, options
 			}
 			
 		// Check if it's a view (has view metadata in Atts)
+		if tableInfo.Atts == nil {
+			continue
+		}
 		viewData, ok := tableInfo.Atts[domain.ViewMetaKey]
 		if !ok {
 			continue
