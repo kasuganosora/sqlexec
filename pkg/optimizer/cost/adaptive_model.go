@@ -3,6 +3,7 @@ package cost
 import (
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
@@ -47,6 +48,7 @@ type AdaptiveCostModel struct {
 
 // CacheHitInfo 缓存命中信息（用于动态调整）
 type CacheHitInfo struct {
+	mu            sync.RWMutex
 	TableHitRates map[string]float64 // 表级缓存命中率
 	LastUpdate    time.Time
 }
@@ -337,7 +339,10 @@ func (acm *AdaptiveCostModel) canUseIndex(fieldName string) bool {
 
 // getTableCacheHitRate 获取表的缓存命中率
 func (acm *AdaptiveCostModel) getTableCacheHitRate(tableName string) float64 {
-	if rate, exists := acm.cacheHitInfo.TableHitRates[tableName]; exists {
+	acm.cacheHitInfo.mu.RLock()
+	rate, exists := acm.cacheHitInfo.TableHitRates[tableName]
+	acm.cacheHitInfo.mu.RUnlock()
+	if exists {
 		return rate
 	}
 	return acm.hardware.EstimateCacheHitRate()
@@ -345,8 +350,10 @@ func (acm *AdaptiveCostModel) getTableCacheHitRate(tableName string) float64 {
 
 // UpdateCacheHitInfo 更新缓存命中信息
 func (acm *AdaptiveCostModel) UpdateCacheHitInfo(tableName string, hitRate float64) {
+	acm.cacheHitInfo.mu.Lock()
 	acm.cacheHitInfo.TableHitRates[tableName] = hitRate
 	acm.cacheHitInfo.LastUpdate = time.Now()
+	acm.cacheHitInfo.mu.Unlock()
 }
 
 // GetHardwareProfile 获取硬件配置
