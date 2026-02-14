@@ -76,24 +76,88 @@ func (op *HashJoinOperator) Execute(ctx context.Context) (*domain.QueryResult, e
 		return nil, fmt.Errorf("execute right child failed: %w", err)
 	}
 
-	// 简化版本：Cross Join所有行
-	// 实际实现应该根据条件进行hash join
-	joinedRows := make([]domain.Row, 0)
-	for _, leftRow := range leftResult.Rows {
+	// Build hash table from right side
+	hashTable := make(map[string][]domain.Row)
+	joinCol := ""
+	if op.config.LeftCond != nil && op.config.LeftCond.Left != nil {
+		joinCol = op.config.LeftCond.Left.Column
+	}
+	rightJoinCol := ""
+	if op.config.RightCond != nil && op.config.RightCond.Left != nil {
+		rightJoinCol = op.config.RightCond.Left.Column
+	}
+
+	if joinCol != "" && rightJoinCol != "" {
+		// Hash join with condition
 		for _, rightRow := range rightResult.Rows {
-			merged := make(domain.Row)
-			for k, v := range leftRow {
-				merged[k] = v
+			key := fmt.Sprintf("%v", rightRow[rightJoinCol])
+			hashTable[key] = append(hashTable[key], rightRow)
+		}
+	}
+
+	joinedRows := make([]domain.Row, 0)
+	if joinCol != "" && rightJoinCol != "" {
+		// Probe hash table with left side
+		for _, leftRow := range leftResult.Rows {
+			key := fmt.Sprintf("%v", leftRow[joinCol])
+			if matchedRows, ok := hashTable[key]; ok {
+				for _, rightRow := range matchedRows {
+					merged := make(domain.Row)
+					for k, v := range leftRow {
+						merged[k] = v
+					}
+					for k, v := range rightRow {
+						if _, exists := merged[k]; exists {
+							merged["right_"+k] = v
+						} else {
+							merged[k] = v
+						}
+					}
+					joinedRows = append(joinedRows, merged)
+				}
 			}
-			for k, v := range rightRow {
-				merged[k] = v
+		}
+	} else {
+		// Fallback: cross join when no condition
+		for _, leftRow := range leftResult.Rows {
+			for _, rightRow := range rightResult.Rows {
+				merged := make(domain.Row)
+				for k, v := range leftRow {
+					merged[k] = v
+				}
+				for k, v := range rightRow {
+					if _, exists := merged[k]; exists {
+						merged["right_"+k] = v
+					} else {
+						merged[k] = v
+					}
+				}
+				joinedRows = append(joinedRows, merged)
 			}
-			joinedRows = append(joinedRows, merged)
+		}
+	}
+
+	// Merge columns from both sides
+	mergedColumns := make([]domain.ColumnInfo, 0, len(leftResult.Columns)+len(rightResult.Columns))
+	mergedColumns = append(mergedColumns, leftResult.Columns...)
+	leftColNames := make(map[string]bool)
+	for _, col := range leftResult.Columns {
+		leftColNames[col.Name] = true
+	}
+	for _, col := range rightResult.Columns {
+		if leftColNames[col.Name] {
+			mergedColumns = append(mergedColumns, domain.ColumnInfo{
+				Name:     "right_" + col.Name,
+				Type:     col.Type,
+				Nullable: col.Nullable,
+			})
+		} else {
+			mergedColumns = append(mergedColumns, col)
 		}
 	}
 
 	return &domain.QueryResult{
-		Columns: leftResult.Columns,
+		Columns: mergedColumns,
 		Rows:    joinedRows,
 	}, nil
 }

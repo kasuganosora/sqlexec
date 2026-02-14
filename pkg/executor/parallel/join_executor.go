@@ -22,8 +22,8 @@ type ParallelHashJoinExecutor struct {
 	workerPool    *WorkerPool
 
 	// State for parallel execution
-	hashTable map[uint64][]domain.Row
-	joinCols  JoinColumns
+	hashTable      map[uint64][]domain.Row
+	joinCols       JoinColumns
 	hashTableReady chan struct{}
 }
 
@@ -36,14 +36,14 @@ func NewParallelHashJoinExecutor(
 	workerPool *WorkerPool,
 ) *ParallelHashJoinExecutor {
 	return &ParallelHashJoinExecutor{
-		joinType:        joinType,
-		left:            left,
-		right:           right,
-		joinCondition:   condition,
-		buildParallel:   buildParallel,
-		probeParallel:   probeParallel,
-		workerPool:      workerPool,
-		hashTableReady:  make(chan struct{}),
+		joinType:       joinType,
+		left:           left,
+		right:          right,
+		joinCondition:  condition,
+		buildParallel:  buildParallel,
+		probeParallel:  probeParallel,
+		workerPool:     workerPool,
+		hashTableReady: make(chan struct{}),
 	}
 }
 
@@ -245,7 +245,7 @@ func (phje *ParallelHashJoinExecutor) mergeJoinResults(results [2]*domain.QueryR
 			return result
 		}
 	}
-	
+
 	return &domain.QueryResult{
 		Rows:    []domain.Row{},
 		Columns: []domain.ColumnInfo{},
@@ -256,40 +256,40 @@ func (phje *ParallelHashJoinExecutor) mergeJoinResults(results [2]*domain.QueryR
 // mergeRows 合并行行（同步）
 func (phje *ParallelHashJoinExecutor) mergeRows(leftRow, rightRow domain.Row, leftCols, rightCols []domain.ColumnInfo) domain.Row {
 	merged := make(domain.Row)
-	
+
 	// 添加左表列
 	for _, col := range leftCols {
 		merged[col.Name] = leftRow[col.Name]
 	}
-	
+
 	// 添加右表列（处理冲突）
 	for _, col := range rightCols {
 		value := rightRow[col.Name]
 		colName := col.Name
-		
+
 		// 检查列名冲突
 		if _, exists := merged[colName]; exists {
 			colName = "right_" + colName
 		}
 		merged[colName] = value
 	}
-	
+
 	return merged
 }
 
 // mergeColumns 合并列信息
 func (phje *ParallelHashJoinExecutor) mergeColumns(left, right []domain.ColumnInfo) []domain.ColumnInfo {
 	merged := make([]domain.ColumnInfo, 0, len(left)+len(right))
-	
+
 	// 添加左表列
 	for _, col := range left {
 		merged = append(merged, col)
 	}
-	
+
 	// 添加右表列（处理冲突）
 	for _, col := range right {
 		colName := col.Name
-		
+
 		// 检查列名冲突
 		conflict := false
 		for _, leftCol := range left {
@@ -298,18 +298,18 @@ func (phje *ParallelHashJoinExecutor) mergeColumns(left, right []domain.ColumnIn
 				break
 			}
 		}
-		
+
 		if conflict {
 			colName = "right_" + colName
 		}
-		
+
 		merged = append(merged, domain.ColumnInfo{
 			Name:     colName,
 			Type:     col.Type,
 			Nullable: col.Nullable,
 		})
 	}
-	
+
 	return merged
 }
 
@@ -349,10 +349,38 @@ func (phje *ParallelHashJoinExecutor) extractColumnsFromExpr(expr *parser.Expres
 		return
 	}
 
+	// For comparison expressions (e.g. left.id = right.id),
+	// the left child is the left join column and the right child is the right join column
+	if expr.Operator == "=" || expr.Operator == "==" {
+		if expr.Left != nil && expr.Left.Type == parser.ExprTypeColumn {
+			colName := expr.Left.Column
+			if colName == "" {
+				if s, ok := expr.Left.Value.(string); ok {
+					colName = s
+				}
+			}
+			if colName != "" {
+				*leftCols = append(*leftCols, colName)
+			}
+		}
+		if expr.Right != nil && expr.Right.Type == parser.ExprTypeColumn {
+			colName := expr.Right.Column
+			if colName == "" {
+				if s, ok := expr.Right.Value.(string); ok {
+					colName = s
+				}
+			}
+			if colName != "" {
+				*rightCols = append(*rightCols, colName)
+			}
+		}
+		return
+	}
+
+	// Recurse for AND/OR compound expressions
 	if expr.Left != nil {
 		phje.extractColumnsFromExpr(expr.Left, leftCols, rightCols)
 	}
-
 	if expr.Right != nil {
 		phje.extractColumnsFromExpr(expr.Right, leftCols, rightCols)
 	}

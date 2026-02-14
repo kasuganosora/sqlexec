@@ -237,18 +237,21 @@ func (m *Manager) beginNonMVCC(level IsolationLevel) (*Transaction, error) {
 func (m *Manager) Commit(txn *Transaction) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
 	if txn.status != TxnStatusInProgress {
 		return fmt.Errorf("transaction is not in progress")
 	}
-	
+
 	// 如果是非MVCC事务
 	if !txn.mvcc {
 		txn.status = TxnStatusCommitted
 		txn.endTime = time.Now()
 		return nil
 	}
-	
+
 	// 应用所有命令
 	for _, cmd := range txn.commands {
 		if err := cmd.Apply(); err != nil {
@@ -260,20 +263,20 @@ func (m *Manager) Commit(txn *Transaction) error {
 			return err
 		}
 	}
-	
+
 	// 更新事务状态
 	txn.status = TxnStatusCommitted
 	txn.endTime = time.Now()
-	
+
 	// 记录到clog
 	m.clog.SetStatus(txn.xid, TxnStatusCommitted)
-	
+
 	// 从活跃事务中移除
 	delete(m.transactions, txn.xid)
-	
+
 	// 清理快照
 	delete(m.snapshots, txn.xid)
-	
+
 	return nil
 }
 
@@ -281,32 +284,35 @@ func (m *Manager) Commit(txn *Transaction) error {
 func (m *Manager) Rollback(txn *Transaction) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
 	if txn.status != TxnStatusInProgress {
 		return fmt.Errorf("transaction is not in progress")
 	}
-	
+
 	// 回滚所有命令
 	for i := len(txn.commands) - 1; i >= 0; i-- {
 		txn.commands[i].Rollback()
 	}
-	
+
 	// 更新事务状态
 	txn.status = TxnStatusAborted
 	txn.endTime = time.Now()
-	
+
 	// 如果是MVCC事务
 	if txn.mvcc && txn.xid != 0 {
 		// 记录到clog
 		m.clog.SetStatus(txn.xid, TxnStatusAborted)
-		
+
 		// 从活跃事务中移除
 		delete(m.transactions, txn.xid)
-		
+
 		// 清理快照
 		delete(m.snapshots, txn.xid)
 	}
-	
+
 	return nil
 }
 

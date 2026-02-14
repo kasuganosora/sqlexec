@@ -84,13 +84,29 @@ func (op *UpdateOperator) evaluateExpression(expr parser.Expression) interface{}
 
 // expressionToFilter 将表达式转换为过滤器
 func (op *UpdateOperator) expressionToFilter(expr *parser.Expression) *domain.Filter {
-	// 简化实现
 	if expr == nil {
 		return nil
 	}
+	// Extract field name and value from expression tree
+	field := "id"
+	operator := "="
+	var value interface{}
+
+	if expr.Left != nil && expr.Left.Type == parser.ExprTypeColumn {
+		field = getColumnName(expr.Left)
+	}
+	if expr.Operator != "" {
+		operator = expr.Operator
+	}
+	if expr.Right != nil {
+		value = expr.Right.Value
+	} else {
+		value = expr.Value
+	}
+
 	return &domain.Filter{
-		Field:    "id",
-		Operator: "=",
-		Value:    expr.Value,
+		Field:    field,
+		Operator: operator,
+		Value:    value,
 	}
 }

@@ -171,11 +171,14 @@ func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *d
 					if options.OrderBy != "" {
 						queryResult.Rows = util.ApplyOrder(queryResult.Rows, options)
 					}
+					// Record total before pagination
+					queryResult.Total = int64(len(queryResult.Rows))
 					if options.Limit > 0 || options.Offset > 0 {
-						queryResult.Rows = util.ApplyPagination(queryResult.Rows, int(options.Limit), int(options.Offset))
+						queryResult.Rows = util.ApplyPagination(queryResult.Rows, int(options.Offset), int(options.Limit))
 					}
+				} else {
+					queryResult.Total = int64(len(queryResult.Rows))
 				}
-				queryResult.Total = int64(len(queryResult.Rows))
 			}
 		}
 	} else {

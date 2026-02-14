@@ -262,10 +262,16 @@ func NewMatchAllQuery() *MatchAllQuery {
 // Execute 执行查询
 func (q *MatchAllQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	// 返回所有文档
-	stats := idx.GetStats()
-	results := make([]SearchResult, 0, stats.TotalDocs)
-	
-	// 这里简化实现，实际需要遍历所有文档
+	allDocIDs := idx.GetAllDocIDs()
+	results := make([]SearchResult, 0, len(allDocIDs))
+
+	for _, docID := range allDocIDs {
+		results = append(results, SearchResult{
+			DocID: docID,
+			Score: 1.0 * q.boost,
+			Doc:   idx.GetDocument(docID),
+		})
+	}
 	return results
 }
 

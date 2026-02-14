@@ -178,10 +178,13 @@ type Snapshot struct {
 
 // NewSnapshot 创建新快照
 func NewSnapshot(xmin, xmax XID, xip []XID, level IsolationLevel) *Snapshot {
+	// Defensive copy of xip to prevent external mutation
+	xipCopy := make([]XID, len(xip))
+	copy(xipCopy, xip)
 	return &Snapshot{
 		xmin:    xmin,
 		xmax:    xmax,
-		xip:     xip,
+		xip:     xipCopy,
 		level:   level,
 		created: time.Now(),
 	}

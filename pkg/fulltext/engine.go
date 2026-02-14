@@ -84,7 +84,10 @@ func NewEngine(config *Config) *Engine {
 	}
 	
 	// 创建分词器
-	tokenizer, _ := analyzer.TokenizerFactory(analyzer.TokenizerTypeStandard, nil)
+	tokenizer, err := analyzer.TokenizerFactory(analyzer.TokenizerTypeStandard, nil)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create standard tokenizer: %v", err))
+	}
 	
 	// 创建BM25评分器
 	stats := bm25.NewCollectionStats()
@@ -373,7 +376,12 @@ func (e *Engine) GetStats() *bm25.CollectionStats {
 
 // DeleteDocument 删除文档
 func (e *Engine) DeleteDocument(docID int64) error {
-	// 简化实现：实际应该更新倒排索引
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if !e.invertedIdx.RemoveDocument(docID) {
+		return fmt.Errorf("document %d not found", docID)
+	}
 	return nil
 }
 

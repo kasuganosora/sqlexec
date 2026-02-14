@@ -101,6 +101,38 @@ func (idx *InvertedIndex) AddDocument(doc *Document, tokens []analyzer.Token) er
 	return nil
 }
 
+// RemoveDocument 从倒排索引中移除文档
+func (idx *InvertedIndex) RemoveDocument(docID int64) bool {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	doc, exists := idx.docStore[docID]
+	if !exists {
+		return false
+	}
+
+	// Remove from all postings lists
+	for _, pl := range idx.postings {
+		pl.RemovePosting(docID)
+	}
+
+	// Remove document vector
+	delete(idx.docVectors, docID)
+
+	// Remove from doc store
+	delete(idx.docStore, docID)
+
+	// Update stats
+	idx.stats.TotalDocs--
+	// Approximate doc length reduction
+	_ = doc
+	if idx.stats.TotalDocs > 0 {
+		idx.stats.UpdateAvgDocLength()
+	}
+
+	return true
+}
+
 // Search 基础搜索（合并所有查询词的倒排列表）
 func (idx *InvertedIndex) Search(queryVector *bm25.SparseVector) []SearchResult {
 	idx.mu.RLock()

@@ -136,8 +136,10 @@ func (cmd *UpdateCommand) Apply() error {
 func (cmd *UpdateCommand) Rollback() error {
 	if !cmd.applied { return nil }
 	if cmd.oldVersion != nil {
+		cmd.oldVersion.mu.Lock()
 		cmd.oldVersion.Expired = false
 		cmd.oldVersion.Xmax = 0
+		cmd.oldVersion.mu.Unlock()
 	}
 	return nil
 }

@@ -204,10 +204,9 @@ func (wp *WorkerPool) Resize(newWorkerCount int) {
 		}(i)
 	}
 
-	// 停止旧workers
+	// 停止旧workers: close taskChan to signal, wait on done for completion
 	for _, w := range oldWorkers {
 		close(w.taskChan)
-		close(w.done)
 		<-w.done
 	}
 }
@@ -255,14 +254,9 @@ func (wp *WorkerPool) WaitWithTimeout(timeout time.Duration) error {
 
 // worker run worker主循环
 func (w *worker) run() {
-	for {
-		select {
-		case <-w.done:
-			return
-		case task := <-w.taskChan:
-			// 执行任务（忽略错误，实际应该记录）
-			_ = task.Execute()
-		}
+	defer close(w.done)
+	for task := range w.taskChan {
+		_ = task.Execute()
 	}
 }
 

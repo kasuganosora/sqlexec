@@ -82,6 +82,18 @@ func (pl *PostingsList) FindPostingWithSkip(docID int64) *Posting {
 	return nil
 }
 
+// RemovePosting 移除指定文档的倒排项
+func (pl *PostingsList) RemovePosting(docID int64) bool {
+	for i, p := range pl.Postings {
+		if p.DocID == docID {
+			pl.Postings = append(pl.Postings[:i], pl.Postings[i+1:]...)
+			pl.DocCount--
+			return true
+		}
+	}
+	return false
+}
+
 // SortByDocID 按DocID排序
 func (pl *PostingsList) SortByDocID() {
 	sort.Slice(pl.Postings, func(i, j int) bool {

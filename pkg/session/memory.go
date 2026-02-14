@@ -30,6 +30,8 @@ func (d *MemoryDriver) CreateSession(ctx context.Context, session *Session) erro
 }
 
 func (d *MemoryDriver) GetSession(ctx context.Context, sessionID string) (*Session, error) {
+	d.Mutex.RLock()
+	defer d.Mutex.RUnlock()
 	session, ok := d.SessionMap[sessionID]
 	if !ok {
 		return nil, errors.New("session not found")
@@ -38,6 +40,8 @@ func (d *MemoryDriver) GetSession(ctx context.Context, sessionID string) (*Sessi
 }
 
 func (d *MemoryDriver) GetSessions(ctx context.Context) ([]*Session, error) {
+	d.Mutex.RLock()
+	defer d.Mutex.RUnlock()
 	sessions := make([]*Session, 0, len(d.SessionMap))
 	for _, session := range d.SessionMap {
 		sessions = append(sessions, session)
@@ -54,10 +58,10 @@ func (d *MemoryDriver) DeleteSession(ctx context.Context, sessionID string) erro
 }
 
 func (d *MemoryDriver) GetKey(ctx context.Context, sessionID string, key string) (any, error) {
+	d.Mutex.Lock()
+	defer d.Mutex.Unlock()
 	_, ok := d.SessionMap[sessionID]
 	if !ok {
-		delete(d.SessionMap, sessionID)
-		delete(d.Values, sessionID)
 		return nil, errors.New("session not found")
 	}
 	values, ok := d.Values[sessionID]
@@ -69,7 +73,7 @@ func (d *MemoryDriver) GetKey(ctx context.Context, sessionID string, key string)
 		return nil, errors.New("key not found")
 	}
 
-	d.Touch(ctx, sessionID)
+	d.touchLocked(sessionID)
 
 	return val, nil
 }
@@ -79,12 +83,10 @@ func (d *MemoryDriver) SetKey(ctx context.Context, sessionID string, key string,
 	defer d.Mutex.Unlock()
 	_, ok := d.SessionMap[sessionID]
 	if !ok {
-		delete(d.SessionMap, sessionID)
-		delete(d.Values, sessionID)
 		return errors.New("session not found")
 	}
 	d.Values[sessionID][key] = value
-	d.Touch(ctx, sessionID)
+	d.touchLocked(sessionID)
 	return nil
 }
 
@@ -93,20 +95,26 @@ func (d *MemoryDriver) DeleteKey(ctx context.Context, sessionID string, key stri
 	defer d.Mutex.Unlock()
 	_, ok := d.SessionMap[sessionID]
 	if !ok {
-		delete(d.SessionMap, sessionID)
-		delete(d.Values, sessionID)
 		return errors.New("session not found")
 	}
 	delete(d.Values[sessionID], key)
-	d.Touch(ctx, sessionID)
+	d.touchLocked(sessionID)
 	return nil
 }
 
+// touchLocked updates the session's LastUsed timestamp.
+// Caller must hold d.Mutex (write lock).
+func (d *MemoryDriver) touchLocked(sessionID string) {
+	if sess, ok := d.SessionMap[sessionID]; ok {
+		sess.LastUsed = time.Now()
+	}
+}
+
 func (d *MemoryDriver) Touch(ctx context.Context, sessionID string) error {
+	d.Mutex.Lock()
+	defer d.Mutex.Unlock()
 	_, ok := d.SessionMap[sessionID]
 	if !ok {
-		delete(d.SessionMap, sessionID)
-		delete(d.Values, sessionID)
 		return errors.New("session not found")
 	}
 	d.SessionMap[sessionID].LastUsed = time.Now()
@@ -154,25 +162,25 @@ func (d *MemoryDriver) DeleteThreadId(ctx context.Context, threadID uint32) erro
 
 // GetAllKeys 获取会话的所有键
 func (d *MemoryDriver) GetAllKeys(ctx context.Context, sessionID string) ([]string, error) {
-	d.Mutex.RLock()
-	defer d.Mutex.RUnlock()
-	
+	d.Mutex.Lock()
+	defer d.Mutex.Unlock()
+
 	_, ok := d.SessionMap[sessionID]
 	if !ok {
 		return nil, errors.New("session not found")
 	}
-	
+
 	values, ok := d.Values[sessionID]
 	if !ok {
 		return []string{}, nil
 	}
-	
+
 	keys := make([]string, 0, len(values))
 	for k := range values {
 		keys = append(keys, k)
 	}
-	
-	d.Touch(ctx, sessionID)
-	
+
+	d.touchLocked(sessionID)
+
 	return keys, nil
 }

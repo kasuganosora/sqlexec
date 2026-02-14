@@ -3,6 +3,7 @@ package operators
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/kasuganosora/sqlexec/pkg/dataaccess"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
@@ -98,9 +99,16 @@ func (op *UnionOperator) distinctRows(rows []domain.Row) []domain.Row {
 
 // rowToKey 将行转换为字符串key用于去重
 func (op *UnionOperator) rowToKey(row domain.Row) string {
+	// Sort column names for deterministic key generation
+	cols := make([]string, 0, len(row))
+	for colName := range row {
+		cols = append(cols, colName)
+	}
+	sort.Strings(cols)
+
 	key := ""
-	for colName, colValue := range row {
-		key += fmt.Sprintf("%v:%v|", colName, colValue)
+	for _, colName := range cols {
+		key += fmt.Sprintf("%v:%v|", colName, row[colName])
 	}
 	return key
 }

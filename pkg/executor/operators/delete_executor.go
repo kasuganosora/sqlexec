@@ -67,13 +67,40 @@ func (op *DeleteOperator) Execute(ctx context.Context) (*domain.QueryResult, err
 
 // expressionToFilter 将表达式转换为过滤器
 func (op *DeleteOperator) expressionToFilter(expr *parser.Expression) *domain.Filter {
-	// 简化实现
 	if expr == nil {
 		return nil
 	}
-	return &domain.Filter{
-		Field:    "id",
-		Operator: "=",
-		Value:    expr.Value,
+	// Extract field name and value from expression tree
+	field := "id"
+	operator := "="
+	var value interface{}
+
+	if expr.Left != nil && expr.Left.Type == parser.ExprTypeColumn {
+		field = getColumnName(expr.Left)
 	}
+	if expr.Operator != "" {
+		operator = expr.Operator
+	}
+	if expr.Right != nil {
+		value = expr.Right.Value
+	} else {
+		value = expr.Value
+	}
+
+	return &domain.Filter{
+		Field:    field,
+		Operator: operator,
+		Value:    value,
+	}
+}
+
+// getColumnName extracts the column name from a column expression
+func getColumnName(expr *parser.Expression) string {
+	if expr.Column != "" {
+		return expr.Column
+	}
+	if s, ok := expr.Value.(string); ok {
+		return s
+	}
+	return "id"
 }

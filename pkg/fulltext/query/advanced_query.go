@@ -268,11 +268,16 @@ func NewAllDocsQuery() *AllDocsQuery {
 
 // Execute 执行查询
 func (q *AllDocsQuery) Execute(idx *index.InvertedIndex) []SearchResult {
-	// 获取所有文档
-	stats := idx.GetStats()
-	results := make([]SearchResult, 0, stats.TotalDocs)
-	
-	// 这里简化实现
+	allDocIDs := idx.GetAllDocIDs()
+	results := make([]SearchResult, 0, len(allDocIDs))
+
+	for _, docID := range allDocIDs {
+		results = append(results, SearchResult{
+			DocID: docID,
+			Score: 1.0 * q.boost,
+			Doc:   idx.GetDocument(docID),
+		})
+	}
 	return results
 }
 
@@ -319,10 +324,22 @@ func NewExistsQuery(field string) *ExistsQuery {
 
 // Execute 执行查询
 func (q *ExistsQuery) Execute(idx *index.InvertedIndex) []SearchResult {
-	// 查找包含该字段的所有文档
 	var results []SearchResult
-	
-	// 简化实现
+
+	allDocIDs := idx.GetAllDocIDs()
+	for _, docID := range allDocIDs {
+		doc := idx.GetDocument(docID)
+		if doc == nil {
+			continue
+		}
+		if _, exists := doc.Fields[q.Field]; exists {
+			results = append(results, SearchResult{
+				DocID: docID,
+				Score: 1.0 * q.boost,
+				Doc:   doc,
+			})
+		}
+	}
 	return results
 }
 
@@ -346,10 +363,27 @@ func NewPrefixQuery(field, prefix string) *PrefixQuery {
 
 // Execute 执行查询
 func (q *PrefixQuery) Execute(idx *index.InvertedIndex) []SearchResult {
-	// 查找以前缀开头的词
-	// 实际实现需要前缀索引（如Trie树）
 	var results []SearchResult
-	
+
+	allDocIDs := idx.GetAllDocIDs()
+	for _, docID := range allDocIDs {
+		doc := idx.GetDocument(docID)
+		if doc == nil {
+			continue
+		}
+		fieldValue, exists := doc.Fields[q.Field]
+		if !exists {
+			continue
+		}
+		strValue := toStringRegex(fieldValue)
+		if strings.HasPrefix(strValue, q.Prefix) {
+			results = append(results, SearchResult{
+				DocID: docID,
+				Score: 1.0 * q.boost,
+				Doc:   doc,
+			})
+		}
+	}
 	return results
 }
 

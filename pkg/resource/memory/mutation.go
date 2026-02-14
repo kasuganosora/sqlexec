@@ -323,7 +323,9 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		return updated, nil
 	}
 
-	// Non-transaction mode: lock order: global lock first, then table-level lock
+	// Non-transaction mode: increment version while holding global lock to avoid race
+	m.currentVer++
+	newVer := m.currentVer
 	tableVer.mu.Lock()
 	m.mu.Unlock()
 	defer tableVer.mu.Unlock()
@@ -337,7 +339,6 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 	evaluator := generated.NewGeneratedColumnEvaluator()
 
 	// Non-transaction update, create new version
-	m.currentVer++
 	newRows := make([]domain.Row, len(sourceData.rows))
 	copy(newRows, sourceData.rows)
 
@@ -373,7 +374,7 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 	}
 
 	versionData := &TableData{
-		version:   m.currentVer,
+		version:   newVer,
 		createdAt: time.Now(),
 		schema: &domain.TableInfo{
 			Name:    sourceData.schema.Name,
@@ -384,8 +385,8 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		rows: newRows,
 	}
 
-	tableVer.versions[m.currentVer] = versionData
-	tableVer.latest = m.currentVer
+	tableVer.versions[newVer] = versionData
+	tableVer.latest = newVer
 
 	return updated, nil
 }
@@ -453,7 +454,9 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		return deleted, nil
 	}
 
-	// Non-transaction mode: lock order: global lock first, then table-level lock
+	// Non-transaction mode: increment version while holding global lock to avoid race
+	m.currentVer++
+	newVer := m.currentVer
 	tableVer.mu.Lock()
 	m.mu.Unlock()
 	defer tableVer.mu.Unlock()
@@ -464,7 +467,6 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 	}
 
 	// Non-transaction delete, create new version
-	m.currentVer++
 	newRows := make([]domain.Row, 0, len(sourceData.rows))
 
 	deleted := int64(0)
@@ -486,7 +488,7 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 	}
 
 	versionData := &TableData{
-		version:   m.currentVer,
+		version:   newVer,
 		createdAt: time.Now(),
 		schema: &domain.TableInfo{
 			Name:    sourceData.schema.Name,
@@ -497,8 +499,8 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		rows: newRows,
 	}
 
-	tableVer.versions[m.currentVer] = versionData
-	tableVer.latest = m.currentVer
+	tableVer.versions[newVer] = versionData
+	tableVer.latest = newVer
 
 	return deleted, nil
 }

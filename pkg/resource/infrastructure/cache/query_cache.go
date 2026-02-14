@@ -48,8 +48,8 @@ func NewQueryCacheWithConfig(maxSize int, ttl time.Duration) *QueryCache {
 
 // Get 获取缓存
 func (c *QueryCache) Get(query string) (*domain.QueryResult, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	entry, exists := c.cache[query]
 	if !exists {

@@ -10,6 +10,22 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/types"
 )
 
+// toFloat64 safely converts a numeric value to float64
+func toFloat64(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	default:
+		return 0, false
+	}
+}
+
 // AggregateOperator 聚合算子
 type AggregateOperator struct {
 	*BaseOperator
@@ -24,7 +40,7 @@ func NewAggregateOperator(p *plan.Plan, das dataaccess.Service) (*AggregateOpera
 	}
 
 	base := NewBaseOperator(p, das)
-	
+
 	// 构建子算子
 	buildFn := func(childPlan *plan.Plan) (Operator, error) {
 		return buildOperator(childPlan, das)
@@ -41,7 +57,7 @@ func NewAggregateOperator(p *plan.Plan, das dataaccess.Service) (*AggregateOpera
 
 // Execute 执行聚合
 func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Aggregate: 聚合函数数: %d, 分组字段数: %d\n", 
+	fmt.Printf("  [EXECUTOR] Aggregate: 聚合函数数: %d, 分组字段数: %d\n",
 		len(op.config.AggFuncs), len(op.config.GroupByCols))
 
 	// 执行子算子
@@ -86,34 +102,36 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 				if _, ok := groups[groupKey][alias]; !ok {
 					groups[groupKey][alias] = 0
 				}
-				count := groups[groupKey][alias].(int)
-				groups[groupKey][alias] = count + 1
+				if count, ok := groups[groupKey][alias].(int); ok {
+					groups[groupKey][alias] = count + 1
+				}
 			case types.Sum:
-				// 简化处理：假设第一列是数值
 				for _, val := range row {
-					if num, ok := val.(int); ok {
-						if _, ok := groups[groupKey][alias]; !ok {
-							groups[groupKey][alias] = 0
+					if num, ok := toFloat64(val); ok {
+						if _, exists := groups[groupKey][alias]; !exists {
+							groups[groupKey][alias] = float64(0)
 						}
-						sum := groups[groupKey][alias].(int)
-						groups[groupKey][alias] = sum + num
+						if sum, ok := toFloat64(groups[groupKey][alias]); ok {
+							groups[groupKey][alias] = sum + num
+						}
 						break
 					}
 				}
 			case types.Avg:
-				// 简化：存储sum和count
 				sumKey := alias + "_sum"
 				countKey := alias + "_count"
 				if _, ok := groups[groupKey][sumKey]; !ok {
-					groups[groupKey][sumKey] = 0
+					groups[groupKey][sumKey] = float64(0)
 					groups[groupKey][countKey] = 0
 				}
 				for _, val := range row {
-					if num, ok := val.(int); ok {
-						sum := groups[groupKey][sumKey].(int)
-						count := groups[groupKey][countKey].(int)
-						groups[groupKey][sumKey] = sum + num
-						groups[groupKey][countKey] = count + 1
+					if num, ok := toFloat64(val); ok {
+						if sum, ok := toFloat64(groups[groupKey][sumKey]); ok {
+							groups[groupKey][sumKey] = sum + num
+						}
+						if count, ok := groups[groupKey][countKey].(int); ok {
+							groups[groupKey][countKey] = count + 1
+						}
 						break
 					}
 				}
@@ -133,10 +151,10 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 				}
 				sumKey := alias + "_sum"
 				countKey := alias + "_count"
-				
-				if sum, ok := group[sumKey].(int); ok {
+
+				if sum, ok := toFloat64(group[sumKey]); ok {
 					if count, ok := group[countKey].(int); ok && count > 0 {
-						group[alias] = sum / count
+						group[alias] = sum / float64(count)
 					}
 				}
 				delete(group, sumKey)

@@ -372,13 +372,17 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 			return nil, err
 		}
 		fmt.Println("  [DEBUG] convertToPlan: Selection")
+		conditions := p.GetConditions()
+		if len(conditions) == 0 {
+			return nil, fmt.Errorf("selection has no conditions")
+		}
 		return &plan.Plan{
-			ID:   fmt.Sprintf("sel_%d", len(p.GetConditions())),
+			ID:   fmt.Sprintf("sel_%d", len(conditions)),
 			Type: plan.TypeSelection,
 			OutputSchema: child.OutputSchema,
 			Children: []*plan.Plan{child},
 			Config: &plan.SelectionConfig{
-				Condition: p.GetConditions()[0],
+				Condition: conditions[0],
 			},
 		}, nil
 	case *LogicalProjection:
@@ -456,6 +460,9 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 		}
 	}
 
+		if len(joinConditions) == 0 {
+			return nil, fmt.Errorf("join has no conditions")
+		}
 		return &plan.Plan{
 			ID:   fmt.Sprintf("join_%s", joinConditions[0].Operator),
 			Type: plan.TypeHashJoin,

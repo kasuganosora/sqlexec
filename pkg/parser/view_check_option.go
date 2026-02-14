@@ -116,8 +116,8 @@ func (cv *CheckOptionValidator) satisfiesWhereClause(row domain.Row, expr *Expre
 	// Evaluate expression
 	result, err := cv.evaluateExpression(row, expr)
 	if err != nil {
-		// Log error but return true to allow operation
-		return true
+		// Fail-safe: reject the operation if validation cannot be performed
+		return false
 	}
 	return result
 }
