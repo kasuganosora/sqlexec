@@ -574,10 +574,9 @@ func TestJoinGraph_LargeGraph(t *testing.T) {
 	stats := graph.GetStats()
 	assert.Equal(t, 10, stats.NodeCount)
 	assert.Equal(t, 9, stats.EdgeCount)
-	// The line graph is actually not considered "connected" by our BFS because
-	// BFS only follows edges in the direction they were added (n0->n1, n1->n2, etc.)
-	// So from n0 we can reach all nodes, but from n9 we can't reach anyone
-	assert.False(t, stats.IsConnected, "Directed line graph is not fully connected backward")
+	// The line graph is connected when treating edges as undirected
+	// (for join planning, connectivity is checked in undirected sense)
+	assert.True(t, stats.IsConnected, "Line graph should be connected when treated as undirected")
 	assert.False(t, stats.IsStar, "Line graph should not be star")
 
 	mst := graph.FindMinSpanningTree()

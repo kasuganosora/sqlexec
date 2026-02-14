@@ -18,8 +18,9 @@ func TestVectorSearchEndToEnd(t *testing.T) {
 
 	// 1. 创建数据源
 	mvccDs := memory.NewMVCCDataSource(&domain.DataSourceConfig{
-		Type: domain.DataSourceTypeMemory,
-		Name: "test_memory",
+		Type:     domain.DataSourceTypeMemory,
+		Name:     "test_memory",
+		Writable: true,
 	})
 	das := dataaccess.NewDataService(mvccDs)
 	
@@ -193,11 +194,12 @@ func TestVectorIndexManagerIntegration(t *testing.T) {
 // TestVectorSearchWithFilters 测试带过滤条件的向量搜索
 func TestVectorSearchWithFilters(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// 创建数据源和索引
 	mvccDs := memory.NewMVCCDataSource(&domain.DataSourceConfig{
-		Type: domain.DataSourceTypeMemory,
-		Name: "test_memory",
+		Type:     domain.DataSourceTypeMemory,
+		Name:     "test_memory",
+		Writable: true,
 	})
 	das := dataaccess.NewDataService(mvccDs)
 	tableInfo := &domain.TableInfo{

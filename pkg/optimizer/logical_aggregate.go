@@ -84,7 +84,13 @@ func (p *LogicalAggregate) Explain() string {
 		if i > 0 {
 			aggStr += ", "
 		}
-		aggStr += fmt.Sprintf("%s(%v)", agg.Type, agg.Expr)
+		// Format: TYPE(expr) AS alias or just TYPE(expr)
+		baseStr := fmt.Sprintf("%s(%v)", agg.Type, agg.Expr)
+		if agg.Alias != "" {
+			aggStr += baseStr + " AS " + agg.Alias
+		} else {
+			aggStr += baseStr
+		}
 	}
 	groupStr := ""
 	groupByCols := p.GetGroupByCols()
