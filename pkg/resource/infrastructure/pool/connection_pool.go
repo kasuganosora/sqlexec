@@ -9,6 +9,16 @@ import (
 	errors "github.com/kasuganosora/sqlexec/pkg/resource/infrastructure/errors"
 )
 
+// safeCloseDB attempts to close a sql.DB, recovering from panics caused by
+// improperly initialized (zero-value) *sql.DB instances.
+func safeCloseDB(db *sql.DB) {
+	if db == nil {
+		return
+	}
+	defer func() { recover() }()
+	db.Close()
+}
+
 // ==================== 连接池 ====================
 
 // ConnectionWrapper 连接包装器
@@ -104,20 +114,25 @@ func (p *ConnectionPool) Get() (*sql.DB, error) {
 	}
 
 	// 查找空闲连接
-	for e := p.connections.Front(); e != nil; e = e.Next() {
+	for e := p.connections.Front(); e != nil; {
+		next := e.Next() // Save next before potential Remove (Remove clears links)
 		conn, ok := e.Value.(*ConnectionWrapper)
 		if ok && !conn.inUse {
 			// 检查连接是否过期
 			if time.Since(conn.lastUsed) > p.idleTimeout {
 				p.connections.Remove(e)
-				p.metrics.DecDeIncrementDestroyed()
+				safeCloseDB(conn.conn)
+				p.metrics.IncDeIncrementDestroyed()
+				e = next
 				continue
 			}
 
 			// 检查连接生命周期
 			if time.Since(conn.createdAt) > p.lifetime {
 				p.connections.Remove(e)
-				p.metrics.DecDeIncrementDestroyed()
+				safeCloseDB(conn.conn)
+				p.metrics.IncDeIncrementDestroyed()
+				e = next
 				continue
 			}
 
@@ -127,6 +142,7 @@ func (p *ConnectionPool) Get() (*sql.DB, error) {
 			p.metrics.IncDeIncrementAcquired()
 			return conn.conn, nil
 		}
+		e = next
 	}
 
 	// 没有空闲连接，需要在实际使用中由调用者提供新连接
@@ -172,11 +188,14 @@ func (p *ConnectionPool) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for e := p.connections.Front(); e != nil; e = e.Next() {
-		if _, ok := e.Value.(*ConnectionWrapper); ok {
+	for e := p.connections.Front(); e != nil; {
+		next := e.Next() // Save next before Remove (Remove clears links)
+		if wrapper, ok := e.Value.(*ConnectionWrapper); ok {
+			safeCloseDB(wrapper.conn)
 			p.connections.Remove(e)
 			p.metrics.IncDeIncrementDestroyed()
 		}
+		e = next
 	}
 
 	return nil
@@ -191,16 +210,22 @@ func (p *ConnectionPool) GetMetrics() *PoolMetrics {
 
 // Stats 获取统计信息
 func (p *ConnectionPool) Stats() map[string]interface{} {
-	metrics := p.GetMetrics()
+	// Snapshot pool fields under lock to avoid races with setters/mutations
+	p.mu.RLock()
+	maxOpen := p.maxOpen
+	maxIdle := p.maxIdle
+	currentOpen := p.connections.Len()
+	p.mu.RUnlock()
+
 	return map[string]interface{}{
-		"max_open":        p.maxOpen,
-		"max_idle":        p.maxIdle,
-		"current_open":    p.connections.Len(),
-		"total_created":   metrics.GetCreated(),
-		"total_destroyed": metrics.GetDestroyed(),
-		"total_acquired":  metrics.GetAcquired(),
-		"total_released":  metrics.GetReleased(),
-		"total_errors":    metrics.GetErrors(),
+		"max_open":        maxOpen,
+		"max_idle":        maxIdle,
+		"current_open":    currentOpen,
+		"total_created":   p.metrics.GetCreated(),
+		"total_destroyed": p.metrics.GetDestroyed(),
+		"total_acquired":  p.metrics.GetAcquired(),
+		"total_released":  p.metrics.GetReleased(),
+		"total_errors":    p.metrics.GetErrors(),
 	}
 }
 

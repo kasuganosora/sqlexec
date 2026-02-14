@@ -2,6 +2,7 @@ package generated
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -15,7 +16,7 @@ type ExpressionCache struct {
 type CachedExpression struct {
 	ExprString  string    // 表达式字符串
 	ParsedAt    time.Time // 解析时间
-	AccessCount  int       // 访问计数
+	AccessCount  int64     // 访问计数（atomic）
 }
 
 // NewExpressionCache 创建表达式缓存
@@ -31,7 +32,7 @@ func (c *ExpressionCache) Get(tableName, columnName string) (string, bool) {
 	key := c.buildKey(tableName, columnName)
 	if value, ok := c.cache.Load(key); ok {
 		if cached, ok := value.(*CachedExpression); ok {
-			cached.AccessCount++
+			atomic.AddInt64(&cached.AccessCount, 1)
 			return cached.ExprString, true
 		}
 	}
@@ -44,7 +45,7 @@ func (c *ExpressionCache) Set(tableName, columnName, exprString string) {
 	cached := &CachedExpression{
 		ExprString:  exprString,
 		ParsedAt:    time.Now(),
-		AccessCount:  0,
+		AccessCount:  int64(0),
 	}
 	c.cache.Store(key, cached)
 }
@@ -77,7 +78,7 @@ func (c *ExpressionCache) GetStats() CacheStats {
 	c.cache.Range(func(key, value interface{}) bool {
 		stats.TotalEntries++
 		if cached, ok := value.(*CachedExpression); ok {
-			stats.TotalAccess += cached.AccessCount
+			stats.TotalAccess += int(atomic.LoadInt64(&cached.AccessCount))
 		}
 		return true
 	})
