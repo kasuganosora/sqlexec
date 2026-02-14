@@ -123,11 +123,18 @@ func (s *CoreSession) createQueryContext(parentCtx context.Context, sql string) 
 	// 如果设置了超时,包装超时上下文
 	var ctx context.Context
 	if timeout > 0 {
-		ctx, queryCtx.CancelFunc = context.WithTimeout(baseCtx, timeout)
-	} else {
-		ctx = baseCtx
+		var timeoutCancel context.CancelFunc
+		ctx, timeoutCancel = context.WithTimeout(baseCtx, timeout)
+		queryCtx.CancelFunc = timeoutCancel
+		// Wrap cancel to release both the timeout timer and the base context
+		combinedCancel := func() {
+			timeoutCancel()
+			cancel()
+		}
+		return ctx, combinedCancel, queryCtx
 	}
 
+	ctx = baseCtx
 	return ctx, cancel, queryCtx
 }
 

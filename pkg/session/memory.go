@@ -44,7 +44,10 @@ func (d *MemoryDriver) GetSessions(ctx context.Context) ([]*Session, error) {
 	defer d.Mutex.RUnlock()
 	sessions := make([]*Session, 0, len(d.SessionMap))
 	for _, session := range d.SessionMap {
-		sessions = append(sessions, session)
+		// Return shallow copies to avoid races on mutable fields (e.g. LastUsed)
+		// when the caller reads them after the lock is released.
+		sessCopy := *session
+		sessions = append(sessions, &sessCopy)
 	}
 	return sessions, nil
 }
