@@ -41,8 +41,6 @@ func NewProjectionOperator(p *plan.Plan, das dataaccess.Service) (*ProjectionOpe
 
 // Execute 执行投影
 func (op *ProjectionOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Projection: 表达式数: %d\n", len(op.config.Expressions))
-
 	// 执行子算子
 	if len(op.children) == 0 {
 		return nil, fmt.Errorf("ProjectionOperator requires at least 1 child")

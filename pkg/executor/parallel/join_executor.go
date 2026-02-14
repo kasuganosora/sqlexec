@@ -49,11 +49,8 @@ func NewParallelHashJoinExecutor(
 
 // Execute 执行并行哈希连接
 func (phje *ParallelHashJoinExecutor) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [PARALLEL JOIN] Starting parallel %s join, leftRows=%d, rightRows=%d, buildParallel=%d, probeParallel=%d\n",
-		phje.joinType, len(phje.left.Rows), len(phje.right.Rows),
-		phje.buildParallel, phje.probeParallel)
-
 	// 并行构建和探测哈希表
+	// Use buffered channels large enough to avoid goroutine leaks
 	resultChan := make(chan *domain.QueryResult, 2)
 	errChan := make(chan error, 2)
 
@@ -62,8 +59,9 @@ func (phje *ParallelHashJoinExecutor) Execute(ctx context.Context) (*domain.Quer
 	// 并行探测哈希表
 	go phje.probeHashTable(ctx, resultChan, errChan)
 
-	// 等待结果
+	// 等待结果 - must collect exactly 2 signals (one from build, one from probe)
 	var results [2]*domain.QueryResult
+	var firstErr error
 	for i := 0; i < 2; i++ {
 		select {
 		case result := <-resultChan:
@@ -71,18 +69,23 @@ func (phje *ParallelHashJoinExecutor) Execute(ctx context.Context) (*domain.Quer
 				results[i] = result
 			}
 		case err := <-errChan:
-			if err != nil {
-				return nil, err
+			if err != nil && firstErr == nil {
+				firstErr = err
 			}
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			if firstErr == nil {
+				firstErr = ctx.Err()
+			}
 		}
+	}
+
+	if firstErr != nil {
+		return nil, firstErr
 	}
 
 	// 合并结果
 	merged := phje.mergeJoinResults(results)
 
-	fmt.Printf("  [PARALLEL JOIN] Completed: %d rows\n", len(merged.Rows))
 	return merged, nil
 }
 
@@ -140,9 +143,9 @@ func (phje *ParallelHashJoinExecutor) buildHashTable(ctx context.Context, result
 	// 等待构建完成
 	go func() {
 		wg.Wait()
+		close(workerErrs)
 
 		// 检查错误
-		close(workerErrs)
 		for err := range workerErrs {
 			if err != nil {
 				errChan <- err
@@ -151,7 +154,12 @@ func (phje *ParallelHashJoinExecutor) buildHashTable(ctx context.Context, result
 		}
 
 		// 构建完成，通知探测阶段可以开始
-		close(phje.hashTableReady)
+		select {
+		case <-phje.hashTableReady:
+			// already closed (should not happen in normal flow)
+		default:
+			close(phje.hashTableReady)
+		}
 
 		// 发送构建完成信号到resultChan
 		resultChan <- nil
@@ -218,9 +226,9 @@ func (phje *ParallelHashJoinExecutor) probeHashTable(ctx context.Context, result
 	// 等待探测完成
 	go func() {
 		wg.Wait()
+		close(workerErrs)
 
 		// 检查错误
-		close(workerErrs)
 		for err := range workerErrs {
 			if err != nil {
 				errChan <- err
@@ -229,10 +237,15 @@ func (phje *ParallelHashJoinExecutor) probeHashTable(ctx context.Context, result
 		}
 
 		// 探测完成
+		mu.Lock()
+		finalResults := make([]domain.Row, len(results))
+		copy(finalResults, results)
+		mu.Unlock()
+
 		resultChan <- &domain.QueryResult{
-			Rows:    results,
+			Rows:    finalResults,
 			Columns: phje.mergeColumns(phje.left.Columns, phje.right.Columns),
-			Total:   int64(len(results)),
+			Total:   int64(len(finalResults)),
 		}
 	}()
 }

@@ -59,53 +59,59 @@ func NewObjectPool(factory func() (interface{}, error), destroy func(interface{}
 
 // Get 获取对象
 func (p *ObjectPool) Get(ctx context.Context) (interface{}, error) {
-	p.mu.Lock()
+	const maxRetries = 100
 
-	// 检查池是否已关闭
-	if p.closed {
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		p.mu.Lock()
+
+		// 检查池是否已关闭
+		if p.closed {
+			p.mu.Unlock()
+			return nil, ErrPoolClosed
+		}
+
+		// 尝试从空闲队列获取
+		if len(p.idle) > 0 {
+			obj := p.idle[len(p.idle)-1]
+			p.idle = p.idle[:len(p.idle)-1]
+			p.active[obj] = struct{}{}
+			p.acquireCount++
+			p.mu.Unlock()
+			return obj, nil
+		}
+
+		// 检查是否达到最大限制
+		if len(p.active) >= p.maxSize {
+			// 等待对象释放
+			p.waitCount++
+			p.mu.Unlock()
+
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Millisecond * 10):
+				// 超时重试（loop instead of recursion）
+				continue
+			}
+		}
+
+		// 创建新对象
 		p.mu.Unlock()
-		return nil, ErrPoolClosed
-	}
+		obj, err := p.factory()
+		if err != nil {
+			return nil, err
+		}
 
-	// 尝试从空闲队列获取
-	if len(p.idle) > 0 {
-		obj := p.idle[len(p.idle)-1]
-		p.idle = p.idle[:len(p.idle)-1]
+		p.mu.Lock()
 		p.active[obj] = struct{}{}
+		p.createCount++
 		p.acquireCount++
 		p.mu.Unlock()
+
 		return obj, nil
 	}
 
-	// 检查是否达到最大限制
-	if len(p.active) >= p.maxSize {
-		// 等待对象释放
-		p.waitCount++
-		p.mu.Unlock()
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(time.Millisecond * 10):
-			// 超时重试
-			return p.Get(ctx)
-		}
-	}
-
-	// 创建新对象
-	p.mu.Unlock()
-	obj, err := p.factory()
-	if err != nil {
-		return nil, err
-	}
-
-	p.mu.Lock()
-	p.active[obj] = struct{}{}
-	p.createCount++
-	p.acquireCount++
-	p.mu.Unlock()
-
-	return obj, nil
+	return nil, ErrPoolEmpty
 }
 
 // Put 归还对象
@@ -233,8 +239,16 @@ func (p *GoroutinePool) worker(id int) {
 
 	for {
 		select {
-		case task := <-p.taskQueue:
-			task()
+		case task, ok := <-p.taskQueue:
+			if !ok {
+				return
+			}
+			func() {
+				defer func() {
+					recover() // prevent worker crash from panicking tasks
+				}()
+				task()
+			}()
 		case <-p.ctx.Done():
 			return
 		}
@@ -261,13 +275,11 @@ func (p *GoroutinePool) Close() error {
 
 	p.cancel()
 	p.wg.Wait()
-	// 等待 worker 退出后再关闭通道
-	select {
-	case <-p.taskQueue:
-		// 清空队列
-	default:
-	}
+	// 等待 worker 退出后再关闭通道并排空队列
 	close(p.taskQueue)
+	for range p.taskQueue {
+		// drain remaining tasks
+	}
 	return nil
 }
 

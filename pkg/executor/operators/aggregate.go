@@ -57,9 +57,6 @@ func NewAggregateOperator(p *plan.Plan, das dataaccess.Service) (*AggregateOpera
 
 // Execute 执行聚合
 func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Aggregate: 聚合函数数: %d, 分组字段数: %d\n",
-		len(op.config.AggFuncs), len(op.config.GroupByCols))
-
 	// 执行子算子
 	if len(op.children) == 0 {
 		return nil, fmt.Errorf("AggregateOperator requires at least 1 child")
@@ -106,15 +103,16 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 					groups[groupKey][alias] = count + 1
 				}
 			case types.Sum:
-				for _, val := range row {
-					if num, ok := toFloat64(val); ok {
-						if _, exists := groups[groupKey][alias]; !exists {
-							groups[groupKey][alias] = float64(0)
+				if agg.Expr != nil && agg.Expr.Column != "" {
+					if val, ok := row[agg.Expr.Column]; ok {
+						if num, ok := toFloat64(val); ok {
+							if _, exists := groups[groupKey][alias]; !exists {
+								groups[groupKey][alias] = float64(0)
+							}
+							if sum, ok := toFloat64(groups[groupKey][alias]); ok {
+								groups[groupKey][alias] = sum + num
+							}
 						}
-						if sum, ok := toFloat64(groups[groupKey][alias]); ok {
-							groups[groupKey][alias] = sum + num
-						}
-						break
 					}
 				}
 			case types.Avg:
@@ -124,15 +122,16 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 					groups[groupKey][sumKey] = float64(0)
 					groups[groupKey][countKey] = 0
 				}
-				for _, val := range row {
-					if num, ok := toFloat64(val); ok {
-						if sum, ok := toFloat64(groups[groupKey][sumKey]); ok {
-							groups[groupKey][sumKey] = sum + num
+				if agg.Expr != nil && agg.Expr.Column != "" {
+					if val, ok := row[agg.Expr.Column]; ok {
+						if num, ok := toFloat64(val); ok {
+							if sum, ok := toFloat64(groups[groupKey][sumKey]); ok {
+								groups[groupKey][sumKey] = sum + num
+							}
+							if count, ok := groups[groupKey][countKey].(int); ok {
+								groups[groupKey][countKey] = count + 1
+							}
 						}
-						if count, ok := groups[groupKey][countKey].(int); ok {
-							groups[groupKey][countKey] = count + 1
-						}
-						break
 					}
 				}
 			}

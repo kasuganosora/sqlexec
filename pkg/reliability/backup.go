@@ -3,6 +3,7 @@ package reliability
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -380,11 +381,8 @@ func calculateRecordCount(data interface{}) int {
 
 // calculateChecksum 计算校验和
 func calculateChecksum(data []byte) string {
-	sum := 0
-	for _, b := range data {
-		sum += int(b)
-	}
-	return fmt.Sprintf("%x", sum)
+	hash := sha256.Sum256(data)
+	return fmt.Sprintf("%x", hash)
 }
 
 // ExportMetadata 导出备份元数据

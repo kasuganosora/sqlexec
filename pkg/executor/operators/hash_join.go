@@ -40,23 +40,6 @@ func NewHashJoinOperator(p *plan.Plan, das dataaccess.Service) (*HashJoinOperato
 
 // Execute 执行Hash Join
 func (op *HashJoinOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	joinTypeStr := ""
-	switch op.config.JoinType {
-	case 0:
-		joinTypeStr = "INNER"
-	case 1:
-		joinTypeStr = "LEFT OUTER"
-	case 2:
-		joinTypeStr = "RIGHT OUTER"
-	case 3:
-		joinTypeStr = "FULL OUTER"
-	case 4:
-		joinTypeStr = "CROSS"
-	default:
-		joinTypeStr = "UNKNOWN"
-	}
-	fmt.Printf("  [EXECUTOR] HashJoin: 执行JOIN, 类型: %s\n", joinTypeStr)
-
 	// 获取左右子算子
 	if len(op.children) < 2 {
 		return nil, fmt.Errorf("HashJoin requires 2 children, got %d", len(op.children))

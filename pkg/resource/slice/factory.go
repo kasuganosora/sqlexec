@@ -39,11 +39,9 @@ func (f *Factory) Create(config *domain.DataSourceConfig) (domain.DataSource, er
 	}
 
 	// 获取是否可写
-	writable := true
+	writable := config.Writable
 	if val, ok := config.Options["writable"].(bool); ok {
 		writable = val
-	} else if config.Writable {
-		writable = config.Writable
 	}
 
 	// 获取是否支持 MVCC

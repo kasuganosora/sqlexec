@@ -250,9 +250,10 @@ func TestCSVFactory(t *testing.T) {
 		t.Errorf("GetType() = %v, want %v", dsType, domain.DataSourceTypeCSV)
 	}
 
-	// 测试 Create - 使用config.Name作为文件路径
+	// 测试 Create
 	config := &domain.DataSourceConfig{
 		Name:     "test_csv_factory",
+		Database: "test_csv_factory.csv",
 		Writable: true,
 		Options:  map[string]interface{}{"writable": true},
 	}

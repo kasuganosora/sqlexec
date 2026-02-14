@@ -1,6 +1,8 @@
 package json
 
 import (
+	"fmt"
+
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
@@ -19,6 +21,19 @@ func (f *JSONFactory) GetType() domain.DataSourceType {
 
 // Create 实现 DataSourceFactory 接口
 func (f *JSONFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
-	// 使用JSONAdapter（继承MVCCDataSource）
-	return NewJSONAdapter(config, config.Name), nil
+	if config == nil {
+		return nil, fmt.Errorf("json factory: config cannot be nil")
+	}
+	filePath := config.Database
+	if config.Options != nil {
+		if p, ok := config.Options["path"]; ok {
+			if str, ok := p.(string); ok && str != "" {
+				filePath = str
+			}
+		}
+	}
+	if filePath == "" {
+		return nil, fmt.Errorf("json factory: file path required (set config.Database or options[\"path\"])")
+	}
+	return NewJSONAdapter(config, filePath), nil
 }

@@ -82,12 +82,17 @@ func (m *Manager) GetStats() map[string]interface{} {
 
 // HealthCheck 健康检查
 func (m *Manager) HealthCheck(ctx context.Context) map[string]bool {
+	// 复制数据源引用，避免在持有锁时调用外部方法
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	results := make(map[string]bool)
+	dataSourcesToCheck := make(map[string]domain.DataSource, len(m.dataSources))
 	for name, ds := range m.dataSources {
-		_, err := ds.GetTableInfo(ctx, "test")
+		dataSourcesToCheck[name] = ds
+	}
+	m.mu.RUnlock()
+
+	results := make(map[string]bool, len(dataSourcesToCheck))
+	for name, ds := range dataSourcesToCheck {
+		_, err := ds.GetTables(ctx)
 		results[name] = err == nil
 	}
 	return results

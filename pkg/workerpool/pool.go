@@ -260,10 +260,35 @@ func (p *Pool) SubmitWait(ctx context.Context, task Task) error {
 
 // SubmitFunc submits a function that returns a value
 func (p *Pool) SubmitFunc(ctx context.Context, fn TaskFunc) (<-chan Result, error) {
-	task := func(ctx context.Context) error {
-		return nil // Will be handled differently
+	if !p.running.Load() || p.closed.Load() {
+		return nil, ErrPoolClosed
 	}
-	return p.Submit(ctx, task)
+
+	resultCh := make(chan Result, 1)
+	wrapper := taskWrapper{
+		task: func(ctx context.Context) error {
+			val, err := fn(ctx)
+			select {
+			case resultCh <- Result{Value: val, Error: err}:
+			default:
+			}
+			return err
+		},
+		result: nil, // result is sent directly to resultCh by the task
+		ctx:    ctx,
+	}
+
+	select {
+	case p.tasks <- wrapper:
+		if p.config.EnableDynamicScaling {
+			go p.maybeScaleUp()
+		}
+		return resultCh, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-p.ctx.Done():
+		return nil, ErrPoolClosed
+	}
 }
 
 // SubmitBatch submits multiple tasks and returns a channel for all results

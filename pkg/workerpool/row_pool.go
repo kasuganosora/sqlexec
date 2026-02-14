@@ -2,6 +2,7 @@ package workerpool
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
@@ -29,10 +30,10 @@ func NewRowPool() *RowPool {
 func (rp *RowPool) Get() domain.Row {
 	v := rp.pool.Get()
 	if v == nil {
-		rp.allocCnt++
+		atomic.AddInt64(&rp.allocCnt, 1)
 		return make(domain.Row)
 	}
-	rp.reuseCnt++
+	atomic.AddInt64(&rp.reuseCnt, 1)
 	row := v.(domain.Row)
 	// Clear the map for reuse
 	for k := range row {
@@ -50,21 +51,24 @@ func (rp *RowPool) Put(row domain.Row) {
 	for k := range row {
 		delete(row, k)
 	}
-	rp.returnCnt++
+	atomic.AddInt64(&rp.returnCnt, 1)
 	rp.pool.Put(row)
 }
 
 // Stats returns pool statistics
 func (rp *RowPool) Stats() RowPoolStats {
-	total := rp.allocCnt + rp.reuseCnt
+	allocs := atomic.LoadInt64(&rp.allocCnt)
+	reuses := atomic.LoadInt64(&rp.reuseCnt)
+	returns := atomic.LoadInt64(&rp.returnCnt)
+	total := allocs + reuses
 	var reuseRate float64
 	if total > 0 {
-		reuseRate = float64(rp.reuseCnt) / float64(total) * 100
+		reuseRate = float64(reuses) / float64(total) * 100
 	}
 	return RowPoolStats{
-		Allocations: rp.allocCnt,
-		Reuses:      rp.reuseCnt,
-		Returns:     rp.returnCnt,
+		Allocations: allocs,
+		Reuses:      reuses,
+		Returns:     returns,
 		ReuseRate:   reuseRate,
 	}
 }

@@ -286,6 +286,8 @@ func (s *Session) GetNextSequenceID() uint8 {
 
 // ResetSequenceID 重置序列号为0
 func (s *Session) ResetSequenceID() {
+	s.sequenceMu.Lock()
+	defer s.sequenceMu.Unlock()
 	s.SequenceID = 0
 }
 

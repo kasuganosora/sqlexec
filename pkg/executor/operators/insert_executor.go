@@ -32,9 +32,6 @@ func NewInsertOperator(p *plan.Plan, das dataaccess.Service) (*InsertOperator, e
 
 // Execute 执行INSERT
 func (op *InsertOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Insert: 插入到表 %s, 列数: %d, 行数: %d\n",
-		op.config.TableName, len(op.config.Columns), len(op.config.Values))
-
 	var rowsAffected int64
 	var lastInsertID int64
 	var err error
@@ -100,7 +97,6 @@ func (op *InsertOperator) Execute(ctx context.Context) (*domain.QueryResult, err
 		Total: 1,
 	}
 
-	fmt.Printf("  [EXECUTOR] Insert: 成功插入 %d 行\n", rowsAffected)
 	return result, nil
 }
 
@@ -137,20 +133,34 @@ func (op *InsertOperator) insertRow(ctx context.Context, row []interface{}) erro
 
 	err := op.dataAccessService.Insert(ctx, op.config.TableName, insertData)
 	if err != nil {
-		return fmt.Errorf("insert data failed: %w", err)
-	}
-
-	// 处理 ON DUPLICATE KEY UPDATE
-	if op.config.OnDuplicate != nil {
-		for col, expr := range *op.config.OnDuplicate {
-			value := op.evaluateExpression(expr)
-			updateData := map[string]interface{}{col: value}
-			
-			err := op.dataAccessService.Update(ctx, op.config.TableName, updateData, nil)
-			if err != nil {
-				return fmt.Errorf("ON DUPLICATE KEY UPDATE failed: %w", err)
+		// 处理 ON DUPLICATE KEY UPDATE：仅在插入失败时才执行更新
+		if op.config.OnDuplicate != nil {
+			// 构建更新数据
+			updateData := make(map[string]interface{})
+			for col, expr := range *op.config.OnDuplicate {
+				updateData[col] = op.evaluateExpression(expr)
 			}
+
+			// 使用插入数据构建过滤条件，只更新匹配行
+			subFilters := make([]domain.Filter, 0, len(insertData))
+			for k, v := range insertData {
+				subFilters = append(subFilters, domain.Filter{
+					Field:    k,
+					Operator: "=",
+					Value:    v,
+				})
+			}
+			filter := &domain.Filter{
+				Logic:      "AND",
+				SubFilters: subFilters,
+			}
+
+			if updateErr := op.dataAccessService.Update(ctx, op.config.TableName, updateData, filter); updateErr != nil {
+				return fmt.Errorf("ON DUPLICATE KEY UPDATE failed: %w", updateErr)
+			}
+			return nil
 		}
+		return fmt.Errorf("insert data failed: %w", err)
 	}
 
 	return nil

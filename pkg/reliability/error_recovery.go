@@ -61,9 +61,10 @@ type RecoveryStrategy struct {
 
 // ErrorRecoveryManager 错误恢复管理器
 type ErrorRecoveryManager struct {
-	strategies map[ErrorType]*RecoveryStrategy
-	errorLog   []*ErrorInfo
-	logLock    sync.RWMutex
+	strategies     map[ErrorType]*RecoveryStrategy
+	strategiesLock sync.RWMutex
+	errorLog       []*ErrorInfo
+	logLock        sync.RWMutex
 }
 
 // NewErrorRecoveryManager 创建错误恢复管理器
@@ -76,12 +77,16 @@ func NewErrorRecoveryManager() *ErrorRecoveryManager {
 
 // RegisterStrategy 注册恢复策略
 func (m *ErrorRecoveryManager) RegisterStrategy(errorType ErrorType, strategy *RecoveryStrategy) {
+	m.strategiesLock.Lock()
 	m.strategies[errorType] = strategy
+	m.strategiesLock.Unlock()
 }
 
 // ExecuteWithRetry 使用重试执行操作
 func (m *ErrorRecoveryManager) ExecuteWithRetry(errorType ErrorType, fn func() error) error {
+	m.strategiesLock.RLock()
 	strategy, ok := m.strategies[errorType]
+	m.strategiesLock.RUnlock()
 	if !ok {
 		// 默认策略：重试3次，间隔1秒
 		strategy = &RecoveryStrategy{
@@ -136,7 +141,9 @@ func (m *ErrorRecoveryManager) ExecuteWithRetry(errorType ErrorType, fn func() e
 
 // ExecuteWithFallback 使用备用方案执行
 func (m *ErrorRecoveryManager) ExecuteWithFallback(errorType ErrorType, primary, fallback func() error) error {
+	m.strategiesLock.RLock()
 	strategy, ok := m.strategies[errorType]
+	m.strategiesLock.RUnlock()
 	if ok && strategy.Action == ActionFallback {
 		// 执行备用方案
 		err := fallback()
@@ -229,7 +236,9 @@ func (m *ErrorRecoveryManager) IsRetryable(err error) bool {
 		return false
 	}
 
+	m.strategiesLock.RLock()
 	strategy, ok := m.strategies[ErrorTypeConnection]
+	m.strategiesLock.RUnlock()
 	if ok && strategy.Action == ActionRetry {
 		return true
 	}
@@ -239,6 +248,7 @@ func (m *ErrorRecoveryManager) IsRetryable(err error) bool {
 
 // CircuitBreaker 断路器
 type CircuitBreaker struct {
+	mu               sync.Mutex
 	failureThreshold int
 	failureCount     int
 	successThreshold int
@@ -269,28 +279,33 @@ func NewCircuitBreaker(failureThreshold int, timeout time.Duration) *CircuitBrea
 
 // Execute 执行操作（带断路器保护）
 func (cb *CircuitBreaker) Execute(fn func() error) error {
+	cb.mu.Lock()
 	if cb.state == StateOpen {
 		if time.Since(cb.lastFailureTime) > cb.timeout {
 			cb.state = StateHalfOpen
 			cb.successCount = 0
 		} else {
+			cb.mu.Unlock()
 			return errors.New("circuit breaker is open")
 		}
 	}
+	cb.mu.Unlock()
 
 	err := fn()
 
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 	if err != nil {
-		cb.onFailure()
+		cb.onFailureLocked()
 		return err
 	}
 
-	cb.onSuccess()
+	cb.onSuccessLocked()
 	return nil
 }
 
-// onSuccess 成功回调
-func (cb *CircuitBreaker) onSuccess() {
+// onSuccessLocked 成功回调（调用者已持有锁）
+func (cb *CircuitBreaker) onSuccessLocked() {
 	cb.failureCount = 0
 
 	if cb.state == StateHalfOpen {
@@ -301,8 +316,8 @@ func (cb *CircuitBreaker) onSuccess() {
 	}
 }
 
-// onFailure 失败回调
-func (cb *CircuitBreaker) onFailure() {
+// onFailureLocked 失败回调（调用者已持有锁）
+func (cb *CircuitBreaker) onFailureLocked() {
 	cb.failureCount++
 	cb.lastFailureTime = time.Now()
 
@@ -313,11 +328,15 @@ func (cb *CircuitBreaker) onFailure() {
 
 // GetState 获取断路器状态
 func (cb *CircuitBreaker) GetState() CircuitState {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 	return cb.state
 }
 
 // Reset 重置断路器
 func (cb *CircuitBreaker) Reset() {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
 	cb.failureCount = 0
 	cb.successCount = 0
 	cb.state = StateClosed

@@ -24,7 +24,7 @@ type ExcelAdapter struct {
 // NewExcelAdapter 创建Excel数据源适配器
 func NewExcelAdapter(config *domain.DataSourceConfig, filePath string) *ExcelAdapter {
 	sheetName := ""
-	writable := false // Excel默认只读
+	writable := config.Writable
 
 	// 从配置中读取选项
 	if config.Options != nil {
@@ -40,11 +40,12 @@ func NewExcelAdapter(config *domain.DataSourceConfig, filePath string) *ExcelAda
 		}
 	}
 
-	// 确保config.Writable与writable一致
-	config.Writable = writable
+	// 创建内部配置副本，确保 Writable 与 Options 一致
+	internalConfig := *config
+	internalConfig.Writable = writable
 
 	return &ExcelAdapter{
-		MVCCDataSource: memory.NewMVCCDataSource(config),
+		MVCCDataSource: memory.NewMVCCDataSource(&internalConfig),
 		filePath:       filePath,
 		sheetName:      sheetName,
 		writable:       writable,
@@ -56,7 +57,7 @@ func (a *ExcelAdapter) Connect(ctx context.Context) error {
 	// 打开Excel文件
 	file, err := excelize.OpenFile(a.filePath)
 	if err != nil {
-		return domain.NewErrNotConnected("excel")
+		return fmt.Errorf("failed to open Excel file %q: %w", a.filePath, err)
 	}
 
 	a.file = file
@@ -132,21 +133,26 @@ func (a *ExcelAdapter) Connect(ctx context.Context) error {
 
 // Close 关闭连接 - 可选写回Excel文件
 func (a *ExcelAdapter) Close(ctx context.Context) error {
+	var writeBackErr error
 	// 如果是可写模式，需要写回Excel文件
 	if a.writable && a.file != nil {
 		if err := a.writeBack(); err != nil {
-			return fmt.Errorf("failed to write back Excel file: %w", err)
+			writeBackErr = fmt.Errorf("failed to write back Excel file: %w", err)
 		}
 	}
 
-	// 关闭Excel文件
+	// 始终关闭Excel文件
 	if a.file != nil {
 		a.file.Close()
 		a.file = nil
 	}
 
-	// 关闭MVCC数据源
-	return a.MVCCDataSource.Close(ctx)
+	// 始终关闭MVCC数据源
+	closeErr := a.MVCCDataSource.Close(ctx)
+	if writeBackErr != nil {
+		return writeBackErr
+	}
+	return closeErr
 }
 
 // GetConfig 获取数据源配置
@@ -360,7 +366,7 @@ func (a *ExcelAdapter) parseValue(value string, colType string) interface{} {
 }
 
 // writeBack 写回Excel文件
-func (a *ExcelAdapter) writeBack() error {
+func (a *ExcelAdapter) writeBack() (retErr error) {
 	// 获取最新数据
 	schema, rows, err := a.GetLatestTableData(a.sheetName)
 	if err != nil {
@@ -373,6 +379,13 @@ func (a *ExcelAdapter) writeBack() error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp sheet: %w", err)
 	}
+
+	// 确保出错时清理临时 sheet
+	defer func() {
+		if retErr != nil {
+			_ = a.file.DeleteSheet(tmpSheet)
+		}
+	}()
 
 	// 写入 header 到临时 sheet
 	for i, col := range schema.Columns {
@@ -403,8 +416,6 @@ func (a *ExcelAdapter) writeBack() error {
 
 	// 临时 sheet 写入成功后，删除旧 sheet 并重命名
 	if err := a.file.DeleteSheet(a.sheetName); err != nil {
-		// 清理临时 sheet
-		_ = a.file.DeleteSheet(tmpSheet)
 		return fmt.Errorf("failed to delete old sheet: %w", err)
 	}
 

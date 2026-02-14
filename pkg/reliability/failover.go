@@ -319,8 +319,9 @@ func (lb *LoadBalancer) NextNode() *Node {
 		return nil
 	}
 
-	node := healthyNodes[lb.current]
-	lb.current = (lb.current + 1) % len(healthyNodes)
+	idx := lb.current % len(healthyNodes)
+	node := healthyNodes[idx]
+	lb.current = (idx + 1) % len(healthyNodes)
 
 	return node
 }

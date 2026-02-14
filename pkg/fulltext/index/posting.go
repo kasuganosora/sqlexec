@@ -30,16 +30,24 @@ func NewPostingsList(termID int64) *PostingsList {
 	}
 }
 
-// AddPosting 添加倒排项
+// AddPosting 添加倒排项（维护按DocID排序的顺序）
 func (pl *PostingsList) AddPosting(posting Posting) {
-	pl.Postings = append(pl.Postings, posting)
+	// 使用二分查找找到插入位置以保持DocID有序
+	idx := sort.Search(len(pl.Postings), func(i int) bool {
+		return pl.Postings[i].DocID >= posting.DocID
+	})
+
+	// 插入到正确位置
+	pl.Postings = append(pl.Postings, Posting{})
+	copy(pl.Postings[idx+1:], pl.Postings[idx:])
+	pl.Postings[idx] = posting
 	pl.DocCount++
-	
+
 	// 更新最大分数
 	if posting.BM25Score > pl.MaxScore {
 		pl.MaxScore = posting.BM25Score
 	}
-	
+
 	// 更新跳表（每N个文档添加一个跳点）
 	skipInterval := 64
 	if len(pl.Postings)%skipInterval == 0 {

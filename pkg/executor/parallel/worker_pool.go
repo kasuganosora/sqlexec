@@ -10,12 +10,13 @@ import (
 // WorkerPool 工作池
 // 管理并发worker的生命周期，避免频繁创建和销毁goroutine
 type WorkerPool struct {
-	workers     []worker
-	taskQueue   chan Task
-	workerCount int
-	wg          sync.WaitGroup
-	shutdown    chan struct{}
-	mu          sync.Mutex
+	workers        []worker
+	taskQueue      chan Task
+	workerCount    int
+	wg             sync.WaitGroup
+	shutdown       chan struct{}
+	dispatcherDone chan struct{} // signals when dispatcher goroutine has exited
+	mu             sync.Mutex
 
 	// Task tracking
 	taskWg     sync.WaitGroup
@@ -51,10 +52,11 @@ func NewWorkerPool(workerCount int) *WorkerPool {
 	}
 
 	wp := &WorkerPool{
-		workers:     make([]worker, workerCount),
-		taskQueue:   make(chan Task, workerCount*2), // buffered queue
-		workerCount: workerCount,
-		shutdown:    make(chan struct{}),
+		workers:        make([]worker, workerCount),
+		taskQueue:      make(chan Task, workerCount*2), // buffered queue
+		workerCount:    workerCount,
+		shutdown:       make(chan struct{}),
+		dispatcherDone: make(chan struct{}),
 	}
 
 	// Initialize workers
@@ -83,6 +85,7 @@ func NewWorkerPool(workerCount int) *WorkerPool {
 // dispatch distributes tasks from taskQueue to workers
 func (wp *WorkerPool) dispatch() {
 	defer wp.wg.Done()
+	defer close(wp.dispatcherDone)
 	workerIdx := 0
 	for {
 		select {
@@ -286,14 +289,13 @@ func (wp *WorkerPool) GetStats() WorkerPoolStats {
 	}
 }
 
-// getActiveWorkerCount 获取活跃worker数量
+// getActiveWorkerCount 获取活跃worker数量（estimated by queue occupancy）
 func (wp *WorkerPool) getActiveWorkerCount() int {
+	// Count workers that have pending tasks (non-destructive check)
 	activeCount := 0
 	for _, w := range wp.workers {
-		select {
-		case <-w.taskChan:
+		if len(w.taskChan) > 0 {
 			activeCount++
-		default:
 		}
 	}
 	return activeCount
@@ -342,22 +344,22 @@ func (wp *WorkerPool) Resize(newWorkerCount int) {
 
 // Shutdown gracefully shuts down the worker pool
 func (wp *WorkerPool) Shutdown() {
-	// Signal shutdown
+	// Signal shutdown and close task queue to stop dispatcher
 	close(wp.shutdown)
-
-	// Close task queue to stop dispatcher
 	close(wp.taskQueue)
 
+	// Wait for dispatcher to exit before closing worker channels
+	// This prevents the race where dispatcher sends on taskChan while we close it
+	<-wp.dispatcherDone
+
 	wp.mu.Lock()
-	// Stop all workers by closing their channels first
-	// Workers will exit gracefully when channels are closed
+	// Now it's safe to close worker task channels since dispatcher is done
 	for _, w := range wp.workers {
 		close(w.taskChan)
-		close(w.done)
 	}
 	wp.mu.Unlock()
 
-	// Wait for all workers and dispatcher to complete
+	// Wait for all workers to complete
 	wp.wg.Wait()
 
 	wp.mu.Lock()

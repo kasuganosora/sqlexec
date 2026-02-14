@@ -2,6 +2,7 @@ package workerpool
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 )
@@ -62,6 +63,7 @@ func (sp *ScanPool) ExecuteParallel(ctx context.Context, tasks []ScanTask) ([]Sc
 	}
 
 	results := make([]ScanResult, len(tasks))
+	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var errCount int64
 	var panicCount int64
@@ -79,30 +81,39 @@ func (sp *ScanPool) ExecuteParallel(ctx context.Context, tasks []ScanTask) ([]Sc
 			defer func() {
 				if r := recover(); r != nil {
 					atomic.AddInt64(&panicCount, 1)
+					mu.Lock()
 					results[idx] = ScanResult{
 						TaskID: task.ID,
 						Error:  ErrTaskPanic,
 					}
+					mu.Unlock()
 				}
 			}()
 
 			result, err := sp.scanFunc(ctx, task)
 			if err != nil {
 				atomic.AddInt64(&errCount, 1)
+				mu.Lock()
 				results[idx] = ScanResult{
 					TaskID: task.ID,
 					Error:  err,
 				}
+				mu.Unlock()
 				return
 			}
+			mu.Lock()
 			results[idx] = result
+			mu.Unlock()
 		}()
 	}
 
 	wg.Wait()
 
-	if panicCount > 0 || errCount > 0 {
+	if panicCount > 0 {
 		return results, ErrTaskPanic
+	}
+	if errCount > 0 {
+		return results, errors.New("workerpool: one or more scan tasks failed")
 	}
 
 	return results, nil
@@ -162,7 +173,7 @@ func (sp *ScanPool) ExecuteParallelWithPool(ctx context.Context, tasks []ScanTas
 	wg.Wait()
 
 	if errCount > 0 {
-		return results, ErrTaskPanic
+		return results, errors.New("workerpool: one or more scan tasks failed")
 	}
 
 	return results, nil

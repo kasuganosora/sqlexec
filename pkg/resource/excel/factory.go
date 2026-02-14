@@ -1,6 +1,8 @@
 package excel
 
 import (
+	"fmt"
+
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
@@ -19,6 +21,19 @@ func (f *ExcelFactory) GetType() domain.DataSourceType {
 
 // Create 实现DataSourceFactory接口
 func (f *ExcelFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
-	// 使用ExcelAdapter（继承MVCCDataSource）
-	return NewExcelAdapter(config, config.Name), nil
+	if config == nil {
+		return nil, fmt.Errorf("excel factory: config cannot be nil")
+	}
+	filePath := config.Database
+	if config.Options != nil {
+		if p, ok := config.Options["path"]; ok {
+			if str, ok := p.(string); ok && str != "" {
+				filePath = str
+			}
+		}
+	}
+	if filePath == "" {
+		return nil, fmt.Errorf("excel factory: file path required (set config.Database or options[\"path\"])")
+	}
+	return NewExcelAdapter(config, filePath), nil
 }

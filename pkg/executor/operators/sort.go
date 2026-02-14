@@ -42,8 +42,6 @@ func NewSortOperator(p *plan.Plan, das dataaccess.Service) (*SortOperator, error
 
 // Execute 执行排序
 func (op *SortOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Sort: 排序字段数: %d\n", len(op.config.OrderByItems))
-
 	// 执行子算子
 	if len(op.children) == 0 {
 		return nil, fmt.Errorf("SortOperator requires at least 1 child")
@@ -58,30 +56,28 @@ func (op *SortOperator) Execute(ctx context.Context) (*domain.QueryResult, error
 	sortedRows := make([]domain.Row, len(childResult.Rows))
 	copy(sortedRows, childResult.Rows)
 
-	// 排序
-	sort.Slice(sortedRows, func(i, j int) bool {
-		// 简化版本：只处理第一个排序字段
-		if len(op.config.OrderByItems) > 0 {
-			item := op.config.OrderByItems[0]
-			if item.Expr.Type == parser.ExprTypeColumn {
-				colName := item.Expr.Column
-				valI, okI := sortedRows[i][colName]
-				valJ, okJ := sortedRows[j][colName]
-				
-				if !okI || !okJ {
-					return false
-				}
-
-				// 简单比较（实际需要处理不同类型）
-				cmp := compareValues(valI, valJ)
-				if cmp == 0 {
-					return false
-				}
-				if item.Direction == "DESC" {
-					return cmp > 0
-				}
-				return cmp < 0
+	// 排序：支持多列排序
+	sort.SliceStable(sortedRows, func(i, j int) bool {
+		for _, item := range op.config.OrderByItems {
+			if item.Expr.Type != parser.ExprTypeColumn {
+				continue
 			}
+			colName := item.Expr.Column
+			valI, okI := sortedRows[i][colName]
+			valJ, okJ := sortedRows[j][colName]
+
+			if !okI || !okJ {
+				continue
+			}
+
+			cmp := compareValues(valI, valJ)
+			if cmp == 0 {
+				continue
+			}
+			if item.Direction == "DESC" {
+				return cmp > 0
+			}
+			return cmp < 0
 		}
 		return false
 	})
@@ -108,7 +104,34 @@ func compareValues(a, b interface{}) int {
 	aInt, aOk := a.(int)
 	bInt, bOk := b.(int)
 	if aOk && bOk {
-		return aInt - bInt
+		if aInt < bInt {
+			return -1
+		} else if aInt > bInt {
+			return 1
+		}
+		return 0
+	}
+
+	aInt64, aOk := a.(int64)
+	bInt64, bOk := b.(int64)
+	if aOk && bOk {
+		if aInt64 < bInt64 {
+			return -1
+		} else if aInt64 > bInt64 {
+			return 1
+		}
+		return 0
+	}
+
+	aFloat, aOk := a.(float64)
+	bFloat, bOk := b.(float64)
+	if aOk && bOk {
+		if aFloat < bFloat {
+			return -1
+		} else if aFloat > bFloat {
+			return 1
+		}
+		return 0
 	}
 
 	return 0

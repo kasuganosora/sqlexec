@@ -546,6 +546,7 @@ func TestExcelFactory(t *testing.T) {
 	// 测试 Create
 	config := &domain.DataSourceConfig{
 		Name:     "test_excel_factory",
+		Database: "test_excel_factory.xlsx",
 		Writable: true,
 		Options:  map[string]interface{}{"writable": true},
 	}

@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/pingcap/tidb/pkg/parser/ast"
 )
@@ -14,7 +15,8 @@ type StmtHandler interface {
 
 // HandlerChain 处理器链
 type HandlerChain struct {
-	handlers map[string]StmtHandler
+	mu             sync.RWMutex
+	handlers       map[string]StmtHandler
 	defaultHandler StmtHandler
 }
 
@@ -27,11 +29,15 @@ func NewHandlerChain() *HandlerChain {
 
 // RegisterHandler 注册处理器
 func (c *HandlerChain) RegisterHandler(stmtType string, handler StmtHandler) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.handlers[stmtType] = handler
 }
 
 // SetDefaultHandler 设置默认处理器
 func (c *HandlerChain) SetDefaultHandler(handler StmtHandler) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.defaultHandler = handler
 }
 
@@ -45,11 +51,15 @@ func (c *HandlerChain) Handle(stmt ast.StmtNode) (interface{}, error) {
 	log.Printf("SQL 语句类型: %s", stmtType)
 
 	// 查找对应的处理器
+	c.mu.RLock()
 	handler, ok := c.handlers[stmtType]
+	defaultHandler := c.defaultHandler
+	c.mu.RUnlock()
+
 	if !ok {
 		// 使用默认处理器
-		if c.defaultHandler != nil {
-			return c.defaultHandler.Handle(stmt)
+		if defaultHandler != nil {
+			return defaultHandler.Handle(stmt)
 		}
 		return nil, fmt.Errorf("不支持的 SQL 语句类型: %s", stmtType)
 	}

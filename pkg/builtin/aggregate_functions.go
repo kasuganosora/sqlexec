@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"math"
+	"sync"
 
 	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
@@ -110,16 +111,23 @@ func InitAggregateFunctions() {
 }
 
 // AggregateRegistry 聚合函数注册表
-var aggregateRegistry = make(map[string]*AggregateFunctionInfo)
+var (
+	aggregateRegistry   = make(map[string]*AggregateFunctionInfo)
+	aggregateRegistryMu sync.RWMutex
+)
 
 // RegisterAggregate 注册聚合函数
 func RegisterAggregate(info *AggregateFunctionInfo) {
+	aggregateRegistryMu.Lock()
 	aggregateRegistry[info.Name] = info
+	aggregateRegistryMu.Unlock()
 }
 
 // GetAggregate 获取聚合函数
 func GetAggregate(name string) (*AggregateFunctionInfo, bool) {
+	aggregateRegistryMu.RLock()
 	info, exists := aggregateRegistry[name]
+	aggregateRegistryMu.RUnlock()
 	return info, exists
 }
 

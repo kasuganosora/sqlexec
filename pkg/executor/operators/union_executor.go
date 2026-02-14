@@ -41,9 +41,6 @@ func NewUnionOperator(p *plan.Plan, das dataaccess.Service) (*UnionOperator, err
 
 // Execute 执行UNION
 func (op *UnionOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Union: 合并 %d 个子结果集, Distinct=%v\n",
-		len(op.children), op.config.Distinct)
-
 	// 执行所有子算子
 	allRows := make([]domain.Row, 0)
 	var columns []domain.ColumnInfo
@@ -66,7 +63,6 @@ func (op *UnionOperator) Execute(ctx context.Context) (*domain.QueryResult, erro
 	// 如果是UNION DISTINCT，去重
 	if op.config.Distinct {
 		allRows = op.distinctRows(allRows)
-		fmt.Printf("  [EXECUTOR] Union: 去重后行数: %d\n", len(allRows))
 	}
 
 	return &domain.QueryResult{

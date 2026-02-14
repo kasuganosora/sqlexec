@@ -5,10 +5,12 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 )
 
 // Encryptor 加密器
@@ -112,11 +114,13 @@ func HashPassword(password string) string {
 
 // VerifyPassword 验证密码
 func VerifyPassword(password, hash string) bool {
-	return HashPassword(password) == hash
+	computed := HashPassword(password)
+	return subtle.ConstantTimeCompare([]byte(computed), []byte(hash)) == 1
 }
 
 // SensitiveFieldsManager 敏感字段管理器
 type SensitiveFieldsManager struct {
+	mu               sync.RWMutex
 	encryptor        *Encryptor
 	sensitiveFields  map[string]bool // table.field -> true
 }
@@ -143,18 +147,24 @@ func NewSensitiveFieldsManager(password string, fields []string) (*SensitiveFiel
 // AddSensitiveField 添加敏感字段
 func (m *SensitiveFieldsManager) AddSensitiveField(table, field string) {
 	key := fmt.Sprintf("%s.%s", table, field)
+	m.mu.Lock()
 	m.sensitiveFields[key] = true
+	m.mu.Unlock()
 }
 
 // RemoveSensitiveField 移除敏感字段
 func (m *SensitiveFieldsManager) RemoveSensitiveField(table, field string) {
 	key := fmt.Sprintf("%s.%s", table, field)
+	m.mu.Lock()
 	delete(m.sensitiveFields, key)
+	m.mu.Unlock()
 }
 
 // IsSensitive 检查字段是否敏感
 func (m *SensitiveFieldsManager) IsSensitive(table, field string) bool {
 	key := fmt.Sprintf("%s.%s", table, field)
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.sensitiveFields[key]
 }
 

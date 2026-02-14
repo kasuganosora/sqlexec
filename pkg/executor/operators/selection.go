@@ -42,8 +42,6 @@ func NewSelectionOperator(p *plan.Plan, das dataaccess.Service) (*SelectionOpera
 
 // Execute 执行选择
 func (op *SelectionOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Selection: 应用过滤条件\n")
-
 	// 执行子算子
 	if len(op.children) == 0 {
 		return nil, fmt.Errorf("SelectionOperator requires at least 1 child")
@@ -148,7 +146,12 @@ func (op *SelectionOperator) compareValues(a, b interface{}) int {
 	aInt, aOk := toInt(a)
 	bInt, bOk := toInt(b)
 	if aOk && bOk {
-		return aInt - bInt
+		if aInt < bInt {
+			return -1
+		} else if aInt > bInt {
+			return 1
+		}
+		return 0
 	}
 
 	// 尝试转换为float64比较

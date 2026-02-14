@@ -1,6 +1,8 @@
 package csv
 
 import (
+	"fmt"
+
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
@@ -19,6 +21,19 @@ func (f *CSVFactory) GetType() domain.DataSourceType {
 
 // Create 实现DataSourceFactory接口
 func (f *CSVFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
-	// 使用CSVAdapter（继承MVCCDataSource）
-	return NewCSVAdapter(config, config.Name), nil
+	if config == nil {
+		return nil, fmt.Errorf("csv factory: config cannot be nil")
+	}
+	filePath := config.Database
+	if config.Options != nil {
+		if p, ok := config.Options["path"]; ok {
+			if str, ok := p.(string); ok && str != "" {
+				filePath = str
+			}
+		}
+	}
+	if filePath == "" {
+		return nil, fmt.Errorf("csv factory: file path required (set config.Database or options[\"path\"])")
+	}
+	return NewCSVAdapter(config, filePath), nil
 }

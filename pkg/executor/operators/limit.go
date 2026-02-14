@@ -40,8 +40,6 @@ func NewLimitOperator(p *plan.Plan, das dataaccess.Service) (*LimitOperator, err
 
 // Execute 执行Limit
 func (op *LimitOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Limit: Limit=%d, Offset=%d\n", op.config.Limit, op.config.Offset)
-
 	// 执行子算子
 	if len(op.children) == 0 {
 		return nil, fmt.Errorf("LimitOperator requires at least 1 child")

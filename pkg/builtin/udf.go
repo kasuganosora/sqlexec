@@ -348,6 +348,9 @@ func (m *UDFManager) evaluateArithmeticExpression(expr string, args []interface{
 	
 	// 替换参数
 	for i, param := range params {
+		if i >= len(args) {
+			break
+		}
 		// 替换 @param 或 :param
 		result = strings.ReplaceAll(result, "@"+param.Name, fmt.Sprintf("%v", args[i]))
 		result = strings.ReplaceAll(result, ":"+param.Name, fmt.Sprintf("%v", args[i]))

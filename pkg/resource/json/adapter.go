@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"path/filepath"
+	"sort"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
@@ -22,7 +25,7 @@ type JSONAdapter struct {
 // NewJSONAdapter 创建JSON数据源适配器
 func NewJSONAdapter(config *domain.DataSourceConfig, filePath string) *JSONAdapter {
 	arrayRoot := ""
-	writable := false // JSON默认只读
+	writable := config.Writable
 
 	// 从配置中读取选项
 	if config.Options != nil {
@@ -38,8 +41,12 @@ func NewJSONAdapter(config *domain.DataSourceConfig, filePath string) *JSONAdapt
 		}
 	}
 
+	// 创建内部配置副本，确保 Writable 与 Options 一致
+	internalConfig := *config
+	internalConfig.Writable = writable
+
 	return &JSONAdapter{
-		MVCCDataSource: memory.NewMVCCDataSource(config),
+		MVCCDataSource: memory.NewMVCCDataSource(&internalConfig),
 		filePath:       filePath,
 		arrayRoot:      arrayRoot,
 		writable:       writable,
@@ -51,7 +58,7 @@ func (a *JSONAdapter) Connect(ctx context.Context) error {
 	// 读取JSON文件
 	data, err := os.ReadFile(a.filePath)
 	if err != nil {
-		return domain.NewErrNotConnected("json")
+		return fmt.Errorf("failed to read JSON file %q: %w", a.filePath, err)
 	}
 
 	// 解析JSON
@@ -62,30 +69,35 @@ func (a *JSONAdapter) Connect(ctx context.Context) error {
 
 	// 获取数据数组
 	var rows []interface{}
+	found := false
 
 	if a.arrayRoot != "" {
 		// 从指定根节点获取数组
 		if obj, ok := jsonData.(map[string]interface{}); ok {
 			if arr, ok := obj[a.arrayRoot].([]interface{}); ok {
 				rows = arr
+				found = true
 			}
 		}
 	} else {
 		// 尝试直接解析为数组
 		if arr, ok := jsonData.([]interface{}); ok {
 			rows = arr
+			found = true
 		}
 	}
 
-	if len(rows) == 0 {
-		return fmt.Errorf("no data found in JSON file")
+	if !found {
+		return fmt.Errorf("no JSON array found in file (use array_root option for nested arrays)")
 	}
 
-	// 推断列信息
-	columns := a.inferColumnTypes(rows)
-
-	// 转换为Row格式
-	convertedRows := a.convertToRows(rows)
+	// 推断列信息和转换数据（允许空数组作为空表）
+	var columns []domain.ColumnInfo
+	var convertedRows []domain.Row
+	if len(rows) > 0 {
+		columns = a.inferColumnTypes(rows)
+		convertedRows = a.convertToRows(rows)
+	}
 
 	// 创建表信息
 	tableInfo := &domain.TableInfo{
@@ -105,15 +117,20 @@ func (a *JSONAdapter) Connect(ctx context.Context) error {
 
 // Close 关闭连接 - 可选写回JSON文件
 func (a *JSONAdapter) Close(ctx context.Context) error {
+	var writeBackErr error
 	// 如果是可写模式，需要写回JSON文件
 	if a.writable {
 		if err := a.writeBack(); err != nil {
-			return fmt.Errorf("failed to write back JSON file: %w", err)
+			writeBackErr = fmt.Errorf("failed to write back JSON file: %w", err)
 		}
 	}
 
-	// 关闭MVCC数据源
-	return a.MVCCDataSource.Close(ctx)
+	// 始终关闭MVCC数据源，即使写回失败
+	closeErr := a.MVCCDataSource.Close(ctx)
+	if writeBackErr != nil {
+		return writeBackErr
+	}
+	return closeErr
 }
 
 // GetConfig 获取数据源配置
@@ -204,10 +221,17 @@ func (a *JSONAdapter) inferColumnTypes(rows []interface{}) []domain.ColumnInfo {
 		}
 	}
 
+	// 排序字段名以保证确定性的列顺序
+	fieldNames := make([]string, 0, len(fieldsMap))
+	for field := range fieldsMap {
+		fieldNames = append(fieldNames, field)
+	}
+	sort.Strings(fieldNames)
+
 	// 推断每列的类型
 	columns := make([]domain.ColumnInfo, 0, len(fieldsMap))
-	for field, values := range fieldsMap {
-		colType := a.inferType(values)
+	for _, field := range fieldNames {
+		colType := a.inferType(fieldsMap[field])
 		columns = append(columns, domain.ColumnInfo{
 			Name:     field,
 			Type:     colType,
@@ -240,10 +264,12 @@ func (a *JSONAdapter) inferType(values []interface{}) string {
 		typeCounts[colType]++
 	}
 
-	// 选择最常见的类型
+	// 选择最常见的类型（固定优先级打破平局：int64 > float64 > bool > string）
+	typePriority := []string{"int64", "float64", "bool", "string"}
 	maxCount := 0
 	bestType := "string"
-	for t, count := range typeCounts {
+	for _, t := range typePriority {
+		count := typeCounts[t]
 		if count > maxCount {
 			maxCount = count
 			bestType = t
@@ -259,8 +285,9 @@ func (a *JSONAdapter) detectType(value interface{}) string {
 	case bool:
 		return "bool"
 	case float64:
-		// 检查是否是整数
-		if v == float64(int64(v)) {
+		// 检查是否是整数（必须无小数部分且在int64范围内）
+		if v == math.Trunc(v) && !math.IsInf(v, 0) && !math.IsNaN(v) &&
+			v >= math.MinInt64 && v <= math.MaxInt64 {
 			return "int64"
 		}
 		return "float64"
@@ -296,13 +323,10 @@ func (a *JSONAdapter) writeBack() error {
 		return err
 	}
 
-	// 转换回JSON数组格式
+	// domain.Row 就是 map[string]interface{}，直接转换无需深拷贝
 	jsonArray := make([]map[string]interface{}, len(rows))
 	for i, row := range rows {
-		jsonArray[i] = make(map[string]interface{})
-		for k, v := range row {
-			jsonArray[i][k] = v
-		}
+		jsonArray[i] = map[string]interface{}(row)
 	}
 
 	var jsonData interface{}
@@ -322,8 +346,30 @@ func (a *JSONAdapter) writeBack() error {
 		return err
 	}
 
-	// 写入文件
-	return os.WriteFile(a.filePath, data, 0644)
+	// 原子写入：先写临时文件，再重命名
+	dir := filepath.Dir(a.filePath)
+	tmpFile, err := os.CreateTemp(dir, ".json_writeback_*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file for writeBack: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, a.filePath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("failed to rename temp file: %w", err)
+	}
+
+	return nil
 }
 
 // IsConnected 检查是否已连接（MVCCDataSource提供）

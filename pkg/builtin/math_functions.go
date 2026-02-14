@@ -3,6 +3,7 @@ package builtin
 import (
 	"fmt"
 	"math"
+	"math/rand"
 
 	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
@@ -638,20 +639,16 @@ func mathMod(args []interface{}) (interface{}, error) {
 }
 
 func mathRand(args []interface{}) (interface{}, error) {
-	seed := int64(0)
 	if len(args) == 1 {
 		seedVal, err := toFloat64(args[0])
 		if err != nil {
 			return nil, err
 		}
-		seed = int64(seedVal)
+		// Use the seed to create a deterministic random number
+		r := rand.New(rand.NewSource(int64(seedVal)))
+		return r.Float64(), nil
 	}
-	
-	if seed != 0 {
-		// 使用种子（简化实现）
-		return float64(seed) / float64(^uint32(0)), nil
-	}
-	
-	// 简化实现：返回一个伪随机数
-	return 0.5, nil
+
+	// No seed: use global rand source
+	return rand.Float64(), nil
 }

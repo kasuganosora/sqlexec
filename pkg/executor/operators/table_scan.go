@@ -31,9 +31,6 @@ func NewTableScanOperator(p *plan.Plan, das dataaccess.Service) (*TableScanOpera
 
 // Execute 执行表扫描
 func (op *TableScanOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] TableScan: 扫描表 %s, 列数: %d, 过滤器数: %d\n", 
-		op.config.TableName, len(op.config.Columns), len(op.config.Filters))
-
 	// 使用数据访问服务查询数据
 	options := &dataaccess.QueryOptions{
 		SelectColumns: make([]string, 0),

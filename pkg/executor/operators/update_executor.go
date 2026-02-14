@@ -32,9 +32,6 @@ func NewUpdateOperator(p *plan.Plan, das dataaccess.Service) (*UpdateOperator, e
 
 // Execute 执行UPDATE
 func (op *UpdateOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Update: 更新表 %s, 列数: %d\n",
-		op.config.TableName, len(op.config.Set))
-
 	// 将SET表达式转换为实际值
 	updateData := make(map[string]interface{})
 	for col, expr := range op.config.Set {
@@ -68,7 +65,6 @@ func (op *UpdateOperator) Execute(ctx context.Context) (*domain.QueryResult, err
 		Total: 1,
 	}
 
-	fmt.Printf("  [EXECUTOR] Update: 成功更新 %d 行\n", rowsAffected)
 	return result, nil
 }
 

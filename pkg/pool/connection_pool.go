@@ -48,19 +48,20 @@ func (p *ConnectionPool) Get(ctx context.Context) (*sql.Conn, error) {
 	// 尝试从池中获取
 	select {
 	case conn := <-p.connections:
-		// 验证连接是否有效
+		p.mu.Unlock()
+		// 验证连接是否有效（outside lock to avoid blocking）
 		if err := conn.PingContext(ctx); err == nil {
-			p.mu.Unlock()
 			return conn, nil
 		}
 		// 连接无效，关闭并创建新的
+		p.mu.Lock()
 		p.destroy(conn)
 		p.currentSize--
+		p.mu.Unlock()
 	default:
 		// 池中没有连接
+		p.mu.Unlock()
 	}
-
-	p.mu.Unlock()
 
 	// 创建新连接
 	conn, err := p.createConnection(ctx)
@@ -92,47 +93,54 @@ func (p *ConnectionPool) Put(conn *sql.Conn) error {
 	case p.connections <- conn:
 		return nil
 	default:
-		// 池已满，关闭连接
+		// 池已满，关闭连接并减少计数
+		p.currentSize--
 		return p.destroy(conn)
 	}
 }
 
 // createConnection 创建新连接
 func (p *ConnectionPool) createConnection(ctx context.Context) (*sql.Conn, error) {
-	p.mu.Lock()
+	const maxRetries = 10
 
-	if p.currentSize >= p.maxSize {
-		p.mu.Unlock()
-		// 等待连接释放
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case conn := <-p.connections:
-			p.mu.Lock()
-			if err := conn.PingContext(ctx); err != nil {
-				p.destroy(conn)
-				p.currentSize--
-				p.mu.Unlock()
-				return p.createConnection(ctx)
-			}
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		p.mu.Lock()
+
+		if p.currentSize >= p.maxSize {
 			p.mu.Unlock()
-			return conn, nil
+			// 等待连接释放
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case conn := <-p.connections:
+				p.mu.Lock()
+				if err := conn.PingContext(ctx); err != nil {
+					p.destroy(conn)
+					p.currentSize--
+					p.mu.Unlock()
+					continue // retry instead of recursion
+				}
+				p.mu.Unlock()
+				return conn, nil
+			}
 		}
+
+		p.mu.Unlock()
+
+		// 创建新连接
+		conn, err := p.factory()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create connection: %w", err)
+		}
+
+		p.mu.Lock()
+		p.currentSize++
+		p.mu.Unlock()
+
+		return conn, nil
 	}
 
-	p.mu.Unlock()
-
-	// 创建新连接
-	conn, err := p.factory()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create connection: %w", err)
-	}
-
-	p.mu.Lock()
-	p.currentSize++
-	p.mu.Unlock()
-
-	return conn, nil
+	return nil, fmt.Errorf("failed to create connection: max retries exceeded")
 }
 
 // Stats 获取连接池统计

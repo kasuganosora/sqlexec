@@ -26,7 +26,7 @@ type CSVAdapter struct {
 func NewCSVAdapter(config *domain.DataSourceConfig, filePath string) *CSVAdapter {
 	delimiter := ','
 	hasHeader := true
-	writable := false // CSV默认只读
+	writable := config.Writable
 
 	// 从配置中读取选项
 	if config.Options != nil {
@@ -47,8 +47,12 @@ func NewCSVAdapter(config *domain.DataSourceConfig, filePath string) *CSVAdapter
 		}
 	}
 
+	// 创建内部配置副本，确保 Writable 与 Options 一致
+	internalConfig := *config
+	internalConfig.Writable = writable
+
 	return &CSVAdapter{
-		MVCCDataSource: memory.NewMVCCDataSource(config),
+		MVCCDataSource: memory.NewMVCCDataSource(&internalConfig),
 		filePath:       filePath,
 		delimiter:      delimiter,
 		hasHeader:      hasHeader,
@@ -61,7 +65,7 @@ func (a *CSVAdapter) Connect(ctx context.Context) error {
 	// 读取CSV文件
 	file, err := os.Open(a.filePath)
 	if err != nil {
-		return domain.NewErrNotConnected("csv")
+		return fmt.Errorf("failed to open CSV file %q: %w", a.filePath, err)
 	}
 	defer file.Close()
 
@@ -117,15 +121,20 @@ func (a *CSVAdapter) Connect(ctx context.Context) error {
 
 // Close 关闭连接 - 可选写回CSV文件
 func (a *CSVAdapter) Close(ctx context.Context) error {
+	var writeBackErr error
 	// 如果是可写模式，需要写回CSV文件
 	if a.writable {
 		if err := a.writeBack(); err != nil {
-			return fmt.Errorf("failed to write back CSV file: %w", err)
+			writeBackErr = fmt.Errorf("failed to write back CSV file: %w", err)
 		}
 	}
 
-	// 关闭MVCC数据源
-	return a.MVCCDataSource.Close(ctx)
+	// 始终关闭MVCC数据源，即使写回失败
+	closeErr := a.MVCCDataSource.Close(ctx)
+	if writeBackErr != nil {
+		return writeBackErr
+	}
+	return closeErr
 }
 
 // GetConfig 获取数据源配置
@@ -197,7 +206,15 @@ func (a *CSVAdapter) Execute(ctx context.Context, sql string) (*domain.QueryResu
 // inferColumnTypes 推断列类型
 func (a *CSVAdapter) inferColumnTypes(headers []string, rows [][]string) []domain.ColumnInfo {
 	if len(rows) == 0 {
-		return []domain.ColumnInfo{}
+		columns := make([]domain.ColumnInfo, len(headers))
+		for i, header := range headers {
+			columns[i] = domain.ColumnInfo{
+				Name:     strings.TrimSpace(header),
+				Type:     "string",
+				Nullable: true,
+			}
+		}
+		return columns
 	}
 
 	// 采样前100行推断类型
@@ -341,7 +358,6 @@ func (a *CSVAdapter) writeBack() error {
 
 	writer := csv.NewWriter(file)
 	writer.Comma = a.delimiter
-	defer writer.Flush()
 
 	// 写入header
 	headers := make([]string, len(schema.Columns))
@@ -372,7 +388,8 @@ func (a *CSVAdapter) writeBack() error {
 		}
 	}
 
-	return nil
+	writer.Flush()
+	return writer.Error()
 }
 
 // IsConnected 检查是否已连接（MVCCDataSource提供）

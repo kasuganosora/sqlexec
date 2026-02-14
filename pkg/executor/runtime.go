@@ -51,8 +51,8 @@ func (r *Runtime) UnregisterQuery(queryID string) {
 
 // UpdateProgress 更新查询进度
 func (r *Runtime) UpdateProgress(queryID string, progress float64, status string) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if ctx, ok := r.activeQueries[queryID]; ok {
 		ctx.Progress = progress
 		if status != "" {
@@ -81,7 +81,9 @@ func (r *Runtime) GetQueryStatus(queryID string) (*QueryContext, error) {
 	if !ok {
 		return nil, fmt.Errorf("query not found: %s", queryID)
 	}
-	return ctx, nil
+	// 返回副本，避免调用者竞争修改内部状态
+	cp := *ctx
+	return &cp, nil
 }
 
 // GetAllQueries 获取所有活跃查询
@@ -90,7 +92,8 @@ func (r *Runtime) GetAllQueries() []*QueryContext {
 	defer r.mu.RUnlock()
 	queries := make([]*QueryContext, 0, len(r.activeQueries))
 	for _, ctx := range r.activeQueries {
-		queries = append(queries, ctx)
+		cp := *ctx
+		queries = append(queries, &cp)
 	}
 	return queries
 }

@@ -32,8 +32,6 @@ func NewDeleteOperator(p *plan.Plan, das dataaccess.Service) (*DeleteOperator, e
 
 // Execute 执行DELETE
 func (op *DeleteOperator) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [EXECUTOR] Delete: 删除表 %s 的数据\n", op.config.TableName)
-
 	// 构建WHERE过滤器
 	var whereFilter *domain.Filter
 	if op.config.Where != nil {
@@ -61,7 +59,6 @@ func (op *DeleteOperator) Execute(ctx context.Context) (*domain.QueryResult, err
 		Total: 1,
 	}
 
-	fmt.Printf("  [EXECUTOR] Delete: 成功删除 %d 行\n", rowsAffected)
 	return result, nil
 }
 

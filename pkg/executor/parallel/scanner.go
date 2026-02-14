@@ -47,9 +47,6 @@ func (ps *ParallelScanner) Execute(ctx context.Context, scanRange ScanRange, opt
 	
 	offset := scanRange.Offset
 
-	fmt.Printf("  [PARALLEL SCAN] Table: %s, Offset: %d, Limit: %d, Parallelism: %d\n",
-		scanRange.TableName, offset, limit, ps.parallelism)
-
 	// 计算每个worker的ScanRange
 	ranges := ps.divideScanRange(scanRange.TableName, offset, limit, ps.parallelism)
 
@@ -83,17 +80,17 @@ func (ps *ParallelScanner) Execute(ctx context.Context, scanRange ScanRange, opt
 		}(i, r)
 	}
 
-	// 收集结果
+	// 收集结果（使用 WorkerIndex 保持顺序）
 	results := make([]*ScanResult, len(ranges))
 	completed := 0
 
-	for {
+	for completed < len(ranges) {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case result := <-resultChan:
 			if result != nil {
-				results[completed] = result
+				results[result.WorkerIndex] = result
 				completed++
 			}
 		case err := <-errChan:
@@ -101,16 +98,10 @@ func (ps *ParallelScanner) Execute(ctx context.Context, scanRange ScanRange, opt
 				return nil, err
 			}
 		}
-
-		if completed == len(ranges) {
-			break
-		}
 	}
 
 	// 合并结果
 	mergedResult := ps.mergeScanResults(results, scanRange.TableName)
-	fmt.Printf("  [PARALLEL SCAN] Completed: %d rows from %d workers\n", len(mergedResult.Rows), completed)
-
 	return mergedResult, nil
 }
 
@@ -134,10 +125,10 @@ func (ps *ParallelScanner) divideScanRange(tableName string, offset, limit int64
 
 // executeScanRange 执行单个扫描范围
 func (ps *ParallelScanner) executeScanRange(ctx context.Context, r ScanRange, options *domain.QueryOptions) (*domain.QueryResult, error) {
-	// 构建查询选项
+	// 构建查询选项（必须创建副本，因为多个goroutine并行调用）
 	scanOptions := &domain.QueryOptions{}
 	if options != nil {
-		scanOptions = options
+		*scanOptions = *options
 	}
 	scanOptions.Offset = int(r.Offset)
 	scanOptions.Limit = int(r.Limit)

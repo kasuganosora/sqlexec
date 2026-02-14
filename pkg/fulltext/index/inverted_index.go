@@ -106,13 +106,20 @@ func (idx *InvertedIndex) RemoveDocument(docID int64) bool {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
-	doc, exists := idx.docStore[docID]
+	_, exists := idx.docStore[docID]
 	if !exists {
 		return false
 	}
 
-	// Remove from all postings lists
+	// Remove from all postings lists and count total token frequency
+	docTokenCount := int64(0)
 	for _, pl := range idx.postings {
+		for _, p := range pl.Postings {
+			if p.DocID == docID {
+				docTokenCount += int64(p.Frequency)
+				break
+			}
+		}
 		pl.RemovePosting(docID)
 	}
 
@@ -124,10 +131,14 @@ func (idx *InvertedIndex) RemoveDocument(docID int64) bool {
 
 	// Update stats
 	idx.stats.TotalDocs--
-	// Approximate doc length reduction
-	_ = doc
+	idx.stats.TotalDocLength -= docTokenCount
+	if idx.stats.TotalDocLength < 0 {
+		idx.stats.TotalDocLength = 0
+	}
 	if idx.stats.TotalDocs > 0 {
 		idx.stats.UpdateAvgDocLength()
+	} else {
+		idx.stats.AvgDocLength = 0
 	}
 
 	return true

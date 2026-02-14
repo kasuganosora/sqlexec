@@ -124,8 +124,6 @@ func NewDataService(dataSource domain.DataSource) Service {
 
 // Query 查询数据
 func (s *DataService) Query(ctx context.Context, tableName string, options *QueryOptions) (*domain.QueryResult, error) {
-	fmt.Printf("  [DATAACCESS] Query: 表=%s, 列数=%d\n", tableName, len(options.SelectColumns))
-
 	// 通过路由器选择数据源
 	ds, err := s.router.Route(tableName)
 	if err != nil {
@@ -160,13 +158,18 @@ func (s *DataService) Query(ctx context.Context, tableName string, options *Quer
 
 // Filter 过滤数据
 func (s *DataService) Filter(ctx context.Context, tableName string, filter domain.Filter, offset, limit int) ([]domain.Row, int64, error) {
+	ds, err := s.router.Route(tableName)
+	if err != nil {
+		return nil, 0, fmt.Errorf("route failed: %w", err)
+	}
+
 	queryOptions := &domain.QueryOptions{
 		Filters: []domain.Filter{filter},
 		Offset:  offset,
 		Limit:   limit,
 	}
 
-	result, err := s.dataSource.Query(ctx, tableName, queryOptions)
+	result, err := ds.Query(ctx, tableName, queryOptions)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -175,7 +178,11 @@ func (s *DataService) Filter(ctx context.Context, tableName string, filter domai
 
 // GetTableInfo 获取表信息
 func (s *DataService) GetTableInfo(ctx context.Context, tableName string) (*domain.TableInfo, error) {
-	return s.dataSource.GetTableInfo(ctx, tableName)
+	ds, err := s.router.Route(tableName)
+	if err != nil {
+		return nil, fmt.Errorf("route failed: %w", err)
+	}
+	return ds.GetTableInfo(ctx, tableName)
 }
 
 // selectColumns 选择指定列
