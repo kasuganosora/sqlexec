@@ -299,16 +299,15 @@ func (a *CSVAdapter) convertToRows(headers []string, columns []domain.ColumnInfo
 	result := make([]domain.Row, len(rows))
 
 	for i, row := range rows {
-		rowMap := make(domain.Row)
-		for j, value := range row {
-			if j >= len(headers) {
-				break
-			}
-
+		rowMap := make(domain.Row, len(columns))
+		for j := 0; j < len(columns); j++ {
 			colName := strings.TrimSpace(headers[j])
-			colType := columns[j].Type
-			parsedValue := a.parseValue(value, colType)
-			rowMap[colName] = parsedValue
+			if j < len(row) {
+				rowMap[colName] = a.parseValue(row[j], columns[j].Type)
+			} else {
+				// CSV rows may have fewer fields than headers; fill with nil
+				rowMap[colName] = nil
+			}
 		}
 		result[i] = rowMap
 	}

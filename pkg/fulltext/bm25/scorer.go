@@ -22,9 +22,49 @@ func NewCollectionStats() *CollectionStats {
 }
 
 // UpdateAvgDocLength 更新平均文档长度
+// Caller must hold s.mu write lock or ensure exclusive access.
 func (s *CollectionStats) UpdateAvgDocLength() {
 	if s.TotalDocs > 0 {
 		s.AvgDocLength = float64(s.TotalDocLength) / float64(s.TotalDocs)
+	}
+}
+
+// GetTotalDocs 获取文档总数（线程安全）
+func (s *CollectionStats) GetTotalDocs() int64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.TotalDocs
+}
+
+// GetAvgDocLength 获取平均文档长度（线程安全）
+func (s *CollectionStats) GetAvgDocLength() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.AvgDocLength
+}
+
+// AddDocStats 记录新增文档的统计信息（线程安全）
+func (s *CollectionStats) AddDocStats(docLength int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.TotalDocs++
+	s.TotalDocLength += docLength
+	s.UpdateAvgDocLength()
+}
+
+// RemoveDocStats 记录移除文档的统计信息（线程安全）
+func (s *CollectionStats) RemoveDocStats(docLength int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.TotalDocs--
+	s.TotalDocLength -= docLength
+	if s.TotalDocLength < 0 {
+		s.TotalDocLength = 0
+	}
+	if s.TotalDocs > 0 {
+		s.UpdateAvgDocLength()
+	} else {
+		s.AvgDocLength = 0
 	}
 }
 
@@ -71,12 +111,12 @@ func NewScorer(params Params, stats *CollectionStats) *Scorer {
 // CalculateIDF 计算逆文档频率
 func (s *Scorer) CalculateIDF(termID int64) float64 {
 	df := s.stats.GetDocFreq(termID)
-	N := float64(s.stats.TotalDocs)
-	
+	N := float64(s.stats.GetTotalDocs())
+
 	if df == 0 || N == 0 {
 		return 0
 	}
-	
+
 	// IDF = log((N - df + 0.5) / (df + 0.5))
 	return math.Log((N - float64(df) + 0.5) / (float64(df) + 0.5))
 }
@@ -84,16 +124,16 @@ func (s *Scorer) CalculateIDF(termID int64) float64 {
 // CalculateTF 计算词频分数
 func (s *Scorer) CalculateTF(freq int, docLength int) float64 {
 	k1, b := s.params.K1, s.params.B
-	avgdl := s.stats.AvgDocLength
-	
+	avgdl := s.stats.GetAvgDocLength()
+
 	if avgdl == 0 {
 		avgdl = 1
 	}
-	
+
 	// TF = (f * (k1 + 1)) / (f + k1 * (1 - b + b * |D| / avgdl))
 	numerator := float64(freq) * (k1 + 1)
 	denominator := float64(freq) + k1*(1-b+b*float64(docLength)/avgdl)
-	
+
 	return numerator / denominator
 }
 

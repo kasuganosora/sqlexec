@@ -327,11 +327,11 @@ func (h *HybridEngine) AutoConvertToVector(doc *Document) (map[int64]float64, er
 		if df == 0 {
 			df = 1
 		}
-		idf := math.Log((float64(stats.TotalDocs)-float64(df)+0.5) / (float64(df)+0.5))
-		
+		idf := math.Log((float64(stats.GetTotalDocs())-float64(df)+0.5) / (float64(df)+0.5))
+
 		// 计算BM25分数
 		docLength := float64(len(tokens))
-		avgDocLength := stats.AvgDocLength
+		avgDocLength := stats.GetAvgDocLength()
 		if avgDocLength == 0 {
 			avgDocLength = 1
 		}

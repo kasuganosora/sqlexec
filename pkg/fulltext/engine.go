@@ -402,7 +402,7 @@ func (e *Engine) Clear() {
 
 // DocumentCount 获取文档数量
 func (e *Engine) DocumentCount() int64 {
-	return e.GetStats().TotalDocs
+	return e.GetStats().GetTotalDocs()
 }
 
 // Highlighter 高亮器

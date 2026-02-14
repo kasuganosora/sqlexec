@@ -94,10 +94,8 @@ func (idx *InvertedIndex) AddDocument(doc *Document, tokens []analyzer.Token) er
 	}
 	
 	// 更新统计信息
-	idx.stats.TotalDocs++
-	idx.stats.TotalDocLength += int64(len(tokens))
-	idx.stats.UpdateAvgDocLength()
-	
+	idx.stats.AddDocStats(int64(len(tokens)))
+
 	return nil
 }
 
@@ -130,16 +128,7 @@ func (idx *InvertedIndex) RemoveDocument(docID int64) bool {
 	delete(idx.docStore, docID)
 
 	// Update stats
-	idx.stats.TotalDocs--
-	idx.stats.TotalDocLength -= docTokenCount
-	if idx.stats.TotalDocLength < 0 {
-		idx.stats.TotalDocLength = 0
-	}
-	if idx.stats.TotalDocs > 0 {
-		idx.stats.UpdateAvgDocLength()
-	} else {
-		idx.stats.AvgDocLength = 0
-	}
+	idx.stats.RemoveDocStats(docTokenCount)
 
 	return true
 }
