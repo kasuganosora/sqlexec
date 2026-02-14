@@ -15,6 +15,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/optimizer"
 	"github.com/kasuganosora/sqlexec/pkg/plugin"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	httpds "github.com/kasuganosora/sqlexec/server/datasource/http"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
 	"github.com/kasuganosora/sqlexec/server/acl"
@@ -105,6 +106,9 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 	// 加载 datasources.json 中配置的数据源
 	configDir := dataDir
 	dsManager := db.GetDSManager()
+
+	// 注册 HTTP 数据源工厂
+	dsManager.GetRegistry().Register(httpds.NewHTTPFactory())
 	dsConfigs, err := config_schema.LoadDatasources(configDir)
 	if err != nil {
 		log.Printf("加载 datasources.json 失败: %v", err)
