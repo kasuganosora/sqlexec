@@ -32,6 +32,10 @@ type MVCCDataSource struct {
 	tempTables map[string]bool
 }
 
+// maxRetainedVersions is the maximum number of old versions to keep per table
+// beyond what active transactions require
+const maxRetainedVersions = 2
+
 // NewMVCCDataSource creates an MVCC in-memory data source
 func NewMVCCDataSource(config *domain.DataSourceConfig) *MVCCDataSource {
 	if config == nil {
@@ -54,5 +58,30 @@ func NewMVCCDataSource(config *domain.DataSourceConfig) *MVCCDataSource {
 		activeTxns:    make(map[int64]*Transaction),
 		tables:        make(map[string]*TableVersions),
 		tempTables:    make(map[string]bool),
+	}
+}
+
+// gcOldVersions removes old table versions that are no longer referenced by
+// any active transaction. Must be called while holding m.mu.Lock().
+func (m *MVCCDataSource) gcOldVersions() {
+	// Find the minimum version still needed by active transactions
+	minRequiredVer := m.currentVer
+	for _, snapshot := range m.snapshots {
+		if snapshot.startVer < minRequiredVer {
+			minRequiredVer = snapshot.startVer
+		}
+	}
+
+	// Clean up old versions from each table
+	for _, tableVer := range m.tables {
+		tableVer.mu.Lock()
+		for ver := range tableVer.versions {
+			// Keep the latest version, versions needed by active transactions,
+			// and a small buffer of recent versions
+			if ver < minRequiredVer && ver != tableVer.latest {
+				delete(tableVer.versions, ver)
+			}
+		}
+		tableVer.mu.Unlock()
 	}
 }

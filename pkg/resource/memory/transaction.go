@@ -110,57 +110,36 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 			for i, row := range cowSnapshot.baseData.rows {
 				rowID := int64(i + 1)
 
-				// Check if this row is deleted
-				if _, deleted := cowSnapshot.deletedRows[rowID]; deleted {
-					continue // Skip deleted rows
+				// Skip deleted rows
+				if cowSnapshot.deletedRows[rowID] {
+					continue
 				}
 
-				// Check if this row is modified
+				// Use modified row or deep copy original
 				if modifiedRow, ok := cowSnapshot.rowCopies[rowID]; ok {
-					// Use modified row
 					newRows = append(newRows, modifiedRow)
 				} else {
-					// Use original row (deep copy)
-					rowCopy := make(map[string]interface{}, len(row))
-					for k, v := range row {
-						rowCopy[k] = v
-					}
-					newRows = append(newRows, rowCopy)
+					newRows = append(newRows, deepCopyRow(row))
 				}
 			}
 
-			// Handle newly inserted rows (rowID exceeds base data row count)
-			baseRowsCount := len(cowSnapshot.baseData.rows)
-			for rowID, row := range cowSnapshot.rowCopies {
-				if rowID > int64(baseRowsCount) {
-					// This is a newly inserted row
+			// Append newly inserted rows in order (rowID > base data row count)
+			baseRowsCount := int64(len(cowSnapshot.baseData.rows))
+			for rowID := baseRowsCount + 1; rowID <= baseRowsCount+cowSnapshot.insertedCount; rowID++ {
+				if cowSnapshot.deletedRows[rowID] {
+					continue
+				}
+				if row, ok := cowSnapshot.rowCopies[rowID]; ok {
 					newRows = append(newRows, row)
 				}
 			}
 
 			// Create new version
-			cols := make([]domain.ColumnInfo, len(cowSnapshot.modifiedData.schema.Columns))
-			copy(cols, cowSnapshot.modifiedData.schema.Columns)
-
-			// Deep copy table attributes
-			var atts map[string]interface{}
-			if cowSnapshot.modifiedData.schema.Atts != nil {
-				atts = make(map[string]interface{}, len(cowSnapshot.modifiedData.schema.Atts))
-				for k, v := range cowSnapshot.modifiedData.schema.Atts {
-					atts[k] = v
-				}
-			}
-
 			newVersionData := &TableData{
 				version:   m.currentVer,
 				createdAt: time.Now(),
-				schema: &domain.TableInfo{
-					Name:    cowSnapshot.modifiedData.schema.Name,
-					Schema:  cowSnapshot.modifiedData.schema.Schema,
-					Columns: cols,
-					Atts:    atts,
-				},
-				rows: newRows,
+				schema:    deepCopySchema(cowSnapshot.modifiedData.schema),
+				rows:      newRows,
 			}
 
 			tableVer.versions[m.currentVer] = newVersionData
@@ -173,6 +152,9 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 
 	delete(m.activeTxns, txnID)
 	delete(m.snapshots, txnID)
+
+	// Garbage collect old versions no longer needed by any transaction
+	m.gcOldVersions()
 
 	return nil
 }
@@ -190,6 +172,9 @@ func (m *MVCCDataSource) RollbackTx(ctx context.Context, txnID int64) error {
 	delete(m.activeTxns, txnID)
 	delete(m.snapshots, txnID)
 
+	// Garbage collect old versions no longer needed by any transaction
+	m.gcOldVersions()
+
 	return nil
 }
 
@@ -198,14 +183,10 @@ func (m *MVCCDataSource) RollbackTx(ctx context.Context, txnID int64) error {
 // ensureCopied ensures table data is copied to transaction snapshot (copy-on-write)
 // Uses row-level COW: only creates structure, does not immediately copy all rows
 func (s *COWTableSnapshot) ensureCopied(tableVer *TableVersions) error {
-	if s.copied {
-		return nil // Already created copy
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Double check to avoid duplicate creation
+	// Check under lock to avoid data race
 	if s.copied {
 		return nil
 	}
@@ -219,31 +200,13 @@ func (s *COWTableSnapshot) ensureCopied(tableVer *TableVersions) error {
 		return domain.NewErrTableNotFound(s.tableName)
 	}
 
-	// Copy schema
-	cols := make([]domain.ColumnInfo, len(baseData.schema.Columns))
-	copy(cols, baseData.schema.Columns)
-
-	// Deep copy table attributes
-	var atts map[string]interface{}
-	if baseData.schema.Atts != nil {
-		atts = make(map[string]interface{}, len(baseData.schema.Atts))
-		for k, v := range baseData.schema.Atts {
-			atts[k] = v
-		}
-	}
-
 	// Create modified data structure without immediately copying all rows
 	// Uses row-level COW: only creates structure, rows are copied on demand
 	s.modifiedData = &TableData{
 		version:   baseData.version,
 		createdAt: baseData.createdAt,
-		schema: &domain.TableInfo{
-			Name:    baseData.schema.Name,
-			Schema:  baseData.schema.Schema,
-			Columns: cols,
-			Atts:    atts,
-		},
-		rows: nil, // Row data is lazy loaded and copied
+		schema:    deepCopySchema(baseData.schema),
+		rows:      nil, // Row data is lazy loaded and copied
 	}
 
 	// Initialize row-level tracking structures
@@ -259,7 +222,11 @@ func (s *COWTableSnapshot) ensureCopied(tableVer *TableVersions) error {
 
 // getTableData retrieves table data from COW snapshot (row-level COW)
 func (s *COWTableSnapshot) getTableData(tableVer *TableVersions) *TableData {
-	if !s.copied {
+	s.mu.RLock()
+	copied := s.copied
+	s.mu.RUnlock()
+
+	if !copied {
 		// No copy created, read main version directly
 		tableVer.mu.RLock()
 		data := tableVer.versions[tableVer.latest]
@@ -271,21 +238,38 @@ func (s *COWTableSnapshot) getTableData(tableVer *TableVersions) *TableData {
 	defer s.mu.RUnlock()
 
 	// Copy created, need to merge base data and row-level modifications
-	if len(s.rowCopies) == 0 {
-		// No rows modified, return base data
+	if len(s.rowCopies) == 0 && len(s.deletedRows) == 0 {
+		// No rows modified or deleted, return base data
 		return s.baseData
 	}
 
-	// Merge base data and modified rows
+	// Merge base data and modified rows, skipping deleted rows
+	baseRowsCount := int64(len(s.baseData.rows))
 	mergedRows := make([]domain.Row, 0, len(s.baseData.rows))
 	for i, row := range s.baseData.rows {
 		rowID := int64(i + 1) // Row ID starts from 1
+
+		// Skip deleted rows
+		if s.deletedRows[rowID] {
+			continue
+		}
+
 		if modifiedRow, ok := s.rowCopies[rowID]; ok {
 			// Use modified row
 			mergedRows = append(mergedRows, modifiedRow)
 		} else {
 			// Use original row
 			mergedRows = append(mergedRows, row)
+		}
+	}
+
+	// Append newly inserted rows (rowID > baseRowsCount)
+	for rowID := baseRowsCount + 1; rowID <= baseRowsCount+s.insertedCount; rowID++ {
+		if row, ok := s.rowCopies[rowID]; ok {
+			// Skip if it was subsequently deleted
+			if !s.deletedRows[rowID] {
+				mergedRows = append(mergedRows, row)
+			}
 		}
 	}
 

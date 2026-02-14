@@ -28,9 +28,11 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
-	// Get table schema
+	// Get table schema (need table lock to safely read versions map)
+	tableVer.mu.RLock()
 	sourceData := tableVer.versions[tableVer.latest]
-	schema := sourceData.schema
+	schema := deepCopySchema(sourceData.schema) // Deep copy so we can release the lock
+	tableVer.mu.RUnlock()
 
 	// Process generated columns: distinguish between STORED and VIRTUAL types
 	processedRows := make([]domain.Row, 0, len(rows))
@@ -117,22 +119,16 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 		// Row-level COW: don't directly copy entire table, only record newly inserted rows
 		cowSnapshot.mu.Lock()
 
-		// Get base data row count
+		// Get base data row count and previously inserted count
 		baseRowsCount := int64(len(cowSnapshot.baseData.rows))
 		inserted := int64(0)
 
 		for _, row := range rows {
-			// Each new row uses incrementing rowID (starting from base data row count + 1)
-			rowID := baseRowsCount + inserted + 1
+			// Each new row uses incrementing rowID, accounting for previously inserted rows
+			cowSnapshot.insertedCount++
+			rowID := baseRowsCount + cowSnapshot.insertedCount
 			cowSnapshot.rowLocks[rowID] = true
-
-			// Deep copy row data
-			rowCopy := make(map[string]interface{}, len(row))
-			for k, v := range row {
-				rowCopy[k] = v
-			}
-			cowSnapshot.rowCopies[rowID] = rowCopy
-
+			cowSnapshot.rowCopies[rowID] = deepCopyRow(row)
 			inserted++
 		}
 
@@ -144,6 +140,7 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 
 	// Increment global version number first (while holding global lock)
 	m.currentVer++
+	newVer := m.currentVer // Capture before releasing global lock
 
 	// Get table-level lock
 	tableVer.mu.Lock()
@@ -158,53 +155,22 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	}
 
 	// Non-transaction insert, create new version
-
-	// Deep copy schema
-	cols := make([]domain.ColumnInfo, len(latestData.schema.Columns))
-	for i := range latestData.schema.Columns {
-		cols[i] = domain.ColumnInfo{
-			Name:            latestData.schema.Columns[i].Name,
-			Type:            latestData.schema.Columns[i].Type,
-			Nullable:        latestData.schema.Columns[i].Nullable,
-			Primary:         latestData.schema.Columns[i].Primary,
-			Default:         latestData.schema.Columns[i].Default,
-			Unique:          latestData.schema.Columns[i].Unique,
-			AutoIncrement:   latestData.schema.Columns[i].AutoIncrement,
-			ForeignKey:      latestData.schema.Columns[i].ForeignKey,
-			IsGenerated:     latestData.schema.Columns[i].IsGenerated,
-			GeneratedType:   latestData.schema.Columns[i].GeneratedType,
-			GeneratedExpr:   latestData.schema.Columns[i].GeneratedExpr,
-			GeneratedDepends: latestData.schema.Columns[i].GeneratedDepends,
-		}
-	}
-
-	// Deep copy table attributes
-	var atts map[string]interface{}
-	if latestData.schema.Atts != nil {
-		atts = make(map[string]interface{}, len(latestData.schema.Atts))
-		for k, v := range latestData.schema.Atts {
-			atts[k] = v
-		}
-	}
-
-	newRows := make([]domain.Row, len(latestData.rows)+len(rows))
+	newRows := make([]domain.Row, len(latestData.rows), len(latestData.rows)+len(rows))
 	copy(newRows, latestData.rows)
-	copy(newRows[len(latestData.rows):], rows)
+	// Deep copy inserted rows to prevent external mutation
+	for _, row := range rows {
+		newRows = append(newRows, deepCopyRow(row))
+	}
 
 	versionData := &TableData{
-		version:   m.currentVer,
+		version:   newVer,
 		createdAt: time.Now(),
-		schema: &domain.TableInfo{
-			Name:    latestData.schema.Name,
-			Schema:  latestData.schema.Schema,
-			Columns: cols,
-			Atts:    atts,
-		},
-		rows: newRows,
+		schema:    deepCopySchema(latestData.schema),
+		rows:      newRows,
 	}
 
-	tableVer.versions[m.currentVer] = versionData
-	tableVer.latest = m.currentVer
+	tableVer.versions[newVer] = versionData
+	tableVer.latest = newVer
 
 	return int64(len(rows)), nil
 }
@@ -226,9 +192,10 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
-	// Get table schema
-	sourceData := tableVer.versions[tableVer.latest]
-	schema := sourceData.schema
+	// Get table schema (need table lock to safely read versions map)
+	tableVer.mu.RLock()
+	schema := deepCopySchema(tableVer.versions[tableVer.latest].schema)
+	tableVer.mu.RUnlock()
 
 	// Filter generated column update values (explicit update not allowed)
 	filteredUpdates := generated.FilterGeneratedColumns(updates, schema)
@@ -265,61 +232,86 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		// Create evaluator
 		evaluator := generated.NewGeneratedColumnEvaluator()
 
-		// Row-level COW: traverse base data, copy and modify matching rows
+		// Row-level COW: traverse base data and inserted rows, copy and modify matching rows
 		cowSnapshot.mu.Lock()
 		defer cowSnapshot.mu.Unlock()
 
 		updated := int64(0)
-		for i, row := range cowSnapshot.baseData.rows {
-			rowID := int64(i + 1) // Row ID starts from 1
-			if util.MatchesFilters(row, filters) {
-				// Row matches filter, needs modification
-				if _, alreadyModified := cowSnapshot.rowLocks[rowID]; !alreadyModified {
-					// First modification of this row, create deep copy
-					rowCopy := make(map[string]interface{}, len(row))
+		baseRowsCount := int64(len(cowSnapshot.baseData.rows))
+
+		// Helper to apply updates to a row
+		applyUpdates := func(rowID int64, row domain.Row, isBase bool) {
+			if !util.MatchesFilters(row, filters) {
+				return
+			}
+			// Skip deleted rows
+			if cowSnapshot.deletedRows[rowID] {
+				return
+			}
+
+			if _, alreadyModified := cowSnapshot.rowLocks[rowID]; !alreadyModified {
+				// First modification of this row, create deep copy (only for base rows)
+				var rowCopy domain.Row
+				if isBase {
+					rowCopy = make(map[string]interface{}, len(row))
 					for k, v := range row {
 						rowCopy[k] = v
 					}
-					// Apply updates
-					for k, v := range filteredUpdates {
-						rowCopy[k] = v
+				} else {
+					// Already a copy in rowCopies, use it directly
+					rowCopy = row
+				}
+				// Apply updates
+				for k, v := range filteredUpdates {
+					rowCopy[k] = v
+				}
+				// Calculate affected generated columns
+				for _, genColName := range affectedGeneratedCols {
+					colInfo := getColumnInfo(genColName, schema)
+					if colInfo != nil && colInfo.IsGenerated {
+						val, err := evaluator.Evaluate(colInfo.GeneratedExpr, rowCopy, schema)
+						if err != nil {
+							val = nil
+						}
+						rowCopy[genColName] = val
 					}
-					// Calculate affected generated columns
+				}
+				cowSnapshot.rowCopies[rowID] = rowCopy
+				cowSnapshot.rowLocks[rowID] = true
+			} else {
+				// Row already modified, directly update existing copy
+				if existingRow, ok := cowSnapshot.rowCopies[rowID]; ok {
+					for k, v := range filteredUpdates {
+						existingRow[k] = v
+					}
 					for _, genColName := range affectedGeneratedCols {
 						colInfo := getColumnInfo(genColName, schema)
 						if colInfo != nil && colInfo.IsGenerated {
-							val, err := evaluator.Evaluate(colInfo.GeneratedExpr, rowCopy, schema)
+							val, err := evaluator.Evaluate(colInfo.GeneratedExpr, existingRow, schema)
 							if err != nil {
-								val = nil // Calculation failed, set to NULL
+								val = nil
 							}
-							rowCopy[genColName] = val
-						}
-					}
-					// Store modified row
-					cowSnapshot.rowCopies[rowID] = rowCopy
-					cowSnapshot.rowLocks[rowID] = true
-				} else {
-					// Row already modified, directly update existing copy
-					if existingRow, ok := cowSnapshot.rowCopies[rowID]; ok {
-						for k, v := range filteredUpdates {
-							existingRow[k] = v
-						}
-						// Calculate affected generated columns
-						for _, genColName := range affectedGeneratedCols {
-							colInfo := getColumnInfo(genColName, schema)
-							if colInfo != nil && colInfo.IsGenerated {
-								val, err := evaluator.Evaluate(colInfo.GeneratedExpr, existingRow, schema)
-								if err != nil {
-									val = nil // Calculation failed, set to NULL
-								}
-								existingRow[genColName] = val
-							}
+							existingRow[genColName] = val
 						}
 					}
 				}
-				updated++
+			}
+			updated++
+		}
+
+		// Check base data rows
+		for i, row := range cowSnapshot.baseData.rows {
+			rowID := int64(i + 1)
+			applyUpdates(rowID, row, true)
+		}
+
+		// Check newly inserted rows in this transaction
+		for rowID := baseRowsCount + 1; rowID <= baseRowsCount+cowSnapshot.insertedCount; rowID++ {
+			if row, ok := cowSnapshot.rowCopies[rowID]; ok {
+				applyUpdates(rowID, row, false)
 			}
 		}
+
 		return updated, nil
 	}
 
@@ -330,8 +322,8 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 	m.mu.Unlock()
 	defer tableVer.mu.Unlock()
 
-	sourceData = tableVer.versions[tableVer.latest]
-	if sourceData == nil {
+	latestData := tableVer.versions[tableVer.latest]
+	if latestData == nil {
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
@@ -339,15 +331,18 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 	evaluator := generated.NewGeneratedColumnEvaluator()
 
 	// Non-transaction update, create new version
-	newRows := make([]domain.Row, len(sourceData.rows))
-	copy(newRows, sourceData.rows)
+	// Deep copy rows to avoid mutating the previous version's data (MVCC isolation)
+	newRows := make([]domain.Row, len(latestData.rows))
+	for i, row := range latestData.rows {
+		newRows[i] = deepCopyRow(row)
+	}
 
 	updated := int64(0)
 	for i, row := range newRows {
 		if util.MatchesFilters(row, filters) {
 			// Apply updates
 			for k, v := range filteredUpdates {
-				newRows[i][k] = v
+				row[k] = v
 			}
 			// Calculate affected generated columns
 			for _, genColName := range affectedGeneratedCols {
@@ -364,25 +359,11 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		}
 	}
 
-	// Deep copy table attributes
-	var atts map[string]interface{}
-	if sourceData.schema.Atts != nil {
-		atts = make(map[string]interface{}, len(sourceData.schema.Atts))
-		for k, v := range sourceData.schema.Atts {
-			atts[k] = v
-		}
-	}
-
 	versionData := &TableData{
 		version:   newVer,
 		createdAt: time.Now(),
-		schema: &domain.TableInfo{
-			Name:    sourceData.schema.Name,
-			Schema:  sourceData.schema.Schema,
-			Columns: sourceData.schema.Columns,
-			Atts:    atts,
-		},
-		rows: newRows,
+		schema:    deepCopySchema(latestData.schema),
+		rows:      newRows,
 	}
 
 	tableVer.versions[newVer] = versionData
@@ -408,7 +389,6 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
-	var sourceData *TableData
 	if hasTxn {
 		// In transaction, use COW snapshot
 		snapshot, ok := m.snapshots[txnID]
@@ -436,8 +416,16 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		defer cowSnapshot.mu.Unlock()
 
 		deleted := int64(0)
+		baseRowsCount := int64(len(cowSnapshot.baseData.rows))
+
+		// Check base data rows
 		for i, row := range cowSnapshot.baseData.rows {
-			rowID := int64(i + 1) // Row ID starts from 1
+			rowID := int64(i + 1)
+
+			// Skip already deleted rows
+			if cowSnapshot.deletedRows[rowID] {
+				continue
+			}
 
 			// Check if row matches delete condition
 			if util.MatchesFilters(row, filters) {
@@ -451,6 +439,23 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 				deleted++
 			}
 		}
+
+		// Check newly inserted rows in this transaction
+		for rowID := baseRowsCount + 1; rowID <= baseRowsCount+cowSnapshot.insertedCount; rowID++ {
+			// Skip already deleted rows
+			if cowSnapshot.deletedRows[rowID] {
+				continue
+			}
+			if row, ok := cowSnapshot.rowCopies[rowID]; ok {
+				if util.MatchesFilters(row, filters) {
+					delete(cowSnapshot.rowCopies, rowID)
+					cowSnapshot.deletedRows[rowID] = true
+					delete(cowSnapshot.rowLocks, rowID)
+					deleted++
+				}
+			}
+		}
+
 		return deleted, nil
 	}
 
@@ -461,16 +466,16 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 	m.mu.Unlock()
 	defer tableVer.mu.Unlock()
 
-	sourceData = tableVer.versions[tableVer.latest]
-	if sourceData == nil {
+	latestData := tableVer.versions[tableVer.latest]
+	if latestData == nil {
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
 
 	// Non-transaction delete, create new version
-	newRows := make([]domain.Row, 0, len(sourceData.rows))
+	newRows := make([]domain.Row, 0, len(latestData.rows))
 
 	deleted := int64(0)
-	for _, row := range sourceData.rows {
+	for _, row := range latestData.rows {
 		if !util.MatchesFilters(row, filters) {
 			newRows = append(newRows, row)
 		} else {
@@ -478,25 +483,11 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		}
 	}
 
-	// Deep copy table attributes
-	var atts map[string]interface{}
-	if sourceData.schema.Atts != nil {
-		atts = make(map[string]interface{}, len(sourceData.schema.Atts))
-		for k, v := range sourceData.schema.Atts {
-			atts[k] = v
-		}
-	}
-
 	versionData := &TableData{
 		version:   newVer,
 		createdAt: time.Now(),
-		schema: &domain.TableInfo{
-			Name:    sourceData.schema.Name,
-			Schema:  sourceData.schema.Schema,
-			Columns: sourceData.schema.Columns,
-			Atts:    atts,
-		},
-		rows: newRows,
+		schema:    deepCopySchema(latestData.schema),
+		rows:      newRows,
 	}
 
 	tableVer.versions[newVer] = versionData

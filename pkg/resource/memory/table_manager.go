@@ -12,12 +12,12 @@ import (
 
 // GetTables gets all tables (excluding temporary tables)
 func (m *MVCCDataSource) GetTables(ctx context.Context) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if !m.connected {
 		return nil, domain.NewErrNotConnected("memory")
 	}
-
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 
 	tables := make([]string, 0, len(m.tables))
 	for name := range m.tables {
@@ -31,12 +31,12 @@ func (m *MVCCDataSource) GetTables(ctx context.Context) ([]string, error) {
 
 // GetAllTables gets all tables (including temporary tables)
 func (m *MVCCDataSource) GetAllTables(ctx context.Context) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if !m.connected {
 		return nil, domain.NewErrNotConnected("memory")
 	}
-
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 
 	tables := make([]string, 0, len(m.tables))
 	for name := range m.tables {
@@ -47,12 +47,12 @@ func (m *MVCCDataSource) GetAllTables(ctx context.Context) ([]string, error) {
 
 // GetTemporaryTables gets all temporary tables
 func (m *MVCCDataSource) GetTemporaryTables(ctx context.Context) ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	if !m.connected {
 		return nil, domain.NewErrNotConnected("memory")
 	}
-
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 
 	tables := make([]string, 0, len(m.tempTables))
 	for name := range m.tempTables {

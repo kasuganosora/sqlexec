@@ -36,11 +36,15 @@ func (m *MVCCDataSource) Close(ctx context.Context) error {
 
 // IsConnected checks if the connection is established
 func (m *MVCCDataSource) IsConnected() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.connected
 }
 
 // IsWritable checks if the data source is writable
 func (m *MVCCDataSource) IsWritable() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.config.Writable
 }
 
