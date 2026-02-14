@@ -73,17 +73,15 @@ func (c *QueryCache) Get(sql string, params []interface{}) (*domain.QueryResult,
 
 	key := c.generateKey(sql, params)
 
-	c.mu.RLock()
+	c.mu.Lock()
 	entry, exists := c.store[key]
-	c.mu.RUnlock()
-
 	if !exists {
+		c.mu.Unlock()
 		return nil, false
 	}
 
 	// 检查是否过期
 	if time.Now().After(entry.ExpiresAt) {
-		c.mu.Lock()
 		delete(c.store, key)
 		c.mu.Unlock()
 		return nil, false
@@ -91,8 +89,10 @@ func (c *QueryCache) Get(sql string, params []interface{}) (*domain.QueryResult,
 
 	// 更新命中次数
 	entry.Hits++
+	result := entry.Result
+	c.mu.Unlock()
 
-	return entry.Result, true
+	return result, true
 }
 
 // Set 设置缓存
@@ -227,7 +227,9 @@ func (c *QueryCache) generateKey(sql string, params []interface{}) string {
 	h := fnv.New32a()
 	h.Write([]byte(sql))
 	// 在缓存键中包含当前数据库上下文
+	c.mu.RLock()
 	h.Write([]byte(c.currentDB))
+	c.mu.RUnlock()
 
 	// 参数排序以确保相同参数不同顺序生成相同键
 	if len(params) > 0 {
@@ -300,17 +302,15 @@ func (c *QueryCache) GetExplain(sql string) (string, bool) {
 
 	key := c.generateKey(sql, nil)
 
-	c.mu.RLock()
+	c.mu.Lock()
 	entry, exists := c.explainStore[key]
-	c.mu.RUnlock()
-
 	if !exists {
+		c.mu.Unlock()
 		return "", false
 	}
 
 	// 检查是否过期
 	if time.Now().After(entry.ExpiresAt) {
-		c.mu.Lock()
 		delete(c.explainStore, key)
 		c.mu.Unlock()
 		return "", false
@@ -318,8 +318,10 @@ func (c *QueryCache) GetExplain(sql string) (string, bool) {
 
 	// 更新命中次数
 	entry.Hits++
+	explain := entry.Explain
+	c.mu.Unlock()
 
-	return entry.Explain, true
+	return explain, true
 }
 
 // SetExplain 设置 Explain 缓存

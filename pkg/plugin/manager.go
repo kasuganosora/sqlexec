@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/kasuganosora/sqlexec/pkg/config_schema"
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
@@ -19,6 +20,7 @@ type PluginManager struct {
 	dsManager *application.DataSourceManager
 	configDir string
 	loader    PluginLoader
+	mu        sync.Mutex
 	plugins   []PluginInfo
 }
 
@@ -78,7 +80,10 @@ func (pm *PluginManager) ScanAndLoad(pluginDir string) error {
 		}
 	}
 
-	log.Printf("[PLUGIN] Loaded %d plugin(s)", len(pm.plugins))
+	pm.mu.Lock()
+	count := len(pm.plugins)
+	pm.mu.Unlock()
+	log.Printf("[PLUGIN] Loaded %d plugin(s)", count)
 
 	// After loading all plugins, create datasource instances from config
 	pm.createDatasourcesFromConfig()
@@ -103,7 +108,9 @@ func (pm *PluginManager) LoadPlugin(path string) error {
 		return fmt.Errorf("failed to register factory: %w", err)
 	}
 
+	pm.mu.Lock()
 	pm.plugins = append(pm.plugins, info)
+	pm.mu.Unlock()
 	log.Printf("[PLUGIN] Loaded plugin: type=%s, version=%s, file=%s",
 		info.Type, info.Version, filepath.Base(path))
 
@@ -123,10 +130,12 @@ func (pm *PluginManager) createDatasourcesFromConfig() {
 	}
 
 	// Build a set of plugin types
+	pm.mu.Lock()
 	pluginTypes := make(map[domain.DataSourceType]bool)
 	for _, p := range pm.plugins {
 		pluginTypes[p.Type] = true
 	}
+	pm.mu.Unlock()
 
 	for _, cfg := range configs {
 		// Only create datasources that match a loaded plugin type
@@ -154,6 +163,8 @@ func (pm *PluginManager) createDatasourcesFromConfig() {
 		}
 
 		if err := pm.dsManager.Register(cfg.Name, ds); err != nil {
+			// Close the connection to avoid resource leak
+			ds.Close(context.Background())
 			log.Printf("[PLUGIN] Failed to register datasource '%s': %v", cfg.Name, err)
 			continue
 		}
@@ -164,7 +175,9 @@ func (pm *PluginManager) createDatasourcesFromConfig() {
 
 // GetLoadedPlugins returns the list of loaded plugins
 func (pm *PluginManager) GetLoadedPlugins() []PluginInfo {
+	pm.mu.Lock()
 	result := make([]PluginInfo, len(pm.plugins))
 	copy(result, pm.plugins)
+	pm.mu.Unlock()
 	return result
 }

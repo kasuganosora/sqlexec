@@ -179,6 +179,8 @@ func (m *MetricsCollector) GetAllTableAccessCount() map[string]int64 {
 
 // GetUptime 获取运行时间
 func (m *MetricsCollector) GetUptime() time.Duration {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return time.Since(m.startTime)
 }
 
@@ -217,16 +219,34 @@ func (m *MetricsCollector) GetSnapshot() *QueryMetrics {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	// Compute values inline to avoid re-acquiring the lock
+	var successRate float64
+	var avgDuration time.Duration
+	if m.queryCount > 0 {
+		successRate = float64(m.querySuccess) / float64(m.queryCount) * 100
+		avgDuration = m.totalDuration / time.Duration(m.queryCount)
+	}
+
+	errorsCopy := make(map[string]int64, len(m.errorCount))
+	for k, v := range m.errorCount {
+		errorsCopy[k] = v
+	}
+
+	tableAccessCopy := make(map[string]int64, len(m.tableAccessCount))
+	for k, v := range m.tableAccessCount {
+		tableAccessCopy[k] = v
+	}
+
 	return &QueryMetrics{
 		QueryCount:       m.queryCount,
 		QuerySuccess:     m.querySuccess,
 		QueryError:       m.queryError,
-		SuccessRate:      m.GetSuccessRate(),
-		AvgDuration:      m.GetAvgDuration(),
+		SuccessRate:      successRate,
+		AvgDuration:      avgDuration,
 		SlowQueryCount:   m.slowQueryCount,
 		ActiveQueries:    m.activeQueries,
-		ErrorCount:       m.GetAllErrors(),
-		TableAccessCount: m.GetAllTableAccessCount(),
-		Uptime:           m.GetUptime(),
+		ErrorCount:       errorsCopy,
+		TableAccessCount: tableAccessCopy,
+		Uptime:           time.Since(m.startTime),
 	}
 }

@@ -133,7 +133,10 @@ func (t *Transaction) Rollback() error {
 
 // Close 关闭事务（等同于 Rollback）
 func (t *Transaction) Close() error {
-	if t.active {
+	t.mu.Lock()
+	active := t.active
+	t.mu.Unlock()
+	if active {
 		return t.Rollback()
 	}
 	return nil

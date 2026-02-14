@@ -78,14 +78,17 @@ func (l *DLLPluginLoader) Load(path string) (domain.DataSourceFactory, PluginInf
 	return factory, info, nil
 }
 
-// cStringToGoString converts a C string pointer to a Go string
+// cStringToGoString converts a C string pointer to a Go string.
+// maxLen prevents unbounded reads on corrupt memory.
+const cStringMaxLen = 1 << 20 // 1 MB
+
 func cStringToGoString(ptr uintptr) string {
 	if ptr == 0 {
 		return ""
 	}
-	// Read bytes until null terminator
+	// Read bytes until null terminator, with a safety limit
 	var bytes []byte
-	for {
+	for i := 0; i < cStringMaxLen; i++ {
 		b := *(*byte)(unsafe.Pointer(ptr))
 		if b == 0 {
 			break

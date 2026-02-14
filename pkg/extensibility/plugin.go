@@ -81,140 +81,146 @@ func NewPluginManager() *PluginManager {
 
 // RegisterDataSourcePlugin 注册数据源插件
 func (pm *PluginManager) RegisterDataSourcePlugin(plugin DataSourcePlugin, config map[string]interface{}) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
 	name := plugin.Name()
+
+	pm.mu.Lock()
 	if _, exists := pm.dataSourcePlugins[name]; exists {
+		pm.mu.Unlock()
 		return fmt.Errorf("data source plugin '%s' already registered", name)
 	}
+	pm.mu.Unlock()
 
-	// 初始化插件
+	// Initialize outside the lock to avoid deadlock if Initialize calls back
 	if err := plugin.Initialize(config); err != nil {
 		return fmt.Errorf("failed to initialize plugin '%s': %w", name, err)
 	}
 
+	pm.mu.Lock()
+	// Double-check after re-acquiring lock
+	if _, exists := pm.dataSourcePlugins[name]; exists {
+		pm.mu.Unlock()
+		return fmt.Errorf("data source plugin '%s' already registered", name)
+	}
 	pm.dataSourcePlugins[name] = plugin
+	pm.mu.Unlock()
 	return nil
 }
 
 // RegisterFunctionPlugin 注册函数插件
 func (pm *PluginManager) RegisterFunctionPlugin(plugin FunctionPlugin, config map[string]interface{}) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
 	name := plugin.Name()
+
+	pm.mu.Lock()
 	if _, exists := pm.functionPlugins[name]; exists {
+		pm.mu.Unlock()
 		return fmt.Errorf("function plugin '%s' already registered", name)
 	}
+	pm.mu.Unlock()
 
-	// 初始化插件
 	if err := plugin.Initialize(config); err != nil {
 		return fmt.Errorf("failed to initialize plugin '%s': %w", name, err)
 	}
 
+	pm.mu.Lock()
+	if _, exists := pm.functionPlugins[name]; exists {
+		pm.mu.Unlock()
+		return fmt.Errorf("function plugin '%s' already registered", name)
+	}
 	pm.functionPlugins[name] = plugin
+	pm.mu.Unlock()
 	return nil
 }
 
 // RegisterMonitorPlugin 注册监控插件
 func (pm *PluginManager) RegisterMonitorPlugin(plugin MonitorPlugin, config map[string]interface{}) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
 	name := plugin.Name()
+
+	pm.mu.Lock()
 	if _, exists := pm.monitorPlugins[name]; exists {
+		pm.mu.Unlock()
 		return fmt.Errorf("monitor plugin '%s' already registered", name)
 	}
+	pm.mu.Unlock()
 
-	// 初始化插件
 	if err := plugin.Initialize(config); err != nil {
 		return fmt.Errorf("failed to initialize plugin '%s': %w", name, err)
 	}
 
+	pm.mu.Lock()
+	if _, exists := pm.monitorPlugins[name]; exists {
+		pm.mu.Unlock()
+		return fmt.Errorf("monitor plugin '%s' already registered", name)
+	}
 	pm.monitorPlugins[name] = plugin
+	pm.mu.Unlock()
 	return nil
 }
 
 // UnregisterPlugin 注销插件
 func (pm *PluginManager) UnregisterPlugin(name string) error {
+	// Extract the plugin from the map under lock, then stop outside the lock
+	// to avoid deadlock if Stop() calls back into the manager.
+	var plugin Plugin
+
 	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	// 尝试注销数据源插件
-	if plugin, ok := pm.dataSourcePlugins[name]; ok {
-		if plugin.IsRunning() {
-			plugin.Stop()
-		}
+	if p, ok := pm.dataSourcePlugins[name]; ok {
+		plugin = p
 		delete(pm.dataSourcePlugins, name)
-		return nil
-	}
-
-	// 尝试注销函数插件
-	if plugin, ok := pm.functionPlugins[name]; ok {
-		if plugin.IsRunning() {
-			plugin.Stop()
-		}
+	} else if p, ok := pm.functionPlugins[name]; ok {
+		plugin = p
 		delete(pm.functionPlugins, name)
-		return nil
-	}
-
-	// 尝试注销监控插件
-	if plugin, ok := pm.monitorPlugins[name]; ok {
-		if plugin.IsRunning() {
-			plugin.Stop()
-		}
+	} else if p, ok := pm.monitorPlugins[name]; ok {
+		plugin = p
 		delete(pm.monitorPlugins, name)
-		return nil
+	}
+	pm.mu.Unlock()
+
+	if plugin == nil {
+		return fmt.Errorf("plugin '%s' not found", name)
 	}
 
-	return fmt.Errorf("plugin '%s' not found", name)
+	if plugin.IsRunning() {
+		plugin.Stop()
+	}
+	return nil
 }
 
 // StartPlugin 启动插件
 func (pm *PluginManager) StartPlugin(name string) error {
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
-	// 尝试启动数据源插件
-	if plugin, ok := pm.dataSourcePlugins[name]; ok {
-		return plugin.Start()
+	var plugin Plugin
+	if p, ok := pm.dataSourcePlugins[name]; ok {
+		plugin = p
+	} else if p, ok := pm.functionPlugins[name]; ok {
+		plugin = p
+	} else if p, ok := pm.monitorPlugins[name]; ok {
+		plugin = p
 	}
+	pm.mu.RUnlock()
 
-	// 尝试启动函数插件
-	if plugin, ok := pm.functionPlugins[name]; ok {
-		return plugin.Start()
+	if plugin == nil {
+		return fmt.Errorf("plugin '%s' not found", name)
 	}
-
-	// 尝试启动监控插件
-	if plugin, ok := pm.monitorPlugins[name]; ok {
-		return plugin.Start()
-	}
-
-	return fmt.Errorf("plugin '%s' not found", name)
+	return plugin.Start()
 }
 
 // StopPlugin 停止插件
 func (pm *PluginManager) StopPlugin(name string) error {
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
-	// 尝试停止数据源插件
-	if plugin, ok := pm.dataSourcePlugins[name]; ok {
-		return plugin.Stop()
+	var plugin Plugin
+	if p, ok := pm.dataSourcePlugins[name]; ok {
+		plugin = p
+	} else if p, ok := pm.functionPlugins[name]; ok {
+		plugin = p
+	} else if p, ok := pm.monitorPlugins[name]; ok {
+		plugin = p
 	}
+	pm.mu.RUnlock()
 
-	// 尝试停止函数插件
-	if plugin, ok := pm.functionPlugins[name]; ok {
-		return plugin.Stop()
+	if plugin == nil {
+		return fmt.Errorf("plugin '%s' not found", name)
 	}
-
-	// 尝试停止监控插件
-	if plugin, ok := pm.monitorPlugins[name]; ok {
-		return plugin.Stop()
-	}
-
-	return fmt.Errorf("plugin '%s' not found", name)
+	return plugin.Stop()
 }
 
 // GetDataSourcePlugin 获取数据源插件
@@ -280,27 +286,24 @@ func (pm *PluginManager) ListPlugins() []string {
 
 // StartAllPlugins 启动所有插件
 func (pm *PluginManager) StartAllPlugins() error {
+	// Collect all plugins under lock, then start outside lock to avoid
+	// holding the lock during potentially slow plugin Start() calls.
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
-	// 启动所有数据源插件
-	for _, plugin := range pm.dataSourcePlugins {
-		if err := plugin.Start(); err != nil {
-			return fmt.Errorf("failed to start data source plugin '%s': %w", plugin.Name(), err)
-		}
+	plugins := make([]Plugin, 0, len(pm.dataSourcePlugins)+len(pm.functionPlugins)+len(pm.monitorPlugins))
+	for _, p := range pm.dataSourcePlugins {
+		plugins = append(plugins, p)
 	}
-
-	// 启动所有函数插件
-	for _, plugin := range pm.functionPlugins {
-		if err := plugin.Start(); err != nil {
-			return fmt.Errorf("failed to start function plugin '%s': %w", plugin.Name(), err)
-		}
+	for _, p := range pm.functionPlugins {
+		plugins = append(plugins, p)
 	}
+	for _, p := range pm.monitorPlugins {
+		plugins = append(plugins, p)
+	}
+	pm.mu.RUnlock()
 
-	// 启动所有监控插件
-	for _, plugin := range pm.monitorPlugins {
+	for _, plugin := range plugins {
 		if err := plugin.Start(); err != nil {
-			return fmt.Errorf("failed to start monitor plugin '%s': %w", plugin.Name(), err)
+			return fmt.Errorf("failed to start plugin '%s': %w", plugin.Name(), err)
 		}
 	}
 
@@ -310,31 +313,22 @@ func (pm *PluginManager) StartAllPlugins() error {
 // StopAllPlugins 停止所有插件
 func (pm *PluginManager) StopAllPlugins() error {
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
-	// 停止所有数据源插件
-	for _, plugin := range pm.dataSourcePlugins {
-		if plugin.IsRunning() {
-			if err := plugin.Stop(); err != nil {
-				return fmt.Errorf("failed to stop data source plugin '%s': %w", plugin.Name(), err)
-			}
-		}
+	plugins := make([]Plugin, 0, len(pm.dataSourcePlugins)+len(pm.functionPlugins)+len(pm.monitorPlugins))
+	for _, p := range pm.dataSourcePlugins {
+		plugins = append(plugins, p)
 	}
-
-	// 停止所有函数插件
-	for _, plugin := range pm.functionPlugins {
-		if plugin.IsRunning() {
-			if err := plugin.Stop(); err != nil {
-				return fmt.Errorf("failed to stop function plugin '%s': %w", plugin.Name(), err)
-			}
-		}
+	for _, p := range pm.functionPlugins {
+		plugins = append(plugins, p)
 	}
+	for _, p := range pm.monitorPlugins {
+		plugins = append(plugins, p)
+	}
+	pm.mu.RUnlock()
 
-	// 停止所有监控插件
-	for _, plugin := range pm.monitorPlugins {
+	for _, plugin := range plugins {
 		if plugin.IsRunning() {
 			if err := plugin.Stop(); err != nil {
-				return fmt.Errorf("failed to stop monitor plugin '%s': %w", plugin.Name(), err)
+				return fmt.Errorf("failed to stop plugin '%s': %w", plugin.Name(), err)
 			}
 		}
 	}

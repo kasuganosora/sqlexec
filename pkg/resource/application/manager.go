@@ -108,10 +108,13 @@ func (m *DataSourceManager) Get(name string) (domain.DataSource, error) {
 
 // GetDefault 获取默认数据源
 func (m *DataSourceManager) GetDefault() (domain.DataSource, error) {
-	if m.defaultDS == "" {
+	m.mu.RLock()
+	name := m.defaultDS
+	m.mu.RUnlock()
+	if name == "" {
 		return nil, fmt.Errorf("no default data source set")
 	}
-	return m.Get(m.defaultDS)
+	return m.Get(name)
 }
 
 // CreateFromConfig 从配置创建数据源
@@ -168,13 +171,22 @@ func (m *DataSourceManager) List() []string {
 
 // ConnectAll 连接所有数据源
 func (m *DataSourceManager) ConnectAll(ctx context.Context) error {
+	// Collect datasources under lock, then connect outside lock
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
+	type namedDS struct {
+		name string
+		ds   domain.DataSource
+	}
+	sources := make([]namedDS, 0, len(m.sources))
 	for name, ds := range m.sources {
-		if !ds.IsConnected() {
-			if err := ds.Connect(ctx); err != nil {
-				return fmt.Errorf("failed to connect data source %s: %w", name, err)
+		sources = append(sources, namedDS{name, ds})
+	}
+	m.mu.RUnlock()
+
+	for _, s := range sources {
+		if !s.ds.IsConnected() {
+			if err := s.ds.Connect(ctx); err != nil {
+				return fmt.Errorf("failed to connect data source %s: %w", s.name, err)
 			}
 		}
 	}
@@ -184,12 +196,20 @@ func (m *DataSourceManager) ConnectAll(ctx context.Context) error {
 // CloseAll 关闭所有数据源
 func (m *DataSourceManager) CloseAll(ctx context.Context) error {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	type namedDS struct {
+		name string
+		ds   domain.DataSource
+	}
+	sources := make([]namedDS, 0, len(m.sources))
+	for name, ds := range m.sources {
+		sources = append(sources, namedDS{name, ds})
+	}
+	m.mu.RUnlock()
 
 	var lastErr error
-	for name, ds := range m.sources {
-		if err := ds.Close(ctx); err != nil {
-			lastErr = fmt.Errorf("failed to close data source %s: %w", name, err)
+	for _, s := range sources {
+		if err := s.ds.Close(ctx); err != nil {
+			lastErr = fmt.Errorf("failed to close data source %s: %w", s.name, err)
 		}
 	}
 	return lastErr

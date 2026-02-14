@@ -42,7 +42,7 @@ func (q *Query) Next() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	if q.closed {
+	if q.closed || q.result == nil {
 		return false
 	}
 
@@ -55,7 +55,7 @@ func (q *Query) Scan(dest ...interface{}) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	if q.closed {
+	if q.closed || q.result == nil {
 		return NewError(ErrCodeClosed, "Query is closed", nil)
 	}
 
@@ -99,7 +99,7 @@ func (q *Query) Row() domain.Row {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 
-	if q.closed || q.rowIndex < 0 || q.rowIndex >= len(q.result.Rows) {
+	if q.closed || q.result == nil || q.rowIndex < 0 || q.rowIndex >= len(q.result.Rows) {
 		return nil
 	}
 
@@ -118,6 +118,9 @@ func (q *Query) RowsCount() int {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
 
+	if q.result == nil {
+		return 0
+	}
 	return len(q.result.Rows)
 }
 

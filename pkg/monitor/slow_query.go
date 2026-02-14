@@ -43,6 +43,8 @@ func NewSlowQueryAnalyzer(threshold time.Duration, maxEntries int) *SlowQueryAna
 
 // IsSlowQuery 检查是否为慢查询
 func (s *SlowQueryAnalyzer) IsSlowQuery(duration time.Duration) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return duration >= s.threshold
 }
 
@@ -80,16 +82,36 @@ func (s *SlowQueryAnalyzer) RecordSlowQuery(sql string, duration time.Duration, 
 }
 
 // RecordSlowQueryWithError 记录带错误的慢查询
-func (s *SlowQueryAnalyzer) RecordSlowQueryWithError(sql string, duration time.Duration, tableName string, rowCount int64, err string) int64 {
-	id := s.RecordSlowQuery(sql, duration, tableName, rowCount)
-	if id > 0 {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		if log, ok := s.slowQueryMap[id]; ok {
-			log.Error = err
-		}
+func (s *SlowQueryAnalyzer) RecordSlowQueryWithError(sql string, duration time.Duration, tableName string, rowCount int64, errMsg string) int64 {
+	if !s.IsSlowQuery(duration) {
+		return 0
 	}
-	return id
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	log := &SlowQueryLog{
+		ID:         s.nextID,
+		SQL:        sql,
+		Duration:   duration,
+		Timestamp:  time.Now(),
+		TableName:  tableName,
+		RowCount:   rowCount,
+		ExecutedBy: "system",
+		Error:      errMsg,
+	}
+
+	s.slowQueryMap[log.ID] = log
+	s.slowQueries = append(s.slowQueries, log)
+	s.nextID++
+
+	if len(s.slowQueries) > s.maxEntries {
+		oldest := s.slowQueries[0]
+		delete(s.slowQueryMap, oldest.ID)
+		s.slowQueries = s.slowQueries[1:]
+	}
+
+	return log.ID
 }
 
 // GetSlowQuery 获取慢查询记录

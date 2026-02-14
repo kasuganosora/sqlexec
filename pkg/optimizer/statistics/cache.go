@@ -37,21 +37,18 @@ func NewStatisticsCache(ttl time.Duration) *StatisticsCache {
 
 // Get 获取缓存的统计信息
 func (sc *StatisticsCache) Get(tableName string) (*TableStatistics, bool) {
-	sc.mu.RLock()
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
 
 	cached, exists := sc.cache[tableName]
 	if !exists {
-		sc.mu.RUnlock()
 		sc.misses++
 		return nil, false
 	}
 
 	// 检查是否过期
 	if time.Since(cached.CollectTime) > sc.ttl {
-		sc.mu.RUnlock()
-		sc.mu.Lock()
 		delete(sc.cache, tableName)
-		sc.mu.Unlock()
 		sc.misses++
 		return nil, false
 	}
@@ -60,7 +57,6 @@ func (sc *StatisticsCache) Get(tableName string) (*TableStatistics, bool) {
 	cached.HitCount++
 	sc.hits++
 
-	sc.mu.RUnlock()
 	return cached.Statistics, true
 }
 
