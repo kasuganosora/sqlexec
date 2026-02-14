@@ -276,6 +276,10 @@ func NewTupleVersion(data interface{}, xmin XID) *TupleVersion {
 
 // IsVisibleTo 检查版本对快照是否可见 (PostgreSQL风格)
 func (v *TupleVersion) IsVisibleTo(snapshot *Snapshot) bool {
+	if snapshot == nil {
+		return false
+	}
+
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 

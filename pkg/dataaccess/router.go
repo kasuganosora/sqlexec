@@ -26,17 +26,17 @@ func NewRouter() *Router {
 // Route 路由表到数据源
 func (r *Router) Route(tableName string) (domain.DataSource, error) {
 	r.mu.RLock()
-	if r.manager == nil {
-		r.mu.RUnlock()
-		return nil, fmt.Errorf("router manager not initialized")
-	}
+	manager := r.manager
 	dataSourceName := r.defaultDataSourceName
 	if route, exists := r.routes[tableName]; exists {
 		dataSourceName = route
 	}
 	r.mu.RUnlock()
 
-	return r.manager.GetDataSource(dataSourceName)
+	if manager == nil {
+		return nil, fmt.Errorf("router manager not initialized")
+	}
+	return manager.GetDataSource(dataSourceName)
 }
 
 // AddRoute 添加路由
