@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
@@ -333,23 +334,7 @@ func matchesFilter(row domain.Row, filter domain.Filter) (bool, error) {
 	}
 }
 
-// matchesLike implements simple LIKE pattern matching
+// matchesLike delegates to utils.MatchesLike for full LIKE pattern matching
 func matchesLike(value, pattern string) bool {
-	if pattern == "%" {
-		return true
-	}
-	if pattern == value {
-		return true
-	}
-	// Pattern starts with "%": matches anything ending with suffix
-	if len(pattern) > 0 && pattern[0] == '%' && len(pattern) > 1 {
-		suffix := pattern[1:]
-		return len(value) >= len(suffix) && value[len(value)-len(suffix):] == suffix
-	}
-	// Pattern ends with "%": matches anything starting with prefix
-	if len(pattern) > 0 && pattern[len(pattern)-1] == '%' && len(pattern) > 1 {
-		prefix := pattern[:len(pattern)-1]
-		return len(value) >= len(prefix) && value[:len(prefix)] == prefix
-	}
-	return false
+	return utils.MatchesLike(value, pattern)
 }

@@ -1,0 +1,124 @@
+{
+  "timestamp": "2026-02-14T20:31:36+08:00",
+  "go_version": "go1.24.2",
+  "system_info": {
+    "cpu_cores": 12,
+    "gomaxprocs": 12
+  },
+  "benchmarks": {
+    "Batch1K_Contains": {
+      "ns_per_op": 28884.951098163107,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 52861
+    },
+    "Batch1K_Prefix": {
+      "ns_per_op": 19111.548001001207,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 87894
+    },
+    "CompareLike_Int": {
+      "ns_per_op": 195.8852663799238,
+      "allocs_per_op": 2,
+      "bytes_per_op": 16,
+      "iterations": 6361797
+    },
+    "CompareLike_String": {
+      "ns_per_op": 42.11181368495374,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 41821464
+    },
+    "Complex_Long1000": {
+      "ns_per_op": 238.41552338295614,
+      "allocs_per_op": 1,
+      "bytes_per_op": 80,
+      "iterations": 7390554
+    },
+    "Complex_Short10": {
+      "ns_per_op": 283.60242003244656,
+      "allocs_per_op": 1,
+      "bytes_per_op": 80,
+      "iterations": 5521083
+    },
+    "Contains_Long1000": {
+      "ns_per_op": 34.29684467109117,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 47064729
+    },
+    "Contains_Medium100": {
+      "ns_per_op": 33.72513603686136,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 47069779
+    },
+    "Contains_Short10": {
+      "ns_per_op": 27.031318144137035,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 49930928
+    },
+    "Exact_Long1000": {
+      "ns_per_op": 4.336165480928458,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 281589138
+    },
+    "Exact_Short10": {
+      "ns_per_op": 5.214696428387399,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 258111420
+    },
+    "Prefix_Long1000": {
+      "ns_per_op": 18.695662000559253,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 84419974
+    },
+    "Prefix_Medium100": {
+      "ns_per_op": 17.117570094071866,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 64545972
+    },
+    "Prefix_Short10": {
+      "ns_per_op": 16.48832046402135,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 60871682
+    },
+    "SinglePercent": {
+      "ns_per_op": 3.0173174722914764,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 363478855
+    },
+    "StdlibContains_1000": {
+      "ns_per_op": 19.91853275940371,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 54536768
+    },
+    "Suffix_Long1000": {
+      "ns_per_op": 16.947884180243165,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 67213334
+    },
+    "Suffix_Medium100": {
+      "ns_per_op": 17.497632309910465,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 71482117
+    },
+    "Suffix_Short10": {
+      "ns_per_op": 21.97186579998127,
+      "allocs_per_op": 0,
+      "bytes_per_op": 0,
+      "iterations": 75070839
+    }
+  }
+}

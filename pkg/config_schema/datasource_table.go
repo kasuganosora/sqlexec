@@ -11,6 +11,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // DatasourceTable is a writable virtual table for managing data source configurations
@@ -448,23 +449,9 @@ func matchesFilter(row domain.Row, filter domain.Filter) bool {
 	}
 }
 
-// matchesLike implements simple LIKE pattern matching
+// matchesLike delegates to utils.MatchesLike for full LIKE pattern matching
 func matchesLike(value, pattern string) bool {
-	if pattern == "%" {
-		return true
-	}
-	if pattern == value {
-		return true
-	}
-	if len(pattern) > 1 && pattern[0] == '%' {
-		suffix := pattern[1:]
-		return len(value) >= len(suffix) && value[len(value)-len(suffix):] == suffix
-	}
-	if len(pattern) > 1 && pattern[len(pattern)-1] == '%' {
-		prefix := pattern[:len(pattern)-1]
-		return len(value) >= len(prefix) && value[:len(prefix)] == prefix
-	}
-	return false
+	return utils.MatchesLike(value, pattern)
 }
 
 // toInt converts an interface{} to int

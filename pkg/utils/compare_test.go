@@ -239,8 +239,8 @@ func TestCompareLike(t *testing.T) {
 		{"LIKE*前缀", "hello", "he*", true, false},
 		{"LIKE*中间", "hello", "*ll*", true, false}, // * wildcard converts to %, supports middle match
 		{"LIKE*全部", "anything", "*", true, false},
-		{"LIKE下划线", "hello", "h_llo", false, false}, // underscore not supported in simple impl
-		{"LIKE混合通配符", "hello world", "%ll%o%", false, false}, // complex pattern not supported by simple impl
+		{"LIKE下划线", "hello", "h_llo", true, false},          // _ matches single char
+		{"LIKE混合通配符", "hello world", "%ll%o%", true, false}, // complex multi-% pattern
 		{"LIKE空模式", "hello", "", false, false},
 		{"LIKE区分大小写", "HELLO", "hello", false, false},
 		{"LIKE数字后缀", "12345", "%345", true, false},

@@ -433,35 +433,15 @@ func (e *ExpressionEvaluator) divValues(a, b any) (any, error) {
 
 // likeValues LIKE 模式匹配
 func (e *ExpressionEvaluator) likeValues(value, pattern interface{}) bool {
-	valStr := fmt.Sprintf("%v", value)
-	patStr := fmt.Sprintf("%v", pattern)
-
-	// 简单的LIKE实现：支持 % 和 _ 通配符
-	patternRegex := strings.ReplaceAll(patStr, "%", ".*")
-	patternRegex = strings.ReplaceAll(patternRegex, "_", ".")
-	patternRegex = "^" + patternRegex + "$"
-
-	// 注意：完整的实现应该使用正则表达式包
-	// 这里简化为使用strings.Contains和通配符匹配
-	if !strings.Contains(patStr, "%") && !strings.Contains(patStr, "_") {
-		return valStr == patStr
+	valStr, ok := value.(string)
+	if !ok {
+		valStr = utils.ToString(value)
 	}
-
-	// 简化实现：只检查是否包含
-	if strings.HasPrefix(patStr, "%") && strings.HasSuffix(patStr, "%") {
-		subPat := strings.Trim(patStr, "%")
-		return strings.Contains(valStr, subPat)
+	patStr, ok := pattern.(string)
+	if !ok {
+		patStr = utils.ToString(pattern)
 	}
-	if strings.HasPrefix(patStr, "%") {
-		subPat := strings.TrimPrefix(patStr, "%")
-		return strings.HasSuffix(valStr, subPat)
-	}
-	if strings.HasSuffix(patStr, "%") {
-		subPat := strings.TrimSuffix(patStr, "%")
-		return strings.HasPrefix(valStr, subPat)
-	}
-
-	return false
+	return utils.MatchesLike(valStr, patStr)
 }
 
 // inValues IN 操作

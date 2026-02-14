@@ -194,16 +194,20 @@ func MapOperator(parserOp string) string {
 // compareLike checks if value matches pattern
 // Supports % (any chars) and * (any chars - glob style)
 func compareLike(a, b interface{}) (bool, error) {
-	aStr := fmt.Sprintf("%v", a)
-	bStr := fmt.Sprintf("%v", b)
+	aStr, ok := a.(string)
+	if !ok {
+		aStr = ToString(a)
+	}
+	bStr, ok := b.(string)
+	if !ok {
+		bStr = ToString(b)
+	}
 
 	// Check for * wildcard (glob style)
 	if strings.Contains(bStr, "*") {
-		// Convert * to % and process
 		normalizedPattern := strings.ReplaceAll(bStr, "*", "%")
 		return MatchesLike(aStr, normalizedPattern), nil
 	}
 
-	// Use MatchesLike (supports % wildcard)
 	return MatchesLike(aStr, bStr), nil
 }

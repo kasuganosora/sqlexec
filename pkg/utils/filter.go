@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"strings"
+
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
@@ -82,8 +84,10 @@ func MatchesAllSubFilters(row domain.Row, subFilters []domain.Filter) (bool, err
 	return true, nil
 }
 
-// MatchesLike implements simple LIKE pattern matching
-// Supports: % (any chars), _ (single char)
+// MatchesLike implements SQL LIKE pattern matching.
+// Supports: % (match any sequence of characters), _ (match any single character).
+// Uses a segment-based algorithm: splits the pattern by '%', then matches
+// each literal segment in order. O(n*k) where k = number of segments.
 func MatchesLike(value, pattern string) bool {
 	// Empty pattern only matches empty value
 	if pattern == "" {
@@ -95,100 +99,134 @@ func MatchesLike(value, pattern string) bool {
 		return true
 	}
 
-	// Exact match
-	if pattern == value {
+	// Exact match (fast: compares length then pointer/bytes)
+	if value == pattern {
 		return true
 	}
 
-	// Count wildcards to determine complexity
+	// Single scan to classify the pattern
 	percentCount := 0
-	for _, c := range pattern {
-		if c == '%' {
+	hasUnderscore := false
+	for i := 0; i < len(pattern); i++ {
+		switch pattern[i] {
+		case '%':
 			percentCount++
+		case '_':
+			hasUnderscore = true
 		}
 	}
 
-	// For complex patterns with multiple %, use recursive matching
-	if percentCount > 2 {
-		return matchesLikeRecursive(value, pattern)
+	// No wildcards → exact match
+	if percentCount == 0 && !hasUnderscore {
+		return value == pattern
 	}
 
-	// Check for middle wildcard: %xxx%
-	if len(pattern) >= 2 && pattern[0] == '%' && pattern[len(pattern)-1] == '%' {
-		middle := pattern[1 : len(pattern)-1]
-		if middle == "" {
-			return true
+	// Fast paths for single-% patterns without '_'
+	if percentCount == 1 && !hasUnderscore {
+		if pattern[len(pattern)-1] == '%' {
+			// xxx%
+			prefix := pattern[:len(pattern)-1]
+			return len(value) >= len(prefix) && value[:len(prefix)] == prefix
 		}
-		// Use simple substring check
-		return containsSubstring(value, middle)
+		if pattern[0] == '%' {
+			// %xxx
+			suffix := pattern[1:]
+			return len(value) >= len(suffix) && value[len(value)-len(suffix):] == suffix
+		}
 	}
 
-	// Check for suffix wildcard: xxx%
-	if len(pattern) > 1 && pattern[len(pattern)-1] == '%' {
-		prefix := pattern[:len(pattern)-1]
-		return len(value) >= len(prefix) && value[:len(prefix)] == prefix
+	// Fast path for %xxx% pattern without '_'
+	if percentCount == 2 && !hasUnderscore && pattern[0] == '%' && pattern[len(pattern)-1] == '%' {
+		return strings.Contains(value, pattern[1:len(pattern)-1])
 	}
 
-	// Check for prefix wildcard: %xxx
-	if len(pattern) > 1 && pattern[0] == '%' {
-		suffix := pattern[1:]
-		return len(value) >= len(suffix) && value[len(value)-len(suffix):] == suffix
-	}
-
-	return false
+	// General segment-based matching
+	return matchesLikeSegmented(value, pattern)
 }
 
-// matchesLikeRecursive handles complex LIKE patterns with multiple wildcards
-func matchesLikeRecursive(value, pattern string) bool {
-	// Base cases
-	if pattern == "" {
-		return value == ""
-	}
-	if pattern == "%" {
-		return true
-	}
-	if value == "" {
-		return pattern == ""
-	}
+// matchesLikeSegmented splits pattern by '%' into literal segments and matches
+// them in order against value. Each '_' in a segment matches exactly one character.
+func matchesLikeSegmented(value, pattern string) bool {
+	segments := strings.Split(pattern, "%")
+	// segments[0] = before first %, segments[last] = after last %
 
-	// Handle leading %
-	if pattern[0] == '%' {
-		// Try matching % with zero chars, then recurse
-		for i := 0; i <= len(value); i++ {
-			if matchesLikeRecursive(value[i:], pattern[1:]) {
-				return true
+	startsWithPercent := pattern[0] == '%'
+	endsWithPercent := pattern[len(pattern)-1] == '%'
+
+	pos := 0
+
+	for i, seg := range segments {
+		if seg == "" {
+			continue
+		}
+
+		isFirst := (i == 0) && !startsWithPercent
+		isLast := (i == len(segments)-1) && !endsWithPercent
+
+		if isFirst {
+			// First segment must match at the start of value
+			if !matchSegmentAt(value, 0, seg) {
+				return false
 			}
+			pos = len(seg)
+		} else if isLast {
+			// Last segment must match at the end of value
+			startPos := len(value) - len(seg)
+			if startPos < pos {
+				return false
+			}
+			if !matchSegmentAt(value, startPos, seg) {
+				return false
+			}
+			pos = len(value)
+		} else {
+			// Middle segment: find first occurrence from current pos
+			found := findSegment(value, pos, seg)
+			if found < 0 {
+				return false
+			}
+			pos = found + len(seg)
 		}
+	}
+
+	// If pattern doesn't end with %, value must be fully consumed
+	if !endsWithPercent && pos != len(value) {
 		return false
 	}
 
-	// Handle trailing % (optimization)
-	if pattern[len(pattern)-1] == '%' {
-		prefix := pattern[:len(pattern)-1]
-		return len(value) >= len(prefix) && value[:len(prefix)] == prefix || 
-			containsSubstring(value, prefix)
-	}
-
-	// Handle literal character at start
-	if value[0] == pattern[0] || pattern[0] == '_' {
-		return matchesLikeRecursive(value[1:], pattern[1:])
-	}
-
-	return false
+	return true
 }
 
-// containsSubstring checks if substr exists in s (simple implementation)
-func containsSubstring(s, substr string) bool {
-	if len(substr) == 0 {
-		return true
-	}
-	if len(substr) > len(s) {
+// matchSegmentAt checks if segment matches at exactly position pos in value.
+// '_' in segment matches any single byte.
+func matchSegmentAt(value string, pos int, seg string) bool {
+	if pos+len(seg) > len(value) {
 		return false
 	}
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
+	for i := 0; i < len(seg); i++ {
+		if seg[i] != '_' && seg[i] != value[pos+i] {
+			return false
 		}
 	}
-	return false
+	return true
+}
+
+// findSegment finds the first position >= startPos where segment matches in value.
+// Returns -1 if not found.
+func findSegment(value string, startPos int, seg string) int {
+	if !strings.Contains(seg, "_") {
+		// No underscore: use strings.Index for speed
+		idx := strings.Index(value[startPos:], seg)
+		if idx < 0 {
+			return -1
+		}
+		return startPos + idx
+	}
+	// Has underscore: linear scan
+	for i := startPos; i <= len(value)-len(seg); i++ {
+		if matchSegmentAt(value, i, seg) {
+			return i
+		}
+	}
+	return -1
 }

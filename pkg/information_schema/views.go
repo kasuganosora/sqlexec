@@ -7,6 +7,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
@@ -181,22 +182,9 @@ func applyViewsFilters(rows []domain.Row, filters []domain.Filter) ([]domain.Row
 	return filtered, nil
 }
 
-// matchLike performs LIKE matching (simple implementation)
+// matchLike performs case-insensitive LIKE matching
 func matchLike(value, pattern string) bool {
-	// Simple implementation: treat % as wildcard
-	valueLower := strings.ToLower(value)
-	patternLower := strings.ToLower(pattern)
-	
-	// Replace SQL wildcard % with Go wildcard *
-	if strings.Contains(patternLower, "%") {
-		goPattern := strings.ReplaceAll(patternLower, "%", "*")
-		// Use simple prefix match for simplicity
-		if strings.HasSuffix(goPattern, "*") {
-			return strings.HasPrefix(valueLower, goPattern[:len(goPattern)-1])
-		}
-	}
-	
-	return valueLower == patternLower
+	return utils.MatchesLike(strings.ToLower(value), strings.ToLower(pattern))
 }
 
 // checkOptionToString converts ViewCheckOption to string

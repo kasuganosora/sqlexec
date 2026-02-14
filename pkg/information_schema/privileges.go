@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kasuganosora/sqlexec/server/acl"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 	"github.com/kasuganosora/sqlexec/pkg/virtual"
+	"github.com/kasuganosora/sqlexec/server/acl"
 )
 
 // UserPrivilegesTable represents INFORMATION_SCHEMA.USER_PRIVILEGES
@@ -279,22 +280,7 @@ func matchesPrivilegeFilter(row domain.Row, filter domain.Filter) (bool, error) 
 	}
 }
 
-// matchesPrivilegeLike implements simple LIKE pattern matching for privileges
+// matchesPrivilegeLike performs case-insensitive LIKE matching for privileges
 func matchesPrivilegeLike(value, pattern string) bool {
-	if pattern == "%" {
-		return true
-	}
-	valueUpper := strings.ToUpper(value)
-	if pattern == valueUpper {
-		return true
-	}
-	if len(pattern) > 0 && pattern[0] == '%' && len(pattern) > 1 {
-		suffix := pattern[1:]
-		return len(value) >= len(suffix) && strings.HasSuffix(valueUpper, strings.ToUpper(suffix))
-	}
-	if len(pattern) > 0 && pattern[len(pattern)-1] == '%' && len(pattern) > 1 {
-		prefix := pattern[:len(pattern)-1]
-		return len(value) >= len(prefix) && strings.HasPrefix(valueUpper, strings.ToUpper(prefix))
-	}
-	return false
+	return utils.MatchesLike(strings.ToUpper(value), strings.ToUpper(pattern))
 }

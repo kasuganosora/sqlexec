@@ -331,6 +331,29 @@ func TestMatchesLike(t *testing.T) {
 		{"hello world", "%hello", false},
 		{"", "%", true},
 		{"test", "test", true},
+		// Underscore wildcard
+		{"hello", "h_llo", true},
+		{"hello", "_ello", true},
+		{"hello", "hell_", true},
+		{"hello", "_____", true},
+		{"hello", "______", false},
+		{"hello", "h__lo", true},
+		// Complex multi-% patterns
+		{"aXbYc", "a%b%c", true},
+		{"hello world", "%ll%o%", true},
+		{"abcdef", "%b%d%f", true},
+		{"abcdef", "%x%d%f", false},
+		// Mixed _ and %
+		{"hello", "h_%lo", true},
+		{"hello world", "_ello%", true},
+		// Edge cases
+		{"", "", true},
+		{"a", "a", true},
+		{"a", "b", false},
+		{"abc", "a_c", true},
+		{"abc", "a__", true},
+		{"abc", "___", true},
+		{"abc", "____", false},
 	}
 
 	for _, tt := range tests {
