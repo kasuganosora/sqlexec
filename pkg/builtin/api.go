@@ -205,8 +205,9 @@ func (api *FunctionAPI) GenerateDocumentation() string {
 		CategoryControl,
 		CategoryJSON,
 		CategorySystem,
+		CategoryFinancial,
 	}
-	
+
 	for _, category := range categories {
 		functions := api.registry.ListByCategory(category)
 		if len(functions) == 0 {
@@ -310,8 +311,9 @@ func (api *FunctionAPI) getCategoryStats() map[string]int {
 		CategoryControl,
 		CategoryJSON,
 		CategorySystem,
+		CategoryFinancial,
 	}
-	
+
 	for _, category := range categories {
 		stats[string(category)] = api.registry.CountByCategory(category)
 	}

@@ -17,6 +17,7 @@ const (
 	CategoryJSON      FunctionCategory = "json"
 	CategorySystem    FunctionCategory = "system"
 	CategoryUser      FunctionCategory = "user"
+	CategoryFinancial FunctionCategory = "financial"
 )
 
 // FunctionScope 函数作用域

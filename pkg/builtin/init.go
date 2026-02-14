@@ -21,6 +21,7 @@ func GetAllCategories() []string {
 		"date",
 		"json",
 		"aggregate",
+		"financial",
 	}
 }
 
