@@ -2,13 +2,34 @@ package fulltext
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"testing"
-	
+
 	"github.com/kasuganosora/sqlexec/pkg/fulltext/analyzer"
 )
 
+// checkJiebaAvailable tests if the gojieba CGO library works on this platform
+// by running a minimal check in a subprocess. If the subprocess crashes (e.g.,
+// segfault on Windows/Cygwin), we know Jieba is not usable.
+func checkJiebaAvailable(t *testing.T) {
+	t.Helper()
+	if os.Getenv("JIEBA_PROBE") == "1" {
+		// We're inside the subprocess — attempt to create a Jieba instance.
+		_, _ = analyzer.TokenizerFactory(analyzer.TokenizerTypeJieba, nil)
+		os.Exit(0)
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestJiebaAndHybrid$", "-test.v")
+	cmd.Env = append(os.Environ(), "JIEBA_PROBE=1")
+	if err := cmd.Run(); err != nil {
+		t.Skip("Skipping: gojieba CGO library is not available on this platform (likely Windows/Cygwin CGO compatibility issue)")
+	}
+}
+
 // TestJiebaAndHybrid 验证 Jieba 分词器和混合搜索功能
 func TestJiebaAndHybrid(t *testing.T) {
+	checkJiebaAvailable(t)
+
 	// 测试 Jieba 分词器
 	tokenizer, err := analyzer.TokenizerFactory(analyzer.TokenizerTypeJieba, nil)
 	if err != nil {
