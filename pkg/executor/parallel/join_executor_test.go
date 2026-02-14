@@ -421,7 +421,12 @@ func TestParallelHashJoinExecutor_ComputeHashKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			key := executor.computeHashKey(tt.row, tt.cols)
-			assert.Greater(t, key, uint64(0))
+			// empty cols returns 0, others return > 0
+			if len(tt.cols) == 0 {
+				assert.Equal(t, uint64(0), key)
+			} else {
+				assert.Greater(t, key, uint64(0))
+			}
 		})
 	}
 }

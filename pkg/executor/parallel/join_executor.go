@@ -36,13 +36,14 @@ func NewParallelHashJoinExecutor(
 	workerPool *WorkerPool,
 ) *ParallelHashJoinExecutor {
 	return &ParallelHashJoinExecutor{
-		joinType:      joinType,
-		left:          left,
-		right:         right,
-		joinCondition: condition,
-		buildParallel: buildParallel,
-		probeParallel: probeParallel,
-		workerPool:    workerPool,
+		joinType:        joinType,
+		left:            left,
+		right:           right,
+		joinCondition:   condition,
+		buildParallel:   buildParallel,
+		probeParallel:   probeParallel,
+		workerPool:      workerPool,
+		hashTableReady:  make(chan struct{}),
 	}
 }
 
@@ -96,8 +97,7 @@ func (phje *ParallelHashJoinExecutor) buildHashTable(ctx context.Context, result
 
 	// 构建哈希表
 	phje.hashTable = make(map[uint64][]domain.Row)
-	phje.hashTableReady = make(chan struct{})
-	
+
 	// 使用parallelism
 	parallelism := phje.buildParallel
 	if parallelism <= 0 {
@@ -109,11 +109,12 @@ func (phje *ParallelHashJoinExecutor) buildHashTable(ctx context.Context, result
 
 	// 并行构建
 	var wg sync.WaitGroup
+	var mu sync.Mutex
 	workerErrs := make(chan error, parallelism)
 
 	for i := 0; i < parallelism; i++ {
 		wg.Add(1)
-		
+
 		start := i * rowsPerWorker
 		end := start + rowsPerWorker
 		if end > rowCount {
@@ -122,14 +123,16 @@ func (phje *ParallelHashJoinExecutor) buildHashTable(ctx context.Context, result
 
 		go func(workerIdx int, start, end int) {
 			defer wg.Done()
-			
+
 			for rowIdx := start; rowIdx < end; rowIdx++ {
 				row := phje.left.Rows[rowIdx]
-				
+
 				// 计算哈希键
 				key := phje.computeHashKey(row, phje.joinCols.Left)
 
-			phje.hashTable[key] = append(phje.hashTable[key], row)
+				mu.Lock()
+				phje.hashTable[key] = append(phje.hashTable[key], row)
+				mu.Unlock()
 			}
 		}(i, start, end)
 	}
@@ -149,6 +152,9 @@ func (phje *ParallelHashJoinExecutor) buildHashTable(ctx context.Context, result
 
 		// 构建完成，通知探测阶段可以开始
 		close(phje.hashTableReady)
+
+		// 发送构建完成信号到resultChan
+		resultChan <- nil
 	}()
 }
 

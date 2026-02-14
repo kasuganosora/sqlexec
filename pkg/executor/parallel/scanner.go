@@ -84,7 +84,7 @@ func (ps *ParallelScanner) Execute(ctx context.Context, scanRange ScanRange, opt
 	}
 
 	// 收集结果
-	results := make([]*ScanResult, 0, len(ranges))
+	results := make([]*ScanResult, len(ranges))
 	completed := 0
 
 	for {
@@ -116,18 +116,17 @@ func (ps *ParallelScanner) Execute(ctx context.Context, scanRange ScanRange, opt
 
 // divideScanRange 划分扫描范围
 func (ps *ParallelScanner) divideScanRange(tableName string, offset, limit int64, parallelism int) []ScanRange {
-	ranges := make([]ScanRange, 0, parallelism)
+	ranges := make([]ScanRange, parallelism)
 
 	// 每个worker的行数
 	rowsPerWorker := int64(float64(limit) / float64(parallelism))
 
 	for i := 0; i < parallelism; i++ {
-		r := ScanRange{
+		ranges[i] = ScanRange{
 			TableName: tableName,
 			Offset:    offset + int64(i)*rowsPerWorker,
 			Limit:     rowsPerWorker,
 		}
-		ranges[i] = r
 	}
 
 	return ranges

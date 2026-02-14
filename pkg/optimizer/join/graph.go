@@ -77,7 +77,7 @@ func (jg *JoinGraph) GetNode(name string) *JoinNode {
 	return jg.nodes[name]
 }
 
-// GetNeighbors 获取节点的邻居
+// GetNeighbors 获取节点的邻居（有向图，只返回出边方向）
 func (jg *JoinGraph) GetNeighbors(name string) []string {
 	node := jg.GetNode(name)
 	if node == nil {
@@ -94,6 +94,40 @@ func (jg *JoinGraph) GetNeighbors(name string) []string {
 	return neighbors
 }
 
+// getNeighborsUndirected 获取节点的所有邻居（无向图，用于连通性检查）
+func (jg *JoinGraph) getNeighborsUndirected(name string) []string {
+	node := jg.GetNode(name)
+	if node == nil {
+		return []string{}
+	}
+
+	seen := make(map[string]bool)
+	neighbors := make([]string, 0)
+
+	// Add outgoing neighbors
+	for _, edge := range node.Edges {
+		if edge.From == name && !seen[edge.To] {
+			seen[edge.To] = true
+			neighbors = append(neighbors, edge.To)
+		}
+	}
+
+	// Add incoming neighbors
+	for nodeName, n := range jg.nodes {
+		if nodeName == name {
+			continue
+		}
+		for _, edge := range n.Edges {
+			if edge.To == name && !seen[edge.From] {
+				seen[edge.From] = true
+				neighbors = append(neighbors, edge.From)
+			}
+		}
+	}
+
+	return neighbors
+}
+
 // GetConnectedComponents 获取连通分量
 func (jg *JoinGraph) GetConnectedComponents() [][]string {
 	visited := make(map[string]bool)
@@ -101,7 +135,8 @@ func (jg *JoinGraph) GetConnectedComponents() [][]string {
 
 	for name := range jg.nodes {
 		if !visited[name] {
-			component := jg.bfs(name, visited)
+			// Use undirected BFS for connected components
+			component := jg.bfsUndirected(name, visited)
 			if len(component) > 0 {
 				components = append(components, component)
 			}
@@ -111,7 +146,7 @@ func (jg *JoinGraph) GetConnectedComponents() [][]string {
 	return components
 }
 
-// BFS 广度优先搜索
+// BFS 广度优先搜索（有向）
 func (jg *JoinGraph) bfs(start string, visited map[string]bool) []string {
 	queue := []string{start}
 	visited[start] = true
@@ -124,6 +159,29 @@ func (jg *JoinGraph) bfs(start string, visited map[string]bool) []string {
 
 		// 遍历邻居
 		for _, neighbor := range jg.GetNeighbors(current) {
+			if !visited[neighbor] {
+				visited[neighbor] = true
+				queue = append(queue, neighbor)
+			}
+		}
+	}
+
+	return component
+}
+
+// bfsUndirected 广度优先搜索（无向，用于连通性检查）
+func (jg *JoinGraph) bfsUndirected(start string, visited map[string]bool) []string {
+	queue := []string{start}
+	visited[start] = true
+	component := []string{}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		component = append(component, current)
+
+		// 遍历所有邻居（入边和出边）
+		for _, neighbor := range jg.getNeighborsUndirected(current) {
 			if !visited[neighbor] {
 				visited[neighbor] = true
 				queue = append(queue, neighbor)
@@ -268,7 +326,7 @@ func (jg *JoinGraph) isConnected() bool {
 		return true
 	}
 
-	// 从任意节点开始BFS
+	// 从任意节点开始无向BFS（连通性检查需要无向）
 	start := ""
 	for name := range jg.nodes {
 		start = name
@@ -276,7 +334,7 @@ func (jg *JoinGraph) isConnected() bool {
 	}
 
 	visited := make(map[string]bool)
-	jg.bfs(start, visited)
+	jg.bfsUndirected(start, visited)
 
 	return len(visited) == len(jg.nodes)
 }

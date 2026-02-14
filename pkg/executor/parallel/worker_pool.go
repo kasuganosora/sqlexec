@@ -16,6 +16,9 @@ type WorkerPool struct {
 	wg          sync.WaitGroup
 	shutdown    chan struct{}
 	mu          sync.Mutex
+
+	// Task tracking
+	taskWg     sync.WaitGroup
 }
 
 // worker 工作包装器
@@ -28,6 +31,17 @@ type worker struct {
 // Task 任务接口
 type Task interface {
 	Execute() error
+}
+
+// trackingTask wraps a task to track completion
+type trackingTask struct {
+	task Task
+	wg   *sync.WaitGroup
+}
+
+func (t *trackingTask) Execute() error {
+	defer t.wg.Done()
+	return t.task.Execute()
 }
 
 // NewWorkerPool creates a worker pool
@@ -84,10 +98,38 @@ func (wp *WorkerPool) dispatch() {
 			wp.mu.Unlock()
 
 			if len(workers) > 0 {
-				select {
-				case workers[workerIdx].taskChan <- task:
-				case <-wp.shutdown:
-					return
+				// Try to send to worker, but check for shutdown
+				sent := false
+				for !sent {
+					select {
+					case <-wp.shutdown:
+						return
+					default:
+						// Try to send with recover for closed channel
+						func() {
+							defer func() {
+								if r := recover(); r != nil {
+									// Channel was closed, exit
+								}
+							}()
+							select {
+							case workers[workerIdx].taskChan <- task:
+								sent = true
+							default:
+								// Worker busy, try next worker
+								workerIdx = (workerIdx + 1) % len(workers)
+								runtime.Gosched()
+							}
+						}()
+						if !sent {
+							// Check if we should exit
+							select {
+							case <-wp.shutdown:
+								return
+							default:
+							}
+						}
+					}
 				}
 				workerIdx = (workerIdx + 1) % len(workers)
 			}
@@ -97,25 +139,47 @@ func (wp *WorkerPool) dispatch() {
 
 // Submit 提交任务到工作池
 func (wp *WorkerPool) Submit(task Task) error {
+	// Check if shutdown first
 	select {
-	case wp.taskQueue <- task:
+	case <-wp.shutdown:
+		return fmt.Errorf("worker pool is shutdown")
+	default:
+	}
+
+	wp.taskWg.Add(1)
+	wrappedTask := &trackingTask{task: task, wg: &wp.taskWg}
+
+	// Use recover to handle send on closed channel
+	defer func() {
+		if r := recover(); r != nil {
+			wp.taskWg.Done()
+		}
+	}()
+
+	select {
+	case wp.taskQueue <- wrappedTask:
 		return nil
 	case <-wp.shutdown:
+		wp.taskWg.Done()
 		return fmt.Errorf("worker pool is shutdown")
 	}
 }
 
 // SubmitWithTimeout 提交任务（带超时）
 func (wp *WorkerPool) SubmitWithTimeout(task Task, timeout time.Duration) error {
+	wp.taskWg.Add(1)
+	wrappedTask := &trackingTask{task: task, wg: &wp.taskWg}
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
 	select {
-	case wp.taskQueue <- task:
+	case wp.taskQueue <- wrappedTask:
 		return nil
 	case <-timer.C:
+		wp.taskWg.Done()
 		return fmt.Errorf("task timeout after %v", timeout)
 	case <-wp.shutdown:
+		wp.taskWg.Done()
 		return fmt.Errorf("worker pool is shutdown")
 	}
 }
@@ -133,27 +197,61 @@ func (wp *WorkerPool) SubmitAndWait(task Task) error {
 
 // SubmitAndWaitWithTimeout submits a task and waits for it to complete with timeout
 func (wp *WorkerPool) SubmitAndWaitWithTimeout(task Task, timeout time.Duration) error {
-	if err := wp.SubmitWithTimeout(task, timeout); err != nil {
-		return err
-	}
-
-	timeoutChan := time.After(timeout)
+	// Create a channel to signal task completion
 	done := make(chan error, 1)
 
-	go func() {
-		if err := task.Execute(); err != nil {
-			done <- err
-		} else {
-			done <- nil
+	// Create a wrapper task that signals completion
+	wp.taskWg.Add(1)
+	wrappedTask := &trackingTaskWithChannel{
+		task: task,
+		done: done,
+		wg:   &wp.taskWg,
+	}
+
+	// Submit the task
+	defer func() {
+		if r := recover(); r != nil {
+			wp.taskWg.Done()
 		}
 	}()
 
 	select {
+	case <-wp.shutdown:
+		wp.taskWg.Done()
+		return fmt.Errorf("worker pool is shutdown")
+	case wp.taskQueue <- wrappedTask:
+		// Task submitted successfully
+	default:
+		wp.taskWg.Done()
+		return fmt.Errorf("task queue is full")
+	}
+
+	select {
 	case err := <-done:
 		return err
-	case <-timeoutChan:
+	case <-time.After(timeout):
 		return fmt.Errorf("task wait timeout after %v", timeout)
+	case <-wp.shutdown:
+		return fmt.Errorf("worker pool is shutdown")
 	}
+}
+
+// trackingTaskWithChannel wraps a task to signal completion via channel
+type trackingTaskWithChannel struct {
+	task Task
+	done chan error
+	wg   *sync.WaitGroup
+}
+
+func (t *trackingTaskWithChannel) Execute() error {
+	defer t.wg.Done()
+	err := t.task.Execute()
+	select {
+	case t.done <- err:
+	default:
+		// Channel might be closed or full
+	}
+	return err
 }
 
 // BatchSubmit 批量提交任务
@@ -272,7 +370,7 @@ func (wp *WorkerPool) Shutdown() {
 
 // Wait 等待所有任务完成
 func (wp *WorkerPool) Wait() error {
-	wp.wg.Wait()
+	wp.taskWg.Wait()
 	return nil
 }
 
@@ -280,7 +378,7 @@ func (wp *WorkerPool) Wait() error {
 func (wp *WorkerPool) WaitWithTimeout(timeout time.Duration) error {
 	done := make(chan struct{})
 	go func() {
-		wp.wg.Wait()
+		wp.taskWg.Wait()
 		close(done)
 	}()
 
