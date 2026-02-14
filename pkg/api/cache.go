@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ type QueryCache struct {
 
 // CacheEntry 缓存条目
 type CacheEntry struct {
+	SQL       string // original SQL for table-level invalidation
 	Result    *domain.QueryResult
 	Params    []interface{}
 	CreatedAt time.Time
@@ -113,6 +115,7 @@ func (c *QueryCache) Set(sql string, params []interface{}, result *domain.QueryR
 
 	now := time.Now()
 	entry := &CacheEntry{
+		SQL:       sql,
 		Result:    result,
 		Params:    params,
 		CreatedAt: now,
@@ -155,9 +158,9 @@ func (c *QueryCache) ClearTable(tableName string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// 删除所有包含该表名的缓存键
-	for key := range c.store {
-		if c.containsTable(key, tableName) {
+	// 删除所有SQL中包含该表名的缓存条目
+	for key, entry := range c.store {
+		if strings.Contains(entry.SQL, tableName) {
 			delete(c.store, key)
 		}
 	}
@@ -245,13 +248,6 @@ func (c *QueryCache) generateKey(sql string, params []interface{}) string {
 	return fmt.Sprintf("%x", h.Sum32())
 }
 
-// containsTable 检查缓存键是否包含指定表名
-func (c *QueryCache) containsTable(key, tableName string) bool {
-	// 简单实现：检查键中是否包含表名
-	// TODO: 更精确的实现可能需要解析 SQL
-	return len(key) > 0 && contains(key, tableName)
-}
-
 // evictOldest 淘汰最老的缓存条目
 func (c *QueryCache) evictOldest() {
 	if len(c.store) == 0 {
@@ -271,12 +267,6 @@ func (c *QueryCache) evictOldest() {
 	if oldestKey != "" {
 		delete(c.store, oldestKey)
 	}
-}
-
-// contains 检查字符串是否包含子串（简化实现，避免循环导入）
-func contains(s, substr string) bool {
-	// 简化实现
-	return len(s) > 0 && len(substr) > 0 && len(s) >= len(substr)
 }
 
 // CacheStats 缓存统计信息
