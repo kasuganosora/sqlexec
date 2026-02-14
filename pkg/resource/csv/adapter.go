@@ -359,7 +359,12 @@ func (a *CSVAdapter) writeBack() error {
 	for _, row := range rows {
 		record := make([]string, len(headers))
 		for i, header := range headers {
-			record[i] = fmt.Sprintf("%v", row[header])
+			val := row[header]
+			if val == nil {
+				record[i] = ""
+			} else {
+				record[i] = fmt.Sprintf("%v", val)
+			}
 		}
 
 		if err := writer.Write(record); err != nil {

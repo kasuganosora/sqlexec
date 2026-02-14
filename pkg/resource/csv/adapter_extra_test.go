@@ -3,6 +3,7 @@ package csv
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -310,5 +311,133 @@ func TestCSVAdapter_Close(t *testing.T) {
 	// 验证已断开
 	if adapter.IsConnected() {
 		t.Errorf("Expected to be disconnected after Close()")
+	}
+}
+
+// TestCSVAdapter_writeBack_NilValues 测试写回时 nil 值不会变成 "<nil>" 字符串
+func TestCSVAdapter_writeBack_NilValues(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test_nil.csv")
+
+	// 写入包含空值的数据
+	initialData := `id,name,value
+1,Alice,100
+2,,200
+`
+	if err := os.WriteFile(testFile, []byte(initialData), 0644); err != nil {
+		t.Fatalf("Failed to write initial data: %v", err)
+	}
+
+	config := &domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeCSV,
+		Name:     "test_nil",
+		Writable: true,
+		Options:  map[string]interface{}{"writable": true},
+	}
+	adapter := NewCSVAdapter(config, testFile)
+	ctx := t.Context()
+
+	if err := adapter.Connect(ctx); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	// 写回
+	if err := adapter.writeBack(); err != nil {
+		t.Fatalf("writeBack() error = %v", err)
+	}
+
+	// 读取写回后的文件内容
+	content, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+
+	fileContent := string(content)
+
+	// 确保不包含 "<nil>" 字符串
+	if strings.Contains(fileContent, "<nil>") {
+		t.Errorf("writeBack produced '<nil>' string for nil values.\nFile content:\n%s", fileContent)
+	}
+
+	// 关闭
+	if err := adapter.Close(ctx); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+}
+
+// TestCSVAdapter_writeBack_MixedTypes 测试写回时各种类型值的正确处理
+func TestCSVAdapter_writeBack_MixedTypes(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "test_mixed.csv")
+
+	initialData := `id,name,active,score
+1,Alice,true,95.5
+2,Bob,false,87.3
+`
+	if err := os.WriteFile(testFile, []byte(initialData), 0644); err != nil {
+		t.Fatalf("Failed to write initial data: %v", err)
+	}
+
+	config := &domain.DataSourceConfig{
+		Type:     domain.DataSourceTypeCSV,
+		Name:     "test_mixed",
+		Writable: true,
+		Options:  map[string]interface{}{"writable": true},
+	}
+	adapter := NewCSVAdapter(config, testFile)
+	ctx := t.Context()
+
+	if err := adapter.Connect(ctx); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	// 写回
+	if err := adapter.writeBack(); err != nil {
+		t.Fatalf("writeBack() error = %v", err)
+	}
+
+	// 验证文件内容
+	content, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+
+	fileContent := string(content)
+	if !strings.Contains(fileContent, "Alice") {
+		t.Errorf("Expected file to contain 'Alice', got:\n%s", fileContent)
+	}
+	if !strings.Contains(fileContent, "Bob") {
+		t.Errorf("Expected file to contain 'Bob', got:\n%s", fileContent)
+	}
+
+	if err := adapter.Close(ctx); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+}
+
+// TestCSVAdapter_DetectType 测试类型检测
+func TestCSVAdapter_DetectType(t *testing.T) {
+	adapter := &CSVAdapter{}
+	tests := []struct {
+		value    string
+		expected string
+	}{
+		{"true", "bool"},
+		{"false", "bool"},
+		{"TRUE", "bool"},
+		{"False", "bool"},
+		{"42", "int64"},
+		{"-100", "int64"},
+		{"3.14", "float64"},
+		{"-2.5", "float64"},
+		{"hello", "string"},
+		{"", "string"},
+	}
+
+	for _, tt := range tests {
+		got := adapter.detectType(tt.value)
+		if got != tt.expected {
+			t.Errorf("detectType(%q) = %q, want %q", tt.value, got, tt.expected)
+		}
 	}
 }

@@ -52,8 +52,13 @@ func (f *Factory) Create(config *domain.DataSourceConfig) (domain.DataSource, er
 		mvccSupported = val
 	}
 
-	// 创建 adapter
-	return NewSliceAdapter(data, tableName, databaseName, writable, mvccSupported)
+	// 通过 New 构造器创建 adapter
+	opts := []Option{
+		WithDatabaseName(databaseName),
+		WithWritable(writable),
+		WithMVCC(mvccSupported),
+	}
+	return New(data, tableName, opts...)
 }
 
 // GetType 获取数据源类型

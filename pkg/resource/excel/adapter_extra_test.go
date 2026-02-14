@@ -3,6 +3,7 @@ package excel
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/xuri/excelize/v2"
@@ -105,6 +106,167 @@ func TestExcelAdapter_Connect_EmptySheet(t *testing.T) {
 	}
 
 	os.Remove(tmpFile.Name())
+}
+
+// TestExcelAdapter_DetectType_CaseInsensitiveBool 测试布尔值检测大小写不敏感
+func TestExcelAdapter_DetectType_CaseInsensitiveBool(t *testing.T) {
+	adapter := &ExcelAdapter{}
+	tests := []struct {
+		value    string
+		expected string
+	}{
+		{"true", "bool"},
+		{"false", "bool"},
+		{"TRUE", "bool"},
+		{"FALSE", "bool"},
+		{"True", "bool"},
+		{"False", "bool"},
+		{"42", "int64"},
+		{"3.14", "float64"},
+		{"hello", "string"},
+	}
+
+	for _, tt := range tests {
+		got := adapter.detectType(tt.value)
+		if got != tt.expected {
+			t.Errorf("detectType(%q) = %q, want %q", tt.value, got, tt.expected)
+		}
+	}
+}
+
+// TestExcelAdapter_ParseValue_CaseInsensitiveBool 测试布尔值解析大小写不敏感
+func TestExcelAdapter_ParseValue_CaseInsensitiveBool(t *testing.T) {
+	adapter := &ExcelAdapter{}
+	tests := []struct {
+		value    string
+		colType  string
+		expected interface{}
+	}{
+		{"true", "bool", true},
+		{"false", "bool", false},
+		{"TRUE", "bool", true},
+		{"FALSE", "bool", false},
+		{"True", "bool", true},
+		{"1", "bool", true},
+		{"0", "bool", false},
+		{"42", "int64", int64(42)},
+		{"3.14", "float64", float64(3.14)},
+		{"hello", "string", "hello"},
+		{"", "string", nil},
+	}
+
+	for _, tt := range tests {
+		got := adapter.parseValue(tt.value, tt.colType)
+		if got != tt.expected {
+			t.Errorf("parseValue(%q, %q) = %v (%T), want %v (%T)",
+				tt.value, tt.colType, got, got, tt.expected, tt.expected)
+		}
+	}
+}
+
+// TestExcelAdapter_writeBack_SafeSheetReplacement 测试安全的 sheet 替换写回
+func TestExcelAdapter_writeBack_SafeSheetReplacement(t *testing.T) {
+	filePath := createTestExcelFile(t)
+	defer os.Remove(filePath)
+
+	config := &domain.DataSourceConfig{
+		Type: domain.DataSourceTypeExcel,
+		Name: "test-safe-writeback",
+		Options: map[string]interface{}{
+			"writable": true,
+		},
+	}
+	adapter := NewExcelAdapter(config, filePath)
+	ctx := context.Background()
+
+	if err := adapter.Connect(ctx); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	// 插入新行
+	newRow := domain.Row{"id": 3, "name": "Charlie", "email": "charlie@example.com"}
+	if _, err := adapter.Insert(ctx, "Sheet1", []domain.Row{newRow}, nil); err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+
+	// 写回
+	if err := adapter.writeBack(); err != nil {
+		t.Fatalf("writeBack() error = %v", err)
+	}
+
+	// 关闭当前 adapter
+	if err := adapter.Close(ctx); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+
+	// 重新打开文件验证数据完整性
+	f, err := excelize.OpenFile(filePath)
+	if err != nil {
+		t.Fatalf("Failed to reopen file: %v", err)
+	}
+	defer f.Close()
+
+	// 验证 sheet 名称正确（应该是 "Sheet1"，不是临时名称）
+	sheets := f.GetSheetList()
+	found := false
+	for _, s := range sheets {
+		if s == "Sheet1" {
+			found = true
+		}
+		// 确保没有残留的临时 sheet
+		if strings.Contains(s, "_tmp_writeback") {
+			t.Errorf("Found leftover temp sheet: %s", s)
+		}
+	}
+	if !found {
+		t.Errorf("Sheet1 not found after writeBack, sheets: %v", sheets)
+	}
+
+	// 验证数据行数（header + 3 data rows）
+	rows, err := f.GetRows("Sheet1")
+	if err != nil {
+		t.Fatalf("GetRows() error = %v", err)
+	}
+	// 1 header + 3 data rows = 4 total
+	if len(rows) != 4 {
+		t.Errorf("Expected 4 rows (1 header + 3 data), got %d", len(rows))
+	}
+}
+
+// TestExcelAdapter_writeBack_NilValues 测试写回时 nil 值不会导致问题
+func TestExcelAdapter_writeBack_NilValues(t *testing.T) {
+	filePath := createTestExcelFile(t)
+	defer os.Remove(filePath)
+
+	config := &domain.DataSourceConfig{
+		Type: domain.DataSourceTypeExcel,
+		Name: "test-nil-writeback",
+		Options: map[string]interface{}{
+			"writable": true,
+		},
+	}
+	adapter := NewExcelAdapter(config, filePath)
+	ctx := context.Background()
+
+	if err := adapter.Connect(ctx); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	// 插入行，部分字段缺失（将产生 nil 值）
+	newRow := domain.Row{"id": 3, "name": "Charlie"}
+	// 注意 email 字段缺失
+	if _, err := adapter.Insert(ctx, "Sheet1", []domain.Row{newRow}, nil); err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+
+	// 写回不应该 panic 或出错
+	if err := adapter.writeBack(); err != nil {
+		t.Fatalf("writeBack() error = %v", err)
+	}
+
+	if err := adapter.Close(ctx); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
 }
 
 // TestExcelAdapter_InferColumnTypes 测试列类型推断

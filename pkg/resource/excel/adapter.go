@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -261,7 +262,6 @@ func (a *ExcelAdapter) inferColumnTypes(headers []string, rows [][]string) []dom
 			if j >= len(typeCounts) || j >= len(headers) {
 				break
 			}
-			value = value // already trimmed by excelize
 			if value == "" {
 				continue
 			}
@@ -295,8 +295,8 @@ func (a *ExcelAdapter) inferColumnTypes(headers []string, rows [][]string) []dom
 
 // detectType 检测值的类型
 func (a *ExcelAdapter) detectType(value string) string {
-	// 尝试解析为布尔值
-	if value == "true" || value == "false" {
+	// 尝试解析为布尔值（大小写不敏感）
+	if strings.EqualFold(value, "true") || strings.EqualFold(value, "false") {
 		return "bool"
 	}
 
@@ -351,10 +351,8 @@ func (a *ExcelAdapter) parseValue(value string, colType string) interface{} {
 			return floatVal
 		}
 	case "bool":
-		if value == "true" {
-			return true
-		} else if value == "false" {
-			return false
+		if boolVal, err := strconv.ParseBool(value); err == nil {
+			return boolVal
 		}
 	}
 
@@ -369,35 +367,52 @@ func (a *ExcelAdapter) writeBack() error {
 		return err
 	}
 
-	// 清空工作表
-	if err := a.file.DeleteSheet(a.sheetName); err != nil {
-		return err
-	}
-
-	// 创建新工作表
-	index, err := a.file.NewSheet(a.sheetName)
+	// 安全写回：先创建临时 sheet，写入数据后再删除旧 sheet 并重命名
+	tmpSheet := a.sheetName + "_tmp_writeback"
+	tmpIndex, err := a.file.NewSheet(tmpSheet)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create temp sheet: %w", err)
 	}
 
-	a.file.SetActiveSheet(index)
-
-	// 写入header
+	// 写入 header 到临时 sheet
 	for i, col := range schema.Columns {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		a.file.SetCellValue(a.sheetName, cell, col.Name)
+		cell, err := excelize.CoordinatesToCellName(i+1, 1)
+		if err != nil {
+			return fmt.Errorf("failed to get cell name for header column %d: %w", i, err)
+		}
+		if err := a.file.SetCellValue(tmpSheet, cell, col.Name); err != nil {
+			return fmt.Errorf("failed to write header %s: %w", col.Name, err)
+		}
 	}
 
-	// 写入数据
+	// 写入数据到临时 sheet
 	for i, row := range rows {
 		rowNum := i + 2 // 跳过header行
 		for j, col := range schema.Columns {
-			cell, _ := excelize.CoordinatesToCellName(j+1, rowNum)
-			if val, exists := row[col.Name]; exists {
-				a.file.SetCellValue(a.sheetName, cell, val)
+			cell, err := excelize.CoordinatesToCellName(j+1, rowNum)
+			if err != nil {
+				return fmt.Errorf("failed to get cell name for row %d col %d: %w", i, j, err)
+			}
+			if val, exists := row[col.Name]; exists && val != nil {
+				if err := a.file.SetCellValue(tmpSheet, cell, val); err != nil {
+					return fmt.Errorf("failed to write cell value at row %d col %s: %w", i, col.Name, err)
+				}
 			}
 		}
 	}
+
+	// 临时 sheet 写入成功后，删除旧 sheet 并重命名
+	if err := a.file.DeleteSheet(a.sheetName); err != nil {
+		// 清理临时 sheet
+		_ = a.file.DeleteSheet(tmpSheet)
+		return fmt.Errorf("failed to delete old sheet: %w", err)
+	}
+
+	if err := a.file.SetSheetName(tmpSheet, a.sheetName); err != nil {
+		return fmt.Errorf("failed to rename temp sheet: %w", err)
+	}
+
+	a.file.SetActiveSheet(tmpIndex)
 
 	// 保存文件
 	return a.file.SaveAs(a.filePath)

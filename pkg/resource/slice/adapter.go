@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"sync"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -15,19 +16,45 @@ import (
 type SliceAdapter struct {
 	*memory.MVCCDataSource
 
-	mu              sync.RWMutex
-	originalData    interface{} // 原始数据 []map[string]any 或 []struct
-	tableName       string      // 表名
-	databaseName    string      // 数据库名
-	writable        bool        // 是否可写
-	mvccSupported   bool        // 是否支持 MVCC
-	isPointer       bool        // 原始数据是否为指针（用于SyncToOriginal）
-	isMapSlice      bool        // 是否为 map slice
-	mapSliceType    reflect.Type // map slice 的类型信息
-	structFields    []reflect.StructField // 结构体字段信息
+	mu            sync.RWMutex
+	syncMu        sync.Mutex // 序列化 CommitTx + SyncToOriginal
+	originalData  interface{}          // 原始数据 []map[string]any 或 []struct
+	tableName     string               // 表名
+	databaseName  string               // 数据库名
+	writable      bool                 // 是否可写
+	mvccSupported bool                 // 是否支持 MVCC
+	isPointer     bool                 // 原始数据是否为指针（用于SyncToOriginal）
+	isMapSlice    bool                 // 是否为 map slice
+	mapSliceType  reflect.Type         // map slice 的类型信息
+	structFields  []reflect.StructField // 结构体字段信息
+	fieldMappings []fieldMapping       // struct 字段到列的映射（含 tag 解析结果）
 }
 
-// NewSliceAdapter 创建一个新的 slice adapter
+// New 创建 SliceAdapter（推荐的构造方式）
+// data: 原始数据，可以是 []map[string]any 或 []struct，推荐传指针以支持写入和同步
+// tableName: 表名，不能为空
+// opts: 可选配置（WithWritable, WithMVCC, WithDatabaseName）
+func New(data interface{}, tableName string, opts ...Option) (*SliceAdapter, error) {
+	cfg := defaultConfig()
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return NewSliceAdapter(data, tableName, cfg.databaseName, cfg.writable, cfg.mvccSupported)
+}
+
+// FromMapSlice 为 []map[string]any 数据创建 SliceAdapter
+// data 推荐传指针（*[]map[string]any）以支持写入和同步
+func FromMapSlice(data *[]map[string]any, tableName string, opts ...Option) (*SliceAdapter, error) {
+	return New(data, tableName, opts...)
+}
+
+// FromStructSlice 为 struct slice 数据创建 SliceAdapter
+// data 必须是指向 struct slice 的指针（如 &[]User{}）
+func FromStructSlice(data interface{}, tableName string, opts ...Option) (*SliceAdapter, error) {
+	return New(data, tableName, opts...)
+}
+
+// NewSliceAdapter 创建一个新的 slice adapter（保留兼容旧 API）
 // data: 原始数据，可以是 []map[string]any 或 []struct
 // tableName: 表名
 // databaseName: 数据库名
@@ -40,11 +67,17 @@ func NewSliceAdapter(data interface{}, tableName string, databaseName string, wr
 	if data == nil {
 		return nil, fmt.Errorf("data cannot be nil")
 	}
+	if tableName == "" {
+		return nil, fmt.Errorf("tableName cannot be empty")
+	}
+	if databaseName == "" {
+		databaseName = "default"
+	}
 
 	val := reflect.ValueOf(data)
 	originalRef := data
 	isPointer := false
-	
+
 	if val.Kind() == reflect.Ptr {
 		if val.IsNil() {
 			return nil, fmt.Errorf("data pointer is nil")
@@ -68,7 +101,7 @@ func NewSliceAdapter(data interface{}, tableName string, databaseName string, wr
 		databaseName:  databaseName,
 		writable:      writable,
 		mvccSupported: mvccSupported,
-		isPointer:    isPointer, // 记录是否为指针
+		isPointer:     isPointer,
 	}
 
 	// 检查是 map slice 还是 struct slice
@@ -76,19 +109,22 @@ func NewSliceAdapter(data interface{}, tableName string, databaseName string, wr
 		elem := val.Index(0).Interface()
 		adapter.isMapSlice = isMapStringAny(elem)
 
-			if !adapter.isMapSlice {
-				// 获取结构体字段信息
-				adapter.structFields = getStructFields(val.Type().Elem())
-			} else {
-				// 记录 map slice 的类型（使用指针指向的类型）
-				adapter.mapSliceType = val.Type()
-			}
+		if !adapter.isMapSlice {
+			// 获取结构体字段信息和 tag 映射
+			elemType := val.Type().Elem()
+			adapter.structFields = getStructFields(elemType)
+			adapter.fieldMappings = resolveFieldMappings(elemType)
+		} else {
+			// 记录 map slice 的类型
+			adapter.mapSliceType = val.Type()
+		}
 	} else {
 		// 空切片，尝试从类型推断
 		elemType := val.Type().Elem()
 		adapter.isMapSlice = isMapStringAnyType(elemType)
 		if !adapter.isMapSlice && elemType.Kind() == reflect.Struct {
 			adapter.structFields = getStructFields(elemType)
+			adapter.fieldMappings = resolveFieldMappings(elemType)
 		} else {
 			adapter.mapSliceType = val.Type()
 		}
@@ -143,55 +179,55 @@ func (a *SliceAdapter) loadData() error {
 }
 
 // convertMapSlice 将 []map[string]any 转换为 TableInfo 和 []Row
+// 单次遍历收集列和行数据，列按字母排序保证确定性
 func (a *SliceAdapter) convertMapSlice(sliceValue reflect.Value) (*domain.TableInfo, []domain.Row) {
 	if sliceValue.Len() == 0 {
-		// 空切片，创建默认 schema
 		return &domain.TableInfo{
 			Name:    a.tableName,
 			Columns: []domain.ColumnInfo{},
 		}, []domain.Row{}
 	}
 
-	// 收集所有列
-	columnSet := make(map[string]bool)
-	columns := []domain.ColumnInfo{}
-	var rows []domain.Row
+	// 单次遍历：同时收集列和构建行数据
+	columnSet := make(map[string]int) // column name -> index in columns slice
+	columns := make([]domain.ColumnInfo, 0)
+	rows := make([]domain.Row, 0, sliceValue.Len())
 
-	// 第一次遍历：收集所有列
 	for i := 0; i < sliceValue.Len(); i++ {
 		elem := sliceValue.Index(i)
-		if elem.Kind() == reflect.Map {
-			for _, key := range elem.MapKeys() {
-				keyStr := key.String()
-				if !columnSet[keyStr] {
-					columnSet[keyStr] = true
-				// 推断列类型
-				val := elem.MapIndex(key).Interface()
+		if elem.Kind() != reflect.Map {
+			continue
+		}
+		row := make(domain.Row, elem.Len())
+		for _, key := range elem.MapKeys() {
+			keyStr := key.String()
+			val := elem.MapIndex(key).Interface()
+			row[keyStr] = val
+
+			if _, exists := columnSet[keyStr]; !exists {
+				columnSet[keyStr] = len(columns)
 				colType := inferColumnType(val)
-					columns = append(columns, domain.ColumnInfo{
-						Name:     keyStr,
-						Type:     colType,
-						Nullable: true,
-					})
-				}
+				columns = append(columns, domain.ColumnInfo{
+					Name:     keyStr,
+					Type:     colType,
+					Nullable: true,
+				})
 			}
 		}
+		rows = append(rows, row)
 	}
 
-	// 第二次遍历：构建行数据
-	for i := 0; i < sliceValue.Len(); i++ {
-		elem := sliceValue.Index(i)
-		if elem.Kind() == reflect.Map {
-			row := make(domain.Row, len(columns))
-			for _, col := range columns {
-				val := elem.MapIndex(reflect.ValueOf(col.Name))
-				if val.IsValid() {
-					row[col.Name] = val.Interface()
-				} else {
-					row[col.Name] = nil
-				}
+	// 按字母排序列，保证 schema 确定性
+	sort.Slice(columns, func(i, j int) bool {
+		return columns[i].Name < columns[j].Name
+	})
+
+	// 补齐缺失列的 nil 值
+	for i, row := range rows {
+		for _, col := range columns {
+			if _, exists := row[col.Name]; !exists {
+				rows[i][col.Name] = nil
 			}
-			rows = append(rows, row)
 		}
 	}
 
@@ -202,29 +238,41 @@ func (a *SliceAdapter) convertMapSlice(sliceValue reflect.Value) (*domain.TableI
 }
 
 // convertStructSlice 将 []struct 转换为 TableInfo 和 []Row
+// 使用 fieldMappings 支持 struct tag 解析和字段索引访问
 func (a *SliceAdapter) convertStructSlice(sliceValue reflect.Value) (*domain.TableInfo, []domain.Row) {
-	// 构建列信息
-	columns := []domain.ColumnInfo{}
-	for _, field := range a.structFields {
-		colType := getFieldType(field.Type)
+	// 构建列信息（使用 tag 解析的映射）
+	columns := make([]domain.ColumnInfo, 0, len(a.fieldMappings))
+	activeMappings := make([]fieldMapping, 0, len(a.fieldMappings))
+
+	for _, fm := range a.fieldMappings {
+		if fm.Skip {
+			continue
+		}
+		field := sliceValue.Type().Elem()
+		if field.Kind() == reflect.Ptr {
+			field = field.Elem()
+		}
+		fieldType := field.Field(fm.FieldIndex).Type
+		colType := getFieldType(fieldType)
 		columns = append(columns, domain.ColumnInfo{
-			Name:     field.Name,
+			Name:     fm.ColumnName,
 			Type:     colType,
-			Nullable: isFieldNullable(field.Type),
+			Nullable: isFieldNullable(fieldType),
 		})
+		activeMappings = append(activeMappings, fm)
 	}
 
-	// 构建行数据
-	var rows []domain.Row
+	// 构建行数据（使用字段索引访问，比 FieldByName 更快）
+	rows := make([]domain.Row, 0, sliceValue.Len())
 	for i := 0; i < sliceValue.Len(); i++ {
 		elem := sliceValue.Index(i)
-		row := make(domain.Row, len(a.structFields))
-		for _, field := range a.structFields {
-			fieldVal := elem.FieldByName(field.Name)
+		row := make(domain.Row, len(activeMappings))
+		for _, fm := range activeMappings {
+			fieldVal := elem.Field(fm.FieldIndex)
 			if fieldVal.IsValid() {
-				row[field.Name] = fieldVal.Interface()
+				row[fm.ColumnName] = fieldVal.Interface()
 			} else {
-				row[field.Name] = nil
+				row[fm.ColumnName] = nil
 			}
 		}
 		rows = append(rows, row)
@@ -236,94 +284,15 @@ func (a *SliceAdapter) convertStructSlice(sliceValue reflect.Value) (*domain.Tab
 	}, rows
 }
 
-// isMapStringAny 检查是否为 map[string]any
-func isMapStringAny(v interface{}) bool {
-	if v == nil {
-		return false
-	}
-	t := reflect.TypeOf(v)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	return t.Kind() == reflect.Map && t.Key().Kind() == reflect.String
-}
-
-// isMapStringAnyType 检查类型是否为 map[string]any
-func isMapStringAnyType(t reflect.Type) bool {
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	return t.Kind() == reflect.Map && t.Key().Kind() == reflect.String
-}
-
-// getStructFields 获取结构体的所有可导出字段
-func getStructFields(t reflect.Type) []reflect.StructField {
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	if t.Kind() != reflect.Struct {
-		return nil
-	}
-
-	var fields []reflect.StructField
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		if field.PkgPath == "" { // 可导出字段
-			fields = append(fields, field)
-		}
-	}
-	return fields
-}
-
-// inferColumnTypes 推断列类型
-func inferColumnType(value interface{}) string {
-	if value == nil {
-		return "any"
-	}
-
-	switch value.(type) {
-	case int, int8, int16, int32, int64:
-		return "int64"
-	case uint, uint8, uint16, uint32, uint64:
-		return "int64"
-	case float32, float64:
-		return "float64"
-	case bool:
-		return "bool"
-	case string:
-		return "string"
+// Reload 从原始数据重新加载到 MVCCDataSource
+// 适用于外部修改了原始 Go 变量后刷新内部状态
+func (a *SliceAdapter) Reload(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
 	default:
-		return "any"
 	}
-}
-
-// getFieldType 获取字段类型
-func getFieldType(t reflect.Type) string {
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-
-	switch t.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return "int64"
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return "int64"
-	case reflect.Float32, reflect.Float64:
-		return "float64"
-	case reflect.Bool:
-		return "bool"
-	case reflect.String:
-		return "string"
-	case reflect.Interface:
-		return "any"
-	default:
-		return "string"
-	}
-}
-
-// isFieldNullable 检查字段是否可空
-func isFieldNullable(t reflect.Type) bool {
-	return t.Kind() == reflect.Ptr
+	return a.loadData()
 }
 
 // SyncToOriginal 将 MVCCDataSource 中的变更同步回原始数据
@@ -352,7 +321,7 @@ func (a *SliceAdapter) SyncToOriginal(ctx context.Context) error {
 	if val.Kind() != reflect.Ptr {
 		return fmt.Errorf("original data must be a pointer to enable sync")
 	}
-	
+
 	sliceVal := val.Elem()
 	if sliceVal.Kind() != reflect.Slice {
 		return fmt.Errorf("original data is not a slice")
@@ -365,7 +334,7 @@ func (a *SliceAdapter) SyncToOriginal(ctx context.Context) error {
 	// 创建新的 slice
 	newSlice := reflect.MakeSlice(sliceVal.Type(), len(rows), len(rows))
 	for i, row := range rows {
-		rowMap := make(map[string]interface{})
+		rowMap := make(map[string]interface{}, len(row))
 		for colName, v := range row {
 			rowMap[colName] = v
 		}
@@ -438,7 +407,6 @@ func (a *SliceAdapter) Insert(ctx context.Context, tableName string, rows []doma
 	if !a.writable {
 		return 0, domain.NewErrReadOnly("slice", "insert")
 	}
-	// 不在insert后同步，只在commit时同步
 	return a.MVCCDataSource.Insert(ctx, tableName, rows, options)
 }
 
@@ -447,7 +415,6 @@ func (a *SliceAdapter) Update(ctx context.Context, tableName string, filters []d
 	if !a.writable {
 		return 0, domain.NewErrReadOnly("slice", "update")
 	}
-	// 不在update后同步，只在commit时同步
 	return a.MVCCDataSource.Update(ctx, tableName, filters, updates, options)
 }
 
@@ -456,7 +423,6 @@ func (a *SliceAdapter) Delete(ctx context.Context, tableName string, filters []d
 	if !a.writable {
 		return 0, domain.NewErrReadOnly("slice", "delete")
 	}
-	// 不在delete后同步，只在commit时同步
 	return a.MVCCDataSource.Delete(ctx, tableName, filters, options)
 }
 
@@ -484,18 +450,24 @@ func (a *SliceAdapter) BeginTx(ctx context.Context, readOnly bool) (int64, error
 }
 
 // CommitTx 提交事务
+// 提交成功后，如果原始数据是 map slice 指针，会自动同步回原始数据
 func (a *SliceAdapter) CommitTx(ctx context.Context, txnID int64) error {
+	a.syncMu.Lock()
+	defer a.syncMu.Unlock()
+
 	// 先提交MVCC事务
 	err := a.MVCCDataSource.CommitTx(ctx, txnID)
 	if err != nil {
 		return err
 	}
-	
+
 	// 只有commit成功后，才同步回原始数据
 	if a.isMapSlice && a.isPointer {
-		_ = a.SyncToOriginal(ctx)
+		if syncErr := a.SyncToOriginal(ctx); syncErr != nil {
+			return fmt.Errorf("transaction committed but sync to original failed: %w", syncErr)
+		}
 	}
-	
+
 	return nil
 }
 
