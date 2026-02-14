@@ -101,10 +101,14 @@ func (phje *ParallelHashJoinExecutor) buildHash(ctx context.Context, rows []doma
 	var wg sync.WaitGroup
 	wg.Add(parallelism)
 
-	rowsPerWorker := rowCount / parallelism
+	rowsPerWorker := (rowCount + parallelism - 1) / parallelism // ceiling division
 
 	for i := 0; i < parallelism; i++ {
 		start := i * rowsPerWorker
+		if start >= rowCount {
+			wg.Done() // no work for this worker
+			continue
+		}
 		end := start + rowsPerWorker
 		if end > rowCount {
 			end = rowCount
@@ -145,7 +149,7 @@ func (phje *ParallelHashJoinExecutor) buildHash(ctx context.Context, rows []doma
 	case <-ctx.Done():
 		// 上下文被取消，关闭取消通道通知所有 worker
 		close(ctxCancelChan)
-		wg.Wait()  // 等待所有 worker 退出
+		wg.Wait() // 等待所有 worker 退出
 		return nil
 	}
 }
@@ -163,10 +167,14 @@ func (phje *ParallelHashJoinExecutor) probeHash(ctx context.Context, rows []doma
 	var wg sync.WaitGroup
 	wg.Add(parallelism)
 
-	rowsPerWorker := rowCount / parallelism
+	rowsPerWorker := (rowCount + parallelism - 1) / parallelism // ceiling division
 
 	for i := 0; i < parallelism; i++ {
 		start := i * rowsPerWorker
+		if start >= rowCount {
+			wg.Done() // no work for this worker
+			continue
+		}
 		end := start + rowsPerWorker
 		if end > rowCount {
 			end = rowCount
@@ -212,7 +220,7 @@ func (phje *ParallelHashJoinExecutor) probeHash(ctx context.Context, rows []doma
 	case <-ctx.Done():
 		// 上下文被取消，关闭取消通道通知所有 worker
 		close(ctxCancelChan)
-		wg.Wait()  // 等待所有 worker 退出
+		wg.Wait() // 等待所有 worker 退出
 		return nil
 	}
 }

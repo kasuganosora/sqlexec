@@ -1,6 +1,7 @@
 package performance
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -89,10 +90,10 @@ func TestBatchExecutorManualFlush(t *testing.T) {
 }
 
 func TestBatchExecutorTimerFlush(t *testing.T) {
-	flushCalled := false
+	var flushCalled atomic.Bool
 
 	flushFunc := func(items []interface{}) error {
-		flushCalled = true
+		flushCalled.Store(true)
 		return nil
 	}
 
@@ -105,7 +106,7 @@ func TestBatchExecutorTimerFlush(t *testing.T) {
 	// Wait for timer to trigger
 	time.Sleep(100 * time.Millisecond)
 
-	if !flushCalled {
+	if !flushCalled.Load() {
 		t.Error("Flush should be called by timer")
 	}
 }

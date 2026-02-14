@@ -50,11 +50,17 @@ func (v *VirtualDataSource) GetConfig() *domain.DataSourceConfig {
 
 // GetTables returns all virtual table names
 func (v *VirtualDataSource) GetTables(ctx context.Context) ([]string, error) {
+	if v.provider == nil {
+		return nil, fmt.Errorf("virtual data source has no provider configured")
+	}
 	return v.provider.ListVirtualTables(), nil
 }
 
 // GetTableInfo returns the schema information for a virtual table
 func (v *VirtualDataSource) GetTableInfo(ctx context.Context, tableName string) (*domain.TableInfo, error) {
+	if v.provider == nil {
+		return nil, fmt.Errorf("virtual data source has no provider configured")
+	}
 	vt, err := v.provider.GetVirtualTable(tableName)
 	if err != nil {
 		return nil, err
@@ -69,6 +75,9 @@ func (v *VirtualDataSource) GetTableInfo(ctx context.Context, tableName string) 
 
 // Query executes a query against a virtual table
 func (v *VirtualDataSource) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) {
+	if v.provider == nil {
+		return nil, fmt.Errorf("virtual data source has no provider configured")
+	}
 	vt, err := v.provider.GetVirtualTable(tableName)
 	if err != nil {
 		return nil, err

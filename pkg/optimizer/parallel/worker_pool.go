@@ -163,12 +163,12 @@ func (wp *WorkerPool) GetStats() WorkerPoolStats {
 
 // getActiveWorkerCount 获取活跃worker数量
 func (wp *WorkerPool) getActiveWorkerCount() int {
+	// Count workers that have pending tasks in their channels.
+	// Use len() which is safe for concurrent reads and non-destructive.
 	activeCount := 0
 	for _, w := range wp.workers {
-		select {
-		case <-w.taskChan:
+		if len(w.taskChan) > 0 {
 			activeCount++
-		default:
 		}
 	}
 	return activeCount

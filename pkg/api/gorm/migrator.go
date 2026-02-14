@@ -48,7 +48,7 @@ func (m *Migrator) AutoMigrate(dst ...interface{}) error {
 func (m *Migrator) HasTable(value interface{}) bool {
 	tableName := m.getTableName(value)
 
-	sql := "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '" + tableName + "'"
+	sql := "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '" + escapeStringValue(tableName) + "'"
 
 	result, err := m.Dialector.Session.Query(sql)
 	if err != nil {
@@ -81,9 +81,8 @@ func (m *Migrator) DropTable(values ...interface{}) error {
 		return nil
 	}
 	tableName := m.getTableName(values[0])
-	_ = tableName // unused
 
-	sql := "DROP TABLE IF EXISTS " + tableName
+	sql := "DROP TABLE IF EXISTS " + quoteIdentifier(tableName)
 
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
@@ -94,7 +93,7 @@ func (m *Migrator) RenameTable(oldName, newName interface{}) error {
 	oldTableName := m.getTableName(oldName)
 	newTableName := m.getTableName(newName)
 
-	sql := "ALTER TABLE " + oldTableName + " RENAME TO " + newTableName
+	sql := "ALTER TABLE " + quoteIdentifier(oldTableName) + " RENAME TO " + quoteIdentifier(newTableName)
 
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
@@ -129,7 +128,7 @@ func (m *Migrator) GetTables() (tableList []string, err error) {
 func (m *Migrator) AddColumn(value interface{}, field string) error {
 	tableName := m.getTableName(value)
 
-	sql := "ALTER TABLE " + tableName + " ADD COLUMN " + field + " INT"
+	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " ADD COLUMN " + quoteIdentifier(field) + " INT"
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
@@ -138,7 +137,7 @@ func (m *Migrator) AddColumn(value interface{}, field string) error {
 func (m *Migrator) DropColumn(value interface{}, name string) error {
 	tableName := m.getTableName(value)
 
-	sql := "ALTER TABLE " + tableName + " DROP COLUMN " + name
+	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " DROP COLUMN " + quoteIdentifier(name)
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
@@ -147,7 +146,7 @@ func (m *Migrator) DropColumn(value interface{}, name string) error {
 func (m *Migrator) AlterColumn(value interface{}, field string) error {
 	tableName := m.getTableName(value)
 
-	sql := "ALTER TABLE " + tableName + " MODIFY COLUMN " + field + " VARCHAR(255)"
+	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " MODIFY COLUMN " + quoteIdentifier(field) + " VARCHAR(255)"
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
@@ -156,7 +155,7 @@ func (m *Migrator) AlterColumn(value interface{}, field string) error {
 func (m *Migrator) RenameColumn(value interface{}, oldName, field string) error {
 	tableName := m.getTableName(value)
 
-	sql := "ALTER TABLE " + tableName + " RENAME COLUMN " + oldName + " TO " + field
+	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " RENAME COLUMN " + quoteIdentifier(oldName) + " TO " + quoteIdentifier(field)
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
@@ -171,7 +170,7 @@ func (m *Migrator) ColumnTypes(value interface{}) (columnTypes []gorm.ColumnType
 func (m *Migrator) CreateConstraint(value interface{}, name string) error {
 	tableName := m.getTableName(value)
 
-	sql := "ALTER TABLE " + tableName + " ADD CONSTRAINT " + name + " FOREIGN KEY (id) REFERENCES other_table(id)"
+	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " ADD CONSTRAINT " + quoteIdentifier(name) + " FOREIGN KEY (id) REFERENCES other_table(id)"
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
@@ -180,7 +179,7 @@ func (m *Migrator) CreateConstraint(value interface{}, name string) error {
 func (m *Migrator) DropConstraint(value interface{}, name string) error {
 	tableName := m.getTableName(value)
 
-	sql := "ALTER TABLE " + tableName + " DROP CONSTRAINT " + name
+	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " DROP CONSTRAINT " + quoteIdentifier(name)
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
@@ -189,7 +188,7 @@ func (m *Migrator) DropConstraint(value interface{}, name string) error {
 func (m *Migrator) HasConstraint(value interface{}, name string) bool {
 	tableName := m.getTableName(value)
 
-	sql := "SELECT COUNT(*) FROM information_schema.key_column_usage WHERE constraint_name = '" + name + "' AND table_name = '" + tableName + "'"
+	sql := "SELECT COUNT(*) FROM information_schema.key_column_usage WHERE constraint_name = '" + escapeStringValue(name) + "' AND table_name = '" + escapeStringValue(tableName) + "'"
 
 	result, err := m.Dialector.Session.Query(sql)
 	if err != nil {
@@ -209,7 +208,7 @@ func (m *Migrator) HasConstraint(value interface{}, name string) bool {
 func (m *Migrator) CreateIndex(value interface{}, name string) error {
 	tableName := m.getTableName(value)
 
-	sql := "CREATE INDEX " + name + " ON " + tableName + " (id)"
+	sql := "CREATE INDEX " + quoteIdentifier(name) + " ON " + quoteIdentifier(tableName) + " (id)"
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
@@ -217,7 +216,7 @@ func (m *Migrator) CreateIndex(value interface{}, name string) error {
 // DropIndex 删除索引
 func (m *Migrator) DropIndex(value interface{}, name string) error {
 	tableName := m.getTableName(value)
-	sql := "DROP INDEX " + name + " ON " + tableName
+	sql := "DROP INDEX " + quoteIdentifier(name) + " ON " + quoteIdentifier(tableName)
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
@@ -226,7 +225,7 @@ func (m *Migrator) DropIndex(value interface{}, name string) error {
 func (m *Migrator) HasIndex(value interface{}, name string) bool {
 	tableName := m.getTableName(value)
 
-	sql := "SELECT COUNT(*) FROM information_schema.statistics WHERE index_name = '" + name + "' AND table_name = '" + tableName + "'"
+	sql := "SELECT COUNT(*) FROM information_schema.statistics WHERE index_name = '" + escapeStringValue(name) + "' AND table_name = '" + escapeStringValue(tableName) + "'"
 
 	result, err := m.Dialector.Session.Query(sql)
 	if err != nil {
@@ -311,6 +310,20 @@ func (m *Migrator) TableType(value interface{}) (tableType gorm.TableType, err e
 	return nil, nil
 }
 
+// quoteIdentifier quotes a SQL identifier with backticks, escaping any
+// embedded backticks to prevent SQL injection in DDL statements.
+func quoteIdentifier(name string) string {
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
+}
+
+// escapeStringValue escapes a string value for use in SQL string literals,
+// preventing SQL injection in queries that interpolate values.
+func escapeStringValue(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `''`)
+	return s
+}
+
 // getTableName 获取表名
 func (m *Migrator) getTableName(value interface{}) string {
 	// 如果是字符串，直接返回
@@ -345,7 +358,7 @@ func (m *Migrator) generateCreateTableSQL(value interface{}) string {
 	tableName := m.getTableName(value)
 
 	// 简单的表创建语句
-	return "CREATE TABLE IF NOT EXISTS " + tableName + " (id INT PRIMARY KEY AUTO_INCREMENT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)"
+	return "CREATE TABLE IF NOT EXISTS " + quoteIdentifier(tableName) + " (id INT PRIMARY KEY AUTO_INCREMENT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)"
 }
 
 // generateCreateTableSQLFromSchema 从 schema 生成 CREATE TABLE SQL
@@ -355,11 +368,11 @@ func (m *Migrator) generateCreateTableSQLFromSchema(s *schema.Schema) string {
 
 	for _, field := range s.Fields {
 		colType := m.Dialector.DataTypeOf(field)
-		def := field.DBName + " " + colType
+		def := quoteIdentifier(field.DBName) + " " + colType
 
 		// 处理主键
 		if field.PrimaryKey {
-			primaryKeys = append(primaryKeys, field.DBName)
+			primaryKeys = append(primaryKeys, quoteIdentifier(field.DBName))
 		}
 
 		// 处理 NOT NULL
@@ -385,7 +398,7 @@ func (m *Migrator) generateCreateTableSQLFromSchema(s *schema.Schema) string {
 		columnDefs = append(columnDefs, def)
 	}
 
-	sql := "CREATE TABLE IF NOT EXISTS " + s.Table + " (" + strings.Join(columnDefs, ", ")
+	sql := "CREATE TABLE IF NOT EXISTS " + quoteIdentifier(s.Table) + " (" + strings.Join(columnDefs, ", ")
 
 	// 添加主键约束
 	if len(primaryKeys) > 0 {

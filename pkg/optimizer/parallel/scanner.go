@@ -142,10 +142,10 @@ func (ps *ParallelScanner) divideScanRange(tableName string, offset, limit int64
 
 // executeScanRange 执行单个扫描范围
 func (ps *ParallelScanner) executeScanRange(ctx context.Context, r ScanRange, options *domain.QueryOptions) (*domain.QueryResult, error) {
-	// 构建查询选项
+	// Create a new QueryOptions copy to avoid race on shared options pointer
 	scanOptions := &domain.QueryOptions{}
 	if options != nil {
-		scanOptions = options
+		*scanOptions = *options
 	}
 	scanOptions.Offset = int(r.Offset)
 	scanOptions.Limit = int(r.Limit)
