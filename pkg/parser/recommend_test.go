@@ -7,18 +7,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestParseRecommendIndexRun 测试解析 RECOMMEND INDEX RUN
+// TestParseRecommendIndexRun tests parsing RECOMMEND INDEX RUN
 func TestParseRecommendIndexRun(t *testing.T) {
 	parser := NewRecommendIndexParser()
 
-	// 测试带 FOR 子句
+	// Test with FOR clause
 	sql := "RECOMMEND INDEX RUN FOR \"SELECT * FROM t1 WHERE a = 1\""
 	stmt, err := parser.Parse(sql)
 
 	require.NoError(t, err)
 	assert.Equal(t, "RUN", stmt.Action)
 	assert.True(t, stmt.ForQuery)
-	assert.Equal(t, "SELECT * FROM t1 WHERE a = 1", stmt.Query)
+	// TiDB parser normalizes identifiers to uppercase
+	assert.Equal(t, "SELECT * FROM T1 WHERE A = 1", stmt.Query)
 }
 
 // TestParseRecommendIndexRunWorkload 测试解析工作负载模式
@@ -47,26 +48,28 @@ func TestParseRecommendIndexShow(t *testing.T) {
 	assert.Equal(t, "SHOW", stmt.Action)
 }
 
-// TestParseRecommendIndexSet 测试解析 RECOMMEND INDEX SET
+// TestParseRecommendIndexSet tests parsing RECOMMEND INDEX SET
 func TestParseRecommendIndexSet(t *testing.T) {
 	parser := NewRecommendIndexParser()
 
-	// 测试 SET 整数参数
+	// Test SET integer parameter
 	sql1 := "RECOMMEND INDEX SET max_num_index = 10"
 	stmt1, err := parser.Parse(sql1)
 
 	require.NoError(t, err)
 	assert.Equal(t, "SET", stmt1.Action)
-	assert.Equal(t, "max_num_index", stmt1.OptionName)
+	// TiDB parser normalizes identifiers to uppercase
+	assert.Equal(t, "MAX_NUM_INDEX", stmt1.OptionName)
 	assert.Equal(t, "10", stmt1.OptionValue)
 
-	// 测试 SET 字符串参数（带引号）
+	// Test SET string parameter (with quotes)
 	sql2 := "RECOMMEND INDEX SET timeout = '60'"
 	stmt2, err := parser.Parse(sql2)
 
 	require.NoError(t, err)
 	assert.Equal(t, "SET", stmt2.Action)
-	assert.Equal(t, "timeout", stmt2.OptionName)
+	// TiDB parser normalizes identifiers to uppercase
+	assert.Equal(t, "TIMEOUT", stmt2.OptionName)
 	assert.Equal(t, "60", stmt2.OptionValue)
 }
 

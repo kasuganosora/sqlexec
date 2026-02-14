@@ -32,6 +32,9 @@ func NewFlatIndex(columnName string, config *VectorIndexConfig) (*FlatIndex, err
 
 // Build 构建索引
 func (f *FlatIndex) Build(ctx context.Context, loader VectorDataLoader) error {
+	if loader == nil {
+		return fmt.Errorf("loader cannot be nil")
+	}
 	records, err := loader.Load(ctx)
 	if err != nil {
 		return err
@@ -62,7 +65,12 @@ func (f *FlatIndex) Search(ctx context.Context, query []float32, k int, filter *
 
 	candidates := make([]idDist, 0, len(f.vectors))
 	for id, vec := range f.vectors {
-		if filter != nil && len(filter.IDs) > 0 {
+		// filter is not nil means we need to filter by IDs
+		if filter != nil {
+			// empty IDs list means no matches
+			if len(filter.IDs) == 0 {
+				continue
+			}
 			found := false
 			for _, fid := range filter.IDs {
 				if fid == id {

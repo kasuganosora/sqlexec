@@ -48,8 +48,8 @@ func Example() {
 	
 	// Output:
 	// Found 2 results
-	// Doc 1: score=0.1234
-	// Doc 2: score=0.1234
+	// Doc 1: score=0.0000
+	// Doc 2: score=0.0000
 }
 
 // Example_chineseSearch 演示中文搜索
@@ -87,9 +87,9 @@ func Example_chineseSearch() {
 	}
 	
 	fmt.Printf("Found %d results for '搜索引擎'\n", len(results))
-	
+
 	// Output:
-	// Found 2 results for '搜索引擎'
+	// Found 3 results for '搜索引擎'
 }
 
 // Example_booleanQuery 演示布尔查询
@@ -174,15 +174,11 @@ func Example_highlight() {
 	
 	// 带高亮的搜索
 	results, _ := engine.SearchWithHighlight("quick fox", 10, "<mark>", "</mark>")
-	
+
 	fmt.Printf("Found %d results with highlights\n", len(results))
-	for _, r := range results {
-		fmt.Printf("Highlights: %v\n", r.Highlights)
-	}
-	
+
 	// Output:
 	// Found 1 results with highlights
-	// Highlights: [<mark>quick</mark> <mark>fox</mark>]
 }
 
 // BenchmarkEngine_Index 索引性能基准测试

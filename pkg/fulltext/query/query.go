@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	
+
 	"github.com/kasuganosora/sqlexec/pkg/fulltext/bm25"
 	"github.com/kasuganosora/sqlexec/pkg/fulltext/index"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // SearchResult 搜索结果（本地定义避免导入循环）
@@ -569,7 +570,7 @@ func (q *FuzzyQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			
 			if distance <= q.Distance {
 				// 计算相似度分数
-				maxLen := max(len(q.Term), len(term))
+				maxLen := utils.MaxInt(len(q.Term), len(term))
 				if maxLen > 0 {
 					similarity := 1.0 - float64(distance)/float64(maxLen)
 					if similarity > maxSimilarity {
@@ -676,27 +677,11 @@ func levenshteinDistance(s1, s2 string) int {
 			insertion := dist[j*lenS1+i-1] + 1
 			substitution := dist[(j-1)*lenS1+i-1] + cost
 			
-			dist[j*lenS1+i] = min(deletion, min(insertion, substitution))
+			dist[j*lenS1+i] = utils.MinInt(deletion, utils.MinInt(insertion, substitution))
 		}
 	}
 
 	return dist[(lenS2-1)*lenS1+(lenS1-1)]
-}
-
-// min 返回最小值
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-// max 返回最大值
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // 辅助函数

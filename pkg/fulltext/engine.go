@@ -121,12 +121,6 @@ func (e *Engine) IndexDocument(doc *Document) error {
 		return fmt.Errorf("tokenize failed: %w", err)
 	}
 	
-	// 转换词为ID
-	for i := range tokens {
-		termID := e.vocabulary.GetOrCreateID(tokens[i].Text)
-		tokens[i].Text = string(rune(termID))
-	}
-	
 	// 转换为内部文档类型
 	internalDoc := &index.Document{
 		ID:      doc.ID,
@@ -146,9 +140,8 @@ func (e *Engine) IndexDocumentWithTokens(doc *Document, tokens []Token) error {
 	// 转换词为ID
 	idTokens := make([]analyzer.Token, len(tokens))
 	for i, token := range tokens {
-		termID := e.vocabulary.GetOrCreateID(token.Text)
 		idTokens[i] = analyzer.Token{
-			Text:     string(rune(termID)),
+			Text:     token.Text,
 			Position: token.Position,
 			Start:    token.Start,
 			End:      token.End,
@@ -171,15 +164,20 @@ func (e *Engine) Search(queryStr string, topK int) ([]SearchResult, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	
-	// 解析查询
-	parser := query.NewSimpleQueryParser("content")
-	q, err := parser.Parse(queryStr)
+	// 使用引擎的分词器对查询进行分词
+	tokens, err := e.tokenizer.Tokenize(queryStr)
 	if err != nil {
-		return nil, fmt.Errorf("parse query failed: %w", err)
+		return nil, fmt.Errorf("tokenize query failed: %w", err)
+	}
+	
+	// 构建布尔查询
+	boolQuery := query.NewBooleanQuery()
+	for _, token := range tokens {
+		boolQuery.AddShould(query.NewTermQuery("content", token.Text))
 	}
 	
 	// 执行查询
-	queryResults := q.Execute(e.invertedIdx)
+	queryResults := boolQuery.Execute(e.invertedIdx)
 	
 	// 转换为引擎结果类型
 	results := convertQueryResults(queryResults)
@@ -220,10 +218,10 @@ func (e *Engine) SearchBM25(queryStr string, topK int) ([]SearchResult, error) {
 		return nil, fmt.Errorf("tokenize failed: %w", err)
 	}
 	
-	// 构建查询向量
+	// 构建查询向量（使用hashString保持与索引一致）
 	queryVector := bm25.NewSparseVector()
 	for _, token := range tokens {
-		termID := e.vocabulary.GetOrCreateID(token.Text)
+		termID := hashString(token.Text)
 		// 计算查询词的权重（这里使用简单的TF）
 		if weight, exists := queryVector.Get(termID); exists {
 			queryVector.Set(termID, weight+1.0)
@@ -245,6 +243,15 @@ func (e *Engine) SearchBM25(queryStr string, topK int) ([]SearchResult, error) {
 	results := convertIdxResults(idxResults)
 	
 	return results, nil
+}
+
+// hashString 将字符串hash为int64（与index包保持一致）
+func hashString(s string) int64 {
+	h := int64(0)
+	for _, c := range s {
+		h = h*31 + int64(c)
+	}
+	return h
 }
 
 // SearchWithHighlight 带高亮的搜索
@@ -331,17 +338,8 @@ func (e *Engine) SearchPhrase(phrase string, slop int, topK int) ([]SearchResult
 		return nil, err
 	}
 	
-	// 转换词为ID
-	idTokens := make([]analyzer.Token, len(tokens))
-	for i, token := range tokens {
-		termID := e.vocabulary.GetOrCreateID(token.Text)
-		idTokens[i] = analyzer.Token{
-			Text:     string(rune(termID)),
-			Position: i,
-		}
-	}
-	
-	idxResults := e.invertedIdx.SearchPhrase(idTokens, slop)
+	// 直接使用原始token，不做词ID转换
+	idxResults := e.invertedIdx.SearchPhrase(tokens, slop)
 	results := convertIdxResults(idxResults)
 	
 	if topK > 0 && len(results) > topK {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/statistics"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // HypotheticalStatsGenerator 虚拟索引统计信息生成器
@@ -94,7 +95,7 @@ func (g *HypotheticalStatsGenerator) estimateNDV(stats *statistics.TableStatisti
 	}
 
 	// 多列索引的 NDV 低于单列最小 NDV
-	return max(minNDV/2, 1)
+	return utils.MaxInt64(minNDV/2, 1)
 }
 
 // heuristicNDV 启发式估算 NDV
@@ -107,9 +108,9 @@ func (g *HypotheticalStatsGenerator) heuristicNDV(rowCount int64) int64 {
 	case rowCount < 1000:
 		return rowCount
 	case rowCount < 100000:
-		return max(rowCount/10, 100)
+		return utils.MaxInt64(rowCount/10, 100)
 	default:
-		return max(rowCount/100, 1000)
+		return utils.MaxInt64(rowCount/100, 1000)
 	}
 }
 
@@ -245,7 +246,7 @@ func (g *HypotheticalStatsGenerator) generateDefaultStats(tableName string, colu
 	if !isUnique {
 		ndv = g.heuristicNDV(rowCount)
 		if len(columns) > 1 {
-			ndv = max(ndv/2, 1)
+			ndv = utils.MaxInt64(ndv/2, 1)
 		}
 	}
 
@@ -308,22 +309,6 @@ func (g *HypotheticalStatsGenerator) CompareWithFullScan(indexStats *Hypothetica
 
 	benefitRatio := fullScanCost / indexCost
 	return benefitRatio, benefitRatio > 1.5 // 索引收益 > 50% 时推荐
-}
-
-// max 返回两个 int64 的最大值
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-// min 返回两个 int64 的最小值
-func min(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 // GetColumnStatistics 获取列统计信息（用于调试）

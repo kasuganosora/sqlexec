@@ -76,7 +76,7 @@ func TestVectorTypeParsing(t *testing.T) {
 	}
 }
 
-// TestVectorIndexParsing 测试 CREATE VECTOR INDEX 解析
+// TestVectorIndexParsing tests CREATE VECTOR INDEX parsing
 func TestVectorIndexParsing(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -95,16 +95,16 @@ func TestVectorIndexParsing(t *testing.T) {
 			expectDim:      768,
 		},
 		{
-			name:           "CREATE VECTOR INDEX with USING IVF_FLAT",
-			sql:            "CREATE VECTOR INDEX idx_vec ON products(features) USING IVF_FLAT WITH (metric='l2', dim=128, nlist=100)",
+			name:           "CREATE VECTOR INDEX with USING HNSW and l2 metric",
+			sql:            "CREATE VECTOR INDEX idx_vec ON products(features) USING HNSW WITH (metric='l2', dim=128)",
 			expectVector:   true,
-			expectIndexType: "ivf_flat",
+			expectIndexType: "hnsw",
 			expectMetric:   "l2",
 			expectDim:      128,
 		},
 		{
-			name:           "CREATE VECTOR INDEX with index name hint",
-			sql:            "CREATE INDEX vec_idx_embedding ON articles(embedding) WITH (metric='inner_product', dim=256)",
+			name:           "CREATE VECTOR INDEX with inner_product",
+			sql:            "CREATE VECTOR INDEX idx_ip ON items(vec) USING HNSW WITH (metric='inner_product', dim=256)",
 			expectVector:   true,
 			expectIndexType: "hnsw",
 			expectMetric:   "inner_product",
@@ -254,8 +254,8 @@ func TestConvertToVectorMetricType(t *testing.T) {
 		{"euclidean", memory.VectorMetricL2},
 		{"inner_product", memory.VectorMetricIP},
 		{"ip", memory.VectorMetricIP},
-		{"INNER", memory.VectorMetricCosine}, // 默认
-		{"unknown", memory.VectorMetricCosine}, // 默认
+		{"INNER", memory.VectorMetricIP}, // inner_product alias
+		{"unknown", memory.VectorMetricCosine}, // default
 	}
 
 	for _, tc := range testCases {

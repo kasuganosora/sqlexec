@@ -6,6 +6,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/fulltext/analyzer"
 	"github.com/kasuganosora/sqlexec/pkg/fulltext/bm25"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // Document 文档（本地定义避免导入循环）
@@ -287,7 +288,7 @@ func matchRemainingPositions(positions [][]int, idx int, lastPos int, slop int) 
 	
 	expectedPos := lastPos + 1
 	for _, pos := range positions[idx] {
-		if abs(pos-expectedPos) <= slop {
+		if utils.AbsInt(pos-expectedPos) <= slop {
 			if matchRemainingPositions(positions, idx+1, pos, slop) {
 				return true
 			}
@@ -361,13 +362,6 @@ func hashString(s string) int64 {
 		h = h*31 + int64(c)
 	}
 	return h
-}
-
-func abs(a int) int {
-	if a < 0 {
-		return -a
-	}
-	return a
 }
 
 // minHeap 最小堆（用于维护Top-K）

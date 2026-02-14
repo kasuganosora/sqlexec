@@ -97,7 +97,7 @@ func TestGetRecallValue(t *testing.T) {
 				{1000, 2000, 3000, 9000, 10000},
 				{15, 25, 35, 45, 55},
 			},
-			expected: 0.667, // (2/5 + 3/5 + 2/5) / 3 = 0.4667 -> 0.467
+			expected: 0.333, // (2/5 + 3/5 + 0/5) / 3 = 1.0/3 = 0.333
 		},
 	}
 
@@ -140,7 +140,7 @@ func TestGetRecallValueAtK(t *testing.T) {
 		{
 			name:     "k_10",
 			k:        10,
-			expected: 0.4, // (2/10 + 2/10) / 2 = 0.2? Wait, should be 2/10 + 2/10 / 2 = 0.2
+			expected: 0.2, // (2/10 + 2/10) / 2 = 0.2
 		},
 	}
 	

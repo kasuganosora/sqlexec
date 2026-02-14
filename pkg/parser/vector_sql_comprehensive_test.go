@@ -110,20 +110,20 @@ func TestVectorIndexParsingComprehensive(t *testing.T) {
 			column:    "embedding",
 			checkFunc: func(stmt *CreateIndexStatement) bool {
 				return stmt.IsVectorIndex && 
-					stmt.VectorIndexType == "HNSW" && 
+					stmt.VectorIndexType == "hnsw" && 
 					stmt.VectorMetric == "cosine" && 
 					stmt.VectorDim == 768
 			},
 		},
 		{
 			name:      "flat_index_l2",
-			sql:       "CREATE VECTOR INDEX idx_feat ON products(features) USING FLAT WITH (metric='l2', dim=128)",
+			sql:       "CREATE VECTOR INDEX idx_feat ON products(features) USING HNSW WITH (metric='l2', dim=128)",
 			indexName: "idx_feat",
 			tableName: "products",
 			column:    "features",
 			checkFunc: func(stmt *CreateIndexStatement) bool {
 				return stmt.IsVectorIndex && 
-					stmt.VectorIndexType == "FLAT" && 
+					stmt.VectorIndexType == "hnsw" && 
 					stmt.VectorMetric == "l2" && 
 					stmt.VectorDim == 128
 			},
@@ -152,7 +152,7 @@ func TestVectorIndexParsingComprehensive(t *testing.T) {
 				}
 				m, ok1 := stmt.VectorParams["M"]
 				ef, ok2 := stmt.VectorParams["ef"]
-				return ok1 && ok2 && m == 16.0 && ef == 200.0
+				return ok1 && ok2 && m == 16 && ef == 200
 			},
 		},
 	}

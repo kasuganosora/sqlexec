@@ -326,9 +326,16 @@ func (a *SQLAdapter) convertSelectStmt(stmt *ast.SelectStmt) (*SelectStatement, 
 			if item.Desc {
 				direction = "DESC"
 			}
+			// Handle column name expressions
 			if col, ok := item.Expr.(*ast.ColumnNameExpr); ok {
 				selectStmt.OrderBy = append(selectStmt.OrderBy, OrderByItem{
 					Column:    col.Name.Name.String(),
+					Direction: direction,
+				})
+			} else if funcCall, ok := item.Expr.(*ast.FuncCallExpr); ok {
+				// Handle function expressions like vec_cosine_distance(...)
+				selectStmt.OrderBy = append(selectStmt.OrderBy, OrderByItem{
+					Column:    extractFuncCallString(funcCall),
 					Direction: direction,
 				})
 			}
@@ -1128,7 +1135,17 @@ if stmt.KeyType == ast.IndexKeyTypeVector {
 	isVectorIndex = true
 	createIndexStmt.IsVectorIndex = true
 	createIndexStmt.IndexType = "VECTOR"
-	// 注意：不在这里设置默认 metric，让它由表达式或 COMMENT 决定
+	// 从 IndexOption.Tp 提取向量索引类型
+	if stmt.IndexOption != nil && stmt.IndexOption.Tp != 0 {
+		tpStr := stmt.IndexOption.Tp.String()
+		tpLower := strings.ToLower(tpStr)
+		// 检查是否是支持的向量索引类型
+		switch tpLower {
+		case "hnsw", "flat", "ivf_flat", "ivf_sq8", "ivf_pq",
+			"hnsw_sq", "hnsw_pq", "ivf_rabitq", "hnsw_prq", "aisaq":
+			createIndexStmt.VectorIndexType = tpLower
+		}
+	}
 } else if stmt.IndexOption != nil && stmt.IndexOption.Tp != 0 {
 	// 根据 TiDB 的索引类型常量转换
 	switch stmt.IndexOption.Tp {
@@ -1266,6 +1283,28 @@ if createIndexStmt.IsVectorIndex && stmt.IndexOption != nil && stmt.IndexOption.
 	}
 
 	return createIndexStmt, nil
+}
+
+// extractFuncCallString extracts a string representation of a function call for ORDER BY
+func extractFuncCallString(funcCall *ast.FuncCallExpr) string {
+	var sb strings.Builder
+	sb.WriteString(strings.ToLower(funcCall.FnName.String()))
+	sb.WriteString("(")
+	for i, arg := range funcCall.Args {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		switch a := arg.(type) {
+		case *ast.ColumnNameExpr:
+			sb.WriteString(a.Name.Name.String())
+		case ast.ValueExpr:
+			sb.WriteString(fmt.Sprintf("'%v'", a.GetValue()))
+		default:
+			sb.WriteString(fmt.Sprintf("%v", arg))
+		}
+	}
+	sb.WriteString(")")
+	return sb.String()
 }
 
 // extractVectorDistanceFunc 从表达式中提取向量距离函数的信息
