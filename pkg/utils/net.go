@@ -1,14 +1,31 @@
 package utils
 
-// ParseRemoteAddr 解析远程地址，格式为 "ip:port"
-// 返回 (ip, port)
+import "strings"
+
+// ParseRemoteAddr parses remote address in format "ip:port" or "[ipv6]:port"
+// Returns (ip, port)
 func ParseRemoteAddr(remoteAddr string) (string, string) {
-	parts := make([]byte, 0)
-	for i := 0; i < len(remoteAddr); i++ {
-		if remoteAddr[i] == ':' {
-			return string(parts), remoteAddr[i+1:]
+	// Handle IPv6 format: [ipv6]:port
+	if len(remoteAddr) > 0 && remoteAddr[0] == '[' {
+		// Find closing bracket
+		closeBracket := strings.Index(remoteAddr, "]")
+		if closeBracket == -1 {
+			// Malformed, return as-is
+			return remoteAddr, ""
 		}
-		parts = append(parts, remoteAddr[i])
+		ip := remoteAddr[:closeBracket+1] // Include brackets
+		// Check for port after bracket
+		if closeBracket+1 < len(remoteAddr) && remoteAddr[closeBracket+1] == ':' {
+			return ip, remoteAddr[closeBracket+2:]
+		}
+		return ip, ""
 	}
-	return string(parts), ""
+
+	// Handle IPv4 format: ip:port
+	// Find last colon for port separation
+	lastColon := strings.LastIndex(remoteAddr, ":")
+	if lastColon == -1 {
+		return remoteAddr, ""
+	}
+	return remoteAddr[:lastColon], remoteAddr[lastColon+1:]
 }

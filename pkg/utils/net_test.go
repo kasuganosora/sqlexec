@@ -75,10 +75,10 @@ func TestParseRemoteAddr(t *testing.T) {
 			expectedPort:  "3306",
 		},
 		{
-			name:          "多个冒号",
+			name:          "Multiple colons (no brackets)",
 			remoteAddr:    "192:168:1:1:3306",
-			expectedIP:    "192",
-			expectedPort:  "168:1:1:3306",
+			expectedIP:    "192:168:1:1",
+			expectedPort:  "3306",
 		},
 		// 特殊情况
 		{
@@ -162,24 +162,24 @@ func TestParseRemoteAddr(t *testing.T) {
 			expectedIP:    "example.com/path",
 			expectedPort:  "8080",
 		},
-		// IPv6边界
+		// IPv6 boundary cases
 		{
-			name:          "IPv6不带括号",
+			name:          "IPv6 without brackets",
 			remoteAddr:    "2001:db8::1:8080",
-			expectedIP:    "2001",
-			expectedPort:  "db8::1:8080",
+			expectedIP:    "2001:db8::1",
+			expectedPort:  "8080",
 		},
 		{
-			name:          "IPv6单括号",
+			name:          "IPv6 single opening bracket",
 			remoteAddr:    "[2001:db8::1",
-			expectedIP:    "[2001",
-			expectedPort:  "db8::1",
+			expectedIP:    "[2001:db8::1",
+			expectedPort:  "",
 		},
 		{
-			name:          "IPv6单括号结尾",
+			name:          "IPv6 single closing bracket",
 			remoteAddr:    "2001:db8::1]:8080",
-			expectedIP:    "2001",
-			expectedPort:  "db8::1]:8080",
+			expectedIP:    "2001:db8::1]",
+			expectedPort:  "8080",
 		},
 		// 长地址
 		{
@@ -261,14 +261,14 @@ func TestParseRemoteAddrEdgeCases(t *testing.T) {
 			checkFunc:  func(ip, port string) bool { return ip == "" && port == "8080" },
 		},
 		{
-			name:       "多个连续冒号",
+			name:       "Multiple consecutive colons",
 			remoteAddr: ":::",
-			checkFunc:  func(ip, port string) bool { return ip == "" && port == ":" },
+			checkFunc:  func(ip, port string) bool { return ip == "::" && port == "" },
 		},
 		{
-			name:       "冒号在开头和结尾",
+			name:       "Colon at start and end",
 			remoteAddr: ":192.168.1.1:",
-			checkFunc:  func(ip, port string) bool { return ip == "" && port == "192.168.1.1:" },
+			checkFunc:  func(ip, port string) bool { return ip == ":192.168.1.1" && port == "" },
 		},
 	}
 
@@ -315,10 +315,10 @@ func TestParseRemoteAddrIPv6(t *testing.T) {
 			expectedPort:  "8080",
 		},
 		{
-			name:          "IPv6单冒号",
+			name:          "IPv6 without brackets",
 			remoteAddr:    "2001:db8::1:8080",
-			expectedIP:    "2001",
-			expectedPort:  "db8::1:8080",
+			expectedIP:    "2001:db8::1",
+			expectedPort:  "8080",
 		},
 	}
 

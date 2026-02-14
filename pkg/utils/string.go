@@ -17,21 +17,21 @@ func ContainsSimple(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
-// FindSubstring 查找子串位置
+// FindSubstring finds substring position (returns character index for Unicode support)
 func FindSubstring(s, substr string) int {
 	if len(substr) == 0 {
 		return 0
 	}
-	if len(s) < len(substr) {
-		return -1
-	}
-	return strings.Index(s, substr)
+	// Use rune-based index for proper Unicode character position
+	return IndexOfSubstring(s, substr)
 }
 
-// Contains 字符串包含检查（支持通配符）
+// Contains checks if string contains substring (supports wildcards)
 func Contains(s, substr string) bool {
-	// 简化实现：将 % 替换为 *
-	substr = ReplaceAll(substr, "%", "*")
+	// Handle wildcard patterns
+	if strings.Contains(substr, "%") {
+		substr = ReplaceAll(substr, "%", "*")
+	}
 
 	if substr == "*" {
 		return true
@@ -52,54 +52,55 @@ func Contains(s, substr string) bool {
 		return StartsWith(s, pattern)
 	}
 
-	return s == substr
+	// No wildcard - use simple contains
+	return strings.Contains(s, substr)
 }
 
-// ReplaceAll 替换字符串中所有出现的子串
+// ReplaceAll replaces all occurrences of old with new in string s
 func ReplaceAll(s, old, new string) string {
+	// Handle empty old string - return original (Go's ReplaceAll inserts between chars)
+	if old == "" {
+		return s
+	}
 	return strings.ReplaceAll(s, old, new)
 }
 
-// ContainsWord 检查单词是否在字符串中（作为独立单词）
+// ContainsWord checks if word exists in string as independent word
 func ContainsWord(str, word string) bool {
 	if len(str) == 0 || len(word) == 0 {
 		return false
 	}
 
-	// 简化实现：查找是否包含空格+word或word+空格，或在开头/结尾
 	wordLower := strings.ToLower(word)
 	strLower := strings.ToLower(str)
 
-	// 检查各种可能的位置
-	patterns := []string{
-		" " + wordLower + " ",
-		" " + wordLower + ",",
-		" " + wordLower + ";",
-		" " + wordLower + ")",
-		"(" + wordLower + " ",
-		"," + wordLower + " ",
-		" " + wordLower + "\n",
-		"\n" + wordLower + " ",
-	}
+	// Word boundary characters
+	separators := []string{" ", ",", ";", "(", ")", "\n", "\t", ".", "!", "?"}
 
-	// 检查开头
-	if strings.HasPrefix(strLower, wordLower+" ") ||
-		strings.HasPrefix(strLower, wordLower+",") ||
-		strings.HasPrefix(strLower, wordLower+"(") {
-		return true
-	}
-
-	// 检查结尾
-	if strings.HasSuffix(strLower, " "+wordLower) ||
-		strings.HasSuffix(strLower, ","+wordLower) ||
-		strings.HasSuffix(strLower, ")"+wordLower) {
-		return true
-	}
-
-	// 检查中间
-	for _, pattern := range patterns {
-		if strings.Contains(strLower, pattern) {
+	// Check at start
+	for _, sep := range separators {
+		if strings.HasPrefix(strLower, wordLower+sep) {
 			return true
+		}
+	}
+	// Check if entire string is the word
+	if strLower == wordLower {
+		return true
+	}
+
+	// Check at end
+	for _, sep := range separators {
+		if strings.HasSuffix(strLower, sep+wordLower) {
+			return true
+		}
+	}
+
+	// Check in middle (word surrounded by separators)
+	for _, sep1 := range separators {
+		for _, sep2 := range separators {
+			if strings.Contains(strLower, sep1+wordLower+sep2) {
+				return true
+			}
 		}
 	}
 

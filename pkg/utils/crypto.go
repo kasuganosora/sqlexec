@@ -62,6 +62,11 @@ func VerifyPassword(storedHash string, password string, authResponse []byte, sal
 		return true
 	}
 
+	// If storedHash is empty but password provided, return false
+	if storedHash == "" {
+		return false
+	}
+
 	// Generate expected auth response from password
 	expectedResponse := GeneratePasswordHash(password, salt)
 

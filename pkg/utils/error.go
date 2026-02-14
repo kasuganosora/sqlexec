@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"errors"
+	"strings"
 )
 
 // MySQL错误码常量定义
@@ -30,34 +31,34 @@ func MapErrorCode(err error) (uint16, string) {
 		return ErrParseError, SqlStateSyntaxError
 	}
 
-	// 检查错误消息内容
-	errMsg := err.Error()
+	// Check error message content (case-insensitive)
+	errMsg := strings.ToLower(err.Error())
 
-	// 表不存在
-	if ContainsSubstring(errMsg, "table") && ContainsSubstring(errMsg, "not found") {
-		return ErrNoSuchTable, SqlStateNoSuchTable
-	}
-
-	// 列不存在
-	if ContainsSubstring(errMsg, "column") && ContainsSubstring(errMsg, "not found") {
+	// Check for column first (more specific)
+	if strings.Contains(errMsg, "column") && strings.Contains(errMsg, "not found") {
 		return ErrBadFieldError, SqlStateBadFieldError
 	}
 
-	// 语法错误
-	if ContainsSubstring(errMsg, "syntax") || ContainsSubstring(errMsg, "SYNTAX_ERROR") || ContainsSubstring(errMsg, "parse") {
+	// Then check for table
+	if strings.Contains(errMsg, "table") && strings.Contains(errMsg, "not found") {
+		return ErrNoSuchTable, SqlStateNoSuchTable
+	}
+
+	// Syntax error
+	if strings.Contains(errMsg, "syntax") || strings.Contains(errMsg, "parse") {
 		return ErrParseError, SqlStateSyntaxError
 	}
 
-	// 空查询
-	if ContainsSubstring(errMsg, "no statements found") || ContainsSubstring(errMsg, "empty query") {
+	// Empty query
+	if strings.Contains(errMsg, "no statements found") || strings.Contains(errMsg, "empty query") {
 		return ErrEmptyQuery, SqlStateSyntaxError
 	}
 
-	// 超时或取消
+	// Timeout or cancellation
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return ErrInterrupted, SqlStateUnknownError
 	}
 
-	// 默认语法错误
+	// Default to syntax error
 	return ErrParseError, SqlStateSyntaxError
 }

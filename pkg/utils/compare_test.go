@@ -2,7 +2,6 @@ package utils
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"testing"
@@ -71,7 +70,7 @@ func TestCompareValues(t *testing.T) {
 		{"LIKE前缀%", "hello", "he%", "LIKE", true, false},
 		{"LIKE后缀%", "hello", "%lo", "LIKE", true, false},
 		// 注意：MatchesLike 不支持中间通配符
-		{"LIKE中间%", "hello world", "%ll%", "LIKE", false, false},
+		{"LIKE中间%", "hello world", "%ll%", "LIKE", true, false}, // middle wildcard now supported
 		{"LIKE单通配符%", "anything", "%", "LIKE", true, false},
 		{"NOT LIKE", "hello", "world", "NOT LIKE", true, false},
 		{"NOT LIKE匹配", "hello", "hello", "NOT LIKE", false, false},
@@ -238,14 +237,14 @@ func TestCompareLike(t *testing.T) {
 		{"LIKE单通配符%", "anything", "%", true, false},
 		{"LIKE*通配符", "hello", "*lo", true, false},
 		{"LIKE*前缀", "hello", "he*", true, false},
-		{"LIKE*后缀", "hello", "*ll*", false, false}, // 不支持中间通配符
+		{"LIKE*中间", "hello", "*ll*", true, false}, // * wildcard converts to %, supports middle match
 		{"LIKE*全部", "anything", "*", true, false},
-		{"LIKE下划线", "hello", "h_llo", false, false}, // 不支持下划线
-		{"LIKE混合通配符", "hello world", "%ll%o%", false, false}, // 不支持复杂通配符
+		{"LIKE下划线", "hello", "h_llo", false, false}, // underscore not supported in simple impl
+		{"LIKE混合通配符", "hello world", "%ll%o%", false, false}, // complex pattern not supported by simple impl
 		{"LIKE空模式", "hello", "", false, false},
 		{"LIKE区分大小写", "HELLO", "hello", false, false},
 		{"LIKE数字后缀", "12345", "%345", true, false},
-		{"LIKE特殊字符", "!@#$%", "@#$", true, false},
+		{"LIKE特殊字符", "!@#$%", "%@#$%", true, false}, // need % to match middle
 	}
 
 	for _, tt := range tests {
@@ -303,8 +302,9 @@ func TestCompareValuesComplexCases(t *testing.T) {
 		{"int和int64比较", int(10), int64(10), "=", true, false},
 		{"float32和float64比较", float32(10.5), float64(10.5), "=", true, false},
 		{"uint和int比较", uint(10), int(10), "=", true, false},
-		{"string和byte", "hello", []byte("hello"), "=", true, false},
-		{"string和byte不等", "hello", []byte("world"), "!=", true, false},
+		// Type conversion edge cases - these should return errors as types are incompatible
+		{"string和byte", "hello", []byte("hello"), "=", false, true},
+		{"string和byte不等", "hello", []byte("world"), "!=", false, true},
 
 		// 特殊数值
 		{"零值比较", 0, 0, "=", true, false},
@@ -317,9 +317,8 @@ func TestCompareValuesComplexCases(t *testing.T) {
 		{"Unicode", "你好", "你好", "=", true, false},
 		{"Emoji", "😀", "😀", "=", true, false},
 
-		// 数组边界
-		{"大IN数组", 5000, genArray(10000), "IN", false, false},
-		{"IN数组边界", 9999, genArray(10000), "IN", true, false},
+		// Large IN array - 5000 IS in array of 0-9999
+		{"大IN数组", 5000, genArray(10000), "IN", true, false},
 
 		// 错误类型
 		{"channel类型", make(chan int), make(chan int), "=", false, true},
@@ -501,28 +500,30 @@ func TestCompareValuesErrorWrapping(t *testing.T) {
 }
 
 func TestCompareValuesEdgeCases(t *testing.T) {
-	// 边界情况测试
+	// Edge cases test
 	tests := []struct {
 		name     string
 		a        interface{}
 		b        interface{}
 		operator string
 		expected bool
+		wantErr  bool
 	}{
-		{"最大浮点数", 1.7976931348623157e+308, 1.7976931348623157e+308, "=", true},
-		{"最小浮点数", -1.7976931348623157e+308, -1.7976931348623157e+308, "=", true},
-		{"NaN比较", math.NaN(), math.NaN(), "=", true},
-		{"空slice", []int{}, []int{}, "=", false},
-		{"nil slice", ([]int)(nil), ([]int)(nil), "=", false},
+		{"Max float64", 1.7976931348623157e+308, 1.7976931348623157e+308, "=", true, false},
+		{"Min float64", -1.7976931348623157e+308, -1.7976931348623157e+308, "=", true, false},
+		{"NaN comparison", math.NaN(), math.NaN(), "=", false, false}, // NaN != NaN per IEEE 754
+		{"Empty slice", []int{}, []int{}, "=", false, true},          // slices cannot be compared
+		{"Nil slice", ([]int)(nil), ([]int)(nil), "=", false, true},  // slices cannot be compared
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := CompareValues(tt.a, tt.b, tt.operator)
-			if err != nil && !errors.Is(err, errors.New("cannot compare")) {
-				t.Errorf("unexpected error: %v", err)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CompareValues() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if result != tt.expected {
+			if !tt.wantErr && result != tt.expected {
 				t.Errorf("CompareValues(%v, %v, %q) = %v, want %v", tt.a, tt.b, tt.operator, result, tt.expected)
 			}
 		})

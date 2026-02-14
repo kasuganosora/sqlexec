@@ -431,10 +431,10 @@ func TestMapErrorCodeMultipleKeywords(t *testing.T) {
 		expectedState string
 	}{
 		{
-			name:          "table和column都存在",
+			name:          "table and column both present",
 			err:           errors.New("table users and column id not found"),
-			expectedCode:  ErrNoSuchTable,
-			expectedState: SqlStateNoSuchTable,
+			expectedCode:  ErrBadFieldError, // column check takes priority
+			expectedState: SqlStateBadFieldError,
 		},
 		{
 			name:          "column和table都存在",

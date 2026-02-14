@@ -83,21 +83,112 @@ func MatchesAllSubFilters(row domain.Row, subFilters []domain.Filter) (bool, err
 }
 
 // MatchesLike implements simple LIKE pattern matching
+// Supports: % (any chars), _ (single char)
 func MatchesLike(value, pattern string) bool {
-	// Simple implementation - can be enhanced for full LIKE support
+	// Empty pattern only matches empty value
+	if pattern == "" {
+		return value == ""
+	}
+
+	// Single wildcard matches everything
 	if pattern == "%" {
 		return true
 	}
+
+	// Exact match
 	if pattern == value {
 		return true
 	}
-	if len(pattern) > 0 && pattern[0] == '%' && len(pattern) > 1 {
+
+	// Count wildcards to determine complexity
+	percentCount := 0
+	for _, c := range pattern {
+		if c == '%' {
+			percentCount++
+		}
+	}
+
+	// For complex patterns with multiple %, use recursive matching
+	if percentCount > 2 {
+		return matchesLikeRecursive(value, pattern)
+	}
+
+	// Check for middle wildcard: %xxx%
+	if len(pattern) >= 2 && pattern[0] == '%' && pattern[len(pattern)-1] == '%' {
+		middle := pattern[1 : len(pattern)-1]
+		if middle == "" {
+			return true
+		}
+		// Use simple substring check
+		return containsSubstring(value, middle)
+	}
+
+	// Check for suffix wildcard: xxx%
+	if len(pattern) > 1 && pattern[len(pattern)-1] == '%' {
+		prefix := pattern[:len(pattern)-1]
+		return len(value) >= len(prefix) && value[:len(prefix)] == prefix
+	}
+
+	// Check for prefix wildcard: %xxx
+	if len(pattern) > 1 && pattern[0] == '%' {
 		suffix := pattern[1:]
 		return len(value) >= len(suffix) && value[len(value)-len(suffix):] == suffix
 	}
-	if len(pattern) > 0 && pattern[len(pattern)-1] == '%' && len(pattern) > 1 {
+
+	return false
+}
+
+// matchesLikeRecursive handles complex LIKE patterns with multiple wildcards
+func matchesLikeRecursive(value, pattern string) bool {
+	// Base cases
+	if pattern == "" {
+		return value == ""
+	}
+	if pattern == "%" {
+		return true
+	}
+	if value == "" {
+		return pattern == ""
+	}
+
+	// Handle leading %
+	if pattern[0] == '%' {
+		// Try matching % with zero chars, then recurse
+		for i := 0; i <= len(value); i++ {
+			if matchesLikeRecursive(value[i:], pattern[1:]) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Handle trailing % (optimization)
+	if pattern[len(pattern)-1] == '%' {
 		prefix := pattern[:len(pattern)-1]
-		return len(value) >= len(prefix) && value[:len(prefix)] == prefix
+		return len(value) >= len(prefix) && value[:len(prefix)] == prefix || 
+			containsSubstring(value, prefix)
+	}
+
+	// Handle literal character at start
+	if value[0] == pattern[0] || pattern[0] == '_' {
+		return matchesLikeRecursive(value[1:], pattern[1:])
+	}
+
+	return false
+}
+
+// containsSubstring checks if substr exists in s (simple implementation)
+func containsSubstring(s, substr string) bool {
+	if len(substr) == 0 {
+		return true
+	}
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
 	}
 	return false
 }

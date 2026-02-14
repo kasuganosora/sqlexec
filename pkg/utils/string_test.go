@@ -137,7 +137,7 @@ func TestContains(t *testing.T) {
 		{"正常包含", "hello world", "world", true},
 		{"不包含", "hello", "world", false},
 		{"空字符串s", "", "", true},
-		{"空字符串substr", "hello", "", false},
+		{"空字符串substr", "hello", "", true}, // empty substring always matches
 		{"整个字符串", "hello", "hello", true},
 		{"通配符*匹配全部", "hello", "*", true},
 		{"前缀通配符", "hello world", "*world", true},
@@ -145,7 +145,7 @@ func TestContains(t *testing.T) {
 		{"前后通配符", "hello world", "*ll*", true},
 		{"百分号通配符", "hello world", "%world", true},
 		{"精确匹配", "hello", "hello", true},
-		{"单字符", "abc", "b", false},
+		{"单字符", "abc", "b", true}, // single character is a valid substring
 		{"Unicode字符", "你好世界", "*世界", true},
 		{"数字字符串", "12345", "*345", true},
 		{"特殊字符", "!@#$%", "*#$%", true},

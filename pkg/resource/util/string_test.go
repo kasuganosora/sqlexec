@@ -136,7 +136,7 @@ func TestContains(t *testing.T) {
 		{"wildcard only", "hello", "*", true},
 		{"percent wildcard", "hello", "%", true},
 		{"no match", "hello", "world", false},
-		{"empty pattern", "hello", "", false},
+		{"empty pattern", "hello", "", true}, // empty pattern matches any string
 		{"empty string", "", "hello", false},
 		{"both empty", "", "", true}, // empty string matches empty string
 		{"wildcard with percent", "hello", "h%o", false},
@@ -166,7 +166,7 @@ func TestReplaceAll(t *testing.T) {
 		{"simple replace", "hello world", "world", "there", "hello there"},
 		{"multiple occurrences", "hello hello hello", "hello", "hi", "hi hi hi"},
 		{"no occurrence", "hello world", "goodbye", "hi", "hello world"},
-		{"empty old", "hello", "", "hi", "hihhiehilhilhiohi"}, // ReplaceAll with empty old inserts new between each character
+		{"empty old", "hello", "", "hi", "hello"}, // empty old returns original string
 		{"empty new", "hello world", "world", "", "hello "},
 		{"empty string", "", "x", "y", ""},
 		{"replace with empty", "hello", "hello", "", ""},
@@ -231,14 +231,13 @@ func TestContainsWord(t *testing.T) {
 		{"empty word", "products and users", "", false},
 		{"both empty", "", "", false},
 		{"word with underscore", "users_items", "users", false},
-		// ContainsWord只检查特定的分隔符（空格、逗号、分号、括号、换行符）
-		// 以下测试根据实际实现调整
-		{"word after comma not matched", "products,users,items", "users", false}, // 需要空格
-		{"word after semicolon not matched", "products;users;items", "users", false}, // 需要空格
-		{"word in parentheses not matched", "(users)", "users", false}, // 需要空格
-		{"newline boundaries not matched", "products\nusers", "users", false}, // 需要合适的边界模式
-		{"newline before word", "products\n users", "users", true}, // 有正确的边界
-		{"newline after word", "products \nusers", "users", false}, // 需要空格+换行符+空格的模式
+		// ContainsWord uses various separators for word boundary detection
+		{"word after comma matched", "products,users,items", "users", true}, // comma is a separator
+		{"word after semicolon matched", "products;users;items", "users", true}, // semicolon is a separator
+		{"word in parentheses matched", "(users)", "users", true}, // parentheses are separators
+		{"newline boundaries matched", "products\nusers", "users", true}, // newline is a separator
+		{"newline before word", "products\n users", "users", true},
+		{"newline after word", "products \nusers", "users", true},
 	}
 
 	for _, tt := range tests {

@@ -192,48 +192,18 @@ func MapOperator(parserOp string) string {
 }
 
 // compareLike checks if value matches pattern
+// Supports % (any chars) and * (any chars - glob style)
 func compareLike(a, b interface{}) (bool, error) {
 	aStr := fmt.Sprintf("%v", a)
 	bStr := fmt.Sprintf("%v", b)
 
-	// 检查是否使用 * 通配符
+	// Check for * wildcard (glob style)
 	if strings.Contains(bStr, "*") {
-		// 将 * 通配符转换为正则表达式
-		pattern := ""
-		for _, ch := range bStr {
-			if ch == '*' || ch == '%' {
-				pattern += ".*"
-			} else if ch == '_' {
-				pattern += "."
-			} else {
-				pattern += string(ch)
-			}
-		}
-
-		if pattern == ".*" {
-			return true, nil
-		}
-
-		// 前缀/后缀匹配优化
-		if strings.HasPrefix(pattern, ".*") && strings.HasSuffix(pattern, ".*") {
-			middle := pattern[2 : len(pattern)-2]
-			return strings.Contains(aStr, middle), nil
-		}
-
-		if strings.HasPrefix(pattern, ".*") {
-			suffix := pattern[2:]
-			return strings.HasSuffix(aStr, suffix), nil
-		}
-
-		if strings.HasSuffix(pattern, ".*") {
-			prefix := pattern[:len(pattern)-2]
-			return strings.HasPrefix(aStr, prefix), nil
-		}
-
-		// 简化：使用字符串匹配
-		return aStr == bStr, nil
+		// Convert * to % and process
+		normalizedPattern := strings.ReplaceAll(bStr, "*", "%")
+		return MatchesLike(aStr, normalizedPattern), nil
 	}
 
-	// 使用 MatchesLike（支持 % 通配符）
+	// Use MatchesLike (supports % wildcard)
 	return MatchesLike(aStr, bStr), nil
 }
