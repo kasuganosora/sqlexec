@@ -25,6 +25,16 @@ func (s *Session) SetCurrentDB(dbName string) {
 	}
 }
 
+// SetConfigDir sets the config directory for the config virtual database
+func (s *Session) SetConfigDir(dir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.coreSession != nil {
+		s.coreSession.SetConfigDir(dir)
+	}
+}
+
 // GetCurrentDB returns the current database for this session
 func (s *Session) GetCurrentDB() string {
 	s.mu.Lock()

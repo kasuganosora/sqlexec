@@ -1,6 +1,8 @@
 package simple
 
 import (
+	"bytes"
+
 	"github.com/kasuganosora/sqlexec/server/handler"
 	"github.com/kasuganosora/sqlexec/server/protocol"
 )
@@ -16,9 +18,19 @@ func NewStatisticsHandler() *StatisticsHandler {
 // Handle 处理 COM_STATISTICS 命令
 func (h *StatisticsHandler) Handle(ctx *handler.HandlerContext, packet interface{}) error {
 	ctx.Log("处理 COM_STATISTICS")
-	// 返回统计信息字符串
+	ctx.ResetSequenceID()
+
+	// COM_STATISTICS response is a string wrapped in a MySQL packet header
 	stats := "Uptime: 3600  Threads: 1  Questions: 10  Slow queries: 0  Opens: 5  Flush tables: 1  Open tables: 4  Queries per second avg: 0.003"
-	_, err := ctx.Connection.Write([]byte(stats))
+	payload := []byte(stats)
+
+	// Build proper MySQL packet: 3-byte length (LE) + 1-byte sequence ID + payload
+	packetBuf := new(bytes.Buffer)
+	packetBuf.Write([]byte{byte(len(payload)), byte(len(payload) >> 8), byte(len(payload) >> 16)})
+	packetBuf.WriteByte(ctx.GetNextSequenceID())
+	packetBuf.Write(payload)
+
+	_, err := ctx.Connection.Write(packetBuf.Bytes())
 	return err
 }
 

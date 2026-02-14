@@ -61,3 +61,31 @@ func isInformationSchemaQuery(tableName string, currentDB string, dsManager inte
 
 	return false
 }
+
+// isConfigTable 检查表是否属于 config 虚拟数据库
+func isConfigTable(tableName string) bool {
+	if strings.Contains(tableName, ".") {
+		parts := strings.SplitN(tableName, ".", 2)
+		if len(parts) == 2 && strings.ToLower(parts[0]) == "config" {
+			return true
+		}
+	}
+	return false
+}
+
+// isConfigQuery 检查是否是 config 虚拟数据库查询
+func isConfigQuery(tableName string, currentDB string) bool {
+	if tableName == "" {
+		return false
+	}
+
+	if strings.HasPrefix(strings.ToLower(tableName), "config.") {
+		return true
+	}
+
+	if strings.EqualFold(currentDB, "config") {
+		return true
+	}
+
+	return false
+}

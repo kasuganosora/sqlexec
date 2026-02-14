@@ -2,12 +2,14 @@ package query
 
 import (
 	"fmt"
+	"math"
+	"strings"
+
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/server/handler"
 	"github.com/kasuganosora/sqlexec/server/protocol"
 	"github.com/kasuganosora/sqlexec/server/response"
-	"strings"
 )
 
 // QueryHandler QUERY 命令处理器
@@ -130,6 +132,9 @@ func (h *QueryHandler) sendQueryResult(ctx *handler.HandlerContext, columns []do
 	// 发送行数据
 	for _, row := range rows {
 		rowPacket := h.buildRowPacket(ctx.GetNextSequenceID(), columns, row)
+		if rowPacket == nil {
+			return fmt.Errorf("failed to marshal row data packet")
+		}
 		if _, err := ctx.Connection.Write(rowPacket); err != nil {
 			return err
 		}
@@ -200,13 +205,14 @@ func (h *QueryHandler) formatValue(value interface{}) string {
 	case uint, uint8, uint16, uint32, uint64:
 		return fmt.Sprintf("%d", v)
 	case float32:
-		if v == float32(int(v)) {
-			return fmt.Sprintf("%d", int(v))
+		f := float64(v)
+		if f == math.Trunc(f) && !math.IsInf(f, 0) && !math.IsNaN(f) {
+			return fmt.Sprintf("%.0f", f)
 		}
 		return fmt.Sprintf("%g", v)
 	case float64:
-		if v == float64(int(v)) {
-			return fmt.Sprintf("%d", int(v))
+		if v == math.Trunc(v) && !math.IsInf(v, 0) && !math.IsNaN(v) {
+			return fmt.Sprintf("%.0f", v)
 		}
 		return fmt.Sprintf("%g", v)
 	case bool:

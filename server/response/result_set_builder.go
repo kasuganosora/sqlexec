@@ -59,5 +59,6 @@ func encodeLengthEncodedInteger(v uint64) []byte {
 		byte(v >> 32),
 		byte(v >> 40),
 		byte(v >> 48),
+		byte(v >> 56),
 	}
 }

@@ -16,6 +16,7 @@ func NewErrorBuilder() *ErrorBuilder {
 func (b *ErrorBuilder) Build(sequenceID uint8, errorCode uint16, sqlState string, errorMessage string) *protocol.ErrorPacket {
 	packet := &protocol.ErrorPacket{}
 	packet.SequenceID = sequenceID
+	packet.Header = 0xFF
 	packet.ErrorCode = errorCode
 	packet.SqlState = sqlState
 	if sqlState != "" {

@@ -18,7 +18,6 @@ func main() {
 	listener, err := net.Listen("tcp4", cfg.GetListenAddress())
 	if err != nil {
 		log.Fatal("监听端口失败:", err)
-		return
 	}
 
 	ctx := context.Background()

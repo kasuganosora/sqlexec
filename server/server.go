@@ -7,10 +7,13 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/config"
+	"github.com/kasuganosora/sqlexec/pkg/config_schema"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer"
+	"github.com/kasuganosora/sqlexec/pkg/plugin"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
@@ -37,6 +40,7 @@ type Server struct {
 	parserRegistry    *handler.PacketParserRegistry
 	handshakeHandler  handler.HandshakeHandler
 	logger            Logger
+	configDir         string // 配置目录（用于 config 虚拟数据库）
 }
 
 type Logger interface {
@@ -64,7 +68,7 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 		DebugMode:    false,
 	})
 	if err != nil {
-		log.Printf("初始化 API DB 失败: %v", err)
+		log.Fatalf("初始化 API DB 失败: %v", err)
 	}
 
 	// 创建并注册 MVCC 数据源
@@ -98,6 +102,45 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 		aclManager = nil
 	}
 
+	// 加载 datasources.json 中配置的数据源
+	configDir := dataDir
+	dsManager := db.GetDSManager()
+	dsConfigs, err := config_schema.LoadDatasources(configDir)
+	if err != nil {
+		log.Printf("加载 datasources.json 失败: %v", err)
+	} else if len(dsConfigs) > 0 {
+		for _, dsCfg := range dsConfigs {
+			dsCfgCopy := dsCfg
+			ds, createErr := dsManager.CreateFromConfig(&dsCfgCopy)
+			if createErr != nil {
+				// Fallback to memory datasource for "memory" type
+				if dsCfg.Type == domain.DataSourceTypeMemory {
+					ds = memory.NewMVCCDataSource(&dsCfgCopy)
+				} else {
+					log.Printf("创建数据源 '%s' 失败: %v", dsCfg.Name, createErr)
+					continue
+				}
+			}
+			if connectErr := ds.Connect(ctx); connectErr != nil {
+				log.Printf("连接数据源 '%s' 失败: %v", dsCfg.Name, connectErr)
+				continue
+			}
+			if regErr := dsManager.Register(dsCfg.Name, ds); regErr != nil {
+				log.Printf("注册数据源 '%s' 失败: %v", dsCfg.Name, regErr)
+				continue
+			}
+			log.Printf("已从配置加载数据源: %s (type=%s)", dsCfg.Name, dsCfg.Type)
+		}
+	}
+
+	// 加载 datasource/ 目录下的插件
+	pluginDir := filepath.Join(dataDir, "datasource")
+	registry := dsManager.GetRegistry()
+	pluginMgr := plugin.NewPluginManager(registry, dsManager, configDir)
+	if err := pluginMgr.ScanAndLoad(pluginDir); err != nil {
+		log.Printf("加载插件失败: %v", err)
+	}
+
 	// 注册进程列表提供者（用于 SHOW PROCESSLIST）
 	optimizer.RegisterProcessListProvider(pkg_session.GetProcessListForOptimizer)
 
@@ -112,6 +155,7 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 		parserRegistry:   handler.NewPacketParserRegistry(&serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)}),
 		handshakeHandler: handshakeHandler.NewDefaultHandshakeHandler(db, &serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)}),
 		logger:           &serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)},
+		configDir:        configDir,
 	}
 
 	// 注册所有处理器
@@ -242,6 +286,7 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 	if s.db != nil && sess.GetAPISession() == nil {
 		apiSess := s.db.Session()
 		apiSess.SetThreadID(sess.ThreadID) // 设置 threadID 用于 KILL 查询
+		apiSess.SetConfigDir(s.configDir)  // 设置配置目录用于 config 虚拟数据库
 		sess.SetAPISession(apiSess)
 		s.logger.Printf("已为连接创建 API Session, ThreadID=%d", sess.ThreadID)
 	}
@@ -279,7 +324,9 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 		err = s.handlerRegistry.Handle(handlerCtx, commandType, commandPack)
 		if err != nil {
 			s.logger.Printf("处理命令失败: %v", err)
-			return err
+			// Per MySQL protocol, a single query failure should not terminate
+			// the connection. The handler should have already sent an error packet.
+			continue
 		}
 
 		// QUIT 命令不需要发送响应，直接退出循环

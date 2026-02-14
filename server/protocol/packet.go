@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // NULLValueMarker 用于标记NULL值的特殊字符串
@@ -25,29 +26,24 @@ func (p *Packet) Unmarshal(r io.Reader) (err error) {
 	buf := make([]byte, 4)
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
-		fmt.Printf("[DEBUG] Packet.Unmarshal: failed to read header: %v\n", err)
 		return err
 	}
-	
+
 	// 解析协议头 (小端序)
 	p.PayloadLength = uint32(buf[0]) | uint32(buf[1])<<8 | uint32(buf[2])<<16
 	p.SequenceID = buf[3]
-	fmt.Printf("[DEBUG] Packet.Unmarshal: seq=%d, payload_len=%d, header=%X\n", p.SequenceID, p.PayloadLength, buf)
 
 	// 读取载荷数据 (payload_length 字节，不包含 sequence ID)
 	p.Payload = nil
-	if p.PayloadLength > 0 && p.PayloadLength < 0xffffff {
+	if p.PayloadLength > 0 && p.PayloadLength <= 0xffffff {
 		p.Payload = make([]byte, p.PayloadLength)
 		n, readErr := io.ReadFull(r, p.Payload)
 		if readErr != nil {
-			fmt.Printf("[DEBUG] Packet.Unmarshal: failed to read payload: %v (read %d/%d)\n", readErr, n, p.PayloadLength)
-			err = readErr
-			return err
+			return readErr
 		}
 		if n != int(p.PayloadLength) {
 			return fmt.Errorf("payload length mismatch: expected %d, got %d", p.PayloadLength, n)
 		}
-		fmt.Printf("[DEBUG] Packet.Unmarshal: payload=%X\n", p.Payload)
 	}
 	return nil
 }
@@ -151,10 +147,11 @@ func (p *HandshakeV10Packet) Unmarshal(r io.Reader) (err error) {
 func (p *HandshakeV10Packet) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
-	// 修复：AuthPluginDataLen 应该是 AuthPluginDataPart (8字节) + AuthPluginDataPart2 的总长度
+	// Use the data as-is (NUL terminator is already included from Unmarshal)
+	// Recalculate AuthPluginDataLen from actual data to avoid stale values
+	authPluginDataLen := p.AuthPluginDataLen
 	if len(p.AuthPluginDataPart2) > 0 {
-		p.AuthPluginDataPart2 = append(p.AuthPluginDataPart2, 0) // 添加0结尾
-		p.AuthPluginDataLen = uint8(8 + len(p.AuthPluginDataPart2))
+		authPluginDataLen = uint8(8 + len(p.AuthPluginDataPart2))
 	}
 
 	// 1. 写入 ProtocolVersion
@@ -163,8 +160,10 @@ func (p *HandshakeV10Packet) Marshal() ([]byte, error) {
 	WriteStringByNullEnd(buf, p.ServerVersion)
 	// 3. 写入 ThreadID (4字节小端)
 	WriteNumber(buf, p.ThreadID, 4)
-	// 4. 写入 AuthPluginDataPart (9字节)+0
-	WriteBinary(buf, append(p.AuthPluginDataPart, 0))
+	// 4. 写入 AuthPluginDataPart (8字节)+NUL
+	authPart1 := make([]byte, len(p.AuthPluginDataPart)+1)
+	copy(authPart1, p.AuthPluginDataPart)
+	WriteBinary(buf, authPart1)
 
 	// 6. 写入 CapabilityFlags1 (2字节小端)
 	WriteNumber(buf, p.CapabilityFlags1, 2)
@@ -175,7 +174,7 @@ func (p *HandshakeV10Packet) Marshal() ([]byte, error) {
 	// 9. 写入 CapabilityFlags2 (2字节小端)
 	WriteNumber(buf, p.CapabilityFlags2, 2)
 	// 10. 写入 AuthPluginDataLen
-	WriteNumber(buf, p.AuthPluginDataLen, 1)
+	WriteNumber(buf, authPluginDataLen, 1)
 	// 11. 写入 Reserved (6字节)
 	WriteBinary(buf, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	// 12. 写入 MariaDBCaps (4字节小端)
@@ -656,8 +655,9 @@ func (p *ErrorInPacket) Unmarshal(r io.Reader, conditional uint32) (err error) {
 		}
 	}
 
-	// 读取剩余数据作为错误消息（以NULL结尾）
-	p.ErrorMessage, _ = ReadStringByNullEndFromReader(reader)
+	// Per MySQL protocol, error message is string<EOF> (runs to end of packet)
+	remaining, _ := io.ReadAll(reader)
+	p.ErrorMessage = strings.TrimRight(string(remaining), "\x00")
 	return nil
 }
 
@@ -833,13 +833,13 @@ func (p *EofInPacket) Unmarshal(r io.Reader, conditional uint32) (err error) {
 // 1. 包头为 0xFE
 // 2. 包长度 < 9字节（防止与超长数据行混淆）
 func IsEofPacket(packet []byte) bool {
-	if len(packet) < 4 {
+	if len(packet) < 5 {
 		return false
 	}
-	// 检查包长度（前3字节）
+	// 检查包长度（前3字节，小端序）
 	packetLength := int(packet[0]) | int(packet[1])<<8 | int(packet[2])<<16
-	// 检查包头（第4字节，索引3）
-	header := packet[3]
+	// packet[3] is the sequence ID, packet[4] is the first payload byte
+	header := packet[4]
 	// EOF包必须是0xFE且长度小于9
 	return header == 0xFE && packetLength < 9
 }
@@ -2278,8 +2278,8 @@ func (p *BinaryRowDataPacket) Marshal(columnCount uint64, columnTypes []uint8) (
 	// 1. 写入包头（0x00）
 	buf.WriteByte(0x00)
 	
-	// 2. 写入NULL位图
-	nullBitmapSize := (columnCount + 7) / 8
+	// 2. 写入NULL位图 (MySQL protocol: NULL bitmap has columnCount+2 bits, first 2 reserved)
+	nullBitmapSize := (columnCount + 2 + 7) / 8
 	nullBitmap := make([]byte, nullBitmapSize)
 	for i, value := range p.Values {
 		if value == nil {
@@ -2486,7 +2486,7 @@ func (p *ComRefreshPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	reader := bufio.NewReader(bytes.NewReader(p.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.SubCommand, _ = reader.ReadByte()
 	return nil
@@ -2525,7 +2525,7 @@ func (p *ComShutdownPacket) Unmarshal(r io.Reader) error {
 		return err
 	}
 
-	reader := bufio.NewReader(r)
+	reader := bufio.NewReader(bytes.NewReader(p.Payload))
 	p.Command, _ = reader.ReadByte()
 	p.ShutdownType, _ = reader.ReadByte()
 	return nil

@@ -212,6 +212,11 @@ func (db *DB) SessionWithOptions(opts *SessionOptions) *Session {
 	return apiSession
 }
 
+// GetDSManager returns the DataSourceManager
+func (db *DB) GetDSManager() *application.DataSourceManager {
+	return db.dsManager
+}
+
 // SetLogger sets the logger for the DB object
 func (db *DB) SetLogger(logger Logger) {
 	db.mu.Lock()

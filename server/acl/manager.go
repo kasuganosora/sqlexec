@@ -151,8 +151,8 @@ func (am *ACLManager) Load() error {
 
 // Save persists user and permission data to JSON files
 func (am *ACLManager) Save() error {
-	am.mu.RLock()
-	defer am.mu.RUnlock()
+	am.mu.Lock()
+	defer am.mu.Unlock()
 	return am.saveWithoutLock()
 }
 
@@ -263,7 +263,12 @@ func (am *ACLManager) IsPrivilegedUser(username, host string) bool {
 	// Check for SUPER or CREATE USER privilege
 	hasSuper, _ := am.userManager.HasPrivilege(host, username, PrivSuper)
 	hasCreateUser, _ := am.userManager.HasPrivilege(host, username, PrivCreateUser)
-	hasGrant := am.HasGrantOption(username, host)
+
+	// Use inline grant check to avoid re-acquiring am.mu.RLock via HasGrantOption
+	hasGrant, _ := am.userManager.HasPrivilege(host, username, PrivGrant)
+	if !hasGrant {
+		hasGrant = am.permissionMgr.HasGrantOption(host, username)
+	}
 
 	return hasSuper || hasCreateUser || hasGrant
 }
@@ -407,7 +412,7 @@ func (am *ACLManager) writeUsersFile(data *DataFile) error {
 		return fmt.Errorf("failed to marshal users data: %w", err)
 	}
 
-	if err := os.WriteFile(am.usersFilePath, jsonData, 0644); err != nil {
+	if err := os.WriteFile(am.usersFilePath, jsonData, 0600); err != nil {
 		return fmt.Errorf("failed to write users.json: %w", err)
 	}
 

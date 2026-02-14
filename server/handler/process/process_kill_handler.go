@@ -34,7 +34,7 @@ func (h *ProcessKillHandler) Handle(ctx *handler.HandlerContext, packet interfac
 
 	cmd, ok := packet.(*protocol.ComProcessKillPacket)
 	if !ok {
-		return fmt.Errorf("invalid packet type for COM_PROCESS_KILL")
+		return ctx.SendError(fmt.Errorf("invalid packet type for COM_PROCESS_KILL"))
 	}
 
 	threadID := cmd.ProcessID

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/builtin"
+	"github.com/kasuganosora/sqlexec/pkg/config_schema"
 	"github.com/kasuganosora/sqlexec/pkg/dataaccess"
 	"github.com/kasuganosora/sqlexec/pkg/executor"
 	"github.com/kasuganosora/sqlexec/pkg/information_schema"
@@ -36,6 +37,7 @@ type OptimizedExecutor struct {
 	useOptimizer  bool
 	currentDB     string
 	currentUser   string // 当前用户（用于权限检查）
+	configDir     string // 配置目录（用于 config 虚拟数据库）
 	functionAPI   *builtin.FunctionAPI // 函数API
 	exprEvaluator *ExpressionEvaluator // 表达式求值器
 }
@@ -130,6 +132,109 @@ func (e *OptimizedExecutor) GetCurrentUser() string {
 	return e.currentUser
 }
 
+// SetConfigDir 设置配置目录（用于 config 虚拟数据库）
+func (e *OptimizedExecutor) SetConfigDir(dir string) {
+	e.configDir = dir
+}
+
+// getConfigDataSource 获取 config 虚拟数据源
+func (e *OptimizedExecutor) getConfigDataSource() domain.DataSource {
+	if e.dsManager == nil || e.configDir == "" {
+		return nil
+	}
+	provider := config_schema.NewProvider(e.dsManager, e.configDir)
+	return virtual.NewWritableVirtualDataSource(provider, "config")
+}
+
+// executeConfigSelect 执行 config 虚拟数据库的 SELECT 查询
+func (e *OptimizedExecutor) executeConfigSelect(ctx context.Context, stmt *parser.SelectStatement) (*domain.QueryResult, error) {
+	cds := e.getConfigDataSource()
+	if cds == nil {
+		return nil, fmt.Errorf("config virtual database is not available")
+	}
+
+	// Strip the "config." prefix from the table name
+	tableName := stmt.From
+	if strings.HasPrefix(strings.ToLower(tableName), "config.") {
+		tableName = tableName[len("config."):]
+	}
+
+	newStmt := *stmt
+	newStmt.From = tableName
+
+	builder := parser.NewQueryBuilder(cds)
+	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
+		Type:   parser.SQLTypeSelect,
+		Select: &newStmt,
+	})
+}
+
+// executeConfigInsert 执行 config 虚拟数据库的 INSERT
+func (e *OptimizedExecutor) executeConfigInsert(ctx context.Context, stmt *parser.InsertStatement) (*domain.QueryResult, error) {
+	cds := e.getConfigDataSource()
+	if cds == nil {
+		return nil, fmt.Errorf("config virtual database is not available")
+	}
+
+	tableName := stmt.Table
+	if strings.HasPrefix(strings.ToLower(tableName), "config.") {
+		tableName = tableName[len("config."):]
+	}
+
+	newStmt := *stmt
+	newStmt.Table = tableName
+
+	builder := parser.NewQueryBuilder(cds)
+	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
+		Type:   parser.SQLTypeInsert,
+		Insert: &newStmt,
+	})
+}
+
+// executeConfigUpdate 执行 config 虚拟数据库的 UPDATE
+func (e *OptimizedExecutor) executeConfigUpdate(ctx context.Context, stmt *parser.UpdateStatement) (*domain.QueryResult, error) {
+	cds := e.getConfigDataSource()
+	if cds == nil {
+		return nil, fmt.Errorf("config virtual database is not available")
+	}
+
+	tableName := stmt.Table
+	if strings.HasPrefix(strings.ToLower(tableName), "config.") {
+		tableName = tableName[len("config."):]
+	}
+
+	newStmt := *stmt
+	newStmt.Table = tableName
+
+	builder := parser.NewQueryBuilder(cds)
+	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
+		Type:   parser.SQLTypeUpdate,
+		Update: &newStmt,
+	})
+}
+
+// executeConfigDelete 执行 config 虚拟数据库的 DELETE
+func (e *OptimizedExecutor) executeConfigDelete(ctx context.Context, stmt *parser.DeleteStatement) (*domain.QueryResult, error) {
+	cds := e.getConfigDataSource()
+	if cds == nil {
+		return nil, fmt.Errorf("config virtual database is not available")
+	}
+
+	tableName := stmt.Table
+	if strings.HasPrefix(strings.ToLower(tableName), "config.") {
+		tableName = tableName[len("config."):]
+	}
+
+	newStmt := *stmt
+	newStmt.Table = tableName
+
+	builder := parser.NewQueryBuilder(cds)
+	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
+		Type:   parser.SQLTypeDelete,
+		Delete: &newStmt,
+	})
+}
+
 // ExecuteSelect 执行 SELECT 查询（支持优化）
 func (e *OptimizedExecutor) ExecuteSelect(ctx context.Context, stmt *parser.SelectStatement) (*domain.QueryResult, error) {
 	// 将用户信息传递到 context（用于权限检查）
@@ -142,6 +247,12 @@ func (e *OptimizedExecutor) ExecuteSelect(ctx context.Context, stmt *parser.Sele
 	if isInformationSchemaQuery(stmt.From, e.currentDB, e.dsManager) {
 		fmt.Println("  [DEBUG] Detected information_schema query, using QueryBuilder path")
 		return e.executeWithBuilder(ctx, stmt)
+	}
+
+	// Check if this is a config virtual database query
+	if isConfigQuery(stmt.From, e.currentDB) {
+		fmt.Println("  [DEBUG] Detected config query, using config virtual data source")
+		return e.executeConfigSelect(ctx, stmt)
 	}
 
 	// 如果启用了优化器，使用优化路径
@@ -297,6 +408,11 @@ func (e *OptimizedExecutor) ExecuteInsert(ctx context.Context, stmt *parser.Inse
 		return nil, fmt.Errorf("information_schema is read-only: INSERT operation not supported")
 	}
 
+	// Check if this is a config virtual database INSERT
+	if isConfigTable(stmt.Table) || isConfigQuery(stmt.Table, e.currentDB) {
+		return e.executeConfigInsert(ctx, stmt)
+	}
+
 	builder := parser.NewQueryBuilder(e.dataSource)
 	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
 		Type:   parser.SQLTypeInsert,
@@ -311,6 +427,11 @@ func (e *OptimizedExecutor) ExecuteUpdate(ctx context.Context, stmt *parser.Upda
 		return nil, fmt.Errorf("information_schema is read-only: UPDATE operation not supported")
 	}
 
+	// Check if this is a config virtual database UPDATE
+	if isConfigTable(stmt.Table) || isConfigQuery(stmt.Table, e.currentDB) {
+		return e.executeConfigUpdate(ctx, stmt)
+	}
+
 	builder := parser.NewQueryBuilder(e.dataSource)
 	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
 		Type:   parser.SQLTypeUpdate,
@@ -323,6 +444,11 @@ func (e *OptimizedExecutor) ExecuteDelete(ctx context.Context, stmt *parser.Dele
 	// Check if trying to DELETE from information_schema
 	if isInformationSchemaTable(stmt.Table) {
 		return nil, fmt.Errorf("information_schema is read-only: DELETE operation not supported")
+	}
+
+	// Check if this is a config virtual database DELETE
+	if isConfigTable(stmt.Table) || isConfigQuery(stmt.Table, e.currentDB) {
+		return e.executeConfigDelete(ctx, stmt)
 	}
 
 	builder := parser.NewQueryBuilder(e.dataSource)

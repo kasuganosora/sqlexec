@@ -55,10 +55,19 @@ func (t *SchemataTable) Query(ctx context.Context, filters []domain.Filter, opti
 		"sql_path":                 nil,
 	})
 
+	// Add config virtual database (always available)
+	rows = append(rows, domain.Row{
+		"catalog_name":              "def",
+		"schema_name":               "config",
+		"default_character_set_name": "utf8mb4",
+		"default_collation_name":     "utf8mb4_general_ci",
+		"sql_path":                 nil,
+	})
+
 	// Add all registered data sources
 	for _, name := range dsNames {
-		// Skip information_schema itself (already added)
-		if name == "information_schema" {
+		// Skip virtual databases (already added)
+		if name == "information_schema" || name == "config" {
 			continue
 		}
 		row := domain.Row{

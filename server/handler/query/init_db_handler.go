@@ -34,7 +34,7 @@ func (h *InitDBHandler) Handle(ctx *handler.HandlerContext, packet interface{}) 
 
 	cmd, ok := packet.(*protocol.ComInitDBPacket)
 	if !ok {
-		return fmt.Errorf("invalid packet type for COM_INIT_DB")
+		return ctx.SendError(fmt.Errorf("invalid packet type for COM_INIT_DB"))
 	}
 
 	// ComInitDBPacket 的 SchemaName 字段是通过 tag 定义的

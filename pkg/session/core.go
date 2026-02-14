@@ -661,8 +661,8 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 	dbName := useStmt.Database
 
 	// 验证数据库是否存在，如果不存在则自动创建
-	// 允许使用 information_schema（特殊数据库）
-	if dbName != "information_schema" {
+	// 允许使用 information_schema 和 config（特殊虚拟数据库）
+	if dbName != "information_schema" && dbName != "config" {
 		if s.dsManager != nil {
 			dsNames := s.dsManager.List()
 			found := false
@@ -717,6 +717,13 @@ func (s *CoreSession) SetCurrentDB(dbName string) {
 	// 同步更新 OptimizedExecutor 的当前数据库
 	if s.executor != nil {
 		s.executor.SetCurrentDB(dbName)
+	}
+}
+
+// SetConfigDir sets the config directory for the config virtual database
+func (s *CoreSession) SetConfigDir(dir string) {
+	if s.executor != nil {
+		s.executor.SetConfigDir(dir)
 	}
 }
 
