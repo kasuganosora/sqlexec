@@ -540,3 +540,341 @@ func builtinAlmostEqual(a, b, epsilon float64) bool {
 	}
 	return diff < epsilon
 }
+
+// --- Extended math functions tests (Batch 5) ---
+
+func TestCbrt(t *testing.T) {
+	tests := []struct {
+		name string
+		args []interface{}
+		want float64
+	}{
+		{"cbrt(27)", []interface{}{27.0}, 3.0},
+		{"cbrt(8)", []interface{}{8.0}, 2.0},
+		{"cbrt(0)", []interface{}{0.0}, 0.0},
+		{"cbrt(-8)", []interface{}{-8.0}, -2.0},
+		{"cbrt(1)", []interface{}{1.0}, 1.0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathCbrt(tt.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !builtinAlmostEqual(result.(float64), tt.want, 1e-9) {
+				t.Errorf("mathCbrt(%v) = %v, want %v", tt.args, result, tt.want)
+			}
+		})
+	}
+
+	// Error case: wrong number of args
+	_, err := mathCbrt([]interface{}{})
+	if err == nil {
+		t.Error("expected error for no args")
+	}
+}
+
+func TestCot(t *testing.T) {
+	// cot(1) = 1/tan(1)
+	result, err := mathCot([]interface{}{1.0})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := 1.0 / math.Tan(1.0)
+	if !builtinAlmostEqual(result.(float64), expected, 1e-9) {
+		t.Errorf("mathCot(1) = %v, want %v", result, expected)
+	}
+
+	// cot(pi/4) = 1
+	result2, err := mathCot([]interface{}{math.Pi / 4})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !builtinAlmostEqual(result2.(float64), 1.0, 1e-9) {
+		t.Errorf("mathCot(pi/4) = %v, want 1.0", result2)
+	}
+
+	// Error: no args
+	_, err = mathCot([]interface{}{})
+	if err == nil {
+		t.Error("expected error for no args")
+	}
+}
+
+func TestSinh(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  float64
+		want float64
+	}{
+		{"sinh(0)", 0, 0},
+		{"sinh(1)", 1, math.Sinh(1)},
+		{"sinh(-1)", -1, math.Sinh(-1)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathSinh([]interface{}{tt.arg})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !builtinAlmostEqual(result.(float64), tt.want, 1e-9) {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestCosh(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  float64
+		want float64
+	}{
+		{"cosh(0)", 0, 1},
+		{"cosh(1)", 1, math.Cosh(1)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathCosh([]interface{}{tt.arg})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !builtinAlmostEqual(result.(float64), tt.want, 1e-9) {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestTanh(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  float64
+		want float64
+	}{
+		{"tanh(0)", 0, 0},
+		{"tanh(1)", 1, math.Tanh(1)},
+		{"tanh(-1)", -1, math.Tanh(-1)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathTanh([]interface{}{tt.arg})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !builtinAlmostEqual(result.(float64), tt.want, 1e-9) {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestFactorial(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []interface{}
+		want    int64
+		wantErr bool
+	}{
+		{"0!", []interface{}{int64(0)}, 1, false},
+		{"1!", []interface{}{int64(1)}, 1, false},
+		{"5!", []interface{}{int64(5)}, 120, false},
+		{"10!", []interface{}{int64(10)}, 3628800, false},
+		{"20!", []interface{}{int64(20)}, 2432902008176640000, false},
+		{"negative", []interface{}{int64(-1)}, 0, true},
+		{"too large", []interface{}{int64(21)}, 0, true},
+		{"no args", []interface{}{}, 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathFactorial(tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.(int64) != tt.want {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestGcd(t *testing.T) {
+	tests := []struct {
+		name string
+		args []interface{}
+		want int64
+	}{
+		{"gcd(12,8)", []interface{}{int64(12), int64(8)}, 4},
+		{"gcd(0,5)", []interface{}{int64(0), int64(5)}, 5},
+		{"gcd(5,0)", []interface{}{int64(5), int64(0)}, 5},
+		{"gcd(7,13)", []interface{}{int64(7), int64(13)}, 1},
+		{"gcd(-12,8)", []interface{}{int64(-12), int64(8)}, 4},
+		{"gcd(100,75)", []interface{}{int64(100), int64(75)}, 25},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathGcd(tt.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.(int64) != tt.want {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+
+	// Error case
+	_, err := mathGcd([]interface{}{})
+	if err == nil {
+		t.Error("expected error for no args")
+	}
+}
+
+func TestLcm(t *testing.T) {
+	tests := []struct {
+		name string
+		args []interface{}
+		want int64
+	}{
+		{"lcm(4,6)", []interface{}{int64(4), int64(6)}, 12},
+		{"lcm(3,7)", []interface{}{int64(3), int64(7)}, 21},
+		{"lcm(0,5)", []interface{}{int64(0), int64(5)}, 0},
+		{"lcm(12,8)", []interface{}{int64(12), int64(8)}, 24},
+		{"lcm(-4,6)", []interface{}{int64(-4), int64(6)}, 12},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathLcm(tt.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.(int64) != tt.want {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+
+	// Error case
+	_, err := mathLcm([]interface{}{})
+	if err == nil {
+		t.Error("expected error for no args")
+	}
+}
+
+func TestEven(t *testing.T) {
+	tests := []struct {
+		name string
+		args []interface{}
+		want float64
+	}{
+		{"even(3)", []interface{}{3.0}, 4.0},
+		{"even(2)", []interface{}{2.0}, 2.0},
+		{"even(1.5)", []interface{}{1.5}, 2.0},
+		{"even(0)", []interface{}{0.0}, 0.0},
+		{"even(-3)", []interface{}{-3.0}, -4.0},
+		{"even(-2)", []interface{}{-2.0}, -2.0},
+		{"even(-1.5)", []interface{}{-1.5}, -2.0},
+		{"even(5)", []interface{}{5.0}, 6.0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathEven(tt.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !builtinAlmostEqual(result.(float64), tt.want, 1e-9) {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsFinite(t *testing.T) {
+	tests := []struct {
+		name string
+		args []interface{}
+		want bool
+	}{
+		{"finite 1.0", []interface{}{1.0}, true},
+		{"finite 0", []interface{}{0.0}, true},
+		{"+Inf", []interface{}{math.Inf(1)}, false},
+		{"-Inf", []interface{}{math.Inf(-1)}, false},
+		{"NaN", []interface{}{math.NaN()}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathIsFinite(tt.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.(bool) != tt.want {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsInfinite(t *testing.T) {
+	tests := []struct {
+		name string
+		args []interface{}
+		want bool
+	}{
+		{"+Inf", []interface{}{math.Inf(1)}, true},
+		{"-Inf", []interface{}{math.Inf(-1)}, true},
+		{"finite", []interface{}{1.0}, false},
+		{"NaN", []interface{}{math.NaN()}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathIsInfinite(tt.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.(bool) != tt.want {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsNan(t *testing.T) {
+	tests := []struct {
+		name string
+		args []interface{}
+		want bool
+	}{
+		{"NaN", []interface{}{math.NaN()}, true},
+		{"finite", []interface{}{1.0}, false},
+		{"+Inf", []interface{}{math.Inf(1)}, false},
+		{"zero", []interface{}{0.0}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := mathIsNan(tt.args)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.(bool) != tt.want {
+				t.Errorf("got %v, want %v", result, tt.want)
+			}
+		})
+	}
+}

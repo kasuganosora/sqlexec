@@ -312,6 +312,171 @@ func init() {
 			Example:     "RAND() -> 0.123456789",
 			Category:    "math",
 		},
+		{
+			Name: "cbrt",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "cbrt", ReturnType: "number", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathCbrt,
+			Description: "Compute cube root",
+			Example:     "CBRT(27) -> 3",
+			Category:    "math",
+		},
+		{
+			Name: "cot",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "cot", ReturnType: "number", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathCot,
+			Description: "Compute cotangent",
+			Example:     "COT(1) -> 0.6420926159343306",
+			Category:    "math",
+		},
+		{
+			Name: "sinh",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "sinh", ReturnType: "number", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathSinh,
+			Description: "Compute hyperbolic sine",
+			Example:     "SINH(1) -> 1.1752011936438014",
+			Category:    "math",
+		},
+		{
+			Name: "cosh",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "cosh", ReturnType: "number", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathCosh,
+			Description: "Compute hyperbolic cosine",
+			Example:     "COSH(1) -> 1.5430806348152437",
+			Category:    "math",
+		},
+		{
+			Name: "tanh",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "tanh", ReturnType: "number", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathTanh,
+			Description: "Compute hyperbolic tangent",
+			Example:     "TANH(1) -> 0.7615941559557649",
+			Category:    "math",
+		},
+		{
+			Name: "asinh",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "asinh", ReturnType: "number", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathAsinh,
+			Description: "Compute inverse hyperbolic sine",
+			Example:     "ASINH(1) -> 0.8813736198100534",
+			Category:    "math",
+		},
+		{
+			Name: "acosh",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "acosh", ReturnType: "number", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathAcosh,
+			Description: "Compute inverse hyperbolic cosine",
+			Example:     "ACOSH(1) -> 0",
+			Category:    "math",
+		},
+		{
+			Name: "atanh",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "atanh", ReturnType: "number", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathAtanh,
+			Description: "Compute inverse hyperbolic tangent",
+			Example:     "ATANH(0.5) -> 0.5493061443340549",
+			Category:    "math",
+		},
+		{
+			Name: "factorial",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "factorial", ReturnType: "integer", ParamTypes: []string{"integer"}, Variadic: false},
+			},
+			Handler:     mathFactorial,
+			Description: "Compute factorial of n (n <= 20)",
+			Example:     "FACTORIAL(5) -> 120",
+			Category:    "math",
+		},
+		{
+			Name: "gcd",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "gcd", ReturnType: "integer", ParamTypes: []string{"integer", "integer"}, Variadic: false},
+			},
+			Handler:     mathGcd,
+			Description: "Compute greatest common divisor",
+			Example:     "GCD(12, 8) -> 4",
+			Category:    "math",
+		},
+		{
+			Name: "lcm",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "lcm", ReturnType: "integer", ParamTypes: []string{"integer", "integer"}, Variadic: false},
+			},
+			Handler:     mathLcm,
+			Description: "Compute least common multiple",
+			Example:     "LCM(4, 6) -> 12",
+			Category:    "math",
+		},
+		{
+			Name: "even",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "even", ReturnType: "number", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathEven,
+			Description: "Round away from zero to nearest even number",
+			Example:     "EVEN(3) -> 4",
+			Category:    "math",
+		},
+		{
+			Name: "is_finite",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "is_finite", ReturnType: "boolean", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathIsFinite,
+			Description: "Check if value is finite (not Inf and not NaN)",
+			Example:     "IS_FINITE(1.0) -> true",
+			Category:    "math",
+		},
+		{
+			Name: "is_infinite",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "is_infinite", ReturnType: "boolean", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathIsInfinite,
+			Description: "Check if value is infinite",
+			Example:     "IS_INFINITE(1.0/0.0) -> true",
+			Category:    "math",
+		},
+		{
+			Name: "is_nan",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "is_nan", ReturnType: "boolean", ParamTypes: []string{"number"}, Variadic: false},
+			},
+			Handler:     mathIsNan,
+			Description: "Check if value is NaN",
+			Example:     "IS_NAN(0.0/0.0) -> true",
+			Category:    "math",
+		},
 	}
 
 	for _, fn := range mathFunctions {
@@ -651,4 +816,236 @@ func mathRand(args []interface{}) (interface{}, error) {
 
 	// No seed: use global rand source
 	return rand.Float64(), nil
+}
+
+// --- Extended math functions (Batch 5) ---
+
+func mathCbrt(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("cbrt() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return math.Cbrt(val), nil
+}
+
+func mathCot(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("cot() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	tanVal := math.Tan(val)
+	if tanVal == 0 {
+		return nil, fmt.Errorf("cot() undefined: tan(x) is zero")
+	}
+	return 1.0 / tanVal, nil
+}
+
+func mathSinh(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("sinh() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return math.Sinh(val), nil
+}
+
+func mathCosh(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("cosh() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return math.Cosh(val), nil
+}
+
+func mathTanh(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("tanh() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return math.Tanh(val), nil
+}
+
+func mathAsinh(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("asinh() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return math.Asinh(val), nil
+}
+
+func mathAcosh(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("acosh() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if val < 1 {
+		return nil, fmt.Errorf("acosh() argument must be >= 1")
+	}
+	return math.Acosh(val), nil
+}
+
+func mathAtanh(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("atanh() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	if val <= -1 || val >= 1 {
+		return nil, fmt.Errorf("atanh() argument must be between -1 and 1 (exclusive)")
+	}
+	return math.Atanh(val), nil
+}
+
+func mathFactorial(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("factorial() requires exactly 1 argument")
+	}
+	n, err := toInt64(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("factorial(): %v", err)
+	}
+	if n < 0 {
+		return nil, fmt.Errorf("factorial() requires non-negative argument")
+	}
+	if n > 20 {
+		return nil, fmt.Errorf("factorial() argument must be <= 20")
+	}
+	var result int64 = 1
+	for i := int64(2); i <= n; i++ {
+		result *= i
+	}
+	return result, nil
+}
+
+func mathGcd(args []interface{}) (interface{}, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("gcd() requires exactly 2 arguments")
+	}
+	a, err := toInt64(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("gcd(): %v", err)
+	}
+	b, err := toInt64(args[1])
+	if err != nil {
+		return nil, fmt.Errorf("gcd(): %v", err)
+	}
+	return gcdInt64(a, b), nil
+}
+
+// gcdInt64 computes the greatest common divisor using the Euclidean algorithm.
+func gcdInt64(a, b int64) int64 {
+	if a < 0 {
+		a = -a
+	}
+	if b < 0 {
+		b = -b
+	}
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
+}
+
+func mathLcm(args []interface{}) (interface{}, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("lcm() requires exactly 2 arguments")
+	}
+	a, err := toInt64(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("lcm(): %v", err)
+	}
+	b, err := toInt64(args[1])
+	if err != nil {
+		return nil, fmt.Errorf("lcm(): %v", err)
+	}
+	if a == 0 || b == 0 {
+		return int64(0), nil
+	}
+	g := gcdInt64(a, b)
+	// Use a/g*b to avoid overflow as much as possible
+	result := (a / g) * b
+	if result < 0 {
+		result = -result
+	}
+	return result, nil
+}
+
+func mathEven(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("even() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	// Round away from zero to the nearest even integer
+	var rounded float64
+	if val >= 0 {
+		rounded = math.Ceil(val)
+		if int64(rounded)%2 != 0 {
+			rounded++
+		}
+	} else {
+		rounded = math.Floor(val)
+		if int64(rounded)%2 != 0 {
+			rounded--
+		}
+	}
+	return rounded, nil
+}
+
+func mathIsFinite(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("is_finite() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return !math.IsInf(val, 0) && !math.IsNaN(val), nil
+}
+
+func mathIsInfinite(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("is_infinite() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return math.IsInf(val, 0), nil
+}
+
+func mathIsNan(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("is_nan() requires exactly 1 argument")
+	}
+	val, err := toFloat64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return math.IsNaN(val), nil
 }

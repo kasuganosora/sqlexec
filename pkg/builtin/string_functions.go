@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"unicode"
 
@@ -308,6 +309,127 @@ func init() {
 			Handler:     stringSpace,
 			Description: "返回指定数量的空格",
 			Example:     "SPACE(5) -> '     '",
+			Category:    "string",
+		},
+		{
+			Name: "chr",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "chr", ReturnType: "string", ParamTypes: []string{"integer"}, Variadic: false},
+			},
+			Handler:     stringChr,
+			Description: "Convert Unicode code point to character",
+			Example:     "CHR(65) -> 'A'",
+			Category:    "string",
+		},
+		{
+			Name: "char",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "char", ReturnType: "string", ParamTypes: []string{"integer"}, Variadic: false},
+			},
+			Handler:     stringChr,
+			Description: "Convert Unicode code point to character (alias for chr)",
+			Example:     "CHAR(65) -> 'A'",
+			Category:    "string",
+		},
+		{
+			Name: "unicode",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "unicode", ReturnType: "integer", ParamTypes: []string{"string"}, Variadic: false},
+			},
+			Handler:     stringUnicode,
+			Description: "Get Unicode code point of first character",
+			Example:     "UNICODE('A') -> 65",
+			Category:    "string",
+		},
+		{
+			Name: "translate",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "translate", ReturnType: "string", ParamTypes: []string{"string", "string", "string"}, Variadic: false},
+			},
+			Handler:     stringTranslate,
+			Description: "Character-by-character replacement mapping",
+			Example:     "TRANSLATE('hello', 'el', 'ip') -> 'hippo'",
+			Category:    "string",
+		},
+		{
+			Name: "starts_with",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "starts_with", ReturnType: "boolean", ParamTypes: []string{"string", "string"}, Variadic: false},
+			},
+			Handler:     stringStartsWith,
+			Description: "Check if string starts with prefix",
+			Example:     "STARTS_WITH('hello', 'he') -> true",
+			Category:    "string",
+		},
+		{
+			Name: "ends_with",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "ends_with", ReturnType: "boolean", ParamTypes: []string{"string", "string"}, Variadic: false},
+			},
+			Handler:     stringEndsWith,
+			Description: "Check if string ends with suffix",
+			Example:     "ENDS_WITH('hello', 'lo') -> true",
+			Category:    "string",
+		},
+		{
+			Name: "contains",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "contains", ReturnType: "boolean", ParamTypes: []string{"string", "string"}, Variadic: false},
+			},
+			Handler:     stringContains,
+			Description: "Check if string contains substring",
+			Example:     "CONTAINS('hello world', 'world') -> true",
+			Category:    "string",
+		},
+		{
+			Name: "format",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "format", ReturnType: "string", ParamTypes: []string{"string"}, Variadic: true},
+			},
+			Handler:     stringFormat,
+			Description: "Format string with arguments (simplified sprintf)",
+			Example:     "FORMAT('Hello %s, you are %d', 'world', 42) -> 'Hello world, you are 42'",
+			Category:    "string",
+		},
+		{
+			Name: "printf",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "printf", ReturnType: "string", ParamTypes: []string{"string"}, Variadic: true},
+			},
+			Handler:     stringFormat,
+			Description: "Format string with arguments (alias for format)",
+			Example:     "PRINTF('Hello %s', 'world') -> 'Hello world'",
+			Category:    "string",
+		},
+		{
+			Name: "url_encode",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "url_encode", ReturnType: "string", ParamTypes: []string{"string"}, Variadic: false},
+			},
+			Handler:     stringURLEncode,
+			Description: "URL-encode a string",
+			Example:     "URL_ENCODE('hello world') -> 'hello+world'",
+			Category:    "string",
+		},
+		{
+			Name: "url_decode",
+			Type: FunctionTypeScalar,
+			Signatures: []FunctionSignature{
+				{Name: "url_decode", ReturnType: "string", ParamTypes: []string{"string"}, Variadic: false},
+			},
+			Handler:     stringURLDecode,
+			Description: "URL-decode a string",
+			Example:     "URL_DECODE('hello+world') -> 'hello world'",
 			Category:    "string",
 		},
 	}
@@ -655,4 +777,129 @@ func stringSpace(args []interface{}) (interface{}, error) {
 	}
 	
 	return strings.Repeat(" ", int(count)), nil
+}
+
+// chr / char: convert Unicode code point to character
+func stringChr(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("chr() requires exactly 1 argument")
+	}
+	n, err := toInt64(args[0])
+	if err != nil {
+		return nil, err
+	}
+	return string(rune(n)), nil
+}
+
+// unicode: get Unicode code point of first character
+func stringUnicode(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("unicode() requires exactly 1 argument")
+	}
+	s := toString(args[0])
+	if len(s) == 0 {
+		return int64(0), nil
+	}
+	runes := []rune(s)
+	return int64(runes[0]), nil
+}
+
+// translate: character-by-character replacement mapping
+func stringTranslate(args []interface{}) (interface{}, error) {
+	if len(args) != 3 {
+		return nil, fmt.Errorf("translate() requires exactly 3 arguments")
+	}
+	s := toString(args[0])
+	from := []rune(toString(args[1]))
+	to := []rune(toString(args[2]))
+
+	// Build replacement map
+	mapping := make(map[rune]rune)
+	for i, r := range from {
+		if _, exists := mapping[r]; !exists {
+			if i < len(to) {
+				mapping[r] = to[i]
+			} else {
+				// If 'to' is shorter, map extra 'from' chars to -1 (delete)
+				mapping[r] = -1
+			}
+		}
+	}
+
+	var result strings.Builder
+	for _, r := range s {
+		if repl, ok := mapping[r]; ok {
+			if repl != -1 {
+				result.WriteRune(repl)
+			}
+			// repl == -1 means delete the character
+		} else {
+			result.WriteRune(r)
+		}
+	}
+	return result.String(), nil
+}
+
+// starts_with: check if string starts with prefix
+func stringStartsWith(args []interface{}) (interface{}, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("starts_with() requires exactly 2 arguments")
+	}
+	s := toString(args[0])
+	prefix := toString(args[1])
+	return strings.HasPrefix(s, prefix), nil
+}
+
+// ends_with: check if string ends with suffix
+func stringEndsWith(args []interface{}) (interface{}, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("ends_with() requires exactly 2 arguments")
+	}
+	s := toString(args[0])
+	suffix := toString(args[1])
+	return strings.HasSuffix(s, suffix), nil
+}
+
+// contains: check if string contains substring
+func stringContains(args []interface{}) (interface{}, error) {
+	if len(args) != 2 {
+		return nil, fmt.Errorf("contains() requires exactly 2 arguments")
+	}
+	s := toString(args[0])
+	sub := toString(args[1])
+	return strings.Contains(s, sub), nil
+}
+
+// format / printf: simplified fmt.Sprintf support
+func stringFormat(args []interface{}) (interface{}, error) {
+	if len(args) < 1 {
+		return nil, fmt.Errorf("format() requires at least 1 argument")
+	}
+	format := toString(args[0])
+	if len(args) == 1 {
+		return format, nil
+	}
+	fmtArgs := make([]interface{}, len(args)-1)
+	copy(fmtArgs, args[1:])
+	return fmt.Sprintf(format, fmtArgs...), nil
+}
+
+// url_encode: URL-encode a string
+func stringURLEncode(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("url_encode() requires exactly 1 argument")
+	}
+	return url.QueryEscape(toString(args[0])), nil
+}
+
+// url_decode: URL-decode a string
+func stringURLDecode(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("url_decode() requires exactly 1 argument")
+	}
+	result, err := url.QueryUnescape(toString(args[0]))
+	if err != nil {
+		return nil, fmt.Errorf("url_decode: %w", err)
+	}
+	return result, nil
 }

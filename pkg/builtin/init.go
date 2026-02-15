@@ -22,6 +22,11 @@ func GetAllCategories() []string {
 		"json",
 		"aggregate",
 		"financial",
+		"control",
+		"system",
+		"encoding",
+		"bitwise",
+		"similarity",
 	}
 }
 
