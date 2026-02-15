@@ -95,13 +95,11 @@ pkg/                    核心库
     cost/               代价模型
     statistics/         统计信息
     join/               JOIN 算法
-    parallel/           并行执行
     plan/               执行计划
     physical/           物理计划
     index/              索引优化
   executor/             查询执行器
     operators/          算子实现
-    parallel/           并行执行
   resource/             数据源抽象
     domain/             领域模型（DataSource 接口、TableInfo、Filter 等）
     application/        DataSourceManager、Registry

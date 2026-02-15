@@ -745,20 +745,283 @@ tableVer.latest = m.currentVer
 
 ### 7.4 BufferPool 与分页存储
 
-表数据以 `PagedRows` 的形式存储，行数据被分割为固定大小的页（默认 4096 行/页），由 `BufferPool` 统一管理：
+#### 7.4.1 设计目标
+
+内存存储引擎将所有行数据保存在进程内存中。当数据量超过物理内存时，系统需要一种机制将冷数据透明地溢出到磁盘，并在需要时重新加载。`BufferPool` 就是这一机制的核心，它借鉴了传统数据库的缓冲区管理思想，但针对内存引擎的特点做了简化：
+
+- **透明溢出**：上层代码无需关心数据是在内存还是磁盘，通过 Pin/Unpin 协议自动管理。
+- **MVCC 感知淘汰**：优先淘汰旧版本的页面，保留最新版本在内存中。
+- **无锁快速路径**：Pin 操作在页面已在内存时只需一次原子操作，避免锁竞争。
+
+#### 7.4.2 核心数据结构
+
+**PageID** -- 页面的唯一标识，由表名、版本号和页内索引组成：
 
 ```go
-// pkg/resource/memory/buffer_pool.go
-type PagingConfig struct {
-    Enabled       bool          // 是否启用
-    MaxMemoryMB   int           // 最大内存限制（0 = 自动检测，使用系统内存的 70%）
-    PageSize      int           // 页大小
-    SpillDir      string        // 溢出文件目录
-    EvictInterval time.Duration // 淘汰检查间隔
+// pkg/resource/memory/paging.go
+type PageID struct {
+    Table   string  // 表名
+    Version int64   // MVCC 版本号
+    Index   int     // 页索引（0, 1, 2, ...）
 }
 ```
 
-BufferPool 采用 LRU（最近最少使用）策略进行页面淘汰，冷数据页面会被溢出到磁盘，热数据页面保留在内存中。这使得内存存储引擎可以处理超过物理内存大小的数据集。
+**RowPage** -- 最小的淘汰单元，持有一个行切片：
+
+```go
+// pkg/resource/memory/paging.go
+type RowPage struct {
+    id        PageID
+    rows      []domain.Row // nil 表示已被淘汰到磁盘
+    rowCount  int          // 行数（淘汰后仍准确）
+    sizeBytes int64        // 估算的内存占用（字节）
+    onDisk    bool         // 是否已序列化到磁盘
+    diskPath  string       // 溢出文件路径
+    pinCount  int32        // 原子计数：> 0 表示正在使用，不可淘汰
+    mu        sync.Mutex   // 保护 rows/onDisk/diskPath 的修改
+}
+```
+
+**PagedRows** -- 替代 `[]domain.Row`，将行数据分割为多个 RowPage：
+
+```go
+// pkg/resource/memory/paged_rows.go
+type PagedRows struct {
+    pool      *BufferPool
+    pages     []*RowPage
+    totalRows int
+    pageSize  int  // 每页行数（默认 4096）
+}
+```
+
+**BufferPool** -- 全局缓冲池，管理所有 RowPage 的内存生命周期：
+
+```go
+// pkg/resource/memory/buffer_pool.go
+type BufferPool struct {
+    maxMemory      int64              // 内存上限（字节）
+    usedMemory     int64              // 当前使用量（原子计数）
+    spillDir       string             // 溢出文件目录
+    pageSize       int                // 页大小
+    evictInterval  time.Duration      // 后台淘汰间隔
+    lru            *lruQueue          // LRU 队列
+    latestVersions map[string]int64   // 表名 -> 最新版本号（淘汰优先级）
+    stopCh         chan struct{}       // 停止信号
+    disabled       bool               // 直通模式（不做内存管理）
+}
+```
+
+#### 7.4.3 配置与初始化
+
+```go
+type PagingConfig struct {
+    Enabled       bool          // 是否启用（false 则进入直通模式）
+    MaxMemoryMB   int           // 内存上限，0 = 自动检测
+    PageSize      int           // 每页行数，默认 4096
+    SpillDir      string        // 溢出目录，默认 $TMPDIR/sqlexec-spill
+    EvictInterval time.Duration // 后台淘汰间隔，默认 5 秒
+}
+```
+
+自动内存检测策略：当 `MaxMemoryMB = 0` 时，使用 `runtime.MemStats.Sys * 70%` 作为上限，最低保证 64 MB。
+
+#### 7.4.4 Pin/Unpin 协议
+
+Pin/Unpin 是缓冲池的核心访问协议，借鉴自经典数据库的 Buffer Manager 设计：
+
+```
+Pin(page) → rows:
+    1. 原子递增 pinCount（防止被淘汰）
+    2. 快速路径：如果 page.rows != nil，直接返回（无锁）
+    3. 慢速路径：加锁，从磁盘加载 rows，更新内存计数
+    4. 返回 rows 引用
+
+Unpin(page):
+    1. 原子递减 pinCount
+    2. 当 pinCount 降为 0 时，将 page 加入 LRU 队列尾部（最近使用）
+```
+
+**快速路径优化**：在正常查询场景中，页面几乎总是在内存中。此时 Pin 操作只需一次 `atomic.AddInt32` 和一次 nil 检查，**完全不获取互斥锁**，不触碰 LRU 队列。这保证了查询热路径的高性能。
+
+**安全性保证**：`rows` 字段只在持有 `page.mu` 锁时才会被设为 nil（淘汰操作），而一旦 Pin 成功（pinCount > 0），淘汰器会跳过该页面。因此快速路径中观察到 `rows != nil` 后可以安全读取。
+
+#### 7.4.5 页面创建与注册
+
+当创建新的 `PagedRows` 时，行数据被均匀分割为多个 RowPage 并注册到 BufferPool：
+
+```go
+// pkg/resource/memory/paged_rows.go
+func NewPagedRows(pool *BufferPool, rows []domain.Row, pageSize int, table string, version int64) *PagedRows {
+    // 按 pageSize 切分 rows 为多个 RowPage
+    for i := 0; i < totalRows; i += pageSize {
+        page := &RowPage{
+            id:        PageID{Table: table, Version: version, Index: len(pages)},
+            rows:      rows[i:end],
+            sizeBytes: estimatePageSize(rows[i:end]),
+        }
+        pool.Register(page)  // 注册到缓冲池，更新内存计数
+    }
+}
+```
+
+Register 操作会更新内存使用量，并在超出上限时**同步淘汰至多 4 个页面**（`maxSyncEvictions = 4`）。这限制了写操作路径上的阻塞时间，剩余的内存压力由后台淘汰器异步处理。
+
+#### 7.4.6 内存大小估算
+
+页面的内存占用通过**采样法**估算，避免遍历所有行带来的开销：
+
+```go
+// pkg/resource/memory/paging.go
+func estimatePageSize(rows []domain.Row) int64 {
+    if len(rows) <= 16 {
+        // 行数 <= 16：精确计算每行
+        return sum(estimateRowSize(row) for row in rows)
+    }
+    // 行数 > 16：采样前 16 行后外推
+    avgRowSize := sum(estimateRowSize(rows[0:16])) / 16
+    return avgRowSize * len(rows)
+}
+```
+
+单行的内存估算考虑了所有值类型的实际开销：
+
+| 类型 | 估算大小 |
+|------|---------|
+| `nil` | 0 |
+| `bool` | 1 |
+| `int` / `int64` / `float64` | 8 |
+| `string` | `len(s) + 16`（header） |
+| `[]byte` | `len(b) + 24`（slice header） |
+| `time.Time` | 24 |
+| `[]float32`（向量） | `len(v)*4 + 24` |
+| `map[string]interface{}` | 递归估算 |
+
+每行还包含 map 的基础开销：`64 + 8*len(row)` 字节。
+
+#### 7.4.7 两层淘汰策略
+
+LRU 队列采用**两层淘汰策略**，结合 MVCC 版本信息：
+
+```
+EvictCandidate(latestVersions):
+    第一层：扫描 LRU 队列（从最久未使用开始），寻找旧版本的页面
+        - 跳过 pinCount > 0 的页面（正在使用）
+        - 跳过已淘汰的页面（rows == nil && onDisk）
+        - 如果 page.Version < latestVersions[page.Table]，淘汰此页
+          （旧 MVCC 版本只有 GC 前的活跃事务才需要，优先淘汰）
+
+    第二层：如果没有旧版本页面可淘汰，退回到普通 LRU
+        - 按最久未使用顺序淘汰任意 unpinned 页面
+```
+
+**为什么优先淘汰旧版本**：MVCC 会为每次写操作创建新版本。旧版本只在少数长事务中被读取，而最新版本几乎所有查询都会访问。因此旧版本是更好的淘汰候选。
+
+#### 7.4.8 磁盘溢出与二进制编解码
+
+淘汰操作将页面行数据序列化到磁盘：
+
+```
+TryEvict():
+    1. 从 LRU 队列获取淘汰候选
+    2. 加锁，二次检查（可能已被其他 goroutine 淘汰）
+    3. 序列化到磁盘：page.rows → encodeRows() → 写文件
+    4. 释放内存：page.rows = nil, page.onDisk = true
+    5. 更新内存计数
+```
+
+溢出文件路径格式：`{spillDir}/{表名}_{版本号}_{页索引}.page`
+
+**二进制编解码器**（`pkg/resource/memory/page_codec.go`）：
+
+编解码器使用自定义的紧凑二进制格式，避免了 `encoding/gob` 因反射带来的性能问题（gob 对 `map[string]interface{}` 序列化 4K 行需要 20ms+，自定义编解码器快 10-50 倍）。
+
+Wire 格式：
+
+```
+[rowCount:uint32]
+for each row:
+    [fieldCount:uint16]
+    for each field:
+        [keyLen:uint16][key:bytes]
+        [typeTag:byte][value:bytes]
+```
+
+支持的类型标签：
+
+| Tag | 类型 | 值编码 |
+|-----|------|--------|
+| 0 | `nil` | 无 |
+| 1 | `bool` | 1 字节 |
+| 2 | `int64` | 8 字节 LE |
+| 3 | `float64` | 8 字节 LE（IEEE 754） |
+| 4 | `string` | `[len:uint32][data:bytes]` |
+| 5 | `[]byte` | `[len:uint32][data:bytes]` |
+| 6 | `time.Time` | `[len:uint16][binary:bytes]` |
+| 7 | `int` | 8 字节 LE（int64 编码） |
+| 8 | `float32` | 4 字节 LE（IEEE 754） |
+| 9 | `int32` | 4 字节 LE |
+
+所有整数使用小端序（Little-Endian），编码函数内联友好。
+
+#### 7.4.9 后台淘汰器
+
+BufferPool 启动时创建一个后台 goroutine，定期检查内存使用情况：
+
+```go
+func (bp *BufferPool) backgroundEvictor() {
+    ticker := time.NewTicker(bp.evictInterval) // 默认 5 秒
+    for {
+        select {
+        case <-ticker.C:
+            // 循环淘汰直到内存降到上限以下
+            for usedMemory > maxMemory {
+                if !bp.TryEvict() {
+                    break // 没有可淘汰的页面
+                }
+            }
+        case <-bp.stopCh:
+            return
+        }
+    }
+}
+```
+
+**两阶段淘汰协作**：
+
+- **同步淘汰**：Register 时，如果超出内存上限，最多同步淘汰 4 个页面。这保证了写操作不会无限制阻塞。
+- **异步淘汰**：后台淘汰器每 5 秒检查一次，持续淘汰直到内存回到安全线以下。
+
+这种设计在写入密集的场景下，将淘汰成本分摊到后台，避免写入延迟尖刺。
+
+#### 7.4.10 PagedRows 的访问接口
+
+`PagedRows` 提供三种访问方式，适应不同使用场景：
+
+| 方法 | 用途 | 页面管理 |
+|------|------|---------|
+| `Get(i)` | 按索引访问单行 | 自动 Pin/Unpin 单页 |
+| `Materialize()` | 返回完整 `[]domain.Row` 切片 | 逐页 Pin → 复制 → Unpin |
+| `Range(fn)` | 迭代所有行 | 逐页 Pin → 遍历 → Unpin |
+
+`Materialize()` 是主要的兼容桥接方法 -- 已有的使用 `[]domain.Row` 的代码通过调用 `Materialize()` 获取完整行切片，无需修改。页面在复制完成后立即 Unpin，成为淘汰候选。
+
+`Range(fn)` 是最内存高效的方式 -- 同一时刻只有一个页面被 Pin，适合大表的流式处理。
+
+#### 7.4.11 生命周期管理
+
+```
+NewPagedRows(pool, rows)     → 创建页面，注册到 BufferPool
+  ↓
+query → Pin/Unpin             → 查询时按需加载/释放
+  ↓
+gcOldVersions()               → MVCC GC 时调用 PagedRows.Release()
+  ↓
+Release()                     → 注销所有页面，清理溢出文件
+  ↓
+BufferPool.Close()            → 停止后台淘汰器，删除溢出目录
+```
+
+`Release()` 由 MVCC 垃圾回收器在清理旧版本时调用，确保旧版本的磁盘溢出文件不会泄漏。
 
 ### 7.5 数据源能力降级
 
@@ -813,4 +1076,4 @@ SQLExec 的 MVCC 实现具有以下特点：
 3. **行级 COW 优化**：避免每次写操作复制全表数据，只读事务开销几乎为零。
 4. **自动 GC**：后台 goroutine 定期清理过期版本和日志，事务结束时也触发增量 GC。
 5. **优雅降级**：对不支持 MVCC 的数据源，系统可自动降级到非 MVCC 模式，保持兼容性。
-6. **分页虚拟内存**：通过 BufferPool 和 LRU 淘汰机制，支持超大数据集的内存管理。
+6. **分页虚拟内存**：通过 BufferPool 实现 Pin/Unpin 协议、两层 MVCC 感知 LRU 淘汰、自定义二进制编解码的磁盘溢出，使内存引擎能处理超过物理内存的数据集。

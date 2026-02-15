@@ -54,7 +54,7 @@ SQL 文本
 | `StatisticsCache` | `statistics/cache.go` | 统计信息缓存，支持自动刷新 |
 | `IndexSelector` | `index/selector.go` | 索引选择器，选择最优索引方案 |
 | `DPJoinReorder` | `join/dp_reorder.go` | 动态规划 JOIN 重排序器 |
-| `ParallelScanner` | `parallel/scanner.go` | 并行表扫描器 |
+| `OptimizedParallelScanner` | `optimized_parallel.go` | 并行表扫描器 |
 | `ExecutionFeedback` | `feedback/feedback.go` | 执行反馈收集，用于代价校准 |
 | `PlanCache` | `plan_cache.go` | 查询计划缓存 |
 
@@ -408,7 +408,7 @@ Hash Join 是 SQLExec 的默认 JOIN 算法，适用于等值连接场景。
 - 逻辑计划：`pkg/optimizer/logical_join.go` -- `LogicalJoin` 节点
 - 物理计划：`pkg/optimizer/physical_scan.go` -- `PhysicalHashJoin`
 - 执行算子：`pkg/executor/operators/` -- `HashJoinOperator`
-- 并行版本：`pkg/optimizer/parallel/join_executor.go` -- `ParallelHashJoinExecutor`
+- 并行扫描：`pkg/optimizer/optimized_parallel.go` -- `OptimizedParallelScanner`
 
 **代价公式**：
 
@@ -678,67 +678,55 @@ DataSource(a,b,c,d,e)  =>  DataSource(a, b)  -- 只读取需要的列
 
 ### 6.1 并行扫描
 
-`ParallelScanner`（`pkg/optimizer/parallel/scanner.go`）实现了并行表扫描：
+`OptimizedParallelScanner`（`pkg/optimizer/optimized_parallel.go`）实现了并行表扫描，由 `PhysicalTableScan` 在执行物理计划时直接调用。
 
 **原理**：
 
 ```
-1. 确定并行度 P (默认为 runtime.NumCPU())
+1. 确定并行度 P (自动选择 min(CPU核心数, 8)，范围 [4, 8])
 2. 将扫描范围 [offset, offset+limit) 均匀划分为 P 个子范围:
    Worker 0: [offset, offset + limit/P)
    Worker 1: [offset + limit/P, offset + 2*limit/P)
    ...
    Worker P-1: [offset + (P-1)*limit/P, offset + limit)
 3. 每个 Worker 独立并行执行子范围的扫描查询
-4. 收集所有 Worker 的结果并合并
+4. 收集所有 Worker 的结果并按顺序合并
 ```
 
 **启用条件**：
 - 数据行数 >= `minParallelScanRows`（默认 100 行）
-- 无过滤条件（有过滤条件时回退为串行扫描）
+- 小于批量大小的扫描直接串行执行，避免调度开销
 
-**Worker Pool**：`WorkerPool`（`pkg/optimizer/parallel/worker_pool.go`）管理并行执行的 goroutine 池，限制最大并行度不超过 64。
+**Worker Pool**：使用 `pkg/workerpool/` 的通用工作池（`workerpool.Pool`），支持延迟初始化（`sync.Once`），队列大小为并行度的 2 倍。当工作池不可用时，回退为基于 channel 信号量的并行实现。
 
-**错误处理**：
-- 使用 `errChan` 收集 Worker 错误。
-- 支持 `context` 取消，通过 `ctx.Done()` 优雅终止所有 Worker。
-- Worker 内部使用 `recover()` 捕获 panic。
+**自适应批量大小**：根据并行度动态调整：
+- 并行度 >= 8：批量 500
+- 并行度 >= 4：批量 750
+- 其他：批量 1000
 
-### 6.2 并行 Hash Join
-
-`ParallelHashJoinExecutor`（`pkg/optimizer/parallel/join_executor.go`）实现了并行的 Hash Join：
-
-**构建阶段并行化**：
-
-```
-1. 将构建侧的行按 Worker 数量均匀分配
-2. 每个 Worker 独立计算其分配行的哈希键（FNV-64a）
-3. 通过互斥锁（sync.Mutex）将结果安全地写入共享哈希表
-4. 等待所有 Worker 完成
-```
-
-**探测阶段并行化**：
-
-```
-1. 将探测侧的行按 Worker 数量均匀分配
-2. 每个 Worker 独立读取哈希表（读操作无需加锁）
-3. 对匹配的行进行合并，通过互斥锁写入结果集
-4. 等待所有 Worker 完成
-```
-
-**上下文取消支持**：两个阶段都支持通过 `ctx.Done()` 和内部取消通道（`ctxCancelChan`）优雅终止。当 context 被取消时，关闭取消通道通知所有 Worker 停止工作，然后等待它们退出。
-
-### 6.3 自动并行度选择
-
-`OptimizedParallelScanner`（`pkg/optimizer/optimized_parallel.go`）提供更智能的并行度选择：
+### 6.2 并行度选择
 
 ```
 当 parallelism = 0 时：
   自动选择 min(CPU核心数, 8) 作为并行度
-  范围限制在 [4, 8]
+  范围限制在 [4, 8]（根据性能基准测试，8 workers 性能最佳）
+  最大并行度硬限制为 8
 ```
 
-小于 100 行的表自动使用串行扫描，避免并行化的调度开销。
+### 6.3 与物理计划的集成
+
+并行扫描直接嵌入 `PhysicalTableScan`（`pkg/optimizer/physical_scan.go`），在物理表扫描阶段执行：
+
+```go
+type PhysicalTableScan struct {
+    // ...
+    parallelScanner     *OptimizedParallelScanner
+    enableParallelScan  bool
+    minParallelScanRows int64  // 默认 100 行
+}
+```
+
+创建 `PhysicalTableScan` 时自动初始化并行扫描器。当扫描行数满足阈值条件时，使用并行扫描；否则回退为串行扫描。
 
 ---
 
