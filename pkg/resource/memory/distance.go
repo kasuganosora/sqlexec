@@ -71,16 +71,28 @@ func (c *cosineDistance) Compute(v1, v2 []float32) float32 {
 	if len(v1) != len(v2) {
 		return 1.0
 	}
-	var dot, norm1, norm2 float64
-	for i := 0; i < len(v1); i++ {
-		dot += float64(v1[i] * v2[i])
-		norm1 += float64(v1[i] * v1[i])
-		norm2 += float64(v2[i] * v2[i])
+	n := len(v1)
+	var dot, norm1, norm2 float32
+
+	// Process 4 elements at a time to help the compiler vectorize
+	i := 0
+	for ; i <= n-4; i += 4 {
+		a0, a1, a2, a3 := v1[i], v1[i+1], v1[i+2], v1[i+3]
+		b0, b1, b2, b3 := v2[i], v2[i+1], v2[i+2], v2[i+3]
+		dot += a0*b0 + a1*b1 + a2*b2 + a3*b3
+		norm1 += a0*a0 + a1*a1 + a2*a2 + a3*a3
+		norm2 += b0*b0 + b1*b1 + b2*b2 + b3*b3
 	}
+	for ; i < n; i++ {
+		dot += v1[i] * v2[i]
+		norm1 += v1[i] * v1[i]
+		norm2 += v2[i] * v2[i]
+	}
+
 	if norm1 == 0 || norm2 == 0 {
 		return 1.0
 	}
-	return float32(1.0 - dot/(math.Sqrt(norm1)*math.Sqrt(norm2)))
+	return 1.0 - dot/float32(math.Sqrt(float64(norm1)*float64(norm2)))
 }
 
 // l2Distance L2距离实现

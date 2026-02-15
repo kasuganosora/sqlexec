@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -141,37 +142,34 @@ func TestImprovedHNSWPerformance(t *testing.T) {
 	// 测试查询延迟
 	numQueries := 1000
 	k := 10
-	
-	var totalLatency float64
-	var maxLatency float64
-	var minLatency float64 = 1e9
-	
+
+	latencies := make([]float64, numQueries)
+
 	for i := 0; i < numQueries; i++ {
 		query := randomVector(256)
-		
+
 		start := time.Now()
 		_, err := hnswIdx.Search(ctx, query, k, nil)
 		require.NoError(t, err)
 		elapsed := time.Since(start)
-		
-		latency := float64(elapsed.Milliseconds())
-		totalLatency += latency
-		
-		if latency > maxLatency {
-			maxLatency = latency
-		}
-		if latency < minLatency {
-			minLatency = latency
-		}
-		
+
+		latencies[i] = float64(elapsed.Microseconds()) / 1000.0 // ms with sub-ms precision
+
 		if (i+1)%200 == 0 {
 			t.Logf("已执行 %d/%d 次查询...", i+1, numQueries)
 		}
 	}
-	
+
+	sort.Float64s(latencies)
+	var totalLatency float64
+	for _, l := range latencies {
+		totalLatency += l
+	}
 	avgLatency := totalLatency / float64(numQueries)
-	p95 := calculatePercentile(numQueries, avgLatency, maxLatency)
-	p99 := calculatePercentile(numQueries, avgLatency, maxLatency)
+	minLatency := latencies[0]
+	maxLatency := latencies[numQueries-1]
+	p95 := latencies[int(float64(numQueries)*0.95)]
+	p99 := latencies[int(float64(numQueries)*0.99)]
 	
 	t.Log("\n=== 改进的 HNSW 性能测试结果 ===")
 	t.Logf("数据集大小: %d 个向量", numVectors)
@@ -190,14 +188,6 @@ func TestImprovedHNSWPerformance(t *testing.T) {
 		"平均延迟应该 <= 5ms, 实际: %.2fms", avgLatency)
 }
 
-// calculatePercentile 简单计算百分位数
-func calculatePercentile(n int, avg, max float64) float64 {
-	// 简化：假设正态分布
-	// P95 ≈ avg + 1.645*(max-avg)
-	// P99 ≈ avg + 2.326*(max-avg)
-	stdDev := (max - avg) / 3.0
-	return avg + 2.326*stdDev
-}
 
 // TestImprovedHNSWScale 测试改进的 HNSW 可扩展性
 func TestImprovedHNSWScale(t *testing.T) {
