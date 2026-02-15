@@ -16,6 +16,8 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/plugin"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	httpds "github.com/kasuganosora/sqlexec/server/datasource/http"
+	mysqlds "github.com/kasuganosora/sqlexec/server/datasource/mysql"
+	pgds "github.com/kasuganosora/sqlexec/server/datasource/postgresql"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
 	"github.com/kasuganosora/sqlexec/server/acl"
@@ -108,8 +110,10 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 	configDir := dataDir
 	dsManager := db.GetDSManager()
 
-	// 注册 HTTP 数据源工厂
+	// 注册数据源工厂
 	dsManager.GetRegistry().Register(httpds.NewHTTPFactory())
+	dsManager.GetRegistry().Register(mysqlds.NewMySQLFactory())
+	dsManager.GetRegistry().Register(pgds.NewPostgreSQLFactory())
 	dsConfigs, err := config_schema.LoadDatasources(configDir)
 	if err != nil {
 		log.Printf("加载 datasources.json 失败: %v", err)
