@@ -27,6 +27,7 @@ func GetAllCategories() []string {
 		"encoding",
 		"bitwise",
 		"similarity",
+		"icu",
 	}
 }
 

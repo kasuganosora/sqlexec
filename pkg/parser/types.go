@@ -253,7 +253,8 @@ const (
 // OrderByItem 排序项
 type OrderByItem struct {
 	Column    string `json:"column"`
-	Direction string `json:"direction"` // ASC, DESC
+	Direction string `json:"direction"`              // ASC, DESC
+	Collation string `json:"collation,omitempty"` // COLLATE clause (optional)
 }
 
 // ForeignKeyInfo 外键信息

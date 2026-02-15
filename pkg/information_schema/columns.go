@@ -122,8 +122,8 @@ func (t *ColumnsTable) Query(ctx context.Context, filters []domain.Filter, optio
 					"numeric_precision":       numPrecision,
 					"numeric_scale":          0,
 					"datetime_precision":      nil,
-					"character_set_name":     "utf8mb4",
-					"collation_name":         "utf8mb4_general_ci",
+					"character_set_name":     getColumnCharset(column),
+					"collation_name":         getColumnCollation(column),
 					"column_type":            columnType,
 					"column_key":             columnKey,
 					"extra":                 extra,
@@ -296,4 +296,20 @@ func (t *ColumnsTable) getNumericPrecision(columnType string) int64 {
 	default:
 		return 0
 	}
+}
+
+// getColumnCollation returns the column's collation, falling back to the default
+func getColumnCollation(col domain.ColumnInfo) string {
+	if col.Collation != "" {
+		return col.Collation
+	}
+	return "utf8mb4_general_ci"
+}
+
+// getColumnCharset returns the column's charset, falling back to the default
+func getColumnCharset(col domain.ColumnInfo) string {
+	if col.Charset != "" {
+		return col.Charset
+	}
+	return "utf8mb4"
 }

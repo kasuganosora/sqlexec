@@ -1386,13 +1386,17 @@ func (s *Server) handleSetCommand(ctx context.Context, conn net.Conn, sess *sess
 	// 处理 SET NAMES charset
 	if strings.HasPrefix(strings.ToUpper(cmd), "NAMES") {
 		charset := strings.TrimSpace(cmd[5:])
-		// 去除可能的 COLLATE 子句
-		if idx := strings.Index(charset, "COLLATE"); idx > 0 {
+		collation := ""
+		if idx := strings.Index(strings.ToUpper(charset), "COLLATE"); idx > 0 {
+			collation = strings.TrimSpace(charset[idx+7:])
 			charset = strings.TrimSpace(charset[:idx])
 		}
 		if err := sess.SetVariable("names", charset); err != nil {
 			log.Printf("设置字符集失败: %v", err)
 			return err
+		}
+		if collation != "" {
+			sess.SetVariable("COLLATION_CONNECTION", collation)
 		}
 		log.Printf("设置字符集: %s", charset)
 		return protocol.SendOK(conn, sess.GetNextSequenceID())

@@ -49,6 +49,8 @@ type TableInfo struct {
 	Columns    []ColumnInfo            `json:"columns"`
 	Temporary  bool                   `json:"temporary,omitempty"` // 是否是临时表
 	Atts       map[string]interface{} `json:"atts,omitempty"`       // 表属性
+	Charset    string                 `json:"charset,omitempty"`    // 表字符集
+	Collation  string                 `json:"collation,omitempty"`  // 表排序规则
 }
 
 // ColumnInfo 列信息
@@ -71,6 +73,10 @@ type ColumnInfo struct {
 	// Vector Columns 支持
 	VectorDim  int    `json:"vector_dim,omitempty"`   // 向量维度
 	VectorType string `json:"vector_type,omitempty"`  // 向量类型（如 "float32"）
+
+	// ICU/Collation 支持
+	Charset   string `json:"charset,omitempty"`
+	Collation string `json:"collation,omitempty"`
 }
 
 // IsVectorType 检查是否为向量类型

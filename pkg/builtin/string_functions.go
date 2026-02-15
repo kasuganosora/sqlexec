@@ -5,6 +5,10 @@ import (
 	"net/url"
 	"strings"
 	"unicode"
+	"unicode/utf8"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
@@ -51,7 +55,7 @@ func init() {
 			Signatures: []FunctionSignature{
 				{Name: "char_length", ReturnType: "integer", ParamTypes: []string{"string"}, Variadic: false},
 			},
-			Handler:     stringLength,
+			Handler:     stringCharLength,
 			Description: "返回字符串长度（字符）",
 			Example:     "CHAR_LENGTH('hello') -> 5",
 			Category:    "string",
@@ -62,7 +66,7 @@ func init() {
 			Signatures: []FunctionSignature{
 				{Name: "character_length", ReturnType: "integer", ParamTypes: []string{"string"}, Variadic: false},
 			},
-			Handler:     stringLength,
+			Handler:     stringCharLength,
 			Description: "返回字符串长度（字符）",
 			Example:     "CHARACTER_LENGTH('hello') -> 5",
 			Category:    "string",
@@ -488,18 +492,25 @@ func stringLength(args []interface{}) (interface{}, error) {
 	return int64(len(toString(args[0]))), nil
 }
 
+func stringCharLength(args []interface{}) (interface{}, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("char_length() requires exactly 1 argument")
+	}
+	return int64(utf8.RuneCountInString(toString(args[0]))), nil
+}
+
 func stringUpper(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("upper() requires exactly 1 argument")
 	}
-	return strings.ToUpper(toString(args[0])), nil
+	return cases.Upper(language.Und).String(toString(args[0])), nil
 }
 
 func stringLower(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("lower() requires exactly 1 argument")
 	}
-	return strings.ToLower(toString(args[0])), nil
+	return cases.Lower(language.Und).String(toString(args[0])), nil
 }
 
 func stringTrim(args []interface{}) (interface{}, error) {

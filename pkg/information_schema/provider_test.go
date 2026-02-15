@@ -44,13 +44,14 @@ func TestListVirtualTables(t *testing.T) {
 
 	tables := provider.ListVirtualTables()
 
-	assert.Len(t, tables, 6) // Should have 6 tables (schemata, tables, columns, table_constraints, key_column_usage, views)
+	assert.Len(t, tables, 7) // Should have 7 tables (schemata, tables, columns, table_constraints, key_column_usage, views, collations)
 	assert.Contains(t, tables, "schemata")
 	assert.Contains(t, tables, "tables")
 	assert.Contains(t, tables, "columns")
 	assert.Contains(t, tables, "table_constraints")
 	assert.Contains(t, tables, "key_column_usage")
 	assert.Contains(t, tables, "views")
+	assert.Contains(t, tables, "collations")
 }
 
 func TestHasTable(t *testing.T) {

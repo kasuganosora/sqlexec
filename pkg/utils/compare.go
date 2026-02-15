@@ -191,6 +191,132 @@ func MapOperator(parserOp string) string {
 	}
 }
 
+// CompareValuesWithCollation compares two values with given operator and collation.
+// When collation is empty or "utf8mb4_bin", falls back to byte-level comparison.
+func CompareValuesWithCollation(a, b interface{}, operator, collation string) (bool, error) {
+	if collation == "" || collation == "utf8mb4_bin" || collation == "binary" {
+		return CompareValues(a, b, operator)
+	}
+
+	op := strings.ToUpper(operator)
+
+	// Special operators delegate to collation-aware variants
+	switch op {
+	case "LIKE":
+		return compareLikeWithCollation(a, b, collation)
+	case "NOT LIKE":
+		result, err := compareLikeWithCollation(a, b, collation)
+		return !result, err
+	case "IN", "NOT IN", "BETWEEN", "NOT BETWEEN":
+		return CompareValues(a, b, operator)
+	}
+
+	if a == nil || b == nil {
+		switch op {
+		case "=", "EQ":
+			return a == nil && b == nil, nil
+		case "!=", "NEQ":
+			return !(a == nil && b == nil), nil
+		default:
+			return false, nil
+		}
+	}
+
+	// Numeric comparison is collation-independent
+	_, aErr := ToFloat64(a)
+	_, bErr := ToFloat64(b)
+	if aErr == nil && bErr == nil {
+		return CompareValues(a, b, operator)
+	}
+
+	// String comparison with collation
+	aStr, aOk := a.(string)
+	bStr, bOk := b.(string)
+	if aOk && bOk {
+		engine := GetGlobalCollationEngine()
+		cmp, err := engine.Compare(aStr, bStr, collation)
+		if err != nil {
+			return false, err
+		}
+		switch op {
+		case "=", "EQ":
+			return cmp == 0, nil
+		case "!=", "NEQ":
+			return cmp != 0, nil
+		case ">", "GT":
+			return cmp > 0, nil
+		case "<", "LT":
+			return cmp < 0, nil
+		case ">=", "GE":
+			return cmp >= 0, nil
+		case "<=", "LE":
+			return cmp <= 0, nil
+		default:
+			return false, fmt.Errorf("unsupported operator: %s", operator)
+		}
+	}
+
+	return false, fmt.Errorf("cannot compare %T with %T", a, b)
+}
+
+// CompareValuesForSortWithCollation compares two values for sorting with collation.
+// When collation is empty or binary, falls back to byte-level comparison.
+func CompareValuesForSortWithCollation(a, b interface{}, collation string) int {
+	if collation == "" || collation == "utf8mb4_bin" || collation == "binary" {
+		return CompareValuesForSort(a, b)
+	}
+
+	if a == nil && b == nil {
+		return 0
+	}
+	if a == nil {
+		return -1
+	}
+	if b == nil {
+		return 1
+	}
+
+	// Numeric comparison is collation-independent
+	aNum, aErr := ToFloat64(a)
+	bNum, bErr := ToFloat64(b)
+	if aErr == nil && bErr == nil {
+		if aNum < bNum {
+			return -1
+		} else if aNum > bNum {
+			return 1
+		}
+		return 0
+	}
+
+	// String comparison with collation
+	aStr := fmt.Sprintf("%v", a)
+	bStr := fmt.Sprintf("%v", b)
+	engine := GetGlobalCollationEngine()
+	cmp, err := engine.Compare(aStr, bStr, collation)
+	if err != nil {
+		return CompareValuesForSort(a, b)
+	}
+	return cmp
+}
+
+// compareLikeWithCollation performs LIKE matching with collation awareness.
+func compareLikeWithCollation(a, b interface{}, collation string) (bool, error) {
+	aStr, ok := a.(string)
+	if !ok {
+		aStr = ToString(a)
+	}
+	bStr, ok := b.(string)
+	if !ok {
+		bStr = ToString(b)
+	}
+
+	if strings.Contains(bStr, "*") {
+		bStr = strings.ReplaceAll(bStr, "*", "%")
+	}
+
+	return MatchesLikeWithCollation(aStr, bStr, collation), nil
+}
+
 // compareLike checks if value matches pattern
 // Supports % (any chars) and * (any chars - glob style)
 func compareLike(a, b interface{}) (bool, error) {

@@ -2,6 +2,11 @@ package utils
 
 import (
 	"strings"
+	"unicode"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
@@ -209,6 +214,52 @@ func matchSegmentAt(value string, pos int, seg string) bool {
 		}
 	}
 	return true
+}
+
+// MatchesLikeWithCollation performs LIKE matching with collation awareness.
+// For _ci collations, folds both value and pattern to lowercase before matching.
+// For _ai_ci collations, additionally strips accents via NFD decomposition.
+func MatchesLikeWithCollation(value, pattern, collation string) bool {
+	if collation == "" || collation == "utf8mb4_bin" || collation == "binary" {
+		return MatchesLike(value, pattern)
+	}
+
+	engine := GetGlobalCollationEngine()
+
+	// For accent-insensitive collations, strip accents first
+	if engine.IsAccentInsensitive(collation) {
+		value = stripAccents(value)
+		pattern = stripAccents(pattern)
+	}
+
+	// For case-insensitive collations, fold case
+	if engine.IsCaseInsensitive(collation) {
+		folder := cases.Fold()
+		value = folder.String(value)
+		pattern = folder.String(pattern)
+	}
+
+	return MatchesLike(value, pattern)
+}
+
+// stripAccents removes diacritical marks from a string using NFD decomposition.
+func stripAccents(s string) string {
+	// NFD decomposes characters: é → e + combining accent
+	decomposed := norm.NFD.String(s)
+	// Filter out combining marks (unicode category Mn)
+	var buf strings.Builder
+	for _, r := range decomposed {
+		if !unicode.Is(unicode.Mn, r) {
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
+}
+
+// stripAccentsForLocale strips accents using locale-specific rules.
+// Currently delegates to stripAccents; can be extended for locale-specific behavior.
+func stripAccentsForLocale(s string, _ language.Tag) string {
+	return stripAccents(s)
 }
 
 // findSegment finds the first position >= startPos where segment matches in value.

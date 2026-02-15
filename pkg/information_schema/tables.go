@@ -170,7 +170,7 @@ func (t *TablesTable) Query(ctx context.Context, filters []domain.Filter, option
 			"create_time":       time.Now(),
 			"update_time":       nil,
 			"check_time":        nil,
-			"table_collation":   "utf8mb4_general_ci",
+			"table_collation":   getTableCollation(tableInfo),
 			"checksum":          nil,
 			"create_options":    "",
 			"table_comment":     "",
@@ -243,4 +243,12 @@ func serializeTableAttributes(atts map[string]interface{}) interface{} {
 
 	// Return as string
 	return string(jsonBytes)
+}
+
+// getTableCollation returns the table's collation, falling back to the default
+func getTableCollation(tableInfo *domain.TableInfo) string {
+	if tableInfo != nil && tableInfo.Collation != "" {
+		return tableInfo.Collation
+	}
+	return "utf8mb4_general_ci"
 }

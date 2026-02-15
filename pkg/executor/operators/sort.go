@@ -9,6 +9,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // SortOperator 排序算子
@@ -25,7 +26,7 @@ func NewSortOperator(p *plan.Plan, das dataaccess.Service) (*SortOperator, error
 	}
 
 	base := NewBaseOperator(p, das)
-	
+
 	// 构建子算子
 	buildFn := func(childPlan *plan.Plan) (Operator, error) {
 		return buildOperator(childPlan, das)
@@ -70,7 +71,12 @@ func (op *SortOperator) Execute(ctx context.Context) (*domain.QueryResult, error
 				continue
 			}
 
-			cmp := compareValues(valI, valJ)
+			var cmp int
+			if item.Collation != "" {
+				cmp = utils.CompareValuesForSortWithCollation(valI, valJ, item.Collation)
+			} else {
+				cmp = utils.CompareValuesForSort(valI, valJ)
+			}
 			if cmp == 0 {
 				continue
 			}
@@ -86,53 +92,4 @@ func (op *SortOperator) Execute(ctx context.Context) (*domain.QueryResult, error
 		Columns: childResult.Columns,
 		Rows:    sortedRows,
 	}, nil
-}
-
-// compareValues 比较两个值
-func compareValues(a, b interface{}) int {
-	aStr, aOk := a.(string)
-	bStr, bOk := b.(string)
-	if aOk && bOk {
-		if aStr < bStr {
-			return -1
-		} else if aStr > bStr {
-			return 1
-		}
-		return 0
-	}
-
-	aInt, aOk := a.(int)
-	bInt, bOk := b.(int)
-	if aOk && bOk {
-		if aInt < bInt {
-			return -1
-		} else if aInt > bInt {
-			return 1
-		}
-		return 0
-	}
-
-	aInt64, aOk := a.(int64)
-	bInt64, bOk := b.(int64)
-	if aOk && bOk {
-		if aInt64 < bInt64 {
-			return -1
-		} else if aInt64 > bInt64 {
-			return 1
-		}
-		return 0
-	}
-
-	aFloat, aOk := a.(float64)
-	bFloat, bOk := b.(float64)
-	if aOk && bOk {
-		if aFloat < bFloat {
-			return -1
-		} else if aFloat > bFloat {
-			return 1
-		}
-		return 0
-	}
-
-	return 0
 }

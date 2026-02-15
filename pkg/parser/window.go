@@ -57,6 +57,7 @@ type WindowExpression struct {
 type OrderItem struct {
 	Expr      Expression
 	Direction string
+	Collation string // COLLATE clause (optional)
 }
 
 // 支持的窗口函数
