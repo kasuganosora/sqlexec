@@ -164,9 +164,16 @@ func (q *BooleanQuery) AddMustNot(query Query) {
 
 // Execute 执行查询
 func (q *BooleanQuery) Execute(idx *index.InvertedIndex) []SearchResult {
-	// 收集所有结果
+	// Fast path: Should-only with all TermQuery children → merge into single vector search
+	if len(q.Must) == 0 && len(q.MustNot) == 0 && len(q.Should) > 0 {
+		if merged := q.tryMergeTermQueries(idx); merged != nil {
+			return merged
+		}
+	}
+
+	// General path
 	docScores := make(map[int64]*booleanDoc)
-	
+
 	// 处理Must查询（AND）
 	for _, query := range q.Must {
 		results := query.Execute(idx)
@@ -183,7 +190,7 @@ func (q *BooleanQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			}
 		}
 	}
-	
+
 	// 处理Should查询（OR）
 	for _, query := range q.Should {
 		results := query.Execute(idx)
@@ -200,7 +207,7 @@ func (q *BooleanQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			}
 		}
 	}
-	
+
 	// 处理MustNot查询（NOT）
 	mustNotDocIDs := make(map[int64]bool)
 	for _, query := range q.MustNot {
@@ -209,32 +216,58 @@ func (q *BooleanQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			mustNotDocIDs[result.DocID] = true
 		}
 	}
-	
+
 	// 过滤和收集结果
 	var results []SearchResult
 	for docID, doc := range docScores {
-		// 排除MustNot的文档
 		if mustNotDocIDs[docID] {
 			continue
 		}
-		
-		// 检查Must条件是否全部满足
 		if len(q.Must) > 0 && doc.mustCount < len(q.Must) {
 			continue
 		}
-		
-		// 检查Should条件是否满足最小要求
 		if len(q.Should) > 0 && doc.shouldCount < q.MinShouldMatch {
 			continue
 		}
-		
+
 		results = append(results, SearchResult{
 			DocID: docID,
 			Score: doc.score * q.boost,
 			Doc:   idx.GetDocument(docID),
 		})
 	}
-	
+
+	return results
+}
+
+// tryMergeTermQueries merges Should clauses that are all TermQueries into a single
+// vector search, avoiding N separate full-index scans.
+func (q *BooleanQuery) tryMergeTermQueries(idx *index.InvertedIndex) []SearchResult {
+	queryVector := bm25.NewSparseVector()
+	for _, sq := range q.Should {
+		tq, ok := sq.(*TermQuery)
+		if !ok {
+			return nil // Not all TermQuery — fall back to general path
+		}
+		termID := hashString(tq.Term)
+		boost := tq.GetBoost()
+		if boost == 0 {
+			boost = 1.0
+		}
+		queryVector.Set(termID, boost)
+	}
+	queryVector.Normalize()
+
+	idxResults := idx.Search(queryVector)
+
+	results := make([]SearchResult, len(idxResults))
+	for i, r := range idxResults {
+		results[i] = SearchResult{
+			DocID: r.DocID,
+			Score: r.Score * q.boost,
+			Doc:   r.Doc,
+		}
+	}
 	return results
 }
 
@@ -631,9 +664,8 @@ func simpleTokenize(value interface{}) []string {
 	return terms
 }
 
-// levenshteinDistance 计算 Levenshtein 编辑距离
+// levenshteinDistance computes Levenshtein edit distance using O(min(m,n)) space.
 func levenshteinDistance(s1, s2 string) int {
-	// 处理特殊情况
 	if s1 == s2 {
 		return 0
 	}
@@ -644,57 +676,59 @@ func levenshteinDistance(s1, s2 string) int {
 		return len(s1)
 	}
 
-	// 创建距离矩阵（优化空间使用一维数组）
-	lenS1 := len(s1) + 1
-	lenS2 := len(s2) + 1
-	
-	// 如果字符串很长，限制计算范围
-	if lenS1 > 100 || lenS2 > 100 {
-		// 对于长字符串，只计算前100个字符的距离
-		if len(s1) > 100 {
-			s1 = s1[:100]
-		}
-		if len(s2) > 100 {
-			s2 = s2[:100]
-		}
-		lenS1 = len(s1) + 1
-		lenS2 = len(s2) + 1
+	// Truncate long strings
+	if len(s1) > 100 {
+		s1 = s1[:100]
 	}
-	
-	dist := make([]int, lenS1*lenS2)
-	
-	// 初始化第一行和第一列
-	for i := 0; i < lenS1; i++ {
-		dist[i] = i
-	}
-	for j := 0; j < lenS2; j++ {
-		dist[j*lenS1] = j
+	if len(s2) > 100 {
+		s2 = s2[:100]
 	}
 
-	// 计算编辑距离
-	for j := 1; j < lenS2; j++ {
-		for i := 1; i < lenS1; i++ {
-			cost := 0
-			if s1[i-1] != s2[j-1] {
-				cost = 1
+	// Ensure s1 is the shorter string for O(min(m,n)) space
+	if len(s1) > len(s2) {
+		s1, s2 = s2, s1
+	}
+
+	// Two-row rolling approach: O(min(m,n)) space instead of O(m*n)
+	prev := make([]int, len(s1)+1)
+	curr := make([]int, len(s1)+1)
+
+	for i := 0; i <= len(s1); i++ {
+		prev[i] = i
+	}
+
+	for j := 1; j <= len(s2); j++ {
+		curr[0] = j
+		for i := 1; i <= len(s1); i++ {
+			cost := 1
+			if s1[i-1] == s2[j-1] {
+				cost = 0
 			}
-			
-			deletion := dist[(j-1)*lenS1+i] + 1
-			insertion := dist[j*lenS1+i-1] + 1
-			substitution := dist[(j-1)*lenS1+i-1] + cost
-			
-			dist[j*lenS1+i] = utils.MinInt(deletion, utils.MinInt(insertion, substitution))
+			del := prev[i] + 1
+			ins := curr[i-1] + 1
+			sub := prev[i-1] + cost
+			// Inline min3 to avoid function call overhead
+			m := del
+			if ins < m {
+				m = ins
+			}
+			if sub < m {
+				m = sub
+			}
+			curr[i] = m
 		}
+		prev, curr = curr, prev
 	}
 
-	return dist[(lenS2-1)*lenS1+(lenS1-1)]
+	return prev[len(s1)]
 }
 
-// 辅助函数
+// hashString computes FNV-1a 64-bit hash (consistent across engine, index, query packages)
 func hashString(s string) int64 {
-	h := int64(0)
-	for _, c := range s {
-		h = h*31 + int64(c)
+	h := uint64(14695981039346656037)
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= 1099511628211
 	}
-	return h
+	return int64(h)
 }

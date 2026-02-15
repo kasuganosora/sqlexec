@@ -162,35 +162,41 @@ func (e *Engine) IndexDocumentWithTokens(doc *Document, tokens []Token) error {
 	return e.invertedIdx.AddDocument(internalDoc, idTokens)
 }
 
-// Search 搜索
+// Search 搜索（使用BM25向量匹配，与SearchBM25共享高效路径）
 func (e *Engine) Search(queryStr string, topK int) ([]SearchResult, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	
-	// 使用引擎的分词器对查询进行分词
+
 	tokens, err := e.tokenizer.Tokenize(queryStr)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize query failed: %w", err)
 	}
-	
-	// 构建布尔查询
-	boolQuery := query.NewBooleanQuery()
+
+	if len(tokens) == 0 {
+		return nil, nil
+	}
+
+	// Build query vector directly (avoids BooleanQuery N×full-scan overhead)
+	queryVector := bm25.NewSparseVector()
 	for _, token := range tokens {
-		boolQuery.AddShould(query.NewTermQuery("content", token.Text))
+		termID := hashString(token.Text)
+		if weight, exists := queryVector.Get(termID); exists {
+			queryVector.Set(termID, weight+1.0)
+		} else {
+			queryVector.Set(termID, 1.0)
+		}
 	}
-	
-	// 执行查询
-	queryResults := boolQuery.Execute(e.invertedIdx)
-	
-	// 转换为引擎结果类型
-	results := convertQueryResults(queryResults)
-	
-	// 限制结果数量
-	if topK > 0 && len(results) > topK {
-		results = results[:topK]
+	queryVector.Normalize()
+
+	// Use efficient TopK search
+	var idxResults []index.SearchResult
+	if topK > 0 {
+		idxResults = e.invertedIdx.SearchTopK(queryVector, topK)
+	} else {
+		idxResults = e.invertedIdx.Search(queryVector)
 	}
-	
-	return results, nil
+
+	return convertIdxResults(idxResults), nil
 }
 
 // SearchWithQuery 使用Query对象搜索
@@ -248,13 +254,14 @@ func (e *Engine) SearchBM25(queryStr string, topK int) ([]SearchResult, error) {
 	return results, nil
 }
 
-// hashString 将字符串hash为int64（与index包保持一致）
+// hashString computes FNV-1a 64-bit hash (consistent across engine, index, query packages)
 func hashString(s string) int64 {
-	h := int64(0)
-	for _, c := range s {
-		h = h*31 + int64(c)
+	h := uint64(14695981039346656037)
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= 1099511628211
 	}
-	return h
+	return int64(h)
 }
 
 // SearchWithHighlight 带高亮的搜索

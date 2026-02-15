@@ -90,14 +90,15 @@ func (pl *PostingsList) FindPostingWithSkip(docID int64) *Posting {
 	return nil
 }
 
-// RemovePosting 移除指定文档的倒排项
+// RemovePosting 移除指定文档的倒排项（使用二分查找）
 func (pl *PostingsList) RemovePosting(docID int64) bool {
-	for i, p := range pl.Postings {
-		if p.DocID == docID {
-			pl.Postings = append(pl.Postings[:i], pl.Postings[i+1:]...)
-			pl.DocCount--
-			return true
-		}
+	idx := sort.Search(len(pl.Postings), func(i int) bool {
+		return pl.Postings[i].DocID >= docID
+	})
+	if idx < len(pl.Postings) && pl.Postings[idx].DocID == docID {
+		pl.Postings = append(pl.Postings[:idx], pl.Postings[idx+1:]...)
+		pl.DocCount--
+		return true
 	}
 	return false
 }

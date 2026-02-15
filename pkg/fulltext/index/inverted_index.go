@@ -51,51 +51,53 @@ func NewInvertedIndex(scorer *bm25.Scorer) *InvertedIndex {
 func (idx *InvertedIndex) AddDocument(doc *Document, tokens []analyzer.Token) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
-	// 存储文档
+
 	idx.docStore[doc.ID] = doc
-	
-	// 统计词频
-	termFreqs := make(map[int64]int)
-	termPositions := make(map[int64][]int)
-	
+
+	// Count term frequencies and positions
+	termFreqs := make(map[int64]int, len(tokens))
+	termPositions := make(map[int64][]int, len(tokens))
+
 	for _, token := range tokens {
-		// 这里假设token.Text已经转换为termID
-		// 实际实现需要词汇表管理
-		termID := hashString(token.Text) // 简化处理，实际应该用词汇表
+		termID := hashString(token.Text)
 		termFreqs[termID]++
 		termPositions[termID] = append(termPositions[termID], token.Position)
 	}
-	
-	// 计算文档向量
-	vector := idx.scorer.ComputeDocumentVector(termFreqs, len(tokens))
+
+	// Read stats snapshot once to avoid per-term lock acquisition
+	totalDocs := idx.stats.GetTotalDocs()
+	avgDocLength := idx.stats.GetAvgDocLength()
+
+	// Compute document vector using batch scoring (reads doc freqs in batch)
+	vector := idx.scorer.ComputeDocumentVectorWithStats(termFreqs, len(tokens), totalDocs, avgDocLength, idx.stats)
 	idx.docVectors[doc.ID] = vector
-	
-	// 更新倒排索引
+
+	// Update inverted index and stats
 	for termID, freq := range termFreqs {
 		postingsList, exists := idx.postings[termID]
 		if !exists {
 			postingsList = NewPostingsList(termID)
 			idx.postings[termID] = postingsList
 		}
-		
-		// 计算BM25分数
-		score := idx.scorer.Score(termID, freq, len(tokens))
-		
+
+		// Use the pre-computed score from the vector
+		score := 0.0
+		if s, ok := vector.Get(termID); ok {
+			score = s
+		}
+
 		posting := Posting{
 			DocID:     doc.ID,
 			Frequency: freq,
 			Positions: termPositions[termID],
 			BM25Score: score,
 		}
-		
+
 		postingsList.AddPosting(posting)
 		idx.stats.IncrementDocFreq(termID)
 	}
-	
-	// 更新统计信息
-	idx.stats.AddDocStats(int64(len(tokens)))
 
+	idx.stats.AddDocStats(int64(len(tokens)))
 	return nil
 }
 
@@ -171,70 +173,76 @@ func (idx *InvertedIndex) Search(queryVector *bm25.SparseVector) []SearchResult 
 	return results
 }
 
-// SearchTopK 搜索Top-K结果（使用MAXSCORE优化）
+// SearchTopK 搜索Top-K结果（DAAT with binary search, zero map allocation）
 func (idx *InvertedIndex) SearchTopK(queryVector *bm25.SparseVector, topK int) []SearchResult {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	if queryVector.IsEmpty() || topK <= 0 {
 		return nil
 	}
-	
-	// 获取查询词列表，按MaxScore降序排序
+
+	// Collect terms with their posting lists
 	type termInfo struct {
-		termID      int64
 		queryWeight float64
-		maxScore    float64
 		postings    *PostingsList
 	}
-	
-	var terms []termInfo
+	terms := make([]termInfo, 0, len(queryVector.Terms))
 	for termID, queryWeight := range queryVector.Terms {
-		if postingsList, exists := idx.postings[termID]; exists {
-			terms = append(terms, termInfo{
-				termID:      termID,
-				queryWeight: queryWeight,
-				maxScore:    postingsList.MaxScore,
-				postings:    postingsList,
-			})
+		if pl, exists := idx.postings[termID]; exists {
+			terms = append(terms, termInfo{queryWeight: queryWeight, postings: pl})
 		}
 	}
-	
 	if len(terms) == 0 {
 		return nil
 	}
-	
-	// 按maxScore降序排序
+
+	// Sort by posting list length ascending (rarest term first = highest IDF, most selective)
 	sort.Slice(terms, func(i, j int) bool {
-		return terms[i].maxScore > terms[j].maxScore
+		return len(terms[i].postings.Postings) < len(terms[j].postings.Postings)
 	})
-	
-	// 使用最小堆维护Top-K
+
 	heap := newMinHeap(topK)
-	
-	// DAAT (Document-At-A-Time) 算法
-	// 只遍历第一个词的倒排列表（分数最高的词）
-	firstTerm := terms[0]
-	
-	for _, posting := range firstTerm.postings.Postings {
+
+	// Phase 1: Iterate leading term (rarest), probe others with binary search — no map needed
+	for _, posting := range terms[0].postings.Postings {
 		docID := posting.DocID
-		score := firstTerm.queryWeight * posting.BM25Score
-		
-		// 累加其他词的分数
+		score := terms[0].queryWeight * posting.BM25Score
 		for i := 1; i < len(terms); i++ {
 			if p := terms[i].postings.FindPosting(docID); p != nil {
 				score += terms[i].queryWeight * p.BM25Score
 			}
 		}
-		
-		// 更新堆
 		heap.tryAdd(docID, score)
 	}
-	
-	// 转换为结果
-	results := heap.toResults(idx)
-	
-	return results
+
+	// Phase 2: Find docs NOT in the leading term (missed by Phase 1).
+	// Use a seen set to avoid duplicates across terms.
+	if len(terms) > 1 && len(heap.items) < topK {
+		seen := make(map[int64]struct{})
+		for i := 1; i < len(terms); i++ {
+			for _, posting := range terms[i].postings.Postings {
+				docID := posting.DocID
+				if terms[0].postings.FindPosting(docID) != nil {
+					continue // Already processed in Phase 1
+				}
+				if _, ok := seen[docID]; ok {
+					continue // Already processed in Phase 2
+				}
+				seen[docID] = struct{}{}
+				// Compute full score across ALL terms
+				score := 0.0
+				for j := 0; j < len(terms); j++ {
+					if p := terms[j].postings.FindPosting(docID); p != nil {
+						score += terms[j].queryWeight * p.BM25Score
+					}
+				}
+				heap.tryAdd(docID, score)
+			}
+		}
+	}
+
+	return heap.toResults(idx)
 }
 
 // SearchPhrase 短语搜索
@@ -386,14 +394,14 @@ func (idx *InvertedIndex) UpdateVocabulary(termID int64) {
 	// 这里保留为接口
 }
 
-// 辅助函数
+// hashString computes FNV-1a 64-bit hash (consistent across engine, index, query packages)
 func hashString(s string) int64 {
-	// 简化实现，实际应该使用词汇表管理
-	h := int64(0)
-	for _, c := range s {
-		h = h*31 + int64(c)
+	h := uint64(14695981039346656037)
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= 1099511628211
 	}
-	return h
+	return int64(h)
 }
 
 // minHeap 最小堆（用于维护Top-K）

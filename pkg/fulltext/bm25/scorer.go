@@ -155,14 +155,48 @@ type Document struct {
 // ComputeDocumentVector 计算文档的BM25稀疏向量
 func (s *Scorer) ComputeDocumentVector(termFreqs map[int64]int, docLength int) *SparseVector {
 	vector := NewSparseVector()
-	
+
 	for termID, freq := range termFreqs {
 		score := s.Score(termID, freq, docLength)
 		if score > 0 {
 			vector.Set(termID, score)
 		}
 	}
-	
+
+	return vector
+}
+
+// ComputeDocumentVectorWithStats computes BM25 vector using pre-fetched stats snapshot
+// to avoid per-term lock acquisition on CollectionStats.
+func (s *Scorer) ComputeDocumentVectorWithStats(termFreqs map[int64]int, docLength int, totalDocs int64, avgDocLength float64, stats *CollectionStats) *SparseVector {
+	vector := NewSparseVector()
+
+	k1, b := s.params.K1, s.params.B
+	N := float64(totalDocs)
+	avgdl := avgDocLength
+	if avgdl == 0 {
+		avgdl = 1
+	}
+
+	for termID, freq := range termFreqs {
+		// IDF with pre-fetched N (only df needs per-term lookup)
+		df := float64(stats.GetDocFreq(termID))
+		var idf float64
+		if df > 0 && N > 0 {
+			idf = math.Log((N - df + 0.5) / (df + 0.5))
+		}
+
+		// TF
+		numerator := float64(freq) * (k1 + 1)
+		denominator := float64(freq) + k1*(1-b+b*float64(docLength)/avgdl)
+		tf := numerator / denominator
+
+		score := idf * tf
+		if score > 0 {
+			vector.Set(termID, score)
+		}
+	}
+
 	return vector
 }
 

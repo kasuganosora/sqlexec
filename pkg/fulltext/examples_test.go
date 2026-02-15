@@ -235,6 +235,117 @@ func BenchmarkEngine_SearchBM25(b *testing.B) {
 	}
 }
 
+// BenchmarkEngine_SearchPhrase 短语搜索基准测试
+func BenchmarkEngine_SearchPhrase(b *testing.B) {
+	engine := NewEngine(DefaultConfig)
+
+	for i := 0; i < 1000; i++ {
+		doc := &Document{
+			ID:      int64(i),
+			Content: "The quick brown fox jumps over the lazy dog",
+		}
+		engine.IndexDocument(doc)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		engine.SearchPhrase("quick brown fox", 0, 10)
+	}
+}
+
+// BenchmarkEngine_Search_LargeIndex 大索引搜索基准测试
+func BenchmarkEngine_Search_LargeIndex(b *testing.B) {
+	engine := NewEngine(DefaultConfig)
+
+	contents := []string{
+		"The quick brown fox jumps over the lazy dog",
+		"A fast red car drove down the empty highway",
+		"Machine learning algorithms process data efficiently",
+		"The weather today is sunny and warm outside",
+		"Database systems require careful query optimization",
+	}
+
+	for i := 0; i < 10000; i++ {
+		doc := &Document{
+			ID:      int64(i),
+			Content: contents[i%len(contents)],
+		}
+		engine.IndexDocument(doc)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		engine.Search("quick fox", 10)
+	}
+}
+
+// BenchmarkEngine_SearchBM25_LargeIndex 大索引BM25搜索基准测试
+func BenchmarkEngine_SearchBM25_LargeIndex(b *testing.B) {
+	engine := NewEngine(DefaultConfig)
+
+	contents := []string{
+		"The quick brown fox jumps over the lazy dog",
+		"A fast red car drove down the empty highway",
+		"Machine learning algorithms process data efficiently",
+		"The weather today is sunny and warm outside",
+		"Database systems require careful query optimization",
+	}
+
+	for i := 0; i < 10000; i++ {
+		doc := &Document{
+			ID:      int64(i),
+			Content: contents[i%len(contents)],
+		}
+		engine.IndexDocument(doc)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		engine.SearchBM25("quick fox", 10)
+	}
+}
+
+// BenchmarkEngine_SearchWithQuery_Boolean 布尔查询搜索基准测试
+func BenchmarkEngine_SearchWithQuery_Boolean(b *testing.B) {
+	engine := NewEngine(DefaultConfig)
+
+	for i := 0; i < 1000; i++ {
+		doc := &Document{
+			ID:      int64(i),
+			Content: "The quick brown fox jumps over the lazy dog",
+		}
+		engine.IndexDocument(doc)
+	}
+
+	boolQ := query.NewBooleanQuery()
+	boolQ.AddShould(query.NewTermQuery("content", "quick"))
+	boolQ.AddShould(query.NewTermQuery("content", "fox"))
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		engine.SearchWithQuery(boolQ, 10)
+	}
+}
+
+// BenchmarkEngine_Delete 删除文档基准测试
+func BenchmarkEngine_Delete(b *testing.B) {
+	engine := NewEngine(DefaultConfig)
+
+	// Pre-index documents
+	for i := 0; i < b.N+1000; i++ {
+		doc := &Document{
+			ID:      int64(i),
+			Content: "The quick brown fox jumps over the lazy dog",
+		}
+		engine.IndexDocument(doc)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		engine.DeleteDocument(int64(i))
+	}
+}
+
 // TestEngine_CompleteWorkflow 完整工作流测试
 func TestEngine_CompleteWorkflow(t *testing.T) {
 	engine := NewEngine(DefaultConfig)
