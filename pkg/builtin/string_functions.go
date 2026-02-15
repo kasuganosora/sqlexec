@@ -587,39 +587,51 @@ func stringSubstring(args []interface{}) (interface{}, error) {
 		return nil, err
 	}
 	
-	length := int64(len(str))
-	if length == 0 {
+	strLen := int64(len(str))
+	if strLen == 0 {
 		return "", nil
 	}
-	
-	// SQL中索引从1开始
-	if start < 1 {
-		start = 1
-	}
-	
-	startPos := start - 1
-	if startPos >= length {
+
+	// MySQL: SUBSTRING('hello', 0) → '' (0 is invalid position)
+	if start == 0 {
 		return "", nil
 	}
-	
+
+	var startPos int64
+	if start < 0 {
+		// MySQL: negative start counts from end of string
+		// SUBSTRING('hello', -2) → position = len-2 = 3 (0-indexed), returns 'lo'
+		startPos = strLen + start
+		if startPos < 0 {
+			startPos = 0
+		}
+	} else {
+		// SQL index starts at 1
+		startPos = start - 1
+	}
+
+	if startPos >= strLen {
+		return "", nil
+	}
+
 	if len(args) == 3 {
 		subLen, err := toInt64(args[2])
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if subLen < 0 {
 			subLen = 0
 		}
-		
+
 		endPos := startPos + subLen
-		if endPos > length {
-			endPos = length
+		if endPos > strLen {
+			endPos = strLen
 		}
-		
+
 		return str[startPos:endPos], nil
 	}
-	
+
 	return str[startPos:], nil
 }
 
@@ -649,7 +661,14 @@ func stringRepeat(args []interface{}) (interface{}, error) {
 	if count <= 0 {
 		return "", nil
 	}
-	
+
+	// Cap total output size to prevent OOM (MySQL caps at max_allowed_packet, typically 1MB)
+	const maxRepeatBytes = 1024 * 1024 // 1MB
+	totalLen := int64(len(str)) * count
+	if totalLen > maxRepeatBytes {
+		return nil, fmt.Errorf("repeat() result exceeds maximum allowed size (%d bytes)", maxRepeatBytes)
+	}
+
 	return strings.Repeat(str, int(count)), nil
 }
 
@@ -680,20 +699,25 @@ func stringLPad(args []interface{}) (interface{}, error) {
 	}
 	
 	padStr := toString(args[2])
+
+	if length <= 0 {
+		return "", nil
+	}
+
 	if len(padStr) == 0 {
 		return str, nil
 	}
-	
+
 	if int64(len(str)) >= length {
-		return str[:length], nil
+		return str[:int(length)], nil
 	}
-	
+
 	paddingNeeded := int(length) - len(str)
 	var padding strings.Builder
 	for padding.Len() < paddingNeeded {
 		padding.WriteString(padStr)
 	}
-	
+
 	return padding.String()[:paddingNeeded] + str, nil
 }
 
@@ -701,22 +725,27 @@ func stringRPad(args []interface{}) (interface{}, error) {
 	if len(args) != 3 {
 		return nil, fmt.Errorf("rpad() requires exactly 3 arguments")
 	}
-	
+
 	str := toString(args[0])
 	length, err := toInt64(args[1])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	padStr := toString(args[2])
+
+	if length <= 0 {
+		return "", nil
+	}
+
 	if len(padStr) == 0 {
 		return str, nil
 	}
-	
+
 	if int64(len(str)) >= length {
-		return str[:length], nil
+		return str[:int(length)], nil
 	}
-	
+
 	paddingNeeded := int(length) - len(str)
 	var padding strings.Builder
 	for padding.Len() < paddingNeeded {
@@ -786,7 +815,12 @@ func stringSpace(args []interface{}) (interface{}, error) {
 	if count <= 0 {
 		return "", nil
 	}
-	
+
+	const maxSpaceBytes = 1024 * 1024 // 1MB
+	if count > maxSpaceBytes {
+		return nil, fmt.Errorf("space() result exceeds maximum allowed size (%d bytes)", maxSpaceBytes)
+	}
+
 	return strings.Repeat(" ", int(count)), nil
 }
 

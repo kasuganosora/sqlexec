@@ -800,6 +800,9 @@ func mathMod(args []interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	if b == 0 {
+		return nil, nil // MySQL: MOD(a, 0) returns NULL
+	}
 	return math.Mod(a, b), nil
 }
 
