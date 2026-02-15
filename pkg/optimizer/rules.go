@@ -3,8 +3,14 @@ package optimizer
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
+)
+
+var (
+	defaultRuleSetOnce sync.Once
+	defaultRuleSetVal  RuleSet
 )
 
 // PredicatePushDownRule predicate pushdown rule
@@ -94,7 +100,7 @@ func (r *ColumnPruningRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 	for k := range requiredCols {
 		keys = append(keys, k)
 	}
-	fmt.Printf("  [DEBUG] ColumnPruningRule.Apply: 需要的列: %v\n", keys)
+	debugf("  [DEBUG] ColumnPruningRule.Apply: 需要的列: %v\n", keys)
 
 	// 如果子节点是 DataSource，调整输出列
 	if dataSource, ok := child.(*LogicalDataSource); ok {
@@ -107,7 +113,7 @@ func (r *ColumnPruningRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 		}
 		// 如果有变化，创建新的 DataSource
 		if len(newColumns) < len(dataSource.Columns) {
-			fmt.Printf("  [DEBUG] ColumnPruningRule.Apply: 原列数: %d, 裁剪后: %d\n", len(dataSource.Columns), len(newColumns))
+			debugf("  [DEBUG] ColumnPruningRule.Apply: 原列数: %d, 裁剪后: %d\n", len(dataSource.Columns), len(newColumns))
 			// 保存下推的谓词和Limit信息
 			predicates := dataSource.GetPushedDownPredicates()
 			limitInfo := dataSource.GetPushedDownLimit()
@@ -119,7 +125,7 @@ func (r *ColumnPruningRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 				newDataSource.PushDownLimit(limitInfo.Limit, limitInfo.Offset)
 			}
 			projection.children[0] = newDataSource
-			fmt.Printf("  [DEBUG] ColumnPruningRule.Apply: 列裁剪完成\n")
+			debugf("  [DEBUG] ColumnPruningRule.Apply: 列裁剪完成\n")
 		}
 	}
 
@@ -442,22 +448,24 @@ func (r *ConstantFoldingRule) tryFoldExpression(expr *parser.Expression, evaluat
 
 // DefaultRuleSet 返回默认规则集
 func DefaultRuleSet() RuleSet {
-	rules := RuleSet{
-		&PredicatePushDownRule{},
-		&ColumnPruningRule{},
-		&ProjectionEliminationRule{},
-		&LimitPushDownRule{},
-		&ConstantFoldingRule{},
-		&JoinReorderRule{},
-		&JoinEliminationRule{},
-		&SemiJoinRewriteRule{},
-		NewVectorIndexRule(), // 添加向量索引规则
-	}
-	fmt.Println("  [DEBUG] DefaultRuleSet: 创建规则集, 数量:", len(rules))
-	for i, r := range rules {
-		fmt.Printf("  [DEBUG]   规则%d: %s\n", i, r.Name())
-	}
-	return rules
+	defaultRuleSetOnce.Do(func() {
+		defaultRuleSetVal = RuleSet{
+			&PredicatePushDownRule{},
+			&ColumnPruningRule{},
+			&ProjectionEliminationRule{},
+			&LimitPushDownRule{},
+			&ConstantFoldingRule{},
+			&JoinReorderRule{},
+			&JoinEliminationRule{},
+			&SemiJoinRewriteRule{},
+			NewVectorIndexRule(), // 添加向量索引规则
+		}
+		debugln("  [DEBUG] DefaultRuleSet: 创建规则集, 数量:", len(defaultRuleSetVal))
+		for i, r := range defaultRuleSetVal {
+			debugf("  [DEBUG]   规则%d: %s\n", i, r.Name())
+		}
+	})
+	return defaultRuleSetVal
 }
 
 // EnhancedRuleSet 返回增强规则集（包含新规则和 hint-aware 规则）
@@ -488,9 +496,9 @@ func EnhancedRuleSet(estimator CardinalityEstimator) RuleSet {
 		NewORToUnionRule(),
 		NewMaxMinEliminationRule(estimator),
 	}
-	fmt.Println("  [DEBUG] EnhancedRuleSet: 创建增强规则集, 数量:", len(rules))
+	debugln("  [DEBUG] EnhancedRuleSet: 创建增强规则集, 数量:", len(rules))
 	for i, r := range rules {
-		fmt.Printf("  [DEBUG]   规则%d: %s\n", i, r.Name())
+		debugf("  [DEBUG]   规则%d: %s\n", i, r.Name())
 	}
 	return rules
 }
@@ -509,17 +517,17 @@ func NewRuleExecutor(rules RuleSet) *RuleExecutor {
 
 // Execute 执行所有规则
 func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
-	fmt.Println("  [DEBUG] RuleExecutor: 开始执行规则, 规则数量:", len(re.rules))
+	debugln("  [DEBUG] RuleExecutor: 开始执行规则, 规则数量:", len(re.rules))
 	
 	// 首先递归处理所有子节点（后序遍历，自底向上）
 	children := plan.Children()
 	if len(children) > 0 {
-		fmt.Println("  [DEBUG] RuleExecutor: 处理子节点, 子节点数:", len(children))
+		debugln("  [DEBUG] RuleExecutor: 处理子节点, 子节点数:", len(children))
 		newChildren := make([]LogicalPlan, len(children))
 		anyChildChanged := false
 		
 		for i, child := range children {
-			fmt.Println("  [DEBUG] RuleExecutor: 递归处理子节点", i, "类型:", child.Explain())
+			debugln("  [DEBUG] RuleExecutor: 递归处理子节点", i, "类型:", child.Explain())
 			newChild, err := re.Execute(ctx, child, optCtx)
 			if err != nil {
 				return nil, err
@@ -527,7 +535,7 @@ func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *O
 			newChildren[i] = newChild
 			if newChild != child {
 				anyChildChanged = true
-				fmt.Println("  [DEBUG] RuleExecutor: 子节点", i, "已更新")
+				debugln("  [DEBUG] RuleExecutor: 子节点", i, "已更新")
 			}
 		}
 		
@@ -543,12 +551,12 @@ func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *O
 	iterations := 0
 
 	for iterations < maxIterations {
-		fmt.Println("  [DEBUG] RuleExecutor: 迭代", iterations+1)
+		debugln("  [DEBUG] RuleExecutor: 迭代", iterations+1)
 		changed := false
 
 		for _, rule := range re.rules {
 			if rule.Match(current) {
-				fmt.Println("  [DEBUG] RuleExecutor: 规则", rule.Name(), "匹配")
+				debugln("  [DEBUG] RuleExecutor: 规则", rule.Name(), "匹配")
 				newPlan, err := rule.Apply(ctx, current, optCtx)
 				if err != nil {
 					return nil, fmt.Errorf("rule %s failed: %w", rule.Name(), err)
@@ -556,19 +564,19 @@ func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *O
 				if newPlan != current {
 					current = newPlan
 					changed = true
-					fmt.Println("  [DEBUG] RuleExecutor: 规则", rule.Name(), "已应用")
+					debugln("  [DEBUG] RuleExecutor: 规则", rule.Name(), "已应用")
 				}
 			}
 		}
 
 		if !changed {
-			fmt.Println("  [DEBUG] RuleExecutor: 没有变化，退出")
+			debugln("  [DEBUG] RuleExecutor: 没有变化，退出")
 			break
 		}
 
 		iterations++
 	}
 
-	fmt.Println("  [DEBUG] RuleExecutor: 执行完成, 总迭代次数:", iterations)
+	debugln("  [DEBUG] RuleExecutor: 执行完成, 总迭代次数:", iterations)
 	return current, nil
 }

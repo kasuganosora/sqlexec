@@ -78,14 +78,15 @@ func (op *HashJoinOperator) Execute(ctx context.Context) (*domain.QueryResult, e
 		}
 	}
 
-	joinedRows := make([]domain.Row, 0)
+	totalCols := len(leftResult.Columns) + len(rightResult.Columns)
+	joinedRows := make([]domain.Row, 0, len(leftResult.Rows))
 	if joinCol != "" && rightJoinCol != "" {
 		// Probe hash table with left side
 		for _, leftRow := range leftResult.Rows {
 			key := fmt.Sprintf("%v", leftRow[joinCol])
 			if matchedRows, ok := hashTable[key]; ok {
 				for _, rightRow := range matchedRows {
-					merged := make(domain.Row)
+					merged := make(domain.Row, totalCols)
 					for k, v := range leftRow {
 						merged[k] = v
 					}
@@ -104,7 +105,7 @@ func (op *HashJoinOperator) Execute(ctx context.Context) (*domain.QueryResult, e
 		// Fallback: cross join when no condition
 		for _, leftRow := range leftResult.Rows {
 			for _, rightRow := range rightResult.Rows {
-				merged := make(domain.Row)
+				merged := make(domain.Row, totalCols)
 				for k, v := range leftRow {
 					merged[k] = v
 				}

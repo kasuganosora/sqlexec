@@ -32,7 +32,7 @@ func (e *ShowExecutor) SetCurrentDB(dbName string) {
 
 // ExecuteShow 执行 SHOW 语句 - 转换为 information_schema 查询
 func (e *ShowExecutor) ExecuteShow(ctx context.Context, showStmt *parser.ShowStatement) (*domain.QueryResult, error) {
-	fmt.Printf("  [DEBUG] Executing SHOW statement: Type=%s, Table=%s, Like=%s, Where=%s\n",
+	debugf("  [DEBUG] Executing SHOW statement: Type=%s, Table=%s, Like=%s, Where=%s\n",
 		showStmt.Type, showStmt.Table, showStmt.Like, showStmt.Where)
 
 	// 根据 SHOW 类型转换为相应的 information_schema 查询
@@ -70,7 +70,7 @@ func (e *ShowExecutor) executeShowTables(ctx context.Context, showStmt *parser.S
 	// 构建 SQL 语句
 	sql := fmt.Sprintf("SELECT table_name FROM information_schema.tables WHERE table_schema = '%s'%s",
 		currentDB, whereClause)
-	fmt.Printf("  [DEBUG] SHOW TABLES converted to: %s, currentDB=%s\n", sql, currentDB)
+	debugf("  [DEBUG] SHOW TABLES converted to: %s, currentDB=%s\n", sql, currentDB)
 
 	// 解析 SQL
 	adapter := parser.NewSQLAdapter()
@@ -101,7 +101,7 @@ func (e *ShowExecutor) executeShowDatabases(ctx context.Context, showStmt *parse
 	}
 
 	sql := fmt.Sprintf("SELECT schema_name FROM information_schema.schemata%s", whereClause)
-	fmt.Printf("  [DEBUG] SHOW DATABASES converted to: %s\n", sql)
+	debugf("  [DEBUG] SHOW DATABASES converted to: %s\n", sql)
 
 	// 解析 SQL
 	adapter := parser.NewSQLAdapter()
@@ -133,7 +133,7 @@ func (e *ShowExecutor) executeShowColumns(ctx context.Context, showStmt *parser.
 
 	sql := fmt.Sprintf("SELECT * FROM information_schema.columns WHERE table_name = '%s'%s",
 		showStmt.Table, whereClause)
-	fmt.Printf("  [DEBUG] SHOW COLUMNS converted to: %s\n", sql)
+	debugf("  [DEBUG] SHOW COLUMNS converted to: %s\n", sql)
 
 	// 解析 SQL
 	adapter := parser.NewSQLAdapter()

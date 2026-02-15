@@ -1,8 +1,6 @@
 package optimizer
 
 import (
-	"fmt"
-
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
@@ -22,7 +20,7 @@ func (o *Optimizer) convertConditionsToFilters(conditions []*parser.Expression) 
 		filters = append(filters, conditionFilters...)
 	}
 
-	fmt.Println("  [DEBUG] convertConditionsToFilters: 生成的过滤器数量:", len(filters))
+	debugln("  [DEBUG] convertConditionsToFilters: 生成的过滤器数量:", len(filters))
 	return filters
 }
 

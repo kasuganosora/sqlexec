@@ -25,11 +25,7 @@ func ApplyPagination(rows []domain.Row, offset, limit int) []domain.Row {
 		end = len(rows)
 	}
 
-	result := make([]domain.Row, 0, limit)
-	for i := start; i < end; i++ {
-		result = append(result, rows[i])
-	}
-	return result
+	return rows[start:end:end]
 }
 
 // PruneRows 裁剪行，只保留指定的列
@@ -38,9 +34,10 @@ func PruneRows(rows []domain.Row, columns []string) []domain.Row {
 		return rows
 	}
 
+	numCols := len(columns)
 	result := make([]domain.Row, len(rows))
 	for i, row := range rows {
-		pruned := make(domain.Row)
+		pruned := make(domain.Row, numCols)
 		for _, col := range columns {
 			if val, ok := row[col]; ok {
 				pruned[col] = val

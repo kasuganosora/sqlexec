@@ -27,11 +27,8 @@ func (o *Optimizer) convertToLogicalPlan(stmt *parser.SQLStatement) (optimizer.L
 
 // convertSelect convert SELECT statement
 func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (optimizer.LogicalPlan, error) {
-	fmt.Println("  [DEBUG] convertSelect: 开始转换, 表名:", stmt.From)
-
 	// Handle queries without FROM clause (e.g., SELECT DATABASE())
 	if stmt.From == "" {
-		fmt.Println("  [DEBUG] convertSelect: 无 FROM 子句，使用常量数据源")
 		// Create a virtual table with one row and one column
 		virtualTableInfo := &domain.TableInfo{
 			Name:    "dual",
@@ -88,13 +85,10 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (optimizer.Logic
 	// 1. Create DataSource
 	tableInfo, err := o.dataSource.GetTableInfo(context.Background(), stmt.From)
 	if err != nil {
-		fmt.Println("  [DEBUG] convertSelect: GetTableInfo 失败:", err)
 		return nil, fmt.Errorf("get table info failed: %w", err)
 	}
-	fmt.Println("  [DEBUG] convertSelect: GetTableInfo 成功, 列数:", len(tableInfo.Columns))
 
 	var logicalPlan optimizer.LogicalPlan = optimizer.NewLogicalDataSource(stmt.From, tableInfo)
-	fmt.Println("  [DEBUG] convertSelect: LogicalDataSource 创建完成")
 
 	// 2. Apply WHERE condition (Selection)
 	if stmt.Where != nil {
@@ -139,16 +133,10 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (optimizer.Logic
 	}
 
 	// 6. Apply SELECT columns (Projection)
-	fmt.Printf("  [DEBUG] convertSelect: SELECT列数量: %d, IsWildcard=%v\n", len(stmt.Columns), isWildcard(stmt.Columns))
-	if len(stmt.Columns) > 0 {
-		fmt.Printf("  [DEBUG] convertSelect: cols[0].Name='%s'\n", stmt.Columns[0].Name)
-	}
 	if len(stmt.Columns) > 0 && !isWildcard(stmt.Columns) {
-		fmt.Println("  [DEBUG] convertSelect: 创建Projection")
 		exprs := make([]*parser.Expression, len(stmt.Columns))
 		aliases := make([]string, len(stmt.Columns))
 		for i, col := range stmt.Columns {
-			fmt.Printf("  [DEBUG] convertSelect: 列%d: Name='%s', Alias='%s'\n", i, col.Name, col.Alias)
 			exprs[i] = &parser.Expression{
 				Type:   parser.ExprTypeColumn,
 				Column: col.Name,
@@ -196,7 +184,6 @@ func (o *Optimizer) convertInsert(stmt *parser.InsertStatement) (optimizer.Logic
 		}
 	}
 
-	fmt.Printf("  [DEBUG] convertInsert: INSERT into %s with %d rows\n", stmt.Table, len(values))
 	return insertPlan, nil
 }
 
@@ -238,7 +225,6 @@ func (o *Optimizer) convertUpdate(stmt *parser.UpdateStatement) (optimizer.Logic
 	// Set LIMIT
 	updatePlan.SetLimit(stmt.Limit)
 
-	fmt.Printf("  [DEBUG] convertUpdate: UPDATE %s with %d columns\n", stmt.Table, len(set))
 	return updatePlan, nil
 }
 
@@ -274,7 +260,6 @@ func (o *Optimizer) convertDelete(stmt *parser.DeleteStatement) (optimizer.Logic
 	// Set LIMIT
 	deletePlan.SetLimit(stmt.Limit)
 
-	fmt.Printf("  [DEBUG] convertDelete: DELETE from %s\n", stmt.Table)
 	return deletePlan, nil
 }
 

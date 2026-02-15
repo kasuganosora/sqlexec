@@ -2,7 +2,6 @@ package optimizer
 
 import (
 	"context"
-	"fmt"
 	"math"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
@@ -54,10 +53,10 @@ func containsJoin(plan LogicalPlan) bool {
 
 // Apply 应用规则：重排序JOIN顺序
 func (r *JoinReorderRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
-	fmt.Println("  [DEBUG] JoinReorderRule.Apply: 开始")
+	debugln("  [DEBUG] JoinReorderRule.Apply: 开始")
 	// 收集所有JOIN节点
 	joinNodes := collectJoins(plan)
-	fmt.Println("  [DEBUG] JoinReorderRule.Apply: 收集到JOIN节点数:", len(joinNodes))
+	debugln("  [DEBUG] JoinReorderRule.Apply: 收集到JOIN节点数:", len(joinNodes))
 
 	if len(joinNodes) < 2 {
 		// 少于2个JOIN，不需要重排序

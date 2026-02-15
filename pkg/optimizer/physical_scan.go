@@ -184,8 +184,6 @@ func NewPhysicalHashJoin(joinType JoinType, left, right PhysicalPlan, conditions
 
 // Execute 执行扫描
 func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 开始查询表 %s, 过滤器数: %d, Limit: %v\n", p.TableName, len(p.filters), p.limitInfo)
-
 	// 计算偏移量和限制量
 	offset := int64(0)
 	limit := int64(0)
@@ -196,8 +194,6 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 
 	// 如果没有过滤条件且启用了并行扫描，使用 OptimizedParallelScanner
 	if p.enableParallelScan && len(p.filters) == 0 {
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 使用 OptimizedParallelScanner 进行并行扫描\n")
-
 		// 使用并行扫描器执行查询
 		scanRange := ScanRange{
 			TableName: p.TableName,
@@ -223,12 +219,9 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 
 		result, err := p.parallelScanner.Execute(ctx, scanRange, options)
 		if err != nil {
-			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 并行扫描失败 %v，回退到串行扫描\n", err)
 			// 回退到串行扫描
 			return p.executeSerialScan(ctx)
 		}
-
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 并行扫描完成，返回 %d 行\n", len(result.Rows))
 
 		// 如果应用了列裁剪，调整结果的Columns
 		if len(p.Columns) < len(p.TableInfo.Columns) {

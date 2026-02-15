@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/dataaccess"
+	"github.com/kasuganosora/sqlexec/pkg/optimizer/feedback"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
@@ -50,6 +51,9 @@ func (op *TableScanOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 	if err != nil {
 		return nil, fmt.Errorf("query table failed: %w", err)
 	}
+
+	// DQ feedback: record actual table size for cost model calibration
+	feedback.GetGlobalFeedback().RecordTableSize(op.config.TableName, int64(len(result.Rows)))
 
 	return result, nil
 }

@@ -151,7 +151,7 @@ func (r *SubqueryMaterializationRule) materializeProjection(projection *LogicalP
 			// Create materialized plan (using a temporary datasource to represent materialization)
 			matPlan := r.createMaterializedPlan(sq, key)
 			r.materialized[key] = matPlan
-			fmt.Printf("  [DEBUG] SubqueryMaterialization: Materialized subquery %s\n", key)
+			debugf("  [DEBUG] SubqueryMaterialization: Materialized subquery %s\n", key)
 		}
 	}
 
@@ -175,7 +175,7 @@ func (r *SubqueryMaterializationRule) materializeSelection(selection *LogicalSel
 			// Create materialized plan
 			matPlan := r.createMaterializedPlan(sq, key)
 			r.materialized[key] = matPlan
-			fmt.Printf("  [DEBUG] SubqueryMaterialization: Materialized subquery %s\n", key)
+			debugf("  [DEBUG] SubqueryMaterialization: Materialized subquery %s\n", key)
 		}
 	}
 

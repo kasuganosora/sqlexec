@@ -113,7 +113,7 @@ func (e *OptimizedExecutor) GetOptimizer() *EnhancedOptimizer {
 // SetCurrentDB 设置当前数据库
 func (e *OptimizedExecutor) SetCurrentDB(dbName string) {
 	e.currentDB = dbName
-	fmt.Printf("  [DEBUG] OptimizedExecutor.SetCurrentDB: currentDB 设置为 %q\n", dbName)
+	debugf("  [DEBUG] OptimizedExecutor.SetCurrentDB: currentDB 设置为 %q\n", dbName)
 }
 
 // GetCurrentDB 获取当前数据库
@@ -124,7 +124,7 @@ func (e *OptimizedExecutor) GetCurrentDB() string {
 // SetCurrentUser 设置当前用户
 func (e *OptimizedExecutor) SetCurrentUser(user string) {
 	e.currentUser = user
-	fmt.Printf("  [DEBUG] OptimizedExecutor.SetCurrentUser: 当前用户设置为 %q\n", user)
+	debugf("  [DEBUG] OptimizedExecutor.SetCurrentUser: 当前用户设置为 %q\n", user)
 }
 
 // GetCurrentUser 获取当前用户
@@ -245,13 +245,13 @@ func (e *OptimizedExecutor) ExecuteSelect(ctx context.Context, stmt *parser.Sele
 	// Check if this is an information_schema query
 	// information_schema queries should use QueryBuilder path to access virtual tables
 	if isInformationSchemaQuery(stmt.From, e.currentDB, e.dsManager) {
-		fmt.Println("  [DEBUG] Detected information_schema query, using QueryBuilder path")
+		debugln("  [DEBUG] Detected information_schema query, using QueryBuilder path")
 		return e.executeWithBuilder(ctx, stmt)
 	}
 
 	// Check if this is a config virtual database query
 	if isConfigQuery(stmt.From, e.currentDB) {
-		fmt.Println("  [DEBUG] Detected config query, using config virtual data source")
+		debugln("  [DEBUG] Detected config query, using config virtual data source")
 		return e.executeConfigSelect(ctx, stmt)
 	}
 
@@ -277,11 +277,11 @@ func (e *OptimizedExecutor) ExecuteShow(ctx context.Context, showStmt *parser.Sh
 
 // executeWithOptimizer 使用优化器执行查询
 func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *parser.SelectStatement) (*domain.QueryResult, error) {
-	fmt.Println("  [DEBUG] 开始优化查询...")
+	debugln("  [DEBUG] 开始优化查询...")
 
 	// 处理没有 FROM 子句的查询（如 SELECT DATABASE()）
 	if stmt.From == "" {
-		fmt.Println("  [DEBUG] 检测到无 FROM 子句的查询")
+		debugln("  [DEBUG] 检测到无 FROM 子句的查询")
 		exprExecutor := NewExpressionExecutor(e.currentDB, e.functionAPI, e.exprEvaluator)
 		result, err := exprExecutor.HandleNoFromQuery(stmt)
 		if err != nil {
@@ -297,7 +297,7 @@ func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *pars
 	// 再次检查是否是 information_schema 查询
 	// 因为 optimizer 路径不支持 information_schema 虚拟表
 	if isInformationSchemaQuery(stmt.From, e.currentDB, e.dsManager) {
-		fmt.Println("  [DEBUG] 在 optimizer 路径中检测到 information_schema 查询，切换到 builder 路径")
+		debugln("  [DEBUG] 在 optimizer 路径中检测到 information_schema 查询，切换到 builder 路径")
 		return e.executeWithBuilder(ctx, stmt)
 	}
 
@@ -306,24 +306,24 @@ func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *pars
 		Type:   parser.SQLTypeSelect,
 		Select: stmt,
 	}
-	fmt.Println("  [DEBUG] SQLStatement构建完成")
+	debugln("  [DEBUG] SQLStatement构建完成")
 
 	// 2. 优化查询计划
-	fmt.Println("  [DEBUG] 调用 Optimize...")
+	debugln("  [DEBUG] 调用 Optimize...")
 	executionPlan, err := e.optimizer.Optimize(ctx, sqlStmt)
 
 	if err != nil {
 		return nil, fmt.Errorf("optimizer failed: %w", err)
 	}
-	fmt.Println("  [DEBUG] Optimize完成")
+	debugln("  [DEBUG] Optimize完成")
 
 	// 3. 执行计划（使用新的 executor）
-	fmt.Println("  [DEBUG] 开始执行计划...")
+	debugln("  [DEBUG] 开始执行计划...")
 	result, err := e.executePlan(ctx, executionPlan)
 	if err != nil {
 		return nil, fmt.Errorf("execute plan failed: %w", err)
 	}
-	fmt.Println("  [DEBUG] 计划执行完成")
+	debugln("  [DEBUG] 计划执行完成")
 
 	// 4. 设置列信息
 	tableInfo, err := e.dataSource.GetTableInfo(ctx, stmt.From)

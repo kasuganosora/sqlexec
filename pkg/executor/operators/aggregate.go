@@ -3,6 +3,7 @@ package operators
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/dataaccess"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
@@ -70,14 +71,16 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 	// 分组聚合
 	groups := make(map[string]map[string]interface{})
 
+	var keyBuilder strings.Builder
 	for _, row := range childResult.Rows {
 		// 构建分组键
-		groupKey := ""
+		keyBuilder.Reset()
 		for _, col := range op.config.GroupByCols {
 			if val, ok := row[col]; ok {
-				groupKey += fmt.Sprintf("%v|", val)
+				fmt.Fprintf(&keyBuilder, "%v|", val)
 			}
 		}
+		groupKey := keyBuilder.String()
 
 		// 初始化分组
 		if _, exists := groups[groupKey]; !exists {
@@ -164,7 +167,7 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 	}
 
 	// 构建输出列
-	outputColumns := make([]domain.ColumnInfo, 0)
+	outputColumns := make([]domain.ColumnInfo, 0, len(op.config.GroupByCols)+len(op.config.AggFuncs))
 	for _, col := range op.config.GroupByCols {
 		outputColumns = append(outputColumns, domain.ColumnInfo{
 			Name: col,

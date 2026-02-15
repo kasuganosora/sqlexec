@@ -192,16 +192,22 @@ func (s *DataService) selectColumns(result *domain.QueryResult, selectColumns []
 		return result
 	}
 
+	// 如果选择的列数 == 表的列数，大概率是 SELECT *，跳过复制
+	if len(selectColumns) >= len(tableInfo.Columns) {
+		return result
+	}
+
 	// 构建列映射
-	columnMap := make(map[string]bool)
+	numSelect := len(selectColumns)
+	columnMap := make(map[string]bool, numSelect)
 	for _, col := range selectColumns {
 		columnMap[col] = true
 	}
 
-	// 选择列
+	// 选择列（预分配 map 容量）
 	filteredRows := make([]domain.Row, len(result.Rows))
 	for i, row := range result.Rows {
-		filteredRow := make(domain.Row)
+		filteredRow := make(domain.Row, numSelect)
 		for colName, colValue := range row {
 			if columnMap[colName] {
 				filteredRow[colName] = colValue
@@ -211,7 +217,7 @@ func (s *DataService) selectColumns(result *domain.QueryResult, selectColumns []
 	}
 
 	// 构建输出列信息
-	outputColumns := make([]domain.ColumnInfo, 0)
+	outputColumns := make([]domain.ColumnInfo, 0, numSelect)
 	for _, col := range tableInfo.Columns {
 		if columnMap[col.Name] {
 			outputColumns = append(outputColumns, col)

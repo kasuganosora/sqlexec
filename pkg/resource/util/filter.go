@@ -11,7 +11,7 @@ func ApplyFilters(rows []domain.Row, options *domain.QueryOptions) []domain.Row 
 		return rows
 	}
 
-	result := []domain.Row{}
+	result := make([]domain.Row, 0, len(rows)/2+1)
 	for _, row := range rows {
 		if MatchesFilters(row, options.Filters) {
 			result = append(result, row)

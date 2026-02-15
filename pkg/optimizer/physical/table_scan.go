@@ -95,8 +95,6 @@ func (p *PhysicalTableScan) Cost() float64 {
 
 // Execute 执行扫描（保留为兼容性接口）
 func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, error) {
-	fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 开始查询表 %s, 过滤器数: %d, Limit: %v\n", p.TableName, len(p.filters), p.limitInfo)
-
 	// 计算偏移量和限制量
 	offset := int64(0)
 	limit := int64(0)
@@ -107,8 +105,6 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 
 	// 如果没有过滤条件且启用了并行扫描，使用 OptimizedParallelScanner
 	if p.enableParallelScan && len(p.filters) == 0 {
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 使用 OptimizedParallelScanner 进行并行扫描\n")
-
 		// 使用并行扫描器执行查询
 		scanRange := optimizer.ScanRange{
 			TableName: p.TableName,
@@ -129,22 +125,17 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 			options.SelectColumns = make([]string, len(p.Columns))
 			for i, col := range p.Columns {
 				options.SelectColumns[i] = col.Name
-				fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 选择列 %s\n", col.Name)
 			}
 		}
 
 		result, err := p.parallelScanner.Execute(ctx, scanRange, options)
 		if err != nil {
-			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 并行扫描失败 %v，回退到串行扫描\n", err)
 			// 回退到串行扫描
 			return p.executeSerialScan(ctx)
 		}
 
-		fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 并行扫描完成，返回 %d 行\n", len(result.Rows))
-
 		// 如果应用了列裁剪，调整结果的Columns
 		if len(p.Columns) < len(p.TableInfo.Columns) {
-			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 应用列裁剪到结果，原列数=%d，裁剪后=%d\n", len(result.Columns), len(p.Columns))
 			// 只保留需要的列
 			columnMap := make(map[string]int)
 			for i, col := range p.Columns {
@@ -174,7 +165,6 @@ func (p *PhysicalTableScan) Execute(ctx context.Context) (*domain.QueryResult, e
 
 			result.Columns = filteredColumns
 			result.Rows = filteredRows
-			fmt.Printf("  [DEBUG] PhysicalTableScan.Execute: 列裁剪完成\n")
 		}
 
 		return result, nil
@@ -202,11 +192,6 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 
 	if isFilterable && len(p.filters) > 0 {
 		// 数据源支持过滤，调用 Filter 方法
-		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 数据源支持过滤，调用 Filter 方法\n")
-		for i, filter := range p.filters {
-			fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
-		}
-
 		// 构建过滤条件
 		var filter domain.Filter
 		if len(p.filters) == 1 {
@@ -223,7 +208,6 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 		// 调用 Filter 方法
 		rows, total, filterErr := filterableDS.Filter(ctx, p.TableName, filter, int(offset), int(limit))
 		if filterErr != nil {
-			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Filter 方法失败 %v\n", filterErr)
 			return nil, filterErr
 		}
 
@@ -232,19 +216,12 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 			Rows:  rows,
 			Total: total,
 		}
-		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Filter 完成，返回 %d 行（total=%d）\n", len(rows), total)
 	} else {
 		// 数据源不支持过滤或无过滤条件，使用 Query 方法
-		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 数据源不支持过滤或无过滤条件，使用 Query 方法\n")
-
 		// 使用 QueryOptions 传递过滤和分页
 		options := &domain.QueryOptions{}
 		if len(p.filters) > 0 {
 			options.Filters = p.filters
-			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用过滤条件到 QueryOptions\n")
-			for i, filter := range p.filters {
-				fmt.Printf("  [DEBUG]   过滤器%d: Field=%s, Operator=%s, Value=%v\n", i, filter.Field, filter.Operator, filter.Value)
-			}
 		}
 		if limit > 0 {
 			options.Limit = int(limit)
@@ -252,30 +229,23 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 		if offset > 0 {
 			options.Offset = int(offset)
 		}
-		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用分页参数: limit=%d, offset=%d\n", options.Limit, options.Offset)
-
 		// 如果应用了列裁剪，只选择需要的列
 		if len(p.Columns) < len(p.TableInfo.Columns) {
 			options.SelectColumns = make([]string, len(p.Columns))
 			for i, col := range p.Columns {
 				options.SelectColumns[i] = col.Name
-				fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 选择列 %s\n", col.Name)
 			}
 		}
 
 		// 调用 Query 方法
 		result, err = p.dataSource.Query(ctx, p.TableName, options)
 		if err != nil {
-			fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Query 方法失败 %v\n", err)
 			return nil, err
 		}
-		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: Query 完成，返回 %d 行\n", len(result.Rows))
 	}
 
 	// 如果应用了列裁剪，调整结果的Columns
 	if len(p.Columns) < len(p.TableInfo.Columns) {
-		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 应用列裁剪到结果，原列数=%d，裁剪后=%d\n", len(result.Columns), len(p.Columns))
-
 		filteredRows := make([]domain.Row, len(result.Rows))
 		for i, row := range result.Rows {
 			filteredRow := make(domain.Row)
@@ -299,7 +269,6 @@ func (p *PhysicalTableScan) executeSerialScan(ctx context.Context) (*domain.Quer
 
 		result.Columns = filteredColumns
 		result.Rows = filteredRows
-		fmt.Printf("  [DEBUG] PhysicalTableScan.executeSerialScan: 列裁剪完成\n")
 	}
 
 	return result, nil

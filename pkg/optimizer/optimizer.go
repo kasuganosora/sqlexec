@@ -15,29 +15,36 @@ type Optimizer struct {
 	rules      RuleSet
 	costModel  CostModel
 	dataSource domain.DataSource
+	planCache  *PlanCache
 }
 
 // NewOptimizer 创建优化器
 func NewOptimizer(dataSource domain.DataSource) *Optimizer {
 	return &Optimizer{
-		rules:     DefaultRuleSet(),
+		rules:      DefaultRuleSet(),
 		costModel:  NewDefaultCostModel(),
 		dataSource: dataSource,
+		planCache:  NewPlanCache(1024),
 	}
 }
 
 // Optimize 优化查询计划（返回可序列化的Plan）
 func (o *Optimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (*plan.Plan, error) {
-	fmt.Println("  [DEBUG] Optimize: 步骤1 - 转换为逻辑计划")
+	fp := SQLFingerprint(stmt)
+	if cached, ok := o.planCache.Get(fp); ok {
+		return cached, nil
+	}
+
+	debugln("  [DEBUG] Optimize: 步骤1 - 转换为逻辑计划")
 	// 1. 转换为逻辑计划
 	logicalPlan, err := o.convertToLogicalPlan(stmt)
 	if err != nil {
 		return nil, fmt.Errorf("convert to logical plan failed: %w", err)
 	}
-	fmt.Println("  [DEBUG] Optimize: 逻辑计划转换完成, 类型:", logicalPlan.Explain())
+	debugln("  [DEBUG] Optimize: 逻辑计划转换完成, 类型:", logicalPlan.Explain())
 
 	// 2. 应用优化规则
-	fmt.Println("  [DEBUG] Optimize: 步骤2 - 应用优化规则")
+	debugln("  [DEBUG] Optimize: 步骤2 - 应用优化规则")
 	optCtx := &OptimizationContext{
 		DataSource: o.dataSource,
 		TableInfo: make(map[string]*domain.TableInfo),
@@ -49,17 +56,18 @@ func (o *Optimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (*p
 	if err != nil {
 		return nil, fmt.Errorf("apply optimization rules failed: %w", err)
 	}
-	fmt.Println("  [DEBUG] Optimize: 优化规则应用完成")
+	debugln("  [DEBUG] Optimize: 优化规则应用完成")
 
 	// 3. 转换为可序列化的Plan
-	fmt.Println("  [DEBUG] Optimize: 步骤3 - 转换为可序列化的Plan")
-	plan, err := o.convertToPlan(ctx, optimizedPlan, optCtx)
+	debugln("  [DEBUG] Optimize: 步骤3 - 转换为可序列化的Plan")
+	resultPlan, err := o.convertToPlan(ctx, optimizedPlan, optCtx)
 	if err != nil {
 		return nil, fmt.Errorf("convert to plan failed: %w", err)
 	}
-	fmt.Println("  [DEBUG] Optimize: Plan转换完成")
+	debugln("  [DEBUG] Optimize: Plan转换完成")
 
-	return plan, nil
+	o.planCache.Put(fp, resultPlan)
+	return resultPlan, nil
 }
 
 // convertToLogicalPlan 将 SQL 语句转换为逻辑计划
@@ -80,11 +88,11 @@ func (o *Optimizer) convertToLogicalPlan(stmt *parser.SQLStatement) (LogicalPlan
 
 // convertSelect 转换 SELECT 语句
 func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, error) {
-	fmt.Println("  [DEBUG] convertSelect: 开始转换, 表名:", stmt.From)
+	debugln("  [DEBUG] convertSelect: 开始转换, 表名:", stmt.From)
 
 	// 处理没有 FROM 子句的查询（如 SELECT DATABASE()）
 	if stmt.From == "" {
-		fmt.Println("  [DEBUG] convertSelect: 无 FROM 子句，使用常量数据源")
+		debugln("  [DEBUG] convertSelect: 无 FROM 子句，使用常量数据源")
 		// 创建一个虚拟表，只有一行一列
 		virtualTableInfo := &domain.TableInfo{
 			Name:    "dual",
@@ -141,13 +149,13 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 	// 1. 创建 DataSource
 	tableInfo, err := o.dataSource.GetTableInfo(context.Background(), stmt.From)
 	if err != nil {
-		fmt.Println("  [DEBUG] convertSelect: GetTableInfo 失败:", err)
+		debugln("  [DEBUG] convertSelect: GetTableInfo 失败:", err)
 		return nil, fmt.Errorf("get table info failed: %w", err)
 	}
-	fmt.Println("  [DEBUG] convertSelect: GetTableInfo 成功, 列数:", len(tableInfo.Columns))
+	debugln("  [DEBUG] convertSelect: GetTableInfo 成功, 列数:", len(tableInfo.Columns))
 
 	var logicalPlan LogicalPlan = NewLogicalDataSource(stmt.From, tableInfo)
-	fmt.Println("  [DEBUG] convertSelect: LogicalDataSource 创建完成")
+	debugln("  [DEBUG] convertSelect: LogicalDataSource 创建完成")
 
 	// 2. 应用 WHERE 条件（Selection）
 	if stmt.Where != nil {
@@ -192,16 +200,16 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 	}
 
 	// 6. 应用 SELECT 列（Projection）
-	fmt.Printf("  [DEBUG] convertSelect: SELECT列数量: %d, IsWildcard=%v\n", len(stmt.Columns), isWildcard(stmt.Columns))
+	debugf("  [DEBUG] convertSelect: SELECT列数量: %d, IsWildcard=%v\n", len(stmt.Columns), isWildcard(stmt.Columns))
 	if len(stmt.Columns) > 0 {
-		fmt.Printf("  [DEBUG] convertSelect: cols[0].Name='%s'\n", stmt.Columns[0].Name)
+		debugf("  [DEBUG] convertSelect: cols[0].Name='%s'\n", stmt.Columns[0].Name)
 	}
 	if len(stmt.Columns) > 0 && !isWildcard(stmt.Columns) {
-		fmt.Println("  [DEBUG] convertSelect: 创建Projection")
+		debugln("  [DEBUG] convertSelect: 创建Projection")
 		exprs := make([]*parser.Expression, len(stmt.Columns))
 		aliases := make([]string, len(stmt.Columns))
 		for i, col := range stmt.Columns {
-			fmt.Printf("  [DEBUG] convertSelect: 列%d: Name='%s', Alias='%s'\n", i, col.Name, col.Alias)
+			debugf("  [DEBUG] convertSelect: 列%d: Name='%s', Alias='%s'\n", i, col.Name, col.Alias)
 			exprs[i] = &parser.Expression{
 				Type:   parser.ExprTypeColumn,
 				Column: col.Name,
@@ -249,7 +257,7 @@ func (o *Optimizer) convertInsert(stmt *parser.InsertStatement) (LogicalPlan, er
 		}
 	}
 
-	fmt.Printf("  [DEBUG] convertInsert: INSERT into %s with %d rows\n", stmt.Table, len(values))
+	debugf("  [DEBUG] convertInsert: INSERT into %s with %d rows\n", stmt.Table, len(values))
 	return insertPlan, nil
 }
 
@@ -291,7 +299,7 @@ func (o *Optimizer) convertUpdate(stmt *parser.UpdateStatement) (LogicalPlan, er
 	// 设置 LIMIT
 	updatePlan.SetLimit(stmt.Limit)
 
-	fmt.Printf("  [DEBUG] convertUpdate: UPDATE %s with %d columns\n", stmt.Table, len(set))
+	debugf("  [DEBUG] convertUpdate: UPDATE %s with %d columns\n", stmt.Table, len(set))
 	return updatePlan, nil
 }
 
@@ -327,7 +335,7 @@ func (o *Optimizer) convertDelete(stmt *parser.DeleteStatement) (LogicalPlan, er
 	// 设置 LIMIT
 	deletePlan.SetLimit(stmt.Limit)
 
-	fmt.Printf("  [DEBUG] convertDelete: DELETE from %s\n", stmt.Table)
+	debugf("  [DEBUG] convertDelete: DELETE from %s\n", stmt.Table)
 	return deletePlan, nil
 }
 
@@ -340,7 +348,7 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 		filters := o.convertConditionsToFilters(pushedDownPredicates)
 		// 获取下推的Limit
 		limitInfo := p.GetPushedDownLimit()
-		fmt.Printf("  [DEBUG] convertToPlan: DataSource(%s), 下推谓词数量: %d, 下推Limit: %v\n", p.TableName, len(filters), limitInfo != nil)
+		debugf("  [DEBUG] convertToPlan: DataSource(%s), 下推谓词数量: %d, 下推Limit: %v\n", p.TableName, len(filters), limitInfo != nil)
 		
 		// 构建列信息
 		columns := make([]types.ColumnInfo, 0, len(p.TableInfo.Columns))
@@ -371,7 +379,7 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println("  [DEBUG] convertToPlan: Selection")
+		debugln("  [DEBUG] convertToPlan: Selection")
 		conditions := p.GetConditions()
 		if len(conditions) == 0 {
 			return nil, fmt.Errorf("selection has no conditions")
@@ -392,7 +400,7 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 		}
 		exprs := p.GetExprs()
 		aliases := p.GetAliases()
-		fmt.Printf("  [DEBUG] convertToPlan: Projection, 表达式数量: %d, 别名数量: %d\n", len(exprs), len(aliases))
+		debugf("  [DEBUG] convertToPlan: Projection, 表达式数量: %d, 别名数量: %d\n", len(exprs), len(aliases))
 		
 		return &plan.Plan{
 			ID:   fmt.Sprintf("proj_%d", len(exprs)),

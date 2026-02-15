@@ -51,11 +51,25 @@ func (op *ProjectionOperator) Execute(ctx context.Context) (*domain.QueryResult,
 		return nil, fmt.Errorf("execute child failed: %w", err)
 	}
 
-	// 投影列
-	resultRows := make([]domain.Row, len(childResult.Rows))
-	outputColumns := make([]domain.ColumnInfo, 0)
+	numExprs := len(op.config.Expressions)
+
+	// Fast path: if all expressions are simple column references with no aliasing,
+	// and the column count matches, skip row reconstruction entirely.
+	allSimpleColumns := true
+	for i, expr := range op.config.Expressions {
+		if expr.Type != parser.ExprTypeColumn {
+			allSimpleColumns = false
+			break
+		}
+		// Check if alias differs from column name
+		if i < len(op.config.Aliases) && op.config.Aliases[i] != "" && op.config.Aliases[i] != expr.Column {
+			allSimpleColumns = false
+			break
+		}
+	}
 
 	// 计算输出列
+	outputColumns := make([]domain.ColumnInfo, 0, numExprs)
 	for i, expr := range op.config.Expressions {
 		colName := ""
 		if i < len(op.config.Aliases) && op.config.Aliases[i] != "" {
@@ -71,9 +85,18 @@ func (op *ProjectionOperator) Execute(ctx context.Context) (*domain.QueryResult,
 		})
 	}
 
+	// Fast path: pass through rows directly when no transformation needed
+	if allSimpleColumns && numExprs >= len(childResult.Columns) {
+		return &domain.QueryResult{
+			Columns: outputColumns,
+			Rows:    childResult.Rows,
+		}, nil
+	}
+
 	// 应用投影
+	resultRows := make([]domain.Row, len(childResult.Rows))
 	for i, row := range childResult.Rows {
-		newRow := make(domain.Row)
+		newRow := make(domain.Row, numExprs)
 		for j, expr := range op.config.Expressions {
 			colName := ""
 			if j < len(op.config.Aliases) && op.config.Aliases[j] != "" {

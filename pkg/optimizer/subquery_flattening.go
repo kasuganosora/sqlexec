@@ -2,7 +2,6 @@ package optimizer
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
@@ -251,7 +250,7 @@ func (r *SubqueryFlatteningRule) flattenInSubquery(cond *parser.Expression, chil
 	if cond.Operator == "not in" {
 		joinType = "ANTI SEMI JOIN"
 	}
-	fmt.Printf("  [DEBUG] SubqueryFlattening: Detected %s subquery to be flattened\n", joinType)
+	debugf("  [DEBUG] SubqueryFlattening: Detected %s subquery to be flattened\n", joinType)
 
 	return cond, nil
 }
@@ -266,7 +265,7 @@ func (r *SubqueryFlatteningRule) flattenExistsSubquery(cond *parser.Expression, 
 	// 2. Convert to SemiJoin
 	// 3. Return nil to indicate the condition was flattened
 
-	fmt.Printf("  [DEBUG] SubqueryFlattening: Detected EXISTS subquery to be flattened to SEMI JOIN\n")
+	debugf("  [DEBUG] SubqueryFlattening: Detected EXISTS subquery to be flattened to SEMI JOIN\n")
 
 	return cond, nil
 }
@@ -285,7 +284,7 @@ func (r *SubqueryFlatteningRule) flattenNotExistsSubquery(cond *parser.Expressio
 	// 2. Convert to AntiSemiJoin
 	// 3. Return nil to indicate the condition was flattened
 
-	fmt.Printf("  [DEBUG] SubqueryFlattening: Detected NOT EXISTS subquery to be flattened to ANTI SEMI JOIN\n")
+	debugf("  [DEBUG] SubqueryFlattening: Detected NOT EXISTS subquery to be flattened to ANTI SEMI JOIN\n")
 
 	return cond, nil
 }

@@ -33,8 +33,8 @@ func (e *ExpressionExecutor) SetCurrentDB(dbName string) {
 
 // HandleNoFromQuery 处理没有 FROM 子句的查询（如 SELECT DATABASE(), SELECT NOW()）
 func (e *ExpressionExecutor) HandleNoFromQuery(stmt *parser.SelectStatement) (*Result, error) {
-	fmt.Println("  [DEBUG] handleNoFromQuery: 开始处理")
-	fmt.Printf("  [DEBUG] handleNoFromQuery: currentDB = %q\n", e.currentDB)
+	debugln("  [DEBUG] handleNoFromQuery: 开始处理")
+	debugf("  [DEBUG] handleNoFromQuery: currentDB = %q\n", e.currentDB)
 
 	// 构建空 row（用于表达式求值）
 	row := make(parser.Row)
@@ -70,7 +70,7 @@ func (e *ExpressionExecutor) HandleNoFromQuery(stmt *parser.SelectStatement) (*R
 			colName = fmt.Sprintf("expr_%d", colIdx)
 		}
 
-		fmt.Printf("  [DEBUG] handleNoFromQuery: 处理列 %s, 表达式类型=%s\n", colName, col.Expr.Type)
+		debugf("  [DEBUG] handleNoFromQuery: 处理列 %s, 表达式类型=%s\n", colName, col.Expr.Type)
 
 		// 计算表达式值
 		value, err := e.evaluateNoFromExpression(col.Expr, row)
@@ -218,7 +218,7 @@ func (e *ExpressionExecutor) evaluateNoFromExpression(expr *parser.Expression, r
 	switch expr.Type {
 	case parser.ExprTypeValue:
 		// 常量值
-		fmt.Printf("  [DEBUG] evaluateNoFromExpression: 常量值=%v\n", expr.Value)
+		debugf("  [DEBUG] evaluateNoFromExpression: 常量值=%v\n", expr.Value)
 		// 特殊处理：如果 Value 为 nil，返回默认的系统变量值
 		// 注意：这是启发式方法，因为解析器无法提供原始变量名
 		if expr.Value == nil {
@@ -252,7 +252,7 @@ func (e *ExpressionExecutor) evaluateNoFromExpression(expr *parser.Expression, r
 func (e *ExpressionExecutor) evaluateVariable(colName string) (interface{}, error) {
 	varName := strings.ToUpper(strings.TrimSpace(colName))
 
-	fmt.Printf("  [DEBUG] evaluateVariable: 变量名=%s\n", varName)
+	debugf("  [DEBUG] evaluateVariable: 变量名=%s\n", varName)
 
 	// 处理系统变量（@@variable）
 	if strings.HasPrefix(varName, "@@") {
@@ -277,7 +277,7 @@ func (e *ExpressionExecutor) evaluateSystemVariable(varName string) (interface{}
 	name = strings.TrimPrefix(name, "SESSION.")
 	name = strings.TrimPrefix(name, "LOCAL.")
 
-	fmt.Printf("  [DEBUG] evaluateSystemVariable: 系统变量=%s\n", name)
+	debugf("  [DEBUG] evaluateSystemVariable: 系统变量=%s\n", name)
 
 	// 处理已知的系统变量
 	switch name {
@@ -303,7 +303,7 @@ func (e *ExpressionExecutor) evaluateSessionVariable(varName string) (interface{
 	// 移除 @ 前缀
 	name := strings.TrimPrefix(varName, "@")
 
-	fmt.Printf("  [DEBUG] evaluateSessionVariable: 会话变量=%s\n", name)
+	debugf("  [DEBUG] evaluateSessionVariable: 会话变量=%s\n", name)
 
 	// 当前实现中，我们无法访问 session 对象
 	// 这是一个限制，需要在未来改进架构
@@ -314,7 +314,7 @@ func (e *ExpressionExecutor) evaluateSessionVariable(varName string) (interface{
 func (e *ExpressionExecutor) evaluateFunctionExpression(expr *parser.Expression, row parser.Row) (interface{}, error) {
 	funcName := strings.ToUpper(expr.Function)
 
-	fmt.Printf("  [DEBUG] evaluateFunctionExpression: 函数名=%s\n", funcName)
+	debugf("  [DEBUG] evaluateFunctionExpression: 函数名=%s\n", funcName)
 
 	// 特殊处理 DATABASE() 函数（因为它需要当前数据库上下文）
 	if funcName == "DATABASE" {

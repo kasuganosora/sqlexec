@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/cost"
+	"github.com/kasuganosora/sqlexec/pkg/optimizer/feedback"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/index"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/join"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
@@ -50,6 +51,8 @@ func NewEnhancedOptimizer(dataSource domain.DataSource, parallelism int) *Enhanc
 
 	// 创建成本模型（使用适配器）
 	costModel := cost.NewAdaptiveCostModel(&cardinalityEstimatorAdapter{estimator: estimator})
+	// Wire DQ feedback for cost calibration
+	costModel.SetFeedback(feedback.GetGlobalFeedback())
 
 	// 创建索引选择器
 	indexSelector := index.NewIndexSelector(estimator)

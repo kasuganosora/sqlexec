@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/cost"
+	"github.com/kasuganosora/sqlexec/pkg/optimizer/feedback"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/index"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/join"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/statistics"
@@ -54,6 +55,8 @@ func (c *defaultContainer) registerDefaults() {
 
 	// Register cost model with adapter
 	costModel := cost.NewAdaptiveCostModel(&costCardinalityAdapter{estimator: estimator})
+	// Wire DQ feedback for cost calibration
+	costModel.SetFeedback(feedback.GetGlobalFeedback())
 	c.Register("cost.model.adaptive", costModel)
 
 	// Register index selector

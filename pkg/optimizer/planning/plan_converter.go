@@ -20,7 +20,6 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan optimizer.Log
 		filters := o.convertConditionsToFilters(pushedDownPredicates)
 		// Get pushed down Limit
 		limitInfo := p.GetPushedDownLimit()
-		fmt.Printf("  [DEBUG] convertToPlan: DataSource(%s), 下推谓词数量: %d, 下推Limit: %v\n", p.TableName, len(filters), limitInfo != nil)
 
 		// Build column info
 		columns := make([]types.ColumnInfo, 0, len(p.TableInfo.Columns))
@@ -51,7 +50,6 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan optimizer.Log
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println("  [DEBUG] convertToPlan: Selection")
 		return &plan.Plan{
 			ID:          fmt.Sprintf("sel_%d", len(p.GetConditions())),
 			Type:        plan.TypeSelection,
@@ -68,7 +66,6 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan optimizer.Log
 		}
 		exprs := p.GetExprs()
 		aliases := p.GetAliases()
-		fmt.Printf("  [DEBUG] convertToPlan: Projection, 表达式数量: %d, 别名数量: %d\n", len(exprs), len(aliases))
 
 		return &plan.Plan{
 			ID:          fmt.Sprintf("proj_%d", len(exprs)),

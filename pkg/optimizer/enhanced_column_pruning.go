@@ -2,7 +2,6 @@ package optimizer
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
@@ -57,13 +56,13 @@ func (r *EnhancedColumnPruningRule) analyzeRequiredColumns(plan LogicalPlan) {
 		// Projection requires columns from its expressions
 		cols := r.extractColumnsFromExprs(p.Exprs)
 		r.requiredCols[planKey] = cols
-		fmt.Printf("  [DEBUG] EnhancedColumnPruning: Projection needs columns: %v\n", cols)
+		debugf("  [DEBUG] EnhancedColumnPruning: Projection needs columns: %v\n", cols)
 
 	case *LogicalSelection:
 		// Selection requires columns from its conditions
 		cols := r.extractColumnsFromExprs(p.Conditions())
 		r.requiredCols[planKey] = cols
-		fmt.Printf("  [DEBUG] EnhancedColumnPruning: Selection needs columns: %v\n", cols)
+		debugf("  [DEBUG] EnhancedColumnPruning: Selection needs columns: %v\n", cols)
 
 	case *LogicalJoin:
 		// Join requires columns from both children and conditions
@@ -77,7 +76,7 @@ func (r *EnhancedColumnPruningRule) analyzeRequiredColumns(plan LogicalPlan) {
 		// Deduplicate
 		uniqueCols := r.deduplicateColumns(allCols)
 		r.requiredCols[planKey] = uniqueCols
-		fmt.Printf("  [DEBUG] EnhancedColumnPruning: Join needs columns: %v\n", uniqueCols)
+		debugf("  [DEBUG] EnhancedColumnPruning: Join needs columns: %v\n", uniqueCols)
 
 	case *LogicalAggregate:
 		// Aggregate requires GROUP BY columns and aggregation expressions
@@ -87,25 +86,25 @@ func (r *EnhancedColumnPruningRule) analyzeRequiredColumns(plan LogicalPlan) {
 
 		allCols := append(groupByCols, aggCols...)
 		r.requiredCols[planKey] = allCols
-		fmt.Printf("  [DEBUG] EnhancedColumnPruning: Aggregate needs columns: %v\n", allCols)
+		debugf("  [DEBUG] EnhancedColumnPruning: Aggregate needs columns: %v\n", allCols)
 
 	case *LogicalSort:
 		// Sort requires columns from order by items
 		cols := r.extractColumnsFromSortItems(p.OrderBy())
 		r.requiredCols[planKey] = cols
-		fmt.Printf("  [DEBUG] EnhancedColumnPruning: Sort needs columns: %v\n", cols)
+		debugf("  [DEBUG] EnhancedColumnPruning: Sort needs columns: %v\n", cols)
 
 	case *LogicalTopN:
 		// TopN requires columns from sort items
 		cols := r.extractColumnsFromSortItems(p.SortItems())
 		r.requiredCols[planKey] = cols
-		fmt.Printf("  [DEBUG] EnhancedColumnPruning: TopN needs columns: %v\n", cols)
+		debugf("  [DEBUG] EnhancedColumnPruning: TopN needs columns: %v\n", cols)
 
 	case *LogicalApply:
 		// Apply requires columns from conditions
 		cols := r.extractColumnsFromExprs(p.GetConditions())
 		r.requiredCols[planKey] = cols
-		fmt.Printf("  [DEBUG] EnhancedColumnPruning: Apply needs columns: %v\n", cols)
+		debugf("  [DEBUG] EnhancedColumnPruning: Apply needs columns: %v\n", cols)
 
 	case *LogicalWindow:
 		// Window requires columns from partition by, order by, and window functions
@@ -119,7 +118,7 @@ func (r *EnhancedColumnPruningRule) analyzeRequiredColumns(plan LogicalPlan) {
 			}
 		}
 		r.requiredCols[planKey] = r.deduplicateColumns(cols)
-		fmt.Printf("  [DEBUG] EnhancedColumnPruning: Window needs columns: %v\n", r.requiredCols[planKey])
+		debugf("  [DEBUG] EnhancedColumnPruning: Window needs columns: %v\n", r.requiredCols[planKey])
 
 	case *LogicalLimit:
 		// Limit doesn't require any specific columns
@@ -208,7 +207,7 @@ func (r *EnhancedColumnPruningRule) pruneDataSource(dataSource *LogicalDataSourc
 	}
 
 	// Create new DataSource with pruned columns
-	fmt.Printf("  [DEBUG] EnhancedColumnPruning: DataSource pruning %s: %d -> %d columns\n",
+	debugf("  [DEBUG] EnhancedColumnPruning: DataSource pruning %s: %d -> %d columns\n",
 		dataSource.TableName, len(dataSource.Columns), len(newColumns))
 
 	newDataSource := NewLogicalDataSource(dataSource.TableName, dataSource.TableInfo)

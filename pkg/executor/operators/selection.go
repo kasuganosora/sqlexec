@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/kasuganosora/sqlexec/pkg/dataaccess"
+	"github.com/kasuganosora/sqlexec/pkg/optimizer/feedback"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -52,12 +53,22 @@ func (op *SelectionOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 		return nil, fmt.Errorf("execute child failed: %w", err)
 	}
 
-	// 应用过滤条件
-	filteredRows := make([]domain.Row, 0)
+	// 应用过滤条件（预分配容量，减少 append 扩容）
+	filteredRows := make([]domain.Row, 0, len(childResult.Rows)/2+1)
 	for _, row := range childResult.Rows {
 		if op.evaluateCondition(row, op.config.Condition) {
 			filteredRows = append(filteredRows, row)
 		}
+	}
+
+	// DQ feedback: record observed selectivity for cost model calibration
+	if op.config.Condition != nil && op.config.Condition.Left != nil &&
+		op.config.Condition.Left.Type == parser.ExprTypeColumn {
+		feedback.GetGlobalFeedback().RecordSelectivity(
+			op.config.Condition.Left.Column,
+			int64(len(childResult.Rows)),
+			int64(len(filteredRows)),
+		)
 	}
 
 	return &domain.QueryResult{

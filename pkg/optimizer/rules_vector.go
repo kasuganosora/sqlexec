@@ -104,7 +104,7 @@ func (r *VectorIndexRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *O
 	// 检查是否有对应的向量索引
 	if r.indexManager != nil && !r.indexManager.HasVectorIndex(dataSource.TableName, vectorInfo.ColumnName) {
 		// 没有找到向量索引，但也可以尝试优化
-		fmt.Printf("  [DEBUG] VectorIndexRule: 表 %s 列 %s 没有向量索引\n", 
+		debugf("  [DEBUG] VectorIndexRule: 表 %s 列 %s 没有向量索引\n", 
 			dataSource.TableName, vectorInfo.ColumnName)
 	}
 
@@ -122,7 +122,7 @@ func (r *VectorIndexRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *O
 		vectorScan.Offset = int(offsetVal)
 	}
 
-	fmt.Printf("  [DEBUG] VectorIndexRule: 将 Sort+Limit 转换为 VectorScan, 表=%s, 列=%s, k=%d\n",
+	debugf("  [DEBUG] VectorIndexRule: 将 Sort+Limit 转换为 VectorScan, 表=%s, 列=%s, k=%d\n",
 		dataSource.TableName, vectorInfo.ColumnName, limitVal)
 
 	return vectorScan, nil

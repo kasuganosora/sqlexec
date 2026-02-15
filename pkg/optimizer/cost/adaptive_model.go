@@ -37,6 +37,14 @@ type CardinalityEstimator interface {
 	EstimateFilter(tableName string, filters []domain.Filter) int64
 }
 
+// FeedbackProvider provides learned execution statistics for cost calibration.
+// This interface breaks the circular dependency between cost and optimizer packages.
+type FeedbackProvider interface {
+	GetTableSize(table string) (int64, bool)
+	GetSelectivity(column string) float64
+	GetJoinFactor(leftTable, rightTable string) float64
+}
+
 // AdaptiveCostModel 自适应成本模型
 // 基于硬件配置、统计信息动态调整成本估算
 type AdaptiveCostModel struct {
@@ -44,6 +52,7 @@ type AdaptiveCostModel struct {
 	factors      *AdaptiveCostFactor
 	estimator    CardinalityEstimator
 	cacheHitInfo *CacheHitInfo
+	feedback     FeedbackProvider // DQ-inspired feedback for cost calibration
 }
 
 // CacheHitInfo 缓存命中信息（用于动态调整）
@@ -308,8 +317,18 @@ func (acm *AdaptiveCostModel) estimateSortingCost(rows int64, sortCols int) floa
 }
 
 // estimatePlanRowCount 估算计划的行数
+// Uses DQ-inspired feedback when available, falls back to default estimates.
 func (acm *AdaptiveCostModel) estimatePlanRowCount(plan interface{}) int64 {
-	// 简化实现，直接估算
+	// Try to get table name from the plan for feedback lookup
+	if ds, ok := plan.(interface{ GetTableName() string }); ok {
+		tableName := ds.GetTableName()
+		if tableName != "" && acm.feedback != nil {
+			if size, ok := acm.feedback.GetTableSize(tableName); ok {
+				return size // Use learned value from execution feedback
+			}
+		}
+		return acm.estimator.EstimateTableScan(tableName)
+	}
 	return 10000
 }
 
@@ -354,6 +373,11 @@ func (acm *AdaptiveCostModel) UpdateCacheHitInfo(tableName string, hitRate float
 	acm.cacheHitInfo.TableHitRates[tableName] = hitRate
 	acm.cacheHitInfo.LastUpdate = time.Now()
 	acm.cacheHitInfo.mu.Unlock()
+}
+
+// SetFeedback sets the DQ feedback provider for cost calibration.
+func (acm *AdaptiveCostModel) SetFeedback(fb FeedbackProvider) {
+	acm.feedback = fb
 }
 
 // GetHardwareProfile 获取硬件配置
