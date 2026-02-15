@@ -2,50 +2,68 @@ package gorm
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/api"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/callbacks"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
 )
 
-// Dialector 封装了 sqlexec 的 Session 作为 GORM 的数据库驱动
+// Dialector implements gorm.Dialector by routing all SQL through an
+// api.Session. Unlike traditional GORM dialectors that need a network
+// connection, this one works in-process — queries go directly from
+// GORM's SQL builder to sqlexec's parser and optimizer.
 type Dialector struct {
-	Session      *api.Session
-	SQLParser    func(sql string) (string, []interface{}, error)
-	CachedDB     *sql.DB // 用于 GORM 的事务和连接池管理
-	Initialized  bool
+	Session *api.Session
+	sqlDB   *sql.DB // created during Initialize via our database/sql driver
 }
 
-// NewDialector 创建一个新的 GORM 驱动，使用 sqlexec 的 Session
+// NewDialector creates a new GORM dialector backed by the given session.
+//
+//	db, _ := api.NewDB(nil)
+//	db.RegisterDataSource("default", memoryDS)
+//	session := db.Session()
+//	gormDB, _ := gorm.Open(NewDialector(session), &gorm.Config{})
 func NewDialector(session *api.Session) gorm.Dialector {
-	return &Dialector{
-		Session:     session,
-		Initialized: false,
-	}
+	return &Dialector{Session: session}
 }
 
-// Name 返回数据库方言名称
+// Name returns the dialect name.
 func (d *Dialector) Name() string {
 	return "sqlexec"
 }
 
-// Initialize 初始化数据库连接
+// Initialize sets up the connection pool and registers GORM's default
+// callbacks. This is the critical piece that makes Create/Find/Update/Delete
+// actually work.
 func (d *Dialector) Initialize(db *gorm.DB) error {
-	d.Initialized = true
+	if d.Session == nil {
+		return fmt.Errorf("sqlexec: Dialector.Session must not be nil")
+	}
+
+	// Create a *sql.DB backed by our database/sql/driver.
+	// This gives GORM a standard ConnPool without a real network connection.
+	d.sqlDB = OpenDB(d.Session)
+	db.ConnPool = d.sqlDB
+
+	// Register default GORM callbacks (Create, Query, Update, Delete, Row, Raw).
+	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{})
+
 	return nil
 }
 
-// Migrator 提供数据库迁移工具
+// Migrator returns the schema migration tool.
 func (d *Dialector) Migrator(db *gorm.DB) gorm.Migrator {
 	return &Migrator{
 		Dialector: d,
-		DB:       db,
+		DB:        db,
 	}
 }
 
-// DataTypeOf 确定架构字段的数据类型
+// DataTypeOf maps GORM schema field types to SQL type names.
 func (d *Dialector) DataTypeOf(field *schema.Field) string {
 	switch field.DataType {
 	case schema.Bool:
@@ -57,19 +75,16 @@ func (d *Dialector) DataTypeOf(field *schema.Field) string {
 			return "SMALLINT"
 		} else if field.Size <= 32 {
 			return "INT"
-		} else if field.Size <= 64 {
-			return "BIGINT"
 		}
 		return "BIGINT"
 	case schema.Float:
-		if field.Precision > 0 {
+		if field.Size <= 32 {
 			return "FLOAT"
 		}
-		return "FLOAT"
-	// Double 类型已在新版本 GORM 中移除，使用 Float 代替
+		return "DOUBLE"
 	case schema.String:
-		if field.Size > 0 {
-			return "VARCHAR"
+		if field.Size > 0 && field.Size <= 65535 {
+			return fmt.Sprintf("VARCHAR(%d)", field.Size)
 		}
 		return "TEXT"
 	case schema.Time:
@@ -77,11 +92,11 @@ func (d *Dialector) DataTypeOf(field *schema.Field) string {
 	case schema.Bytes:
 		return "BLOB"
 	default:
-		return "VARCHAR"
+		return "VARCHAR(255)"
 	}
 }
 
-// DefaultValueOf 提供架构字段的默认值
+// DefaultValueOf returns a clause expression for a field's default value.
 func (d *Dialector) DefaultValueOf(field *schema.Field) clause.Expression {
 	if field.DefaultValue != "" {
 		return clause.Expr{SQL: "DEFAULT"}
@@ -89,25 +104,28 @@ func (d *Dialector) DefaultValueOf(field *schema.Field) clause.Expression {
 	return nil
 }
 
-// BindVarTo 处理 SQL 语句中的变量绑定
-func (d *Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement, v interface{}) {
+// BindVarTo writes a `?` placeholder for parameter binding (MySQL style).
+func (d *Dialector) BindVarTo(writer clause.Writer, _ *gorm.Statement, _ interface{}) {
 	writer.WriteByte('?')
 }
 
-// QuoteTo 管理标识符的引号
+// QuoteTo quotes an identifier with backticks (MySQL style).
 func (d *Dialector) QuoteTo(writer clause.Writer, str string) {
 	writer.WriteByte('`')
 	writer.WriteString(str)
 	writer.WriteByte('`')
 }
 
-// Explain 格式化带有变量的 SQL 语句
+// Explain returns a human-readable version of the SQL with bound parameters.
 func (d *Dialector) Explain(sql string, vars ...interface{}) string {
-	// 简化实现，直接返回 SQL
-	return sql
+	return fmt.Sprintf("%s %v", sql, vars)
 }
 
-// SetSQLParser 设置 SQL 解析器，用于将 GORM 的 SQL 转换为 sqlexec 可识别的格式
-func (d *Dialector) SetSQLParser(parser func(sql string) (string, []interface{}, error)) {
-	d.SQLParser = parser
+// CloseDB closes the internal *sql.DB created during Initialize.
+// Call this when you're done with the GORM DB to release resources.
+func (d *Dialector) CloseDB() error {
+	if d.sqlDB != nil {
+		return d.sqlDB.Close()
+	}
+	return nil
 }

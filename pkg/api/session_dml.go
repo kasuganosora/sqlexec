@@ -117,5 +117,19 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 		}
 	}
 
-	return NewResult(result.Total, 0, nil), nil
+	// Extract last_insert_id from INSERT result rows if available.
+	// The INSERT executor returns rows like {"rows_affected": N, "last_insert_id": M}.
+	var lastInsertID int64
+	if len(result.Rows) > 0 {
+		if v, ok := result.Rows[0]["last_insert_id"]; ok {
+			switch id := v.(type) {
+			case int64:
+				lastInsertID = id
+			case int:
+				lastInsertID = int64(id)
+			}
+		}
+	}
+
+	return NewResult(result.Total, lastInsertID, nil), nil
 }

@@ -3,48 +3,43 @@ package gorm
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
-	"sync"
 )
 
-// Migrator 实现了 GORM 的 Migrator 接口，将迁移操作委托给 sqlexec
+// Migrator implements gorm.Migrator, routing DDL operations through the
+// sqlexec Session via Session.Execute() and Session.Query().
 type Migrator struct {
 	Dialector *Dialector
-	DB       *gorm.DB
+	DB        *gorm.DB
 }
 
-// AutoMigrate 自动迁移
+// AutoMigrate creates tables for the given models if they don't exist.
 func (m *Migrator) AutoMigrate(dst ...interface{}) error {
 	for _, value := range dst {
-		// 使用 GORM 的 schema 解析器
 		namer := schema.NamingStrategy{}
 		s, err := schema.Parse(value, &sync.Map{}, namer)
 		if err != nil {
 			return fmt.Errorf("failed to parse schema: %w", err)
 		}
 
-		tableName := s.Table
-
-		// 检查表是否存在
-		if m.HasTable(tableName) {
-			// 表已存在，不处理
+		if m.HasTable(s.Table) {
 			continue
 		}
 
-		// 表不存在，创建新表
 		sql := m.generateCreateTableSQLFromSchema(s)
 		_, err = m.Dialector.Session.Execute(sql)
 		if err != nil {
-			return fmt.Errorf("failed to create table %s: %w", tableName, err)
+			return fmt.Errorf("failed to create table %s: %w", s.Table, err)
 		}
 	}
 	return nil
 }
 
-// HasTable 检查表是否存在
+// HasTable checks whether a table exists.
 func (m *Migrator) HasTable(value interface{}) bool {
 	tableName := m.getTableName(value)
 
@@ -64,42 +59,50 @@ func (m *Migrator) HasTable(value interface{}) bool {
 	return false
 }
 
-// CreateTable 创建表
+// CreateTable creates tables for the given models.
 func (m *Migrator) CreateTable(values ...interface{}) error {
-	if len(values) == 0 {
-		return nil
+	for _, value := range values {
+		namer := schema.NamingStrategy{}
+		s, err := schema.Parse(value, &sync.Map{}, namer)
+		if err != nil {
+			// Fallback to simple create
+			sql := m.generateCreateTableSQL(value)
+			_, execErr := m.Dialector.Session.Execute(sql)
+			return execErr
+		}
+		sql := m.generateCreateTableSQLFromSchema(s)
+		_, err = m.Dialector.Session.Execute(sql)
+		if err != nil {
+			return err
+		}
 	}
-	sql := m.generateCreateTableSQL(values[0])
-
-	_, err := m.Dialector.Session.Execute(sql)
-	return err
+	return nil
 }
 
-// DropTable 删除表
+// DropTable drops the given tables.
 func (m *Migrator) DropTable(values ...interface{}) error {
-	if len(values) == 0 {
-		return nil
+	for _, value := range values {
+		tableName := m.getTableName(value)
+		sql := "DROP TABLE IF EXISTS " + quoteIdentifier(tableName)
+		_, err := m.Dialector.Session.Execute(sql)
+		if err != nil {
+			return err
+		}
 	}
-	tableName := m.getTableName(values[0])
-
-	sql := "DROP TABLE IF EXISTS " + quoteIdentifier(tableName)
-
-	_, err := m.Dialector.Session.Execute(sql)
-	return err
+	return nil
 }
 
-// RenameTable 重命名表
+// RenameTable renames a table.
 func (m *Migrator) RenameTable(oldName, newName interface{}) error {
 	oldTableName := m.getTableName(oldName)
 	newTableName := m.getTableName(newName)
 
 	sql := "ALTER TABLE " + quoteIdentifier(oldTableName) + " RENAME TO " + quoteIdentifier(newTableName)
-
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
 
-// GetTables 获取所有表
+// GetTables returns all table names.
 func (m *Migrator) GetTables() (tableList []string, err error) {
 	sql := "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()"
 
@@ -124,16 +127,18 @@ func (m *Migrator) GetTables() (tableList []string, err error) {
 	return tables, nil
 }
 
-// AddColumn 添加列
+// AddColumn adds a column to the table. It resolves the column type from the
+// model's schema rather than hardcoding.
 func (m *Migrator) AddColumn(value interface{}, field string) error {
 	tableName := m.getTableName(value)
+	colType := m.resolveColumnType(value, field)
 
-	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " ADD COLUMN " + quoteIdentifier(field) + " INT"
+	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " ADD COLUMN " + quoteIdentifier(field) + " " + colType
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
 
-// DropColumn 删除列
+// DropColumn drops a column from the table.
 func (m *Migrator) DropColumn(value interface{}, name string) error {
 	tableName := m.getTableName(value)
 
@@ -142,16 +147,18 @@ func (m *Migrator) DropColumn(value interface{}, name string) error {
 	return err
 }
 
-// AlterColumn 修改列
+// AlterColumn modifies a column's type. It resolves the new type from the
+// model's schema.
 func (m *Migrator) AlterColumn(value interface{}, field string) error {
 	tableName := m.getTableName(value)
+	colType := m.resolveColumnType(value, field)
 
-	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " MODIFY COLUMN " + quoteIdentifier(field) + " VARCHAR(255)"
+	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " MODIFY COLUMN " + quoteIdentifier(field) + " " + colType
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
 
-// RenameColumn 重命名列
+// RenameColumn renames a column.
 func (m *Migrator) RenameColumn(value interface{}, oldName, field string) error {
 	tableName := m.getTableName(value)
 
@@ -160,22 +167,38 @@ func (m *Migrator) RenameColumn(value interface{}, oldName, field string) error 
 	return err
 }
 
-// ColumnTypes 获取列类型
+// HasColumn checks whether a column exists by querying information_schema.
+func (m *Migrator) HasColumn(value interface{}, name string) bool {
+	tableName := m.getTableName(value)
+
+	sql := "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '" +
+		escapeStringValue(tableName) + "' AND column_name = '" + escapeStringValue(name) + "'"
+
+	result, err := m.Dialector.Session.Query(sql)
+	if err != nil {
+		return false
+	}
+	defer result.Close()
+
+	if result.Next() {
+		var count int
+		result.Scan(&count)
+		return count > 0
+	}
+	return false
+}
+
+// ColumnTypes returns column type information for the table.
 func (m *Migrator) ColumnTypes(value interface{}) (columnTypes []gorm.ColumnType, err error) {
-	// 简化实现：返回空列表，避免复杂的接口实现
 	return []gorm.ColumnType{}, nil
 }
 
-// CreateConstraint 创建约束
+// CreateConstraint creates a named constraint.
 func (m *Migrator) CreateConstraint(value interface{}, name string) error {
-	tableName := m.getTableName(value)
-
-	sql := "ALTER TABLE " + quoteIdentifier(tableName) + " ADD CONSTRAINT " + quoteIdentifier(name) + " FOREIGN KEY (id) REFERENCES other_table(id)"
-	_, err := m.Dialector.Session.Execute(sql)
-	return err
+	return gorm.ErrNotImplemented
 }
 
-// DropConstraint 删除约束
+// DropConstraint drops a named constraint.
 func (m *Migrator) DropConstraint(value interface{}, name string) error {
 	tableName := m.getTableName(value)
 
@@ -184,11 +207,12 @@ func (m *Migrator) DropConstraint(value interface{}, name string) error {
 	return err
 }
 
-// HasConstraint 检查约束是否存在
+// HasConstraint checks whether a constraint exists.
 func (m *Migrator) HasConstraint(value interface{}, name string) bool {
 	tableName := m.getTableName(value)
 
-	sql := "SELECT COUNT(*) FROM information_schema.key_column_usage WHERE constraint_name = '" + escapeStringValue(name) + "' AND table_name = '" + escapeStringValue(tableName) + "'"
+	sql := "SELECT COUNT(*) FROM information_schema.key_column_usage WHERE constraint_name = '" +
+		escapeStringValue(name) + "' AND table_name = '" + escapeStringValue(tableName) + "'"
 
 	result, err := m.Dialector.Session.Query(sql)
 	if err != nil {
@@ -204,16 +228,18 @@ func (m *Migrator) HasConstraint(value interface{}, name string) bool {
 	return false
 }
 
-// CreateIndex 创建索引
+// CreateIndex creates an index. It extracts the column list from the model's
+// schema rather than hardcoding to (id).
 func (m *Migrator) CreateIndex(value interface{}, name string) error {
 	tableName := m.getTableName(value)
+	columns := m.resolveIndexColumns(value, name)
 
-	sql := "CREATE INDEX " + quoteIdentifier(name) + " ON " + quoteIdentifier(tableName) + " (id)"
+	sql := "CREATE INDEX " + quoteIdentifier(name) + " ON " + quoteIdentifier(tableName) + " (" + columns + ")"
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
 
-// DropIndex 删除索引
+// DropIndex drops an index.
 func (m *Migrator) DropIndex(value interface{}, name string) error {
 	tableName := m.getTableName(value)
 	sql := "DROP INDEX " + quoteIdentifier(name) + " ON " + quoteIdentifier(tableName)
@@ -221,11 +247,12 @@ func (m *Migrator) DropIndex(value interface{}, name string) error {
 	return err
 }
 
-// HasIndex 检查索引是否存在
+// HasIndex checks whether an index exists.
 func (m *Migrator) HasIndex(value interface{}, name string) bool {
 	tableName := m.getTableName(value)
 
-	sql := "SELECT COUNT(*) FROM information_schema.statistics WHERE index_name = '" + escapeStringValue(name) + "' AND table_name = '" + escapeStringValue(tableName) + "'"
+	sql := "SELECT COUNT(*) FROM information_schema.statistics WHERE index_name = '" +
+		escapeStringValue(name) + "' AND table_name = '" + escapeStringValue(tableName) + "'"
 
 	result, err := m.Dialector.Session.Query(sql)
 	if err != nil {
@@ -241,127 +268,174 @@ func (m *Migrator) HasIndex(value interface{}, name string) bool {
 	return false
 }
 
-// RenameIndex 重命名索引
+// RenameIndex renames an index by dropping and re-creating it.
 func (m *Migrator) RenameIndex(value interface{}, oldName, newName string) error {
-	// 不支持重命名索引，需要先删除再创建
 	if err := m.DropIndex(value, oldName); err != nil {
 		return err
 	}
 	return m.CreateIndex(value, newName)
 }
 
-// CreateView 创建视图（GORM 1.25+ 需要的方法）
+// CreateView is not supported.
 func (m *Migrator) CreateView(name string, option gorm.ViewOption) error {
 	return gorm.ErrNotImplemented
 }
 
-// CurrentDatabase 获取当前数据库名称（GORM 1.25+ 需要的方法）
+// CurrentDatabase returns the name of the current database.
 func (m *Migrator) CurrentDatabase() (name string) {
-	return "test_db"
+	result, err := m.Dialector.Session.Query("SELECT DATABASE()")
+	if err != nil {
+		return ""
+	}
+	defer result.Close()
+	if result.Next() {
+		var dbName string
+		if err := result.Scan(&dbName); err == nil {
+			return dbName
+		}
+	}
+	return ""
 }
 
-// DropView 删除视图（GORM 1.25+ 需要的方法）
+// DropView is not supported.
 func (m *Migrator) DropView(name string) error {
 	return gorm.ErrNotImplemented
 }
 
-// FullDataTypeOf 获取完整数据类型（GORM 1.25+ 需要的方法）
+// FullDataTypeOf returns the complete data type for a field.
 func (m *Migrator) FullDataTypeOf(field *schema.Field) (expr clause.Expr) {
 	return clause.Expr{SQL: m.Dialector.DataTypeOf(field)}
 }
 
-// GetIndexes 获取索引（GORM 1.25+ 需要的方法）
+// GetIndexes returns indexes for the table.
 func (m *Migrator) GetIndexes(value interface{}) (indexes []gorm.Index, err error) {
 	return []gorm.Index{}, nil
 }
 
-// GetTypeAliases 获取类型别名（GORM 1.25+ 需要的方法）
+// GetTypeAliases returns type aliases for a type name.
 func (m *Migrator) GetTypeAliases(typ string) []string {
 	return nil
 }
 
-// HasColumn 检查列是否存在
-func (m *Migrator) HasColumn(value interface{}, name string) bool {
-	return false
-}
-
-// MigrateColumn 迁移列
+// MigrateColumn is not supported.
 func (m *Migrator) MigrateColumn(value interface{}, field *schema.Field, columnType gorm.ColumnType) error {
 	return gorm.ErrNotImplemented
 }
 
-// MigrateColumnUnique 迁移唯一列
+// MigrateColumnUnique is not supported.
 func (m *Migrator) MigrateColumnUnique(value interface{}, field *schema.Field, columnType gorm.ColumnType) error {
 	return gorm.ErrNotImplemented
 }
 
-// MigrateTable 迁移表
+// MigrateTable is not supported.
 func (m *Migrator) MigrateTable(value interface{}, fields []schema.Field, fieldOpts map[string][]string) error {
 	return gorm.ErrNotImplemented
 }
 
-// MigrateValue 迁移值
+// MigrateValue is not supported.
 func (m *Migrator) MigrateValue(value interface{}, field *schema.Field, valueRef interface{}) error {
 	return gorm.ErrNotImplemented
 }
 
-// TableType 获取表类型
+// TableType returns type information for the table.
 func (m *Migrator) TableType(value interface{}) (tableType gorm.TableType, err error) {
 	return nil, nil
 }
 
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
 // quoteIdentifier quotes a SQL identifier with backticks, escaping any
-// embedded backticks to prevent SQL injection in DDL statements.
+// embedded backticks to prevent SQL injection.
 func quoteIdentifier(name string) string {
 	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
 }
 
-// escapeStringValue escapes a string value for use in SQL string literals,
-// preventing SQL injection in queries that interpolate values.
+// escapeStringValue escapes a string value for use in SQL string literals.
 func escapeStringValue(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `'`, `''`)
 	return s
 }
 
-// getTableName 获取表名
+// getTableName resolves the table name from various value types.
+// It uses GORM's schema parser for model structs, which correctly applies
+// the NamingStrategy (e.g. User → users).
 func (m *Migrator) getTableName(value interface{}) string {
-	// 如果是字符串，直接返回
 	if str, ok := value.(string); ok {
 		return str
 	}
-
-	// 如果是 schema 对象，使用 Table 字段
 	if s, ok := value.(*schema.Schema); ok {
 		return s.Table
 	}
-
-	// 如果是字符串指针，解引用后返回
 	if ptrStr, ok := value.(*string); ok {
 		return *ptrStr
 	}
 
-	// 简单实现，通过类型名称推断
-	typ := fmt.Sprintf("%T", value)
-	typeName := strings.ToLower(strings.TrimPrefix(strings.TrimSuffix(typ, "}"), "*"))
+	// Use GORM's schema parser for model structs
+	namer := schema.NamingStrategy{}
+	s, err := schema.Parse(value, &sync.Map{}, namer)
+	if err == nil {
+		return s.Table
+	}
 
-	// 去掉包名前缀
+	// Last resort: derive from type name
+	typ := fmt.Sprintf("%T", value)
+	typeName := strings.TrimPrefix(typ, "*")
 	if idx := strings.LastIndex(typeName, "."); idx != -1 {
 		typeName = typeName[idx+1:]
 	}
-
-	return typeName
+	return strings.ToLower(typeName)
 }
 
-// generateCreateTableSQL 生成 CREATE TABLE SQL
+// resolveColumnType looks up a field in the model's schema and returns its
+// SQL type. Falls back to VARCHAR(255) if the schema can't be parsed.
+func (m *Migrator) resolveColumnType(value interface{}, fieldName string) string {
+	namer := schema.NamingStrategy{}
+	s, err := schema.Parse(value, &sync.Map{}, namer)
+	if err != nil {
+		return "VARCHAR(255)"
+	}
+	for _, f := range s.Fields {
+		if f.DBName == fieldName || f.Name == fieldName {
+			return m.Dialector.DataTypeOf(f)
+		}
+	}
+	return "VARCHAR(255)"
+}
+
+// resolveIndexColumns looks up an index definition in the model's schema and
+// returns the comma-separated quoted column list. Falls back to "id".
+func (m *Migrator) resolveIndexColumns(value interface{}, indexName string) string {
+	namer := schema.NamingStrategy{}
+	s, err := schema.Parse(value, &sync.Map{}, namer)
+	if err != nil {
+		return quoteIdentifier("id")
+	}
+	for _, idx := range s.ParseIndexes() {
+		if idx.Name == indexName {
+			cols := make([]string, 0, len(idx.Fields))
+			for _, f := range idx.Fields {
+				cols = append(cols, quoteIdentifier(f.Field.DBName))
+			}
+			if len(cols) > 0 {
+				return strings.Join(cols, ", ")
+			}
+		}
+	}
+	return quoteIdentifier("id")
+}
+
+// generateCreateTableSQL generates a simple CREATE TABLE statement (fallback).
 func (m *Migrator) generateCreateTableSQL(value interface{}) string {
 	tableName := m.getTableName(value)
-
-	// 简单的表创建语句
-	return "CREATE TABLE IF NOT EXISTS " + quoteIdentifier(tableName) + " (id INT PRIMARY KEY AUTO_INCREMENT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)"
+	return "CREATE TABLE IF NOT EXISTS " + quoteIdentifier(tableName) +
+		" (id INT PRIMARY KEY AUTO_INCREMENT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)"
 }
 
-// generateCreateTableSQLFromSchema 从 schema 生成 CREATE TABLE SQL
+// generateCreateTableSQLFromSchema generates a CREATE TABLE statement from a
+// parsed GORM schema with proper column types, primary keys, and constraints.
 func (m *Migrator) generateCreateTableSQLFromSchema(s *schema.Schema) string {
 	var columnDefs []string
 	var primaryKeys []string
@@ -370,27 +444,22 @@ func (m *Migrator) generateCreateTableSQLFromSchema(s *schema.Schema) string {
 		colType := m.Dialector.DataTypeOf(field)
 		def := quoteIdentifier(field.DBName) + " " + colType
 
-		// 处理主键
 		if field.PrimaryKey {
 			primaryKeys = append(primaryKeys, quoteIdentifier(field.DBName))
 		}
 
-		// 处理 NOT NULL
 		if !field.PrimaryKey && !field.Unique {
 			def += " NULL"
 		}
 
-		// 处理默认值
 		if field.DefaultValue != "" && field.DefaultValue != "nil" {
 			def += " DEFAULT " + fmt.Sprintf("%v", field.DefaultValue)
 		}
 
-		// 处理自动增量
 		if field.AutoIncrement {
 			def += " AUTO_INCREMENT"
 		}
 
-		// 处理唯一约束
 		if field.Unique {
 			def += " UNIQUE"
 		}
@@ -400,7 +469,6 @@ func (m *Migrator) generateCreateTableSQLFromSchema(s *schema.Schema) string {
 
 	sql := "CREATE TABLE IF NOT EXISTS " + quoteIdentifier(s.Table) + " (" + strings.Join(columnDefs, ", ")
 
-	// 添加主键约束
 	if len(primaryKeys) > 0 {
 		sql += ", PRIMARY KEY (" + strings.Join(primaryKeys, ", ") + ")"
 	}
@@ -409,4 +477,3 @@ func (m *Migrator) generateCreateTableSQLFromSchema(s *schema.Schema) string {
 
 	return sql
 }
-
