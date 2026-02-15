@@ -56,7 +56,8 @@ milvus/
 
 # Temporary files
 *.tmp
-temp*
+temp_*
+temp[0-9]*
 
 # Project specific files
 permissions.json
