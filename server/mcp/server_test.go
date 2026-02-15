@@ -399,7 +399,7 @@ func TestHandleDescribeTable_NonexistentTable(t *testing.T) {
 func TestLogToolCall_NilAuditLogger(t *testing.T) {
 	deps := &ToolDeps{AuditLogger: nil}
 	// Should not panic
-	deps.logToolCall("client", "ip", "tool", nil, 0, true)
+	deps.logToolCall("trace", "client", "ip", "tool", nil, 0, true)
 }
 
 func TestGetClient_NoClient(t *testing.T) {

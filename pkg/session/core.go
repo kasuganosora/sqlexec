@@ -31,6 +31,7 @@ type CoreSession struct {
 	closed         bool
 	queryTimeout   time.Duration    // 查询超时时间
 	threadID       uint32           // 关联的线程ID (用于KILL)
+	traceID        string           // 追踪ID (来自协议层 Session)
 	queryMu        sync.Mutex       // 查询锁
 }
 
@@ -95,11 +96,26 @@ func (s *CoreSession) GetThreadID() uint32 {
 	return s.threadID
 }
 
+// SetTraceID 设置追踪ID
+func (s *CoreSession) SetTraceID(traceID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.traceID = traceID
+}
+
+// GetTraceID 获取追踪ID
+func (s *CoreSession) GetTraceID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.traceID
+}
+
 // createQueryContext 创建带超时的查询上下文
 func (s *CoreSession) createQueryContext(parentCtx context.Context, sql string) (context.Context, context.CancelFunc, *QueryContext) {
 	s.mu.RLock()
 	timeout := s.queryTimeout
 	threadID := s.threadID
+	traceID := s.traceID
 	user := s.user
 	host := s.host
 	currentDB := s.currentDB
@@ -112,6 +128,7 @@ func (s *CoreSession) createQueryContext(parentCtx context.Context, sql string) 
 	queryCtx := &QueryContext{
 		QueryID:    queryID,
 		ThreadID:   threadID,
+		TraceID:    traceID,
 		SQL:        sql,
 		StartTime:  time.Now(),
 		CancelFunc: cancel,
@@ -145,9 +162,17 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 		return nil, fmt.Errorf("session is closed")
 	}
 
+	// 提取 SQL 注释中的 trace_id（优先级最高）
+	commentTraceID, sql := ExtractTraceID(sql)
+
 	// 创建查询上下文(带超时和取消支持)
 	queryCtx, cancel, qc := s.createQueryContext(ctx, sql)
 	defer cancel()
+
+	// SQL 注释中的 trace_id 覆盖 session 级别的 trace_id
+	if commentTraceID != "" {
+		qc.TraceID = commentTraceID
+	}
 
 	// 设置当前用户到 executor（用于权限检查）
 	s.mu.RLock()
@@ -217,9 +242,15 @@ func (s *CoreSession) ExecuteInsert(ctx context.Context, sql string, rows []doma
 		return nil, fmt.Errorf("session is closed")
 	}
 
+	commentTraceID, sql := ExtractTraceID(sql)
+
 	// 创建查询上下文(带超时和取消支持)
 	queryCtx, cancel, qc := s.createQueryContext(ctx, sql)
 	defer cancel()
+
+	if commentTraceID != "" {
+		qc.TraceID = commentTraceID
+	}
 
 	// 注册查询
 	registry := GetGlobalQueryRegistry()
@@ -266,9 +297,15 @@ func (s *CoreSession) ExecuteUpdate(ctx context.Context, sql string, _ []domain.
 		return nil, fmt.Errorf("session is closed")
 	}
 
+	commentTraceID, sql := ExtractTraceID(sql)
+
 	// 创建查询上下文(带超时和取消支持)
 	queryCtx, cancel, qc := s.createQueryContext(ctx, sql)
 	defer cancel()
+
+	if commentTraceID != "" {
+		qc.TraceID = commentTraceID
+	}
 
 	// 注册查询
 	registry := GetGlobalQueryRegistry()
@@ -315,9 +352,15 @@ func (s *CoreSession) ExecuteDelete(ctx context.Context, sql string, _ []domain.
 		return nil, fmt.Errorf("session is closed")
 	}
 
+	commentTraceID, sql := ExtractTraceID(sql)
+
 	// 创建查询上下文(带超时和取消支持)
 	queryCtx, cancel, qc := s.createQueryContext(ctx, sql)
 	defer cancel()
+
+	if commentTraceID != "" {
+		qc.TraceID = commentTraceID
+	}
 
 	// 注册查询
 	registry := GetGlobalQueryRegistry()

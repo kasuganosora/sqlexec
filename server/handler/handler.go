@@ -40,6 +40,12 @@ type HandshakeHandler interface {
 	Name() string
 }
 
+// AuditLogger 审计日志接口（避免直接依赖 security 包）
+type AuditLogger interface {
+	LogQuery(traceID, user, database, query string, duration int64, success bool)
+	LogError(traceID, user, database, message string, err error)
+}
+
 // HandlerContext 处理器上下文
 type HandlerContext struct {
 	Session      *pkg_session.Session
@@ -47,6 +53,7 @@ type HandlerContext struct {
 	Command      uint8
 	Logger       Logger
 	DB           DBAccessor
+	AuditLogger  AuditLogger
 }
 
 // DBAccessor 数据库访问器接口（避免循环依赖）
@@ -55,12 +62,13 @@ type DBAccessor interface {
 }
 
 // NewHandlerContext 创建处理器上下文
-func NewHandlerContext(sess *pkg_session.Session, conn net.Conn, command uint8, logger Logger) *HandlerContext {
+func NewHandlerContext(sess *pkg_session.Session, conn net.Conn, command uint8, logger Logger, auditLogger AuditLogger) *HandlerContext {
 	return &HandlerContext{
 		Session:      sess,
 		Connection:   conn,
 		Command:      command,
 		Logger:       logger,
+		AuditLogger:  auditLogger,
 	}
 }
 

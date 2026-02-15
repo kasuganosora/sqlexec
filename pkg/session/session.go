@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -93,6 +94,7 @@ func (m *SessionMgr) CreateSession(ctx context.Context, addr string, port string
 		driver:     m.driver,
 	}
 	sess.ThreadID = m.GetThreadId(ctx)
+	sess.TraceID = fmt.Sprintf("%d-%d", sess.ThreadID, time.Now().UnixMilli())
 	err = m.driver.SetThreadId(ctx, sess.ThreadID, sess)
 	if err != nil {
 		return
@@ -195,6 +197,7 @@ type Session struct {
 	driver       SessionDriver
 	ID           string    `json:"id"`
 	ThreadID     uint32    `json:"thread_id"`
+	TraceID      string    `json:"trace_id"`
 	User         string    `json:"user"`
 	Created      time.Time `json:"created"`
 	LastUsed     time.Time `json:"last_used"`
@@ -226,11 +229,34 @@ func (s *Session) SetUser(user string) {
 	s.User = user
 }
 
+// SetTraceID 设置追踪ID（客户端可通过 SET @trace_id 或 SQL 注释覆盖）
+func (s *Session) SetTraceID(traceID string) {
+	s.TraceID = traceID
+}
+
+// GetTraceID 获取追踪ID
+func (s *Session) GetTraceID() string {
+	return s.TraceID
+}
+
 // SetVariable 设置会话变量（用于 SET 命令）
 func (s *Session) SetVariable(name string, value interface{}) error {
-	// 使用 "@@" 或 "@" 前缀标识变量
 	key := "var:" + name
 	log.Printf("设置会话变量: %s = %v", name, value)
+
+	// 拦截 trace_id 变量，同步更新 Session.TraceID
+	if name == "trace_id" {
+		if v, ok := value.(string); ok {
+			s.TraceID = v
+			// 同步到 API Session（CoreSession）
+			if apiSess := s.GetAPISession(); apiSess != nil {
+				if setter, ok := apiSess.(interface{ SetTraceID(string) }); ok {
+					setter.SetTraceID(v)
+				}
+			}
+		}
+	}
+
 	return s.Set(key, value)
 }
 

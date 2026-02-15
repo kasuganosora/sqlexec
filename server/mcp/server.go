@@ -56,6 +56,7 @@ func (s *Server) Start() error {
 		mcp.WithDescription("Execute a SQL query against the database. Supports SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, SHOW, DESCRIBE, and other SQL statements."),
 		mcp.WithString("sql", mcp.Description("The SQL query to execute"), mcp.Required()),
 		mcp.WithString("database", mcp.Description("The database to query (optional, uses default if not specified)")),
+		mcp.WithString("trace_id", mcp.Description("Optional trace ID for request tracing and audit logging")),
 	)
 
 	listDBTool := mcp.NewTool("list_databases",

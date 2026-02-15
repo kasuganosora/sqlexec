@@ -27,9 +27,14 @@ type ToolDeps struct {
 func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	sql := request.GetString("sql", "")
 	database := request.GetString("database", "")
+	traceID := request.GetString("trace_id", "")
 
 	if sql == "" {
 		return mcp.NewToolResultError("sql parameter is required"), nil
+	}
+
+	if traceID == "" {
+		traceID = fmt.Sprintf("mcp-%d", time.Now().UnixMilli())
 	}
 
 	client := getClient(ctx)
@@ -44,6 +49,7 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 	session := d.DB.Session()
 	defer session.Close()
 	session.SetConfigDir(d.ConfigDir)
+	session.SetTraceID(traceID)
 	if clientName != "" {
 		session.SetUser(clientName)
 	}
@@ -63,7 +69,7 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 	if isRead {
 		query, err := session.Query(sql)
 		if err != nil {
-			d.logToolCall(clientName, clientIP, "query", map[string]interface{}{"sql": sql, "database": database}, time.Since(start).Milliseconds(), false)
+			d.logToolCall(traceID, clientName, clientIP, "query", map[string]interface{}{"sql": sql, "database": database}, time.Since(start).Milliseconds(), false)
 			return mcp.NewToolResultError(fmt.Sprintf("query failed: %v", err)), nil
 		}
 		defer query.Close()
@@ -94,13 +100,13 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 	} else {
 		result, err := session.Execute(sql)
 		if err != nil {
-			d.logToolCall(clientName, clientIP, "query", map[string]interface{}{"sql": sql, "database": database}, time.Since(start).Milliseconds(), false)
+			d.logToolCall(traceID, clientName, clientIP, "query", map[string]interface{}{"sql": sql, "database": database}, time.Since(start).Milliseconds(), false)
 			return mcp.NewToolResultError(fmt.Sprintf("execute failed: %v", err)), nil
 		}
 		resultText = fmt.Sprintf("Affected rows: %d", result.RowsAffected)
 	}
 
-	d.logToolCall(clientName, clientIP, "query", map[string]interface{}{"sql": sql, "database": database}, time.Since(start).Milliseconds(), true)
+	d.logToolCall(traceID, clientName, clientIP, "query", map[string]interface{}{"sql": sql, "database": database}, time.Since(start).Milliseconds(), true)
 	return mcp.NewToolResultText(resultText), nil
 }
 
@@ -111,6 +117,7 @@ func (d *ToolDeps) HandleListDatabases(ctx context.Context, request mcp.CallTool
 	if client != nil {
 		clientName = client.Name
 	}
+	traceID := fmt.Sprintf("mcp-%d", time.Now().UnixMilli())
 	start := time.Now()
 
 	session := d.DB.Session()
@@ -122,7 +129,7 @@ func (d *ToolDeps) HandleListDatabases(ctx context.Context, request mcp.CallTool
 
 	query, err := session.Query("SHOW DATABASES")
 	if err != nil {
-		d.logToolCall(clientName, "", "list_databases", nil, time.Since(start).Milliseconds(), false)
+		d.logToolCall(traceID, clientName, "", "list_databases", nil, time.Since(start).Milliseconds(), false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list databases: %v", err)), nil
 	}
 	defer query.Close()
@@ -136,7 +143,7 @@ func (d *ToolDeps) HandleListDatabases(ctx context.Context, request mcp.CallTool
 		}
 	}
 
-	d.logToolCall(clientName, "", "list_databases", nil, time.Since(start).Milliseconds(), true)
+	d.logToolCall(traceID, clientName, "", "list_databases", nil, time.Since(start).Milliseconds(), true)
 	return mcp.NewToolResultText(sb.String()), nil
 }
 
@@ -152,6 +159,7 @@ func (d *ToolDeps) HandleListTables(ctx context.Context, request mcp.CallToolReq
 	if client != nil {
 		clientName = client.Name
 	}
+	traceID := fmt.Sprintf("mcp-%d", time.Now().UnixMilli())
 	start := time.Now()
 
 	session := d.DB.Session()
@@ -164,7 +172,7 @@ func (d *ToolDeps) HandleListTables(ctx context.Context, request mcp.CallToolReq
 
 	query, err := session.Query("SHOW TABLES")
 	if err != nil {
-		d.logToolCall(clientName, "", "list_tables", map[string]interface{}{"database": database}, time.Since(start).Milliseconds(), false)
+		d.logToolCall(traceID, clientName, "", "list_tables", map[string]interface{}{"database": database}, time.Since(start).Milliseconds(), false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list tables: %v", err)), nil
 	}
 	defer query.Close()
@@ -178,7 +186,7 @@ func (d *ToolDeps) HandleListTables(ctx context.Context, request mcp.CallToolReq
 		}
 	}
 
-	d.logToolCall(clientName, "", "list_tables", map[string]interface{}{"database": database}, time.Since(start).Milliseconds(), true)
+	d.logToolCall(traceID, clientName, "", "list_tables", map[string]interface{}{"database": database}, time.Since(start).Milliseconds(), true)
 	return mcp.NewToolResultText(sb.String()), nil
 }
 
@@ -199,6 +207,7 @@ func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallTool
 	if client != nil {
 		clientName = client.Name
 	}
+	traceID := fmt.Sprintf("mcp-%d", time.Now().UnixMilli())
 	start := time.Now()
 
 	session := d.DB.Session()
@@ -211,7 +220,7 @@ func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallTool
 
 	query, err := session.Query(fmt.Sprintf("SHOW COLUMNS FROM %s", table))
 	if err != nil {
-		d.logToolCall(clientName, "", "describe_table", map[string]interface{}{"database": database, "table": table}, time.Since(start).Milliseconds(), false)
+		d.logToolCall(traceID, clientName, "", "describe_table", map[string]interface{}{"database": database, "table": table}, time.Since(start).Milliseconds(), false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to describe table: %v", err)), nil
 	}
 	defer query.Close()
@@ -237,13 +246,13 @@ func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallTool
 		sb.WriteString("\n")
 	}
 
-	d.logToolCall(clientName, "", "describe_table", map[string]interface{}{"database": database, "table": table}, time.Since(start).Milliseconds(), true)
+	d.logToolCall(traceID, clientName, "", "describe_table", map[string]interface{}{"database": database, "table": table}, time.Since(start).Milliseconds(), true)
 	return mcp.NewToolResultText(sb.String()), nil
 }
 
-func (d *ToolDeps) logToolCall(clientName, ip, toolName string, args map[string]interface{}, duration int64, success bool) {
+func (d *ToolDeps) logToolCall(traceID, clientName, ip, toolName string, args map[string]interface{}, duration int64, success bool) {
 	if d.AuditLogger != nil {
-		d.AuditLogger.LogMCPToolCall(clientName, ip, toolName, args, duration, success)
+		d.AuditLogger.LogMCPToolCall(traceID, clientName, ip, toolName, args, duration, success)
 	}
 }
 

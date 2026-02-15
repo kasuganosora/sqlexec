@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -42,9 +43,9 @@ func (h *QueryHandler) Handle(ctx *handler.HandlerContext, packet interface{}) e
 
 	ctx.Log("处理 COM_QUERY: %s", query)
 
+	queryStart := time.Now()
+
 	// 使用 API Session 执行查询
-	// 所有查询（包括 SELECT DATABASE()、SELECT 1、@@变量查询）都通过 API 执行
-	// 这些查询会在 OptimizedExecutor 中处理（包括 handleNoFromQuery）
 	apiSessIntf := ctx.Session.GetAPISession()
 	if apiSessIntf == nil {
 		ctx.Log("API Session 未初始化")
@@ -63,6 +64,10 @@ func (h *QueryHandler) Handle(ctx *handler.HandlerContext, packet interface{}) e
 	queryObj, err := apiSess.Query(query)
 	if err != nil {
 		ctx.Log("查询失败: %v", err)
+		if ctx.AuditLogger != nil {
+			traceID := ctx.Session.GetTraceID()
+			ctx.AuditLogger.LogQuery(traceID, ctx.Session.User, "", query, time.Since(queryStart).Milliseconds(), false)
+		}
 		return ctx.SendError(err)
 	}
 	defer queryObj.Close()
@@ -86,6 +91,12 @@ func (h *QueryHandler) Handle(ctx *handler.HandlerContext, packet interface{}) e
 	}
 
 	ctx.Log("总共收集到 %d 行数据", rowCount)
+
+	// 审计记录
+	if ctx.AuditLogger != nil {
+		traceID := ctx.Session.GetTraceID()
+		ctx.AuditLogger.LogQuery(traceID, ctx.Session.User, "", query, time.Since(queryStart).Milliseconds(), true)
+	}
 
 	// 发送结果集
 	return h.sendQueryResult(ctx, columns, rows)

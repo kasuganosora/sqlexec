@@ -38,6 +38,7 @@ const (
 // AuditEvent 审计事件
 type AuditEvent struct {
 	ID        string                 `json:"id"`
+	TraceID   string                 `json:"trace_id,omitempty"`
 	Timestamp time.Time              `json:"timestamp"`
 	Level     AuditLevel             `json:"level"`
 	EventType AuditEventType         `json:"event_type"`
@@ -98,9 +99,10 @@ func (al *AuditLogger) Log(event *AuditEvent) {
 }
 
 // LogQuery 记录查询
-func (al *AuditLogger) LogQuery(user, database, query string, duration int64, success bool) {
+func (al *AuditLogger) LogQuery(traceID, user, database, query string, duration int64, success bool) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelInfo,
 		EventType: EventTypeQuery,
@@ -115,9 +117,10 @@ func (al *AuditLogger) LogQuery(user, database, query string, duration int64, su
 }
 
 // LogInsert 记录插入操作
-func (al *AuditLogger) LogInsert(user, database, table string, query string, duration int64, success bool) {
+func (al *AuditLogger) LogInsert(traceID, user, database, table string, query string, duration int64, success bool) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelInfo,
 		EventType: EventTypeInsert,
@@ -133,9 +136,10 @@ func (al *AuditLogger) LogInsert(user, database, table string, query string, dur
 }
 
 // LogUpdate 记录更新操作
-func (al *AuditLogger) LogUpdate(user, database, table string, query string, duration int64, success bool) {
+func (al *AuditLogger) LogUpdate(traceID, user, database, table string, query string, duration int64, success bool) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelInfo,
 		EventType: EventTypeUpdate,
@@ -151,9 +155,10 @@ func (al *AuditLogger) LogUpdate(user, database, table string, query string, dur
 }
 
 // LogDelete 记录删除操作
-func (al *AuditLogger) LogDelete(user, database, table string, query string, duration int64, success bool) {
+func (al *AuditLogger) LogDelete(traceID, user, database, table string, query string, duration int64, success bool) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelWarning,
 		EventType: EventTypeDelete,
@@ -169,9 +174,10 @@ func (al *AuditLogger) LogDelete(user, database, table string, query string, dur
 }
 
 // LogDDL 记录DDL操作
-func (al *AuditLogger) LogDDL(user, database, query string, duration int64, success bool) {
+func (al *AuditLogger) LogDDL(traceID, user, database, query string, duration int64, success bool) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelWarning,
 		EventType: EventTypeDDL,
@@ -186,9 +192,10 @@ func (al *AuditLogger) LogDDL(user, database, query string, duration int64, succ
 }
 
 // LogLogin 记录登录
-func (al *AuditLogger) LogLogin(user, ip string, success bool) {
+func (al *AuditLogger) LogLogin(traceID, user, ip string, success bool) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelInfo,
 		EventType: EventTypeLogin,
@@ -204,9 +211,10 @@ func (al *AuditLogger) LogLogin(user, ip string, success bool) {
 }
 
 // LogLogout 记录登出
-func (al *AuditLogger) LogLogout(user string) {
+func (al *AuditLogger) LogLogout(traceID, user string) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelInfo,
 		EventType: EventTypeLogout,
@@ -235,9 +243,10 @@ func (al *AuditLogger) LogPermission(user, action string, metadata map[string]in
 }
 
 // LogInjection 记录SQL注入尝试
-func (al *AuditLogger) LogInjection(user, ip, query string) {
+func (al *AuditLogger) LogInjection(traceID, user, ip, query string) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelCritical,
 		EventType: EventTypeInjection,
@@ -254,9 +263,10 @@ func (al *AuditLogger) LogInjection(user, ip, query string) {
 }
 
 // LogError 记录错误
-func (al *AuditLogger) LogError(user, database, message string, err error) {
+func (al *AuditLogger) LogError(traceID, user, database, message string, err error) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelError,
 		EventType: EventTypeError,
@@ -273,9 +283,10 @@ func (al *AuditLogger) LogError(user, database, message string, err error) {
 }
 
 // LogAPIRequest 记录 HTTP API 请求
-func (al *AuditLogger) LogAPIRequest(clientName, ip, method, path, sql, database string, duration int64, success bool) {
+func (al *AuditLogger) LogAPIRequest(traceID, clientName, ip, method, path, sql, database string, duration int64, success bool) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelInfo,
 		EventType: EventTypeAPIRequest,
@@ -296,9 +307,10 @@ func (al *AuditLogger) LogAPIRequest(clientName, ip, method, path, sql, database
 }
 
 // LogMCPToolCall 记录 MCP 工具调用
-func (al *AuditLogger) LogMCPToolCall(clientName, ip, toolName string, args map[string]interface{}, duration int64, success bool) {
+func (al *AuditLogger) LogMCPToolCall(traceID, clientName, ip, toolName string, args map[string]interface{}, duration int64, success bool) {
 	event := &AuditEvent{
 		ID:        generateEventID(),
+		TraceID:   traceID,
 		Timestamp: time.Now(),
 		Level:     AuditLevelInfo,
 		EventType: EventTypeMCPToolCall,
@@ -333,6 +345,21 @@ func (al *AuditLogger) GetEvents(offset, limit int) []*AuditEvent {
 			continue
 		}
 		events = append(events, event)
+	}
+
+	return events
+}
+
+// GetEventsByTraceID 获取指定 TraceID 的事件
+func (al *AuditLogger) GetEventsByTraceID(traceID string) []*AuditEvent {
+	al.bufLock.RLock()
+	defer al.bufLock.RUnlock()
+
+	events := make([]*AuditEvent, 0)
+	for _, event := range al.buffer {
+		if event != nil && event.TraceID == traceID {
+			events = append(events, event)
+		}
 	}
 
 	return events

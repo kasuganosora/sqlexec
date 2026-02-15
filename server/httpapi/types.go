@@ -6,6 +6,7 @@ import "github.com/kasuganosora/sqlexec/pkg/resource/domain"
 type QueryRequest struct {
 	SQL      string `json:"sql"`
 	Database string `json:"database,omitempty"`
+	TraceID  string `json:"trace_id,omitempty"`
 }
 
 // QueryResponse represents a successful query response

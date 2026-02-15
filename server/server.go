@@ -41,6 +41,7 @@ type Server struct {
 	parserRegistry    *handler.PacketParserRegistry
 	handshakeHandler  handler.HandshakeHandler
 	logger            Logger
+	auditLogger       handler.AuditLogger
 	configDir         string // 配置目录（用于 config 虚拟数据库）
 }
 
@@ -222,6 +223,11 @@ func (s *Server) SetDB(db *api.DB) {
 	s.db = db
 }
 
+// SetAuditLogger 设置审计日志记录器
+func (s *Server) SetAuditLogger(al handler.AuditLogger) {
+	s.auditLogger = al
+}
+
 // GetDB 返回服务器的 DB 实例
 func (s *Server) GetDB() *api.DB {
 	return s.db
@@ -300,6 +306,7 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 	if s.db != nil && sess.GetAPISession() == nil {
 		apiSess := s.db.Session()
 		apiSess.SetThreadID(sess.ThreadID) // 设置 threadID 用于 KILL 查询
+		apiSess.SetTraceID(sess.TraceID)   // 传播 trace-id 用于请求追踪
 		apiSess.SetConfigDir(s.configDir)  // 设置配置目录用于 config 虚拟数据库
 		sess.SetAPISession(apiSess)
 		s.logger.Printf("已为连接创建 API Session, ThreadID=%d", sess.ThreadID)
@@ -334,7 +341,7 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 		}
 
 		// 使用注册中心处理命令
-		handlerCtx := handler.NewHandlerContext(sess, conn, commandType, s.logger)
+		handlerCtx := handler.NewHandlerContext(sess, conn, commandType, s.logger, s.auditLogger)
 		err = s.handlerRegistry.Handle(handlerCtx, commandType, commandPack)
 		if err != nil {
 			s.logger.Printf("处理命令失败: %v", err)

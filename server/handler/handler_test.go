@@ -37,7 +37,7 @@ func TestNewHandlerContext(t *testing.T) {
 	conn := mock.NewMockConnection()
 	logger := mock.NewMockLogger()
 
-	ctx := NewHandlerContext(sess, conn, 0x03, logger)
+	ctx := NewHandlerContext(sess, conn, 0x03, logger, nil)
 	if ctx == nil {
 		t.Fatal("NewHandlerContext returned nil")
 	}

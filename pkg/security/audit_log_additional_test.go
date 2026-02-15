@@ -38,7 +38,7 @@ func TestAuditLogger_Log(t *testing.T) {
 func TestAuditLogger_LogQuery(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
-	auditor.LogQuery("user1", "db1", "SELECT * FROM table1", 100, true)
+	auditor.LogQuery("", "user1", "db1", "SELECT * FROM table1", 100, true)
 
 	events := auditor.GetEventsByUser("user1")
 	assert.Equal(t, 1, len(events))
@@ -52,7 +52,7 @@ func TestAuditLogger_LogQuery(t *testing.T) {
 func TestAuditLogger_LogInsert(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
-	auditor.LogInsert("user1", "db1", "table1", "INSERT INTO table1 VALUES (1)", 50, true)
+	auditor.LogInsert("", "user1", "db1", "table1", "INSERT INTO table1 VALUES (1)", 50, true)
 
 	events := auditor.GetEventsByUser("user1")
 	assert.GreaterOrEqual(t, len(events), 1)
@@ -66,7 +66,7 @@ func TestAuditLogger_LogInsert(t *testing.T) {
 func TestAuditLogger_LogUpdate(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
-	auditor.LogUpdate("user1", "db1", "table1", "UPDATE table1 SET x=1", 75, false)
+	auditor.LogUpdate("", "user1", "db1", "table1", "UPDATE table1 SET x=1", 75, false)
 
 	events := auditor.GetEventsByUser("user1")
 	assert.GreaterOrEqual(t, len(events), 1)
@@ -80,7 +80,7 @@ func TestAuditLogger_LogUpdate(t *testing.T) {
 func TestAuditLogger_LogDelete(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
-	auditor.LogDelete("user1", "db1", "table1", "DELETE FROM table1", 30, true)
+	auditor.LogDelete("", "user1", "db1", "table1", "DELETE FROM table1", 30, true)
 
 	events := auditor.GetEventsByUser("user1")
 	assert.GreaterOrEqual(t, len(events), 1)
@@ -94,7 +94,7 @@ func TestAuditLogger_LogDelete(t *testing.T) {
 func TestAuditLogger_LogDDL(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
-	auditor.LogDDL("user1", "db1", "CREATE TABLE test (id INT)", 200, true)
+	auditor.LogDDL("", "user1", "db1", "CREATE TABLE test (id INT)", 200, true)
 
 	events := auditor.GetEventsByUser("user1")
 	assert.GreaterOrEqual(t, len(events), 1)
@@ -108,7 +108,7 @@ func TestAuditLogger_LogDDL(t *testing.T) {
 func TestAuditLogger_LogLogin(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
-	auditor.LogLogin("user1", "192.168.1.1", true)
+	auditor.LogLogin("", "user1", "192.168.1.1", true)
 
 	events := auditor.GetEventsByUser("user1")
 	assert.GreaterOrEqual(t, len(events), 1)
@@ -126,7 +126,7 @@ func TestAuditLogger_LogLogin(t *testing.T) {
 func TestAuditLogger_LogLogout(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
-	auditor.LogLogout("user1")
+	auditor.LogLogout("", "user1")
 
 	events := auditor.GetEventsByUser("user1")
 	assert.GreaterOrEqual(t, len(events), 1)
@@ -158,7 +158,7 @@ func TestAuditLogger_LogPermission(t *testing.T) {
 func TestAuditLogger_LogInjection(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
-	auditor.LogInjection("user1", "192.168.1.1", "SELECT * FROM users WHERE id=1; DROP TABLE users;")
+	auditor.LogInjection("", "user1", "192.168.1.1", "SELECT * FROM users WHERE id=1; DROP TABLE users;")
 
 	events := auditor.GetEventsByUser("user1")
 	assert.GreaterOrEqual(t, len(events), 1)
@@ -178,7 +178,7 @@ func TestAuditLogger_LogError(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
 	err := assert.AnError
-	auditor.LogError("user1", "db1", "Connection failed", err)
+	auditor.LogError("", "user1", "db1", "Connection failed", err)
 
 	events := auditor.GetEventsByUser("user1")
 	assert.GreaterOrEqual(t, len(events), 1)
@@ -200,7 +200,7 @@ func TestAuditLogger_GetEvents(t *testing.T) {
 
 	// 添加多个事件
 	for i := 0; i < 5; i++ {
-		auditor.LogQuery("user1", "db1", "SELECT 1", 10, true)
+		auditor.LogQuery("", "user1", "db1", "SELECT 1", 10, true)
 	}
 
 	// 获取所有事件
@@ -216,9 +216,9 @@ func TestAuditLogger_GetEventsByUser(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
 	// 添加不同用户的事件
-	auditor.LogQuery("user1", "db1", "SELECT 1", 10, true)
-	auditor.LogQuery("user2", "db1", "SELECT 2", 10, true)
-	auditor.LogQuery("user1", "db1", "SELECT 3", 10, true)
+	auditor.LogQuery("", "user1", "db1", "SELECT 1", 10, true)
+	auditor.LogQuery("", "user2", "db1", "SELECT 2", 10, true)
+	auditor.LogQuery("", "user1", "db1", "SELECT 3", 10, true)
 
 	// 获取user1的事件
 	user1Events := auditor.GetEventsByUser("user1")
@@ -233,9 +233,9 @@ func TestAuditLogger_GetEventsByType(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
 	// 添加不同类型的事件
-	auditor.LogQuery("user1", "db1", "SELECT 1", 10, true)
-	auditor.LogInsert("user1", "db1", "table1", "INSERT INTO table1 VALUES (1)", 10, true)
-	auditor.LogQuery("user1", "db1", "SELECT 2", 10, true)
+	auditor.LogQuery("", "user1", "db1", "SELECT 1", 10, true)
+	auditor.LogInsert("", "user1", "db1", "table1", "INSERT INTO table1 VALUES (1)", 10, true)
+	auditor.LogQuery("", "user1", "db1", "SELECT 2", 10, true)
 
 	// 获取Query类型的事件
 	queryEvents := auditor.GetEventsByType(EventTypeQuery)
@@ -250,10 +250,10 @@ func TestAuditLogger_GetEventsByLevel(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
 	// 添加不同级别的事件
-	auditor.LogQuery("user1", "db1", "SELECT 1", 10, true)
-	auditor.LogDelete("user1", "db1", "table1", "DELETE FROM table1", 10, true)
-	auditor.LogError("user1", "db1", "Error", assert.AnError)
-	auditor.LogInjection("user1", "192.168.1.1", "malicious query")
+	auditor.LogQuery("", "user1", "db1", "SELECT 1", 10, true)
+	auditor.LogDelete("", "user1", "db1", "table1", "DELETE FROM table1", 10, true)
+	auditor.LogError("", "user1", "db1", "Error", assert.AnError)
+	auditor.LogInjection("", "user1", "192.168.1.1", "malicious query")
 
 	// 获取Info级别的事件
 	infoEvents := auditor.GetEventsByLevel(AuditLevelInfo)
@@ -278,7 +278,7 @@ func TestAuditLogger_GetEventsByTimeRange(t *testing.T) {
 	now := time.Now()
 
 	// 添加事件
-	auditor.LogQuery("user1", "db1", "SELECT 1", 10, true)
+	auditor.LogQuery("", "user1", "db1", "SELECT 1", 10, true)
 
 	// 获取当前时间范围内的事件
 	events := auditor.GetEventsByTimeRange(now.Add(-time.Hour), now.Add(time.Hour))
@@ -293,8 +293,8 @@ func TestAuditLogger_Export(t *testing.T) {
 	auditor := NewAuditLogger(10)
 
 	// 添加事件
-	auditor.LogQuery("user1", "db1", "SELECT 1", 10, true)
-	auditor.LogInsert("user1", "db1", "table1", "INSERT INTO table1 VALUES (1)", 10, true)
+	auditor.LogQuery("", "user1", "db1", "SELECT 1", 10, true)
+	auditor.LogInsert("", "user1", "db1", "table1", "INSERT INTO table1 VALUES (1)", 10, true)
 
 	// 导出
 	exported, err := auditor.Export()
@@ -311,7 +311,7 @@ func TestAuditLogger_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(idx int) {
 			for j := 0; j < 100; j++ {
-				auditor.LogQuery("user1", "db1", "SELECT 1", 10, true)
+				auditor.LogQuery("", "user1", "db1", "SELECT 1", 10, true)
 			}
 			done <- true
 		}(i)
@@ -332,7 +332,7 @@ func TestAuditLogger_BufferOverflow(t *testing.T) {
 
 	// 添加超过缓冲区大小的事件
 	for i := 0; i < 10; i++ {
-		auditor.LogQuery("user1", "db1", "SELECT 1", 10, true)
+		auditor.LogQuery("", "user1", "db1", "SELECT 1", 10, true)
 	}
 
 	// 获取事件 - 使用合理的limit值

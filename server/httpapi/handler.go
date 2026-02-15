@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -68,11 +69,21 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	clientIP := getClientIP(r)
 
+	// Resolve trace-id: request body > X-Trace-ID header > auto-generate
+	traceID := req.TraceID
+	if traceID == "" {
+		traceID = r.Header.Get("X-Trace-ID")
+	}
+	if traceID == "" {
+		traceID = fmt.Sprintf("http-%d", time.Now().UnixMilli())
+	}
+
 	// Create ephemeral session
 	session := h.db.Session()
 	defer session.Close()
 	session.SetConfigDir(h.configDir)
 	session.SetUser(client.Name)
+	session.SetTraceID(traceID)
 	if req.Database != "" {
 		session.SetCurrentDB(req.Database)
 	}
@@ -91,7 +102,7 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		query, err := session.Query(req.SQL)
 		duration = time.Since(start).Milliseconds()
 		if err != nil {
-			h.logRequest(client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, false)
+			h.logRequest(traceID, client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, false)
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{
 				Error: err.Error(),
 				Code:  http.StatusBadRequest,
@@ -105,7 +116,7 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, query.Row())
 		}
 
-		h.logRequest(client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, true)
+		h.logRequest(traceID, client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, true)
 
 		writeJSON(w, http.StatusOK, QueryResponse{
 			Columns: query.Columns(),
@@ -116,7 +127,7 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		result, err := session.Execute(req.SQL)
 		duration = time.Since(start).Milliseconds()
 		if err != nil {
-			h.logRequest(client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, false)
+			h.logRequest(traceID, client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, false)
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{
 				Error: err.Error(),
 				Code:  http.StatusBadRequest,
@@ -124,7 +135,7 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.logRequest(client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, true)
+		h.logRequest(traceID, client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, true)
 
 		writeJSON(w, http.StatusOK, ExecResponse{
 			AffectedRows: result.RowsAffected,
@@ -132,9 +143,9 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *QueryHandler) logRequest(clientName, ip, method, path, sql, database string, duration int64, success bool) {
+func (h *QueryHandler) logRequest(traceID, clientName, ip, method, path, sql, database string, duration int64, success bool) {
 	if h.auditLogger != nil {
-		h.auditLogger.LogAPIRequest(clientName, ip, method, path, sql, database, duration, success)
+		h.auditLogger.LogAPIRequest(traceID, clientName, ip, method, path, sql, database, duration, success)
 	}
 }
 

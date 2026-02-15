@@ -11,6 +11,7 @@ import (
 type QueryContext struct {
 	QueryID    string        // 查询唯一ID (生成格式: {ThreadID}_{timestamp}_{sequence})
 	ThreadID   uint32        // 关联的线程ID
+	TraceID    string        // 追踪ID (来自 Session 或 SQL 注释覆盖)
 	SQL        string        // 执行的SQL
 	StartTime  time.Time     // 开始时间
 	CancelFunc context.CancelFunc // 取消函数
@@ -61,6 +62,7 @@ func (qc *QueryContext) GetDuration() time.Duration {
 type QueryStatus struct {
 	QueryID   string
 	ThreadID  uint32
+	TraceID   string
 	SQL       string
 	StartTime time.Time
 	Duration  time.Duration
@@ -85,6 +87,7 @@ func (qc *QueryContext) GetStatus() QueryStatus {
 	return QueryStatus{
 		QueryID:   qc.QueryID,
 		ThreadID:  qc.ThreadID,
+		TraceID:   qc.TraceID,
 		SQL:       qc.SQL,
 		StartTime: qc.StartTime,
 		Duration:  time.Since(qc.StartTime),

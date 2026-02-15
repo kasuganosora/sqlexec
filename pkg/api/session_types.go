@@ -73,6 +73,25 @@ func (s *Session) GetThreadID() uint32 {
 	return s.threadID
 }
 
+// SetTraceID 设置追踪ID（传播到 CoreSession）
+func (s *Session) SetTraceID(traceID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.coreSession != nil {
+		s.coreSession.SetTraceID(traceID)
+	}
+}
+
+// GetTraceID 获取追踪ID
+func (s *Session) GetTraceID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.coreSession != nil {
+		return s.coreSession.GetTraceID()
+	}
+	return ""
+}
+
 // SetUser 设置当前用户名
 func (s *Session) SetUser(user string) {
 	s.mu.Lock()
