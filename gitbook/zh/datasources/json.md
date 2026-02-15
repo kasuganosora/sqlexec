@@ -20,13 +20,14 @@ JSON 数据源要求文件内容为一个 JSON 数组，每个元素为一个扁
 |------|------|------|------|
 | `name` | string | 是 | 数据源名称，作为数据库标识符（`USE <name>` 切换） |
 | `type` | string | 是 | 固定值 `json` |
-| `database` | string | 是 | JSON 文件路径 |
+| `database` | string | 否 | 所属数据库名称 |
 
 ## 选项
 
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
-| `path` | _(空)_ | JSON 路径表达式，用于从嵌套结构中提取数组 |
+| `path` | _(必填)_ | JSON 文件路径 |
+| `array_root` | _(空)_ | JSON 路径表达式，用于从嵌套结构中提取数组 |
 | `writable` | `false` | 是否允许写入操作 |
 
 ## 表名
@@ -55,24 +56,24 @@ SQLExec 会从采样行中推断每个字段的数据类型：
     {
       "name": "users",
       "type": "json",
-      "database": "/data/users.json",
       "options": {
+        "path": "/data/users.json",
         "writable": "false"
       }
     },
     {
       "name": "api_response",
       "type": "json",
-      "database": "/data/response.json",
       "options": {
-        "path": "data.items"
+        "path": "/data/response.json",
+        "array_root": "data.items"
       }
     }
   ]
 }
 ```
 
-对于嵌套 JSON 结构，可以使用 `path` 选项指定数据数组的位置：
+对于嵌套 JSON 结构，可以使用 `array_root` 选项指定数据数组的位置：
 
 ```json
 {
@@ -86,7 +87,7 @@ SQLExec 会从采样行中推断每个字段的数据类型：
 }
 ```
 
-配置 `"path": "data.items"` 将提取 `items` 数组作为数据表。
+配置 `"array_root": "data.items"` 将提取 `items` 数组作为数据表。
 
 ### 查询示例
 
@@ -117,8 +118,8 @@ GROUP BY city;
 {
   "name": "editable_json",
   "type": "json",
-  "database": "/data/config.json",
   "options": {
+    "path": "/data/config.json",
     "writable": "true"
   }
 }

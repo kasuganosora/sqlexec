@@ -18,13 +18,13 @@ Each line in a JSON Lines file is an independent JSON object, separated by newli
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Data source name, used as the database identifier (`USE <name>` to switch) |
 | `type` | string | Yes | Fixed value `jsonl` |
-| `database` | string | Yes | JSONL file path |
+| `database` | string | No | Database name this data source belongs to |
 
 ## Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `path` | _(empty)_ | JSON path expression |
+| `path` | _(required)_ | JSONL file path |
 | `writable` | `false` | Whether to allow write operations |
 | `skip_errors` | `false` | Whether to skip malformed lines |
 
@@ -59,8 +59,8 @@ JSONL files are parsed line by line using `bufio.Scanner`, with a maximum line s
     {
       "name": "events",
       "type": "jsonl",
-      "database": "/data/logs/events.jsonl",
       "options": {
+        "path": "/data/logs/events.jsonl",
         "skip_errors": "true",
         "writable": "false"
       }
@@ -99,8 +99,8 @@ Like the JSON data source, the JSONL data source's writable mode uses an atomic 
 {
   "name": "writable_events",
   "type": "jsonl",
-  "database": "/data/events.jsonl",
   "options": {
+    "path": "/data/events.jsonl",
     "writable": "true"
   }
 }

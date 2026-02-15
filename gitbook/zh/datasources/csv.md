@@ -8,12 +8,13 @@ CSV 数据源将 CSV 文件加载到内存中，允许你使用标准 SQL 进行
 |------|------|------|------|
 | `name` | string | 是 | 数据源名称，作为数据库标识符（`USE <name>` 切换） |
 | `type` | string | 是 | 固定值 `csv` |
-| `database` | string | 是 | CSV 文件路径 |
+| `database` | string | 否 | 所属数据库名称 |
 
 ## 选项
 
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
+| `path` | _(必填)_ | CSV 文件路径 |
 | `delimiter` | `,` | 字段分隔符，可设为 `\t`（制表符）、`;`（分号）等 |
 | `header` | `true` | 首行是否为列标题 |
 | `writable` | `false` | 是否允许写入操作 |
@@ -47,8 +48,8 @@ CSV 文件中所有字段本质上都是字符串。SQLExec 会自动采样前 1
     {
       "name": "access_logs",
       "type": "csv",
-      "database": "/data/logs/access_log.csv",
       "options": {
+        "path": "/data/logs/access_log.csv",
         "delimiter": ",",
         "header": "true",
         "writable": "false"
@@ -57,8 +58,8 @@ CSV 文件中所有字段本质上都是字符串。SQLExec 会自动采样前 1
     {
       "name": "tsv_data",
       "type": "csv",
-      "database": "/data/export.tsv",
       "options": {
+        "path": "/data/export.tsv",
         "delimiter": "\t",
         "header": "true"
       }
@@ -98,8 +99,8 @@ LIMIT 20;
 {
   "name": "editable_csv",
   "type": "csv",
-  "database": "/data/products.csv",
   "options": {
+    "path": "/data/products.csv",
     "writable": "true"
   }
 }

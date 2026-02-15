@@ -20,13 +20,14 @@ The JSON data source requires the file content to be a JSON array, with each ele
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Data source name, used as the database identifier (`USE <name>` to switch) |
 | `type` | string | Yes | Fixed value `json` |
-| `database` | string | Yes | JSON file path |
+| `database` | string | No | Database name this data source belongs to |
 
 ## Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `path` | _(empty)_ | JSON path expression for extracting an array from a nested structure |
+| `path` | _(required)_ | JSON file path |
+| `array_root` | _(empty)_ | JSON path expression for extracting an array from a nested structure |
 | `writable` | `false` | Whether to allow write operations |
 
 ## Table Name
@@ -55,24 +56,24 @@ SQLExec infers the data type of each field from sampled rows:
     {
       "name": "users",
       "type": "json",
-      "database": "/data/users.json",
       "options": {
+        "path": "/data/users.json",
         "writable": "false"
       }
     },
     {
       "name": "api_response",
       "type": "json",
-      "database": "/data/response.json",
       "options": {
-        "path": "data.items"
+        "path": "/data/response.json",
+        "array_root": "data.items"
       }
     }
   ]
 }
 ```
 
-For nested JSON structures, you can use the `path` option to specify the location of the data array:
+For nested JSON structures, you can use the `array_root` option to specify the location of the data array:
 
 ```json
 {
@@ -86,7 +87,7 @@ For nested JSON structures, you can use the `path` option to specify the locatio
 }
 ```
 
-Setting `"path": "data.items"` will extract the `items` array as the data table.
+Setting `"array_root": "data.items"` will extract the `items` array as the data table.
 
 ### Query Examples
 
@@ -117,8 +118,8 @@ When `writable` is set to `true`, write operations can be performed. SQLExec use
 {
   "name": "editable_json",
   "type": "json",
-  "database": "/data/config.json",
   "options": {
+    "path": "/data/config.json",
     "writable": "true"
   }
 }

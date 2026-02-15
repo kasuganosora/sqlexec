@@ -8,12 +8,13 @@ The CSV data source loads CSV files into memory, allowing you to query them usin
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Data source name, used as the database identifier (`USE <name>` to switch) |
 | `type` | string | Yes | Fixed value `csv` |
-| `database` | string | Yes | CSV file path |
+| `database` | string | No | Database name this data source belongs to |
 
 ## Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
+| `path` | _(required)_ | CSV file path |
 | `delimiter` | `,` | Field delimiter; can be set to `\t` (tab), `;` (semicolon), etc. |
 | `header` | `true` | Whether the first row is a column header |
 | `writable` | `false` | Whether to allow write operations |
@@ -47,8 +48,8 @@ All fields in a CSV file are inherently strings. SQLExec automatically samples t
     {
       "name": "access_logs",
       "type": "csv",
-      "database": "/data/logs/access_log.csv",
       "options": {
+        "path": "/data/logs/access_log.csv",
         "delimiter": ",",
         "header": "true",
         "writable": "false"
@@ -57,8 +58,8 @@ All fields in a CSV file are inherently strings. SQLExec automatically samples t
     {
       "name": "tsv_data",
       "type": "csv",
-      "database": "/data/export.tsv",
       "options": {
+        "path": "/data/export.tsv",
         "delimiter": "\t",
         "header": "true"
       }
@@ -98,8 +99,8 @@ When `writable` is set to `true`, you can perform insert, update, and delete ope
 {
   "name": "editable_csv",
   "type": "csv",
-  "database": "/data/products.csv",
   "options": {
+    "path": "/data/products.csv",
     "writable": "true"
   }
 }

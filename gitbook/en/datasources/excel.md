@@ -8,12 +8,13 @@ The Excel data source supports loading XLS and XLSX format spreadsheet files, al
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Data source name, used as the database identifier (`USE <name>` to switch) |
 | `type` | string | Yes | Fixed value `excel` |
-| `database` | string | Yes | Excel file path (.xls or .xlsx) |
+| `database` | string | No | Database name this data source belongs to |
 
 ## Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
+| `path` | _(required)_ | Excel file path (.xls or .xlsx) |
 | `sheet` | _(first worksheet)_ | Worksheet name or index (starting from 0) |
 
 ## Table Name
@@ -54,15 +55,17 @@ SELECT * FROM `Sales Data 2025`;
     {
       "name": "sales",
       "type": "excel",
-      "database": "/data/reports/sales_2025.xlsx",
       "options": {
+        "path": "/data/reports/sales_2025.xlsx",
         "sheet": "Q1Data"
       }
     },
     {
       "name": "inventory",
       "type": "excel",
-      "database": "/data/inventory.xls"
+      "options": {
+        "path": "/data/inventory.xls"
+      }
     }
   ]
 }
@@ -99,16 +102,16 @@ Configure multiple data sources pointing to different worksheets in the same fil
     {
       "name": "sales_q1",
       "type": "excel",
-      "database": "/data/reports/annual_2025.xlsx",
       "options": {
+        "path": "/data/reports/annual_2025.xlsx",
         "sheet": "Q1"
       }
     },
     {
       "name": "sales_q2",
       "type": "excel",
-      "database": "/data/reports/annual_2025.xlsx",
       "options": {
+        "path": "/data/reports/annual_2025.xlsx",
         "sheet": "Q2"
       }
     }

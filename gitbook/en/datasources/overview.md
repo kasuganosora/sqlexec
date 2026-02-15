@@ -40,27 +40,25 @@ All data sources share the following common configuration fields:
 | `port` | int | No | Port number (used by MySQL, PostgreSQL) |
 | `username` | string | Depends | Username (used by MySQL, PostgreSQL) |
 | `password` | string | Depends | Password (used by MySQL, PostgreSQL) |
-| `database` | string | Depends | Database name or file path (meaning varies by type, see table below) |
+| `database` | string | Depends | Database name the data source belongs to (meaning varies by type, see table below) |
 | `writable` | bool | No | Whether write operations are allowed |
 | `options` | object | No | Type-specific advanced options |
 
 ### Meaning of the `database` Field
 
-The `database` field has different meanings for different data source types:
+The `database` field defines which database the data source belongs to:
 
 | Data Source Type | `database` Field Meaning | Example |
 |-----------------|------------------------|---------|
 | MySQL | Remote MySQL database name | `"myapp"` |
 | PostgreSQL | Remote PostgreSQL database name | `"analytics"` |
-| CSV | CSV file path | `"/data/logs.csv"` |
-| JSON | JSON file path | `"/data/users.json"` |
-| JSONL | JSONL file path | `"/data/events.jsonl"` |
-| Excel | Excel file path | `"/data/report.xlsx"` |
-| Parquet | Parquet file path | `"/data/events.parquet"` |
-| HTTP | _Not used_ | — |
+| CSV / JSON / JSONL / Excel / Parquet | Database name it belongs to (optional) | `"analytics"` |
+| HTTP | Database name it belongs to (optional) | `"api_db"` |
 | Memory | _Not used_ | — |
 
-> **Important**: The `name` field determines the "database" name for this data source within SQLExec. After switching the active data source with `USE <name>`, all subsequent SQL operations execute against that data source.
+> **Important**:
+> - The `name` field determines the "database" name for this data source within SQLExec. After switching the active data source with `USE <name>`, all subsequent SQL operations execute against that data source.
+> - For file-based data sources (CSV, JSON, JSONL, Excel, Parquet), the **file path** should be specified via the `path` field in `options`, not in the `database` field.
 
 ## Configuration Methods
 
@@ -90,7 +88,9 @@ Suitable for standalone SQLExec server deployments. Create a `datasources.json` 
     {
       "name": "logs",
       "type": "csv",
-      "database": "/data/access_logs.csv"
+      "options": {
+        "path": "/data/access_logs.csv"
+      }
     }
   ]
 }
@@ -148,7 +148,7 @@ Returned columns:
 | `port` | int | Port number |
 | `username` | varchar(64) | Username |
 | `password` | varchar(128) | Password (displayed as `****`) |
-| `database_name` | varchar(128) | Database name / file path |
+| `database_name` | varchar(128) | Database name it belongs to |
 | `writable` | boolean | Whether writable |
 | `options` | text | Options in JSON format |
 | `status` | varchar(16) | Connection status (`connected` / `disconnected`) |
@@ -160,9 +160,9 @@ Returned columns:
 INSERT INTO config.datasource (name, type, host, port, username, password, database_name, writable)
 VALUES ('production', 'mysql', 'db.example.com', 3306, 'app_user', 'secret', 'myapp', true);
 
--- Add a CSV data source
-INSERT INTO config.datasource (name, type, database_name)
-VALUES ('logs', 'csv', '/data/access_logs.csv');
+-- Add a CSV data source (file path goes in options)
+INSERT INTO config.datasource (name, type, options)
+VALUES ('logs', 'csv', '{"path": "/data/access_logs.csv"}');
 
 -- Add a PostgreSQL data source with options
 INSERT INTO config.datasource (name, type, host, port, username, password, database_name, options)

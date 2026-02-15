@@ -8,7 +8,13 @@ The Parquet data source supports loading Apache Parquet columnar storage files, 
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Data source name, used as the database identifier (`USE <name>` to switch) |
 | `type` | string | Yes | Fixed value `parquet` |
-| `database` | string | Yes | Parquet file path |
+| `database` | string | No | Database name this data source belongs to |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `path` | _(required)_ | Parquet file path |
 
 ## Table Name
 
@@ -47,7 +53,9 @@ Parquet files contain complete schema information. SQLExec automatically maps Pa
     {
       "name": "analytics",
       "type": "parquet",
-      "database": "/data/warehouse/events_2025.parquet"
+      "options": {
+        "path": "/data/warehouse/events_2025.parquet"
+      }
     }
   ]
 }

@@ -40,27 +40,25 @@ DataSourceFactory → Registry → DataSourceManager
 | `port` | int | 否 | 端口号（MySQL、PostgreSQL 使用） |
 | `username` | string | 视类型 | 用户名（MySQL、PostgreSQL 使用） |
 | `password` | string | 视类型 | 密码（MySQL、PostgreSQL 使用） |
-| `database` | string | 视类型 | 数据库名或文件路径（含义因类型而异，见下表） |
+| `database` | string | 视类型 | 所属数据库名称（含义因类型而异，见下表） |
 | `writable` | bool | 否 | 是否允许写入操作 |
 | `options` | object | 否 | 类型特定的高级选项 |
 
 ### `database` 字段的含义
 
-`database` 字段在不同类型的数据源中有不同的含义：
+`database` 字段用于定义数据源所属的数据库名称：
 
 | 数据源类型 | `database` 字段含义 | 示例 |
 |-----------|-------------------|------|
 | MySQL | 远程 MySQL 数据库名称 | `"myapp"` |
 | PostgreSQL | 远程 PostgreSQL 数据库名称 | `"analytics"` |
-| CSV | CSV 文件路径 | `"/data/logs.csv"` |
-| JSON | JSON 文件路径 | `"/data/users.json"` |
-| JSONL | JSONL 文件路径 | `"/data/events.jsonl"` |
-| Excel | Excel 文件路径 | `"/data/report.xlsx"` |
-| Parquet | Parquet 文件路径 | `"/data/events.parquet"` |
-| HTTP | _不使用_ | — |
+| CSV / JSON / JSONL / Excel / Parquet | 所属数据库名称（可选） | `"analytics"` |
+| HTTP | 所属数据库名称（可选） | `"api_db"` |
 | Memory | _不使用_ | — |
 
-> **重要**：`name` 字段决定了该数据源在 SQLExec 中作为"数据库"的名称。通过 `USE <name>` 切换活动数据源后，后续的所有 SQL 操作都在该数据源上执行。
+> **重要**：
+> - `name` 字段决定了该数据源在 SQLExec 中作为"数据库"的名称。通过 `USE <name>` 切换活动数据源后，后续的所有 SQL 操作都在该数据源上执行。
+> - 文件型数据源（CSV、JSON、JSONL、Excel、Parquet）的**文件路径**应通过 `options` 中的 `path` 字段指定，而非 `database` 字段。
 
 ## 配置方式
 
@@ -90,7 +88,9 @@ SQLExec 支持三种数据源配置方式。
     {
       "name": "logs",
       "type": "csv",
-      "database": "/data/access_logs.csv"
+      "options": {
+        "path": "/data/access_logs.csv"
+      }
     }
   ]
 }
@@ -148,7 +148,7 @@ SELECT * FROM config.datasource;
 | `port` | int | 端口号 |
 | `username` | varchar(64) | 用户名 |
 | `password` | varchar(128) | 密码（显示为 `****`） |
-| `database_name` | varchar(128) | 数据库名/文件路径 |
+| `database_name` | varchar(128) | 所属数据库名称 |
 | `writable` | boolean | 是否可写 |
 | `options` | text | JSON 格式的选项 |
 | `status` | varchar(16) | 连接状态（`connected` / `disconnected`） |
@@ -160,9 +160,9 @@ SELECT * FROM config.datasource;
 INSERT INTO config.datasource (name, type, host, port, username, password, database_name, writable)
 VALUES ('production', 'mysql', 'db.example.com', 3306, 'app_user', 'secret', 'myapp', true);
 
--- 添加 CSV 数据源
-INSERT INTO config.datasource (name, type, database_name)
-VALUES ('logs', 'csv', '/data/access_logs.csv');
+-- 添加 CSV 数据源（文件路径放在 options 中）
+INSERT INTO config.datasource (name, type, options)
+VALUES ('logs', 'csv', '{"path": "/data/access_logs.csv"}');
 
 -- 添加 PostgreSQL 数据源（带选项）
 INSERT INTO config.datasource (name, type, host, port, username, password, database_name, options)

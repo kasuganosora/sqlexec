@@ -18,13 +18,13 @@ JSON Lines 文件中每一行是一个独立的 JSON 对象，行与行之间用
 |------|------|------|------|
 | `name` | string | 是 | 数据源名称，作为数据库标识符（`USE <name>` 切换） |
 | `type` | string | 是 | 固定值 `jsonl` |
-| `database` | string | 是 | JSONL 文件路径 |
+| `database` | string | 否 | 所属数据库名称 |
 
 ## 选项
 
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
-| `path` | _(空)_ | JSON 路径表达式 |
+| `path` | _(必填)_ | JSONL 文件路径 |
 | `writable` | `false` | 是否允许写入操作 |
 | `skip_errors` | `false` | 是否跳过格式错误的行 |
 
@@ -59,8 +59,8 @@ JSONL 文件使用 `bufio.Scanner` 逐行解析，每行最大支持 **10MB**。
     {
       "name": "events",
       "type": "jsonl",
-      "database": "/data/logs/events.jsonl",
       "options": {
+        "path": "/data/logs/events.jsonl",
         "skip_errors": "true",
         "writable": "false"
       }
@@ -99,8 +99,8 @@ ORDER BY timestamp;
 {
   "name": "writable_events",
   "type": "jsonl",
-  "database": "/data/events.jsonl",
   "options": {
+    "path": "/data/events.jsonl",
     "writable": "true"
   }
 }

@@ -8,12 +8,13 @@ Excel 数据源支持加载 XLS 和 XLSX 格式的电子表格文件，允许你
 |------|------|------|------|
 | `name` | string | 是 | 数据源名称，作为数据库标识符（`USE <name>` 切换） |
 | `type` | string | 是 | 固定值 `excel` |
-| `database` | string | 是 | Excel 文件路径（.xls 或 .xlsx） |
+| `database` | string | 否 | 所属数据库名称 |
 
 ## 选项
 
 | 选项 | 默认值 | 说明 |
 |------|--------|------|
+| `path` | _(必填)_ | Excel 文件路径（.xls 或 .xlsx） |
 | `sheet` | _(第一个工作表)_ | 工作表名称或索引（从 0 开始） |
 
 ## 表名
@@ -54,15 +55,17 @@ SELECT * FROM `销售数据 2025`;
     {
       "name": "sales",
       "type": "excel",
-      "database": "/data/reports/sales_2025.xlsx",
       "options": {
+        "path": "/data/reports/sales_2025.xlsx",
         "sheet": "Q1数据"
       }
     },
     {
       "name": "inventory",
       "type": "excel",
-      "database": "/data/inventory.xls"
+      "options": {
+        "path": "/data/inventory.xls"
+      }
     }
   ]
 }
@@ -99,16 +102,16 @@ WHERE quantity > 100 AND unit_price < 50.00;
     {
       "name": "sales_q1",
       "type": "excel",
-      "database": "/data/reports/annual_2025.xlsx",
       "options": {
+        "path": "/data/reports/annual_2025.xlsx",
         "sheet": "Q1"
       }
     },
     {
       "name": "sales_q2",
       "type": "excel",
-      "database": "/data/reports/annual_2025.xlsx",
       "options": {
+        "path": "/data/reports/annual_2025.xlsx",
         "sheet": "Q2"
       }
     }

@@ -8,7 +8,13 @@ Parquet 数据源支持加载 Apache Parquet 列式存储文件，适用于分�
 |------|------|------|------|
 | `name` | string | 是 | 数据源名称，作为数据库标识符（`USE <name>` 切换） |
 | `type` | string | 是 | 固定值 `parquet` |
-| `database` | string | 是 | Parquet 文件路径 |
+| `database` | string | 否 | 所属数据库名称 |
+
+## 选项
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `path` | _(必填)_ | Parquet 文件路径 |
 
 ## 表名
 
@@ -47,7 +53,9 @@ Parquet 文件包含完整的 schema 信息，SQLExec 会将 Parquet 类型自�
     {
       "name": "analytics",
       "type": "parquet",
-      "database": "/data/warehouse/events_2025.parquet"
+      "options": {
+        "path": "/data/warehouse/events_2025.parquet"
+      }
     }
   ]
 }
