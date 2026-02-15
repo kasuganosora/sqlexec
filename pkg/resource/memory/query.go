@@ -64,7 +64,7 @@ func (m *MVCCDataSource) Filter(
 		Filters: filters,
 	}
 
-	filteredRows := util.ApplyFilters(tableData.rows, options)
+	filteredRows := util.ApplyFilters(tableData.Rows(), options)
 	total := int64(len(filteredRows))
 
 	// Apply pagination
@@ -137,7 +137,7 @@ func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *d
 		plan, planErr := m.queryPlanner.PlanQuery(tableName, options.Filters, options)
 		if planErr != nil {
 			// Optimization failed, use full table scan
-			pagedRows := util.ApplyQueryOperations(tableData.rows, options, &tableData.schema.Columns)
+			pagedRows := util.ApplyQueryOperations(tableData.Rows(), options, &tableData.schema.Columns)
 			queryResult = &domain.QueryResult{
 				Columns: tableData.schema.Columns,
 				Rows:    pagedRows,
@@ -148,7 +148,7 @@ func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *d
 			queryResult, err = m.queryPlanner.ExecutePlan(plan, tableData)
 			if err != nil {
 				// Execution failed, use full table scan
-				pagedRows := util.ApplyQueryOperations(tableData.rows, options, &tableData.schema.Columns)
+				pagedRows := util.ApplyQueryOperations(tableData.Rows(), options, &tableData.schema.Columns)
 				queryResult = &domain.QueryResult{
 					Columns: tableData.schema.Columns,
 					Rows:    pagedRows,
@@ -183,7 +183,7 @@ func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *d
 		}
 	} else {
 		// No filter conditions, use full table scan
-		pagedRows := util.ApplyQueryOperations(tableData.rows, options, &tableData.schema.Columns)
+		pagedRows := util.ApplyQueryOperations(tableData.Rows(), options, &tableData.schema.Columns)
 		queryResult = &domain.QueryResult{
 			Columns: tableData.schema.Columns,
 			Rows:    pagedRows,

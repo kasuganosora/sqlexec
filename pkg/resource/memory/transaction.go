@@ -106,8 +106,9 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 			m.currentVer++
 
 			// Merge base data and row-level modifications
-			newRows := make([]domain.Row, 0, len(cowSnapshot.baseData.rows))
-			for i, row := range cowSnapshot.baseData.rows {
+			baseRows := cowSnapshot.baseData.Rows()
+			newRows := make([]domain.Row, 0, len(baseRows))
+			for i, row := range baseRows {
 				rowID := int64(i + 1)
 
 				// Skip deleted rows
@@ -124,7 +125,7 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 			}
 
 			// Append newly inserted rows in order (rowID > base data row count)
-			baseRowsCount := int64(len(cowSnapshot.baseData.rows))
+			baseRowsCount := int64(cowSnapshot.baseData.RowCount())
 			for rowID := baseRowsCount + 1; rowID <= baseRowsCount+cowSnapshot.insertedCount; rowID++ {
 				if cowSnapshot.deletedRows[rowID] {
 					continue
@@ -139,7 +140,7 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 				version:   m.currentVer,
 				createdAt: time.Now(),
 				schema:    deepCopySchema(cowSnapshot.modifiedData.schema),
-				rows:      newRows,
+				rows:      NewPagedRows(m.bufferPool, newRows, 0, tableName, m.currentVer),
 			}
 
 			tableVer.versions[m.currentVer] = newVersionData
@@ -244,9 +245,10 @@ func (s *COWTableSnapshot) getTableData(tableVer *TableVersions) *TableData {
 	}
 
 	// Merge base data and modified rows, skipping deleted rows
-	baseRowsCount := int64(len(s.baseData.rows))
-	mergedRows := make([]domain.Row, 0, len(s.baseData.rows))
-	for i, row := range s.baseData.rows {
+	baseRowsCount := int64(s.baseData.RowCount())
+	srcRows := s.baseData.Rows()
+	mergedRows := make([]domain.Row, 0, len(srcRows))
+	for i, row := range srcRows {
 		rowID := int64(i + 1) // Row ID starts from 1
 
 		// Skip deleted rows
@@ -277,6 +279,6 @@ func (s *COWTableSnapshot) getTableData(tableVer *TableVersions) *TableData {
 		version:   s.modifiedData.version,
 		createdAt: s.modifiedData.createdAt,
 		schema:    s.modifiedData.schema,
-		rows:      mergedRows,
+		rows:      NewPagedRows(nil, mergedRows, 0, s.tableName, s.modifiedData.version),
 	}
 }

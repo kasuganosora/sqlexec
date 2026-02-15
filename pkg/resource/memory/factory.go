@@ -7,11 +7,18 @@ import (
 // ==================== Factory ====================
 
 // MemoryFactory 内存数据源工厂
-type MemoryFactory struct{}
+type MemoryFactory struct {
+	pagingCfg *PagingConfig
+}
 
 // NewMemoryFactory 创建内存数据源工厂
-func NewMemoryFactory() *MemoryFactory {
-	return &MemoryFactory{}
+// An optional *PagingConfig controls the buffer pool for memory paging.
+func NewMemoryFactory(opts ...*PagingConfig) *MemoryFactory {
+	var cfg *PagingConfig
+	if len(opts) > 0 {
+		cfg = opts[0]
+	}
+	return &MemoryFactory{pagingCfg: cfg}
 }
 
 // GetType 实现DataSourceFactory接口
@@ -34,5 +41,5 @@ func (f *MemoryFactory) Create(config *domain.DataSourceConfig) (domain.DataSour
 		Type:     domain.DataSourceTypeMemory,
 		Name:     name,
 		Writable: writable,
-	}), nil
+	}, f.pagingCfg), nil
 }

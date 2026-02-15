@@ -120,7 +120,7 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 		cowSnapshot.mu.Lock()
 
 		// Get base data row count and previously inserted count
-		baseRowsCount := int64(len(cowSnapshot.baseData.rows))
+		baseRowsCount := int64(cowSnapshot.baseData.RowCount())
 		inserted := int64(0)
 
 		for _, row := range rows {
@@ -155,8 +155,9 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	}
 
 	// Non-transaction insert, create new version
-	newRows := make([]domain.Row, len(latestData.rows), len(latestData.rows)+len(rows))
-	copy(newRows, latestData.rows)
+	existingRows := latestData.Rows()
+	newRows := make([]domain.Row, len(existingRows), len(existingRows)+len(rows))
+	copy(newRows, existingRows)
 	// Deep copy inserted rows to prevent external mutation
 	for _, row := range rows {
 		newRows = append(newRows, deepCopyRow(row))
@@ -166,7 +167,7 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 		version:   newVer,
 		createdAt: time.Now(),
 		schema:    deepCopySchema(latestData.schema),
-		rows:      newRows,
+		rows:      NewPagedRows(m.bufferPool, newRows, 0, tableName, newVer),
 	}
 
 	tableVer.versions[newVer] = versionData
@@ -237,7 +238,7 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		defer cowSnapshot.mu.Unlock()
 
 		updated := int64(0)
-		baseRowsCount := int64(len(cowSnapshot.baseData.rows))
+		baseRowsCount := int64(cowSnapshot.baseData.RowCount())
 
 		// Helper to apply updates to a row
 		applyUpdates := func(rowID int64, row domain.Row, isBase bool) {
@@ -300,7 +301,7 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		}
 
 		// Check base data rows
-		for i, row := range cowSnapshot.baseData.rows {
+		for i, row := range cowSnapshot.baseData.Rows() {
 			rowID := int64(i + 1)
 			applyUpdates(rowID, row, true)
 		}
@@ -332,8 +333,9 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 
 	// Non-transaction update, create new version
 	// Deep copy rows to avoid mutating the previous version's data (MVCC isolation)
-	newRows := make([]domain.Row, len(latestData.rows))
-	for i, row := range latestData.rows {
+	srcRows := latestData.Rows()
+	newRows := make([]domain.Row, len(srcRows))
+	for i, row := range srcRows {
 		newRows[i] = deepCopyRow(row)
 	}
 
@@ -363,7 +365,7 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		version:   newVer,
 		createdAt: time.Now(),
 		schema:    deepCopySchema(latestData.schema),
-		rows:      newRows,
+		rows:      NewPagedRows(m.bufferPool, newRows, 0, tableName, newVer),
 	}
 
 	tableVer.versions[newVer] = versionData
@@ -416,10 +418,10 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		defer cowSnapshot.mu.Unlock()
 
 		deleted := int64(0)
-		baseRowsCount := int64(len(cowSnapshot.baseData.rows))
+		baseRowsCount := int64(cowSnapshot.baseData.RowCount())
 
 		// Check base data rows
-		for i, row := range cowSnapshot.baseData.rows {
+		for i, row := range cowSnapshot.baseData.Rows() {
 			rowID := int64(i + 1)
 
 			// Skip already deleted rows
@@ -472,10 +474,11 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 	}
 
 	// Non-transaction delete, create new version
-	newRows := make([]domain.Row, 0, len(latestData.rows))
+	delSrcRows := latestData.Rows()
+	newRows := make([]domain.Row, 0, len(delSrcRows))
 
 	deleted := int64(0)
-	for _, row := range latestData.rows {
+	for _, row := range delSrcRows {
 		if !util.MatchesFilters(row, filters) {
 			newRows = append(newRows, row)
 		} else {
@@ -487,7 +490,7 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		version:   newVer,
 		createdAt: time.Now(),
 		schema:    deepCopySchema(latestData.schema),
-		rows:      newRows,
+		rows:      NewPagedRows(m.bufferPool, newRows, 0, tableName, newVer),
 	}
 
 	tableVer.versions[newVer] = versionData

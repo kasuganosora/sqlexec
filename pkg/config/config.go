@@ -22,6 +22,7 @@ type Config struct {
 	Optimizer     OptimizerConfig     `json:"optimizer"`
 	HTTPAPI       HTTPAPIConfig       `json:"http_api"`
 	MCP           MCPConfig           `json:"mcp"`
+	Paging        PagingConfig        `json:"paging"`
 }
 
 // HTTPAPIConfig HTTP REST API 配置
@@ -131,6 +132,15 @@ type OptimizerConfig struct {
 	Enabled bool `json:"enabled"`
 }
 
+// PagingConfig 内存分页配置（虚拟内存机制）
+type PagingConfig struct {
+	Enabled       bool          `json:"enabled"`         // 是否启用内存分页
+	MaxMemoryMB   int           `json:"max_memory_mb"`   // 最大内存(MB)，0=自动检测(系统内存的70%)
+	PageSize      int           `json:"page_size"`       // 每页行数，默认4096
+	SpillDir      string        `json:"spill_dir"`       // 溢出文件目录，默认临时目录
+	EvictInterval time.Duration `json:"evict_interval"`  // 后台驱逐检查间隔，默认5秒
+}
+
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
@@ -218,6 +228,13 @@ func DefaultConfig() *Config {
 			Enabled: false,
 			Host:    "0.0.0.0",
 			Port:    8081,
+		},
+		Paging: PagingConfig{
+			Enabled:       true,
+			MaxMemoryMB:   0,
+			PageSize:      4096,
+			SpillDir:      "",
+			EvictInterval: 5 * time.Second,
 		},
 	}
 }

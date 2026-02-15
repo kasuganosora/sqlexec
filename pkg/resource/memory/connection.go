@@ -31,6 +31,12 @@ func (m *MVCCDataSource) Close(ctx context.Context) error {
 	m.snapshots = make(map[int64]*Snapshot)
 	m.activeTxns = make(map[int64]*Transaction)
 	m.connected = false
+
+	// Shut down buffer pool and clean up spill files
+	if m.bufferPool != nil {
+		m.bufferPool.Close()
+	}
+
 	return nil
 }
 

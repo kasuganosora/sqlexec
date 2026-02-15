@@ -141,7 +141,7 @@ func (m *MVCCDataSource) CreateTable(ctx context.Context, tableInfo *domain.Tabl
 			Temporary: tableInfo.Temporary,
 			Atts:      atts,
 		},
-		rows: []domain.Row{},
+		rows: NewEmptyPagedRows(m.bufferPool, 0),
 	}
 
 	m.tables[tableInfo.Name] = &TableVersions{
@@ -208,7 +208,7 @@ func (m *MVCCDataSource) TruncateTable(ctx context.Context, tableName string) er
 			Columns: tableVer.versions[tableVer.latest].schema.Columns,
 			Atts:    atts,
 		},
-		rows: []domain.Row{},
+		rows: NewEmptyPagedRows(m.bufferPool, 0),
 	}
 
 	tableVer.versions[m.currentVer] = versionData

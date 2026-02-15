@@ -38,7 +38,7 @@ func (m *MVCCDataSource) LoadTable(tableName string, schema *domain.TableInfo, r
 			Columns: cols,
 			Atts:    atts,
 		},
-		rows: rows,
+		rows: NewPagedRows(m.bufferPool, rows, 0, tableName, m.currentVer),
 	}
 
 	if existing, ok := m.tables[tableName]; ok {
@@ -79,7 +79,7 @@ func (m *MVCCDataSource) GetLatestTableData(tableName string) (*domain.TableInfo
 		return nil, nil, domain.NewErrTableNotFound(tableName)
 	}
 
-	return latest.schema, latest.rows, nil
+	return latest.schema, latest.Rows(), nil
 }
 
 // GetCurrentVersion gets current version number

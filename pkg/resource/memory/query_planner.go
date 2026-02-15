@@ -82,7 +82,7 @@ func (p *QueryPlanner) ExecutePlan(plan *QueryPlan, tableData *TableData) (*doma
 func (p *QueryPlanner) fullScan(tableData *TableData, plan *QueryPlan) (*domain.QueryResult, error) {
 	// 使用现有的过滤逻辑
 	filteredRows := make([]domain.Row, 0)
-	for _, row := range tableData.rows {
+	for _, row := range tableData.Rows() {
 		matches := true
 		for _, filter := range plan.Filters {
 			// 使用MatchFilter进行正确的值比较
@@ -129,8 +129,8 @@ func (p *QueryPlanner) indexScan(tableData *TableData, plan *QueryPlan) (*domain
 	// 根据rowID获取行数据
 	filteredRows := make([]domain.Row, 0, len(rowIDs))
 	for _, rowID := range rowIDs {
-		if int(rowID) <= len(tableData.rows) {
-			filteredRows = append(filteredRows, tableData.rows[rowID-1])
+		if int(rowID) <= tableData.RowCount() {
+			filteredRows = append(filteredRows, tableData.rows.Get(int(rowID-1)))
 		}
 	}
 

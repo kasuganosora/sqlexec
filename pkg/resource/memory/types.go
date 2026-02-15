@@ -21,7 +21,24 @@ type TableData struct {
 	version   int64
 	createdAt time.Time
 	schema    *domain.TableInfo
-	rows      []domain.Row
+	rows      *PagedRows
+}
+
+// Rows materializes all paged rows into a flat slice for compatibility
+// with existing code that expects []domain.Row.
+func (td *TableData) Rows() []domain.Row {
+	if td == nil || td.rows == nil {
+		return nil
+	}
+	return td.rows.Materialize()
+}
+
+// RowCount returns the total number of rows without materializing.
+func (td *TableData) RowCount() int {
+	if td == nil || td.rows == nil {
+		return 0
+	}
+	return td.rows.Len()
 }
 
 // COWTableSnapshot represents a copy-on-write snapshot of a table
