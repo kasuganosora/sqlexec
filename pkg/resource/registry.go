@@ -5,6 +5,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/csv"
 	"github.com/kasuganosora/sqlexec/pkg/resource/excel"
 	"github.com/kasuganosora/sqlexec/pkg/resource/json"
+	"github.com/kasuganosora/sqlexec/pkg/resource/jsonl"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/kasuganosora/sqlexec/pkg/resource/parquet"
 	"github.com/kasuganosora/sqlexec/pkg/resource/slice"
@@ -20,6 +21,7 @@ func init() {
 	// 注册文件数据源工厂
 	registry.Register(csv.NewCSVFactory())
 	registry.Register(json.NewJSONFactory())
+	registry.Register(jsonl.NewJSONLFactory())
 	registry.Register(excel.NewExcelFactory())
 	registry.Register(parquet.NewParquetFactory())
 

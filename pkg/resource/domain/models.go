@@ -25,6 +25,8 @@ const (
 	DataSourceTypeJSON DataSourceType = "json"
 	// DataSourceTypeParquet Parquet文件数据源
 	DataSourceTypeParquet DataSourceType = "parquet"
+	// DataSourceTypeJSONL JSONL文件数据源
+	DataSourceTypeJSONL DataSourceType = "jsonl"
 	// DataSourceTypeHTTP HTTP远程数据源
 	DataSourceTypeHTTP DataSourceType = "http"
 )
