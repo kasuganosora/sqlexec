@@ -100,12 +100,9 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		defer query.Close()
 
-		var rows []domain.Row
+		rows := make([]domain.Row, 0, 64)
 		for query.Next() {
 			rows = append(rows, query.Row())
-		}
-		if rows == nil {
-			rows = []domain.Row{}
 		}
 
 		h.logRequest(client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, true)

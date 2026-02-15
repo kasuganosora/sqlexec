@@ -79,9 +79,9 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 		sb.WriteString("\n")
 
 		rowCount := 0
+		vals := make([]string, len(colNames))
 		for query.Next() {
 			row := query.Row()
-			vals := make([]string, len(colNames))
 			for i, col := range colNames {
 				vals[i] = fmt.Sprintf("%v", row[col])
 			}

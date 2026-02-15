@@ -105,12 +105,20 @@ func AuthMiddleware(store *ClientStore) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Read body for signature verification
-			body, err := io.ReadAll(r.Body)
+			// Read body for signature verification (limit to 10MB)
+			const maxBodySize = 10 * 1024 * 1024
+			body, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize+1))
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, ErrorResponse{
 					Error: "failed to read request body",
 					Code:  http.StatusBadRequest,
+				})
+				return
+			}
+			if len(body) > maxBodySize {
+				writeJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{
+					Error: "request body too large",
+					Code:  http.StatusRequestEntityTooLarge,
 				})
 				return
 			}
