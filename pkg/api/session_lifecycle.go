@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+
+	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
 // GetDB returns DB object that created this session
@@ -25,13 +27,13 @@ func (s *Session) SetCurrentDB(dbName string) {
 	}
 }
 
-// SetConfigDir sets the config directory for the config virtual database
-func (s *Session) SetConfigDir(dir string) {
+// SetVirtualDBRegistry 设置虚拟数据库注册表
+func (s *Session) SetVirtualDBRegistry(registry *virtual.VirtualDatabaseRegistry) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.coreSession != nil {
-		s.coreSession.SetConfigDir(dir)
+		s.coreSession.SetVirtualDBRegistry(registry)
 	}
 }
 

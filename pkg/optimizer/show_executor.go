@@ -131,8 +131,14 @@ func (e *ShowExecutor) executeShowColumns(ctx context.Context, showStmt *parser.
 		whereClause = fmt.Sprintf(" AND (%s)", showStmt.Where)
 	}
 
-	sql := fmt.Sprintf("SELECT * FROM information_schema.columns WHERE table_name = '%s'%s",
-		showStmt.Table, whereClause)
+	// 使用当前数据库作为 table_schema 过滤条件，避免跨库列混淆
+	schemaFilter := ""
+	if e.currentDB != "" {
+		schemaFilter = fmt.Sprintf(" AND table_schema = '%s'", e.currentDB)
+	}
+
+	sql := fmt.Sprintf("SELECT * FROM information_schema.columns WHERE table_name = '%s'%s%s",
+		showStmt.Table, schemaFilter, whereClause)
 	debugf("  [DEBUG] SHOW COLUMNS converted to: %s\n", sql)
 
 	// 解析 SQL

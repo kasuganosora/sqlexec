@@ -30,6 +30,7 @@ import (
 	"github.com/kasuganosora/sqlexec/server/protocol"
 	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 	isacl "github.com/kasuganosora/sqlexec/pkg/information_schema"
+	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
 type Server struct {
@@ -45,6 +46,7 @@ type Server struct {
 	logger            Logger
 	auditLogger       handler.AuditLogger
 	configDir         string // 配置目录（用于 config 虚拟数据库）
+	vdbRegistry       *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
 }
 
 type Logger interface {
@@ -150,6 +152,16 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 		log.Printf("加载插件失败: %v", err)
 	}
 
+	// 创建虚拟数据库注册表并注册 config 虚拟数据库
+	vdbRegistry := virtual.NewVirtualDatabaseRegistry()
+	configProvider := config_schema.NewProvider(dsManager, configDir)
+	vdbRegistry.Register(&virtual.VirtualDatabaseEntry{
+		Name:     "config",
+		Provider: configProvider,
+		Writable: true,
+	})
+	log.Printf("已注册虚拟数据库: config")
+
 	// 注册进程列表提供者（用于 SHOW PROCESSLIST）
 	optimizer.RegisterProcessListProvider(pkg_session.GetProcessListForOptimizer)
 
@@ -165,6 +177,7 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 		handshakeHandler: handshakeHandler.NewDefaultHandshakeHandler(db, &serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)}),
 		logger:           &serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)},
 		configDir:        configDir,
+		vdbRegistry:      vdbRegistry,
 	}
 
 	// 注册所有处理器
@@ -242,6 +255,11 @@ func (s *Server) GetConfigDir() string {
 	return s.configDir
 }
 
+// GetVirtualDBRegistry 返回虚拟数据库注册表
+func (s *Server) GetVirtualDBRegistry() *virtual.VirtualDatabaseRegistry {
+	return s.vdbRegistry
+}
+
 func (s *Server) Start() (err error) {
 	acceptChan := make(chan net.Conn)
 	errChan := make(chan error, 1)
@@ -311,7 +329,7 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 		apiSess := s.db.Session()
 		apiSess.SetThreadID(sess.ThreadID) // 设置 threadID 用于 KILL 查询
 		apiSess.SetTraceID(sess.TraceID)   // 传播 trace-id 用于请求追踪
-		apiSess.SetConfigDir(s.configDir)  // 设置配置目录用于 config 虚拟数据库
+		apiSess.SetVirtualDBRegistry(s.vdbRegistry)  // 设置虚拟数据库注册表
 		sess.SetAPISession(apiSess)
 		s.logger.Printf("已为连接创建 API Session, ThreadID=%d", sess.ThreadID)
 	}

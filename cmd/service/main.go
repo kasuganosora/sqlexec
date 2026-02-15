@@ -39,6 +39,7 @@ func main() {
 	// 条件启动 HTTP API
 	if cfg.HTTPAPI.Enabled {
 		httpServer := httpapi.NewServer(srv.GetDB(), srv.GetConfigDir(), &cfg.HTTPAPI, auditLogger)
+		httpServer.SetVirtualDBRegistry(srv.GetVirtualDBRegistry())
 		go func() {
 			if err := httpServer.Start(); err != nil {
 				logger.Error("HTTP API 服务器退出: %v", err)
@@ -49,6 +50,7 @@ func main() {
 	// 条件启动 MCP
 	if cfg.MCP.Enabled {
 		mcpSrv := mcpserver.NewServer(srv.GetDB(), srv.GetConfigDir(), &cfg.MCP, auditLogger)
+		mcpSrv.SetVirtualDBRegistry(srv.GetVirtualDBRegistry())
 		go func() {
 			if err := mcpSrv.Start(); err != nil {
 				logger.Error("MCP 服务器退出: %v", err)

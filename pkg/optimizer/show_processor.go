@@ -103,8 +103,12 @@ func (sp *DefaultShowProcessor) ProcessShowColumns(ctx context.Context, tableNam
 		return nil, fmt.Errorf("SHOW COLUMNS requires a table name")
 	}
 
-	// SHOW COLUMNS FROM table -> SELECT * FROM information_schema.columns WHERE table_name = ?
-	sql := fmt.Sprintf("SELECT * FROM information_schema.columns WHERE table_name = '%s'", tableName)
+	// SHOW COLUMNS FROM table -> SELECT * FROM information_schema.columns WHERE table_name = ? AND table_schema = ?
+	schemaFilter := ""
+	if sp.currentDB != "" {
+		schemaFilter = fmt.Sprintf(" AND table_schema = '%s'", sp.currentDB)
+	}
+	sql := fmt.Sprintf("SELECT * FROM information_schema.columns WHERE table_name = '%s'%s", tableName, schemaFilter)
 	
 	adapter := parser.NewSQLAdapter()
 	parseResult, err := adapter.Parse(sql)

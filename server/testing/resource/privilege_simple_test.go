@@ -19,8 +19,8 @@ func TestPrivilegeTablesVisibility(t *testing.T) {
 	// Create data source manager
 	dsManager := application.NewDataSourceManager()
 
-	// Create TablesTable
-	tablesTable := information_schema.NewTablesTable(dsManager)
+	// Create TablesTable (nil registry — no virtual databases in this test)
+	tablesTable := information_schema.NewTablesTable(dsManager, nil)
 
 	t.Run("Root user can see privilege tables", func(t *testing.T) {
 		// Root user can see all tables
@@ -34,12 +34,12 @@ func TestPrivilegeTablesVisibility(t *testing.T) {
 
 		t.Logf("Tables seen by root user: %d", result.Total)
 
-		// Should see 9 tables
+		// Should see 9 info_schema tables (no virtual DB registry in this test)
 		assert.Equal(t, int64(9), result.Total)
 	})
 
 	t.Run("Normal user cannot see privilege tables", func(t *testing.T) {
-		// Normal user can only see basic 5 tables
+		// Normal user can only see basic 5 info_schema tables + 2 config tables
 		options := &domain.QueryOptions{
 			User: "normal_user",
 		}
@@ -50,7 +50,7 @@ func TestPrivilegeTablesVisibility(t *testing.T) {
 
 		t.Logf("Tables seen by normal user: %d", result.Total)
 
-		// Should only see 5 tables
+		// Should see 5 info_schema tables (no virtual DB registry in this test)
 		assert.Equal(t, int64(5), result.Total)
 	})
 
@@ -66,7 +66,7 @@ func TestPrivilegeTablesVisibility(t *testing.T) {
 
 		t.Logf("Tables seen without user: %d", result.Total)
 
-		// Should only see 5 tables
+		// Should see 5 info_schema tables (no virtual DB registry in this test)
 		assert.Equal(t, int64(5), result.Total)
 	})
 }

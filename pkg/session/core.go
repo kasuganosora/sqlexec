@@ -12,6 +12,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
+	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
 // CoreSession 核心会话实现（用于用户 API）
@@ -33,6 +34,7 @@ type CoreSession struct {
 	threadID       uint32           // 关联的线程ID (用于KILL)
 	traceID        string           // 追踪ID (来自协议层 Session)
 	queryMu        sync.Mutex       // 查询锁
+	vdbRegistry    *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
 }
 
 // NewCoreSession 创建核心会话（默认使用增强优化器）
@@ -216,6 +218,17 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 	} else if parseResult.Statement.Show != nil {
 		// 处理 SHOW 语句 - 转换为 information_schema 查询
 		result, err = s.executor.ExecuteShow(queryCtx, parseResult.Statement.Show)
+	} else if parseResult.Statement.Describe != nil {
+		// DESC/DESCRIBE 转换为 SHOW COLUMNS FROM table
+		descStmt := parseResult.Statement.Describe
+		showStmt := &parser.ShowStatement{
+			Type:  "COLUMNS",
+			Table: descStmt.Table,
+		}
+		if descStmt.Column != "" {
+			showStmt.Like = descStmt.Column
+		}
+		result, err = s.executor.ExecuteShow(queryCtx, showStmt)
 	} else {
 		return nil, fmt.Errorf("statement type not supported yet")
 	}
@@ -711,8 +724,9 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 	dbName := useStmt.Database
 
 	// 验证数据库是否存在，如果不存在则自动创建
-	// 允许使用 information_schema 和 config（特殊虚拟数据库）
-	if dbName != "information_schema" && dbName != "config" {
+	// 允许使用 information_schema 和所有已注册的虚拟数据库
+	isVirtual := dbName == "information_schema" || (s.vdbRegistry != nil && s.vdbRegistry.IsVirtualDB(dbName))
+	if !isVirtual {
 		if s.dsManager != nil {
 			dsNames := s.dsManager.List()
 			found := false
@@ -770,10 +784,11 @@ func (s *CoreSession) SetCurrentDB(dbName string) {
 	}
 }
 
-// SetConfigDir sets the config directory for the config virtual database
-func (s *CoreSession) SetConfigDir(dir string) {
+// SetVirtualDBRegistry 设置虚拟数据库注册表
+func (s *CoreSession) SetVirtualDBRegistry(registry *virtual.VirtualDatabaseRegistry) {
+	s.vdbRegistry = registry
 	if s.executor != nil {
-		s.executor.SetConfigDir(dir)
+		s.executor.SetVirtualDBRegistry(registry)
 	}
 }
 

@@ -10,12 +10,14 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/security"
+	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
 // QueryHandler handles SQL query execution via HTTP
 type QueryHandler struct {
 	db          *api.DB
 	configDir   string
+	vdbRegistry *virtual.VirtualDatabaseRegistry
 	auditLogger *security.AuditLogger
 }
 
@@ -26,6 +28,11 @@ func NewQueryHandler(db *api.DB, configDir string, auditLogger *security.AuditLo
 		configDir:   configDir,
 		auditLogger: auditLogger,
 	}
+}
+
+// SetVirtualDBRegistry sets the virtual database registry
+func (h *QueryHandler) SetVirtualDBRegistry(registry *virtual.VirtualDatabaseRegistry) {
+	h.vdbRegistry = registry
 }
 
 // ServeHTTP handles POST /api/v1/query
@@ -81,7 +88,9 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Create ephemeral session
 	session := h.db.Session()
 	defer session.Close()
-	session.SetConfigDir(h.configDir)
+	if h.vdbRegistry != nil {
+		session.SetVirtualDBRegistry(h.vdbRegistry)
+	}
 	session.SetUser(client.Name)
 	session.SetTraceID(traceID)
 	if req.Database != "" {

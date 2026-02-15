@@ -7,12 +7,12 @@ import (
 )
 
 func TestColumnsTableGetName(t *testing.T) {
-	table := NewColumnsTable(nil)
+	table := NewColumnsTable(nil, nil)
 	assert.Equal(t, "columns", table.GetName())
 }
 
 func TestColumnsTableGetSchema(t *testing.T) {
-	table := NewColumnsTable(nil)
+	table := NewColumnsTable(nil, nil)
 	schema := table.GetSchema()
 	assert.Len(t, schema, 21) // columns table has 21 columns
 	

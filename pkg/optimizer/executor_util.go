@@ -5,6 +5,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
 // filterColumns 过滤列信息
@@ -62,30 +63,11 @@ func isInformationSchemaQuery(tableName string, currentDB string, dsManager inte
 	return false
 }
 
-// isConfigTable 检查表是否属于 config 虚拟数据库
-func isConfigTable(tableName string) bool {
-	if strings.Contains(tableName, ".") {
-		parts := strings.SplitN(tableName, ".", 2)
-		if len(parts) == 2 && strings.ToLower(parts[0]) == "config" {
-			return true
-		}
+// isVirtualDBQuery 检查是否是某个虚拟数据库的查询（使用注册表动态判断）
+// 返回匹配的虚拟库名（空字符串表示不匹配）
+func isVirtualDBQuery(tableName string, currentDB string, registry *virtual.VirtualDatabaseRegistry) string {
+	if tableName == "" || registry == nil {
+		return ""
 	}
-	return false
-}
-
-// isConfigQuery 检查是否是 config 虚拟数据库查询
-func isConfigQuery(tableName string, currentDB string) bool {
-	if tableName == "" {
-		return false
-	}
-
-	if strings.HasPrefix(strings.ToLower(tableName), "config.") {
-		return true
-	}
-
-	if strings.EqualFold(currentDB, "config") {
-		return true
-	}
-
-	return false
+	return registry.IsVirtualDBQuery(tableName, currentDB)
 }

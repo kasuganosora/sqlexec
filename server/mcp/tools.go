@@ -9,6 +9,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/config_schema"
 	"github.com/kasuganosora/sqlexec/pkg/security"
+	"github.com/kasuganosora/sqlexec/pkg/virtual"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -20,6 +21,7 @@ const ctxKeyMCPClient contextKey = "mcp_client"
 type ToolDeps struct {
 	DB          *api.DB
 	ConfigDir   string
+	VDBRegistry *virtual.VirtualDatabaseRegistry
 	AuditLogger *security.AuditLogger
 }
 
@@ -48,7 +50,9 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 
 	session := d.DB.Session()
 	defer session.Close()
-	session.SetConfigDir(d.ConfigDir)
+	if d.VDBRegistry != nil {
+		session.SetVirtualDBRegistry(d.VDBRegistry)
+	}
 	session.SetTraceID(traceID)
 	if clientName != "" {
 		session.SetUser(clientName)
@@ -122,7 +126,9 @@ func (d *ToolDeps) HandleListDatabases(ctx context.Context, request mcp.CallTool
 
 	session := d.DB.Session()
 	defer session.Close()
-	session.SetConfigDir(d.ConfigDir)
+	if d.VDBRegistry != nil {
+		session.SetVirtualDBRegistry(d.VDBRegistry)
+	}
 	if clientName != "" {
 		session.SetUser(clientName)
 	}
@@ -164,7 +170,9 @@ func (d *ToolDeps) HandleListTables(ctx context.Context, request mcp.CallToolReq
 
 	session := d.DB.Session()
 	defer session.Close()
-	session.SetConfigDir(d.ConfigDir)
+	if d.VDBRegistry != nil {
+		session.SetVirtualDBRegistry(d.VDBRegistry)
+	}
 	if clientName != "" {
 		session.SetUser(clientName)
 	}
@@ -212,7 +220,9 @@ func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallTool
 
 	session := d.DB.Session()
 	defer session.Close()
-	session.SetConfigDir(d.ConfigDir)
+	if d.VDBRegistry != nil {
+		session.SetVirtualDBRegistry(d.VDBRegistry)
+	}
 	if clientName != "" {
 		session.SetUser(clientName)
 	}

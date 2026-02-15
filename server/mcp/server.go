@@ -11,6 +11,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/config"
 	"github.com/kasuganosora/sqlexec/pkg/config_schema"
 	"github.com/kasuganosora/sqlexec/pkg/security"
+	"github.com/kasuganosora/sqlexec/pkg/virtual"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
@@ -19,8 +20,14 @@ import (
 type Server struct {
 	db          *api.DB
 	configDir   string
+	vdbRegistry *virtual.VirtualDatabaseRegistry
 	cfg         *config.MCPConfig
 	auditLogger *security.AuditLogger
+}
+
+// SetVirtualDBRegistry sets the virtual database registry
+func (s *Server) SetVirtualDBRegistry(registry *virtual.VirtualDatabaseRegistry) {
+	s.vdbRegistry = registry
 }
 
 // NewServer creates a new MCP server
@@ -40,6 +47,7 @@ func (s *Server) Start() error {
 	deps := &ToolDeps{
 		DB:          s.db,
 		ConfigDir:   s.configDir,
+		VDBRegistry: s.vdbRegistry,
 		AuditLogger: s.auditLogger,
 	}
 

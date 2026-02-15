@@ -15,13 +15,15 @@ import (
 // TablesTable represents information_schema.tables
 // It lists all tables across all data sources
 type TablesTable struct {
-	dsManager *application.DataSourceManager
+	dsManager   *application.DataSourceManager
+	vdbRegistry *virtual.VirtualDatabaseRegistry
 }
 
 // NewTablesTable creates a new TablesTable
-func NewTablesTable(dsManager *application.DataSourceManager) virtual.VirtualTable {
+func NewTablesTable(dsManager *application.DataSourceManager, registry *virtual.VirtualDatabaseRegistry) virtual.VirtualTable {
 	return &TablesTable{
-		dsManager: dsManager,
+		dsManager:   dsManager,
+		vdbRegistry: registry,
 	}
 }
 
@@ -178,6 +180,39 @@ func (t *TablesTable) Query(ctx context.Context, filters []domain.Filter, option
 		}
 
 			rows = append(rows, row)
+		}
+	}
+
+	// Add tables from all registered virtual databases
+	if t.vdbRegistry != nil {
+		for _, entry := range t.vdbRegistry.List() {
+			for _, vTableName := range entry.Provider.ListVirtualTables() {
+				row := domain.Row{
+					"table_catalog":    "def",
+					"table_schema":     entry.Name,
+					"table_name":       vTableName,
+					"table_type":       "SYSTEM VIEW",
+					"engine":           "VIRTUAL",
+					"version":          int64(10),
+					"row_format":       "Dynamic",
+					"table_rows":       int64(0),
+					"avg_row_length":   int64(0),
+					"data_length":      int64(0),
+					"max_data_length":  int64(0),
+					"index_length":     int64(0),
+					"data_free":        int64(0),
+					"auto_increment":   nil,
+					"create_time":      time.Now(),
+					"update_time":      nil,
+					"check_time":       nil,
+					"table_collation":  "utf8mb4_general_ci",
+					"checksum":         nil,
+					"create_options":   "",
+					"table_comment":    "",
+					"table_attributes": nil,
+				}
+				rows = append(rows, row)
+			}
 		}
 	}
 

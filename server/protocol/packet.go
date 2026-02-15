@@ -147,11 +147,22 @@ func (p *HandshakeV10Packet) Unmarshal(r io.Reader) (err error) {
 func (p *HandshakeV10Packet) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
-	// Use the data as-is (NUL terminator is already included from Unmarshal)
-	// Recalculate AuthPluginDataLen from actual data to avoid stale values
+	// Compute the padded part_2 and auth_plugin_data_len together.
+	// MySQL protocol requires auth_plugin_data_part_2 to be at least 13 bytes on the wire.
+	// auth_plugin_data_len must equal 8 + len(padded_part_2) so that clients read the
+	// correct number of bytes. MariaDB clients compute: MAX(12, data_len - 8).
+	// With data_len=21 (8+13): MAX(12,13)=13 → all 13 bytes consumed correctly.
+	// With data_len=20 (8+12): MAX(12,12)=12 → stray NUL corrupts auth_plugin_name.
 	authPluginDataLen := p.AuthPluginDataLen
+	var paddedPart2 []byte
 	if len(p.AuthPluginDataPart2) > 0 {
-		authPluginDataLen = uint8(8 + len(p.AuthPluginDataPart2))
+		minLen := 13
+		if len(p.AuthPluginDataPart2) > minLen {
+			minLen = len(p.AuthPluginDataPart2)
+		}
+		paddedPart2 = make([]byte, minLen)
+		copy(paddedPart2, p.AuthPluginDataPart2)
+		authPluginDataLen = uint8(8 + len(paddedPart2))
 	}
 
 	// 1. 写入 ProtocolVersion
@@ -179,9 +190,9 @@ func (p *HandshakeV10Packet) Marshal() ([]byte, error) {
 	WriteBinary(buf, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	// 12. 写入 MariaDBCaps (4字节小端)
 	WriteNumber(buf, p.MariaDBCaps, 4)
-	// 13. 写入 AuthPluginDataPart2
-	if len(p.AuthPluginDataPart2) > 0 {
-		WriteBinary(buf, p.AuthPluginDataPart2)
+	// 13. 写入 AuthPluginDataPart2 (padded to at least 13 bytes)
+	if paddedPart2 != nil {
+		WriteBinary(buf, paddedPart2)
 	}
 	// 14. 写入 AuthPluginName (以0结尾)
 	if p.AuthPluginName != "" {
@@ -264,15 +275,21 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 	// 7. 读取用户名（NUL结尾字符串）
 	p.User, _ = ReadStringByNullEndFromReader(reader)
 
+	// Compute client's full 32-bit capabilities for parsing the rest of the response.
+	// The client's response format is determined by the CLIENT's declared capabilities,
+	// not the server's. Using server capabilities here would cause misparse when the
+	// client doesn't set a flag the server advertises (e.g. CLIENT_CONNECT_WITH_DB).
+	clientCaps := (uint32(p.ExtendedClientCapabilities) << 16) | uint32(p.ClientCapabilities)
+
 	// 8. 读取认证响应
 	buf = make([]byte, 1)
 	reader.Peek(1) // 检查是否还有数据
 	if reader.Buffered() > 0 {
 		switch {
-		case capabilities&CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA != 0:
+		case clientCaps&CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA != 0:
 			// 长度编码的认证响应
 			p.AuthResponse, _ = ReadStringByLenencFromReader[uint8](reader)
-		case capabilities&CLIENT_SECURE_CONNECTION != 0:
+		case clientCaps&CLIENT_SECURE_CONNECTION != 0:
 			// 安全连接：1字节长度 + N字节内容
 			authLenBytes, _ := readBytes(1)
 			authLen := int(authLenBytes[0])
@@ -286,7 +303,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 	}
 
 	// 9. 读取Database（如果有）
-	if capabilities&CLIENT_CONNECT_WITH_DB != 0 {
+	if clientCaps&CLIENT_CONNECT_WITH_DB != 0 {
 		buf = make([]byte, 1)
 		reader.Peek(1) // 检查是否还有数据
 		if reader.Buffered() > 0 {
@@ -295,7 +312,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 	}
 
 	// 10. 读取ClientAuthPluginName（如果有）
-	if capabilities&CLIENT_PLUGIN_AUTH != 0 {
+	if clientCaps&CLIENT_PLUGIN_AUTH != 0 {
 		buf = make([]byte, 1)
 		reader.Peek(1) // 检查是否还有数据
 		if reader.Buffered() > 0 {
@@ -304,7 +321,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 	}
 
 	// 11. 读取连接属性（如果有）
-	if capabilities&CLIENT_CONNECT_ATTRS != 0 {
+	if clientCaps&CLIENT_CONNECT_ATTRS != 0 {
 		buf = make([]byte, 1)
 		reader.Peek(1) // 检查是否还有数据
 		if reader.Buffered() > 0 {
@@ -328,7 +345,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 	}
 
 	// 12. 读取ZstdCompressionLevel（如果有）
-	if capabilities&CLIENT_ZSTD_COMPRESSION_ALGORITHM != 0 {
+	if clientCaps&CLIENT_ZSTD_COMPRESSION_ALGORITHM != 0 {
 		buf = make([]byte, 1)
 		reader.Peek(1) // 检查是否还有数据
 		if reader.Buffered() > 0 {

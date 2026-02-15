@@ -1,6 +1,8 @@
 package handshake
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net"
 
 	"github.com/kasuganosora/sqlexec/pkg/api"
@@ -29,15 +31,24 @@ func (h *DefaultHandshakeHandler) Handle(conn net.Conn, sess *pkg_session.Sessio
 	handshakePacket := &protocol.HandshakeV10Packet{}
 	handshakePacket.Packet.SequenceID = 0
 	handshakePacket.ProtocolVersion = 10
-	handshakePacket.ServerVersion = "10.11.4-MariaDB"
+	handshakePacket.ServerVersion = "8.0.32"
 	handshakePacket.ThreadID = sess.ThreadID
-	handshakePacket.AuthPluginDataPart = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
-	handshakePacket.AuthPluginDataPart2 = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c}
-	handshakePacket.CapabilityFlags1 = 0xf7fe
-	handshakePacket.CharacterSet = 8
+	// Generate random 20-byte scramble for mysql_native_password
+	scramble := make([]byte, 20)
+	rand.Read(scramble)
+	// Scramble bytes must not be 0x00 (NUL) to avoid truncation in NUL-terminated contexts
+	for i := range scramble {
+		if scramble[i] == 0 {
+			scramble[i] = 1
+		}
+	}
+	handshakePacket.AuthPluginDataPart = scramble[:8]
+	handshakePacket.AuthPluginDataPart2 = scramble[8:]
+	handshakePacket.CapabilityFlags1 = 0xf7ff
+	handshakePacket.CharacterSet = 0x21 // utf8_general_ci
 	handshakePacket.StatusFlags = 0x0002
-	handshakePacket.CapabilityFlags2 = 0x81bf
-	handshakePacket.MariaDBCaps = 0x00000007
+	handshakePacket.CapabilityFlags2 = 0x00bf
+	handshakePacket.MariaDBCaps = 0x00000000
 	handshakePacket.AuthPluginName = "mysql_native_password"
 
 	handshakeData, err := handshakePacket.Marshal()
@@ -49,7 +60,7 @@ func (h *DefaultHandshakeHandler) Handle(conn net.Conn, sess *pkg_session.Sessio
 		return err
 	}
 	if h.logger != nil {
-		h.logger.Printf("已发送握手包, ThreadID: %d", handshakePacket.ThreadID)
+		h.logger.Printf("已发送握手包, ThreadID: %d, hex: %s", handshakePacket.ThreadID, hex.EncodeToString(handshakeData))
 	}
 
 	// 计算完整的能力标志 (32位)
@@ -97,17 +108,14 @@ func (h *DefaultHandshakeHandler) Handle(conn net.Conn, sess *pkg_session.Sessio
 	// 参考MariaDB: net_new_transaction重置序列号
 	sess.SequenceID = 255
 
-	okPacket := &protocol.OkPacket{}
-	okPacket.SequenceID = 2
-	okPacket.OkInPacket.Header = 0x00
-	okPacket.OkInPacket.AffectedRows = 0
-	okPacket.OkInPacket.LastInsertId = 0
-	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
-	okPacket.OkInPacket.Warnings = 0
-
-	okData, err := okPacket.Marshal()
-	if err != nil {
-		return err
+	// Build minimal OK packet: header(0x00) + affected_rows(0) + last_insert_id(0) + status(autocommit) + warnings(0)
+	okData := []byte{
+		0x07, 0x00, 0x00, 0x02, // 7-byte payload, seq=2
+		0x00,       // OK header
+		0x00,       // affected_rows = 0
+		0x00,       // last_insert_id = 0
+		0x02, 0x00, // status_flags = SERVER_STATUS_AUTOCOMMIT
+		0x00, 0x00, // warnings = 0
 	}
 
 	_, err = conn.Write(okData)
@@ -115,7 +123,7 @@ func (h *DefaultHandshakeHandler) Handle(conn net.Conn, sess *pkg_session.Sessio
 		return err
 	}
 	if h.logger != nil {
-		h.logger.Printf("已发送认证成功包")
+		h.logger.Printf("已发送认证成功包, hex: %s", hex.EncodeToString(okData))
 	}
 
 	return nil

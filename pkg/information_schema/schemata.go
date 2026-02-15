@@ -12,13 +12,15 @@ import (
 // SchemataTable represents information_schema.schemata
 // It lists all databases (data sources) in the system
 type SchemataTable struct {
-	dsManager *application.DataSourceManager
+	dsManager   *application.DataSourceManager
+	vdbRegistry *virtual.VirtualDatabaseRegistry
 }
 
 // NewSchemataTable creates a new SchemataTable
-func NewSchemataTable(dsManager *application.DataSourceManager) virtual.VirtualTable {
+func NewSchemataTable(dsManager *application.DataSourceManager, registry *virtual.VirtualDatabaseRegistry) virtual.VirtualTable {
 	return &SchemataTable{
-		dsManager: dsManager,
+		dsManager:   dsManager,
+		vdbRegistry: registry,
 	}
 }
 
@@ -43,10 +45,10 @@ func (t *SchemataTable) Query(ctx context.Context, filters []domain.Filter, opti
 	// Get all data source names
 	dsNames := t.dsManager.List()
 
-	// Build result rows - include information_schema as a special database
-	rows := make([]domain.Row, 0, len(dsNames)+1)
+	// Build result rows
+	rows := make([]domain.Row, 0, len(dsNames)+2)
 
-	// Add information_schema first (always available)
+	// Add information_schema (always available)
 	rows = append(rows, domain.Row{
 		"catalog_name":              "def",
 		"schema_name":               "information_schema",
@@ -55,19 +57,26 @@ func (t *SchemataTable) Query(ctx context.Context, filters []domain.Filter, opti
 		"sql_path":                 nil,
 	})
 
-	// Add config virtual database (always available)
-	rows = append(rows, domain.Row{
-		"catalog_name":              "def",
-		"schema_name":               "config",
-		"default_character_set_name": "utf8mb4",
-		"default_collation_name":     "utf8mb4_general_ci",
-		"sql_path":                 nil,
-	})
+	// Add all registered virtual databases from registry
+	if t.vdbRegistry != nil {
+		for _, entry := range t.vdbRegistry.List() {
+			rows = append(rows, domain.Row{
+				"catalog_name":              "def",
+				"schema_name":               entry.Name,
+				"default_character_set_name": "utf8mb4",
+				"default_collation_name":     "utf8mb4_general_ci",
+				"sql_path":                 nil,
+			})
+		}
+	}
 
 	// Add all registered data sources
 	for _, name := range dsNames {
-		// Skip virtual databases (already added)
-		if name == "information_schema" || name == "config" {
+		// Skip virtual databases (already added above)
+		if name == "information_schema" {
+			continue
+		}
+		if t.vdbRegistry != nil && t.vdbRegistry.IsVirtualDB(name) {
 			continue
 		}
 		row := domain.Row{

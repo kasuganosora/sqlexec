@@ -10,15 +10,22 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/config"
 	"github.com/kasuganosora/sqlexec/pkg/security"
+	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
 // Server is the HTTP REST API server
 type Server struct {
 	db          *api.DB
 	configDir   string
+	vdbRegistry *virtual.VirtualDatabaseRegistry
 	cfg         *config.HTTPAPIConfig
 	auditLogger *security.AuditLogger
 	httpServer  *http.Server
+}
+
+// SetVirtualDBRegistry sets the virtual database registry
+func (s *Server) SetVirtualDBRegistry(registry *virtual.VirtualDatabaseRegistry) {
+	s.vdbRegistry = registry
 }
 
 // NewServer creates a new HTTP API server
@@ -37,6 +44,7 @@ func (s *Server) Start() error {
 
 	clientStore := NewClientStore(s.configDir)
 	queryHandler := NewQueryHandler(s.db, s.configDir, s.auditLogger)
+	queryHandler.SetVirtualDBRegistry(s.vdbRegistry)
 
 	mux := http.NewServeMux()
 

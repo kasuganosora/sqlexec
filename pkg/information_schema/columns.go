@@ -14,13 +14,15 @@ import (
 // ColumnsTable represents information_schema.columns
 // It lists all columns across all tables in all data sources
 type ColumnsTable struct {
-	dsManager *application.DataSourceManager
+	dsManager   *application.DataSourceManager
+	vdbRegistry *virtual.VirtualDatabaseRegistry
 }
 
 // NewColumnsTable creates a new ColumnsTable
-func NewColumnsTable(dsManager *application.DataSourceManager) virtual.VirtualTable {
+func NewColumnsTable(dsManager *application.DataSourceManager, registry *virtual.VirtualDatabaseRegistry) virtual.VirtualTable {
 	return &ColumnsTable{
-		dsManager: dsManager,
+		dsManager:   dsManager,
+		vdbRegistry: registry,
 	}
 }
 
@@ -133,6 +135,57 @@ func (t *ColumnsTable) Query(ctx context.Context, filters []domain.Filter, optio
 				}
 
 				rows = append(rows, row)
+			}
+		}
+	}
+
+	// Add columns from all registered virtual databases
+	if t.vdbRegistry != nil {
+		for _, entry := range t.vdbRegistry.List() {
+			for _, vTableName := range entry.Provider.ListVirtualTables() {
+				vt, vtErr := entry.Provider.GetVirtualTable(vTableName)
+				if vtErr != nil {
+					continue
+				}
+				for i, column := range vt.GetSchema() {
+					columnType := t.getColumnType(column)
+					charMaxLen := t.getCharacterMaxLength(column.Type)
+					numPrecision := t.getNumericPrecision(column.Type)
+
+					columnKey := ""
+					if column.Primary {
+						columnKey = "PRI"
+					}
+					nullable := "NO"
+					if column.Nullable {
+						nullable = "YES"
+					}
+
+					row := domain.Row{
+						"table_catalog":            "def",
+						"table_schema":             entry.Name,
+						"table_name":               vTableName,
+						"column_name":              column.Name,
+						"ordinal_position":         i + 1,
+						"column_default":           "",
+						"is_nullable":              nullable,
+						"data_type":                t.getDataType(column.Type),
+						"character_maximum_length":  charMaxLen,
+						"character_octet_length":   charMaxLen * 4,
+						"numeric_precision":         numPrecision,
+						"numeric_scale":            0,
+						"datetime_precision":        nil,
+						"character_set_name":        "utf8mb4",
+						"collation_name":           "utf8mb4_general_ci",
+						"column_type":              columnType,
+						"column_key":               columnKey,
+						"extra":                    "",
+						"privileges":               "select,insert,update,references",
+						"column_comment":           "",
+						"generation_expression":     nil,
+					}
+					rows = append(rows, row)
+				}
 			}
 		}
 	}

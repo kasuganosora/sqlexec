@@ -17,17 +17,18 @@ type ACLManager interface {
 // Provider implements VirtualTableProvider for information_schema
 // It manages all information_schema virtual tables
 type Provider struct {
-	dsManager *application.DataSourceManager
-	aclManager ACLManager
-	tables    map[string]virtual.VirtualTable
+	dsManager   *application.DataSourceManager
+	aclManager  ACLManager
+	vdbRegistry *virtual.VirtualDatabaseRegistry
+	tables      map[string]virtual.VirtualTable
 }
 
 // NewProvider creates a new information_schema provider
 func NewProvider(dsManager *application.DataSourceManager) virtual.VirtualTableProvider {
 	p := &Provider{
-		dsManager: dsManager,
+		dsManager:  dsManager,
 		aclManager: nil,
-		tables:    make(map[string]virtual.VirtualTable),
+		tables:     make(map[string]virtual.VirtualTable),
 	}
 	p.initializeTables()
 	return p
@@ -36,9 +37,21 @@ func NewProvider(dsManager *application.DataSourceManager) virtual.VirtualTableP
 // NewProviderWithACL creates a new information_schema provider with ACL support
 func NewProviderWithACL(dsManager *application.DataSourceManager, aclMgr ACLManager) virtual.VirtualTableProvider {
 	p := &Provider{
-		dsManager: dsManager,
+		dsManager:  dsManager,
 		aclManager: aclMgr,
-		tables:    make(map[string]virtual.VirtualTable),
+		tables:     make(map[string]virtual.VirtualTable),
+	}
+	p.initializeTables()
+	return p
+}
+
+// NewProviderWithRegistry creates a new information_schema provider with virtual database registry
+func NewProviderWithRegistry(dsManager *application.DataSourceManager, aclMgr ACLManager, registry *virtual.VirtualDatabaseRegistry) virtual.VirtualTableProvider {
+	p := &Provider{
+		dsManager:   dsManager,
+		aclManager:  aclMgr,
+		vdbRegistry: registry,
+		tables:      make(map[string]virtual.VirtualTable),
 	}
 	p.initializeTables()
 	return p
@@ -47,9 +60,9 @@ func NewProviderWithACL(dsManager *application.DataSourceManager, aclMgr ACLMana
 // initializeTables registers all information_schema virtual tables
 func (p *Provider) initializeTables() {
 	// Register core information_schema tables
-	p.tables["schemata"] = NewSchemataTable(p.dsManager)
-	p.tables["tables"] = NewTablesTable(p.dsManager)
-	p.tables["columns"] = NewColumnsTable(p.dsManager)
+	p.tables["schemata"] = NewSchemataTable(p.dsManager, p.vdbRegistry)
+	p.tables["tables"] = NewTablesTable(p.dsManager, p.vdbRegistry)
+	p.tables["columns"] = NewColumnsTable(p.dsManager, p.vdbRegistry)
 	p.tables["table_constraints"] = NewTableConstraintsTable(p.dsManager)
 	p.tables["key_column_usage"] = NewKeyColumnUsageTable(p.dsManager)
 	p.tables["views"] = NewViewsTable(p.dsManager)
