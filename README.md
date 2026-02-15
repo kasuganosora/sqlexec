@@ -73,13 +73,27 @@ func main() {
 
 ### 多数据源查询 / Multi-Source Queries
 
-通过 `datasources.json` 配置多种数据源，使用统一 SQL 接口查询：
+支持 9 种数据源 / Supports 9 data source types：Memory, MySQL, PostgreSQL, CSV, JSON, JSONL, Excel, Parquet, HTTP
 
-Configure multiple data sources via `datasources.json` and query with unified SQL:
+**方式一 / Method 1：`datasources.json`**
 
 ```json
 {
   "datasources": [
+    {
+      "name": "default",
+      "type": "memory",
+      "writable": true
+    },
+    {
+      "name": "mydb",
+      "type": "mysql",
+      "host": "10.0.0.1",
+      "port": 3306,
+      "username": "reader",
+      "password": "secret",
+      "database": "production"
+    },
     {
       "name": "logs",
       "type": "csv",
@@ -88,24 +102,46 @@ Configure multiple data sources via `datasources.json` and query with unified SQ
       }
     },
     {
-      "name": "remote_db",
-      "type": "mysql",
-      "host": "10.0.0.1",
-      "port": 3306,
-      "username": "reader",
-      "password": "secret",
-      "database": "production"
+      "name": "analytics",
+      "type": "postgresql",
+      "host": "pg.example.com",
+      "port": 5432,
+      "username": "analyst",
+      "password": "pass",
+      "database": "analytics_db",
+      "options": {
+        "schema": "public",
+        "ssl_mode": "require"
+      }
     }
   ]
 }
 ```
 
+> **Note**: 文件型数据源（CSV/JSON/JSONL/Excel/Parquet）的文件路径通过 `options.path` 指定 / File paths for file-based sources go in `options.path`
+
+**方式二 / Method 2：SQL 动态管理 / Runtime SQL Management**
+
 ```sql
--- 切换数据源 / Switch data source
+-- 查看所有数据源 / List all data sources
+SELECT * FROM config.datasource;
+
+-- 添加 MySQL 数据源 / Add MySQL data source
+INSERT INTO config.datasource (name, type, host, port, username, password, database_name, writable)
+VALUES ('production', 'mysql', 'db.example.com', 3306, 'app_user', 'secret', 'myapp', true);
+
+-- 添加 CSV 数据源 / Add CSV data source
+INSERT INTO config.datasource (name, type, options)
+VALUES ('logs', 'csv', '{"path": "/data/access_logs.csv"}');
+```
+
+**查询数据源 / Query Data Sources**
+
+```sql
 USE logs;
 SELECT * FROM csv_data WHERE status_code = 500;
 
-USE remote_db;
+USE mydb;
 SELECT * FROM orders WHERE created_at > '2025-01-01';
 ```
 
