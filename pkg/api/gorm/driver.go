@@ -305,6 +305,15 @@ func parseTimeString(s string) (time.Time, error) {
 		time.RFC3339Nano,
 		"2006-01-02 15:04:05.999999999 -0700 MST",
 		"2006-01-02 15:04:05 -0700 MST",
+		"2006-01-02 15:04:05.999999999 -0700",
+		"2006-01-02 15:04:05 -0700",
+		// Format from fmt.Sprintf("%v", time.Time) with UTC
+		"2006-01-02 15:04:05.999999999 +0000 UTC",
+		"2006-01-02 15:04:05 +0000 UTC",
+		"2006-01-02 15:04:05 +0000",
+		// Additional common formats
+		"2006-01-02 15:04:05.999999",
+		"2006-01-02 15:04:05.999999 -0700",
 	}
 
 	for _, format := range formats {

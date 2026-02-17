@@ -102,6 +102,18 @@ func TestToDriverValue_Timestamp(t *testing.T) {
             expected: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
             isTime:   true,
         },
+        {
+            name:     "fmt.Sprintf format +0000 UTC",
+            input:    "2024-01-15 10:30:00 +0000 UTC",
+            expected: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+            isTime:   true,
+        },
+        {
+            name:     "fmt.Sprintf format with nanoseconds +0000 UTC",
+            input:    "2024-01-15 10:30:00.123456789 +0000 UTC",
+            expected: time.Date(2024, 1, 15, 10, 30, 0, 123456789, time.UTC),
+            isTime:   true,
+        },
     }
 
     for _, tt := range tests {
