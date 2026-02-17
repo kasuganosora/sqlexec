@@ -257,7 +257,15 @@ func toDriverValue(v interface{}) driver.Value {
 		return nil
 	}
 	switch val := v.(type) {
-	case int64, float64, bool, string, []byte, time.Time:
+	case time.Time:
+		return val
+	case string:
+		// Try to parse as timestamp first for GORM compatibility
+		if t, err := parseTimeString(val); err == nil {
+			return t
+		}
+		return val
+	case int64, float64, bool, []byte:
 		return val
 	case int:
 		return int64(val)
@@ -282,4 +290,28 @@ func toDriverValue(v interface{}) driver.Value {
 	default:
 		return fmt.Sprintf("%v", val)
 	}
+}
+
+// parseTimeString attempts to parse a string as a time.Time.
+// Supports common timestamp formats used by databases.
+func parseTimeString(s string) (time.Time, error) {
+	// Common timestamp formats
+	formats := []string{
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05.999999999",
+		"2006-01-02T15:04:05",
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999 -0700 MST",
+		"2006-01-02 15:04:05 -0700 MST",
+	}
+
+	for _, format := range formats {
+		if t, err := time.Parse(format, s); err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("not a timestamp")
 }
