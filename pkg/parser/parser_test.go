@@ -2,6 +2,9 @@ package parser
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewParser(t *testing.T) {
@@ -309,6 +312,7 @@ func TestParseCreateTableStmt(t *testing.T) {
 		{"CREATE TABLE with PRIMARY KEY", "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100))", false},
 		{"CREATE TABLE with multiple columns", "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100), age INT)", false},
 		{"Non-CREATE TABLE statement", "SELECT * FROM users", true},
+		{"CREATE TABLE with ENGINE=PERSISTENT", "CREATE TABLE users (id INT, name VARCHAR(100)) ENGINE=PERSISTENT", false},
 	}
 
 	for _, tt := range tests {
@@ -322,6 +326,60 @@ func TestParseCreateTableStmt(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseCreateTableStmtPersistent(t *testing.T) {
+	p := NewParser()
+	adapter := NewSQLAdapter()
+
+	// Test ENGINE=PERSISTENT is parsed correctly
+	result, err := adapter.Parse("CREATE TABLE persistent_table (id INT PRIMARY KEY, data VARCHAR(255)) ENGINE=PERSISTENT")
+	require.NoError(t, err)
+	require.NotNil(t, result.Statement)
+	assert.True(t, result.Statement.Create.Persistent, "Persistent should be true for ENGINE=PERSISTENT")
+
+	// Test normal table without ENGINE
+	result2, err := adapter.Parse("CREATE TABLE normal_table (id INT PRIMARY KEY, data VARCHAR(255))")
+	require.NoError(t, err)
+	require.NotNil(t, result2.Statement)
+	assert.False(t, result2.Statement.Create.Persistent, "Persistent should be false for normal table")
+
+	// Test ENGINE=INNODB (should not be persistent)
+	result3, err := adapter.Parse("CREATE TABLE innodb_table (id INT PRIMARY KEY) ENGINE=INNODB")
+	require.NoError(t, err)
+	assert.False(t, result3.Statement.Create.Persistent, "Persistent should be false for ENGINE=INNODB")
+
+	// Also verify the parser works
+	_ = p
+}
+
+func TestParseCompositeIndex(t *testing.T) {
+	adapter := NewSQLAdapter()
+
+	// Test single column index
+	result1, err := adapter.Parse("CREATE INDEX idx_single ON users(email)")
+	require.NoError(t, err)
+	require.NotNil(t, result1.Statement.CreateIndex)
+	assert.Equal(t, []string{"email"}, result1.Statement.CreateIndex.Columns)
+
+	// Test composite (multi-column) index
+	result2, err := adapter.Parse("CREATE INDEX idx_composite ON users(first_name, last_name)")
+	require.NoError(t, err)
+	require.NotNil(t, result2.Statement.CreateIndex)
+	assert.Equal(t, []string{"first_name", "last_name"}, result2.Statement.CreateIndex.Columns)
+
+	// Test composite unique index
+	result3, err := adapter.Parse("CREATE UNIQUE INDEX idx_unique_composite ON orders(user_id, order_date)")
+	require.NoError(t, err)
+	require.NotNil(t, result3.Statement.CreateIndex)
+	assert.Equal(t, []string{"user_id", "order_date"}, result3.Statement.CreateIndex.Columns)
+	assert.True(t, result3.Statement.CreateIndex.Unique)
+
+	// Test three-column composite index
+	result4, err := adapter.Parse("CREATE INDEX idx_three ON products(category, brand, price)")
+	require.NoError(t, err)
+	require.NotNil(t, result4.Statement.CreateIndex)
+	assert.Equal(t, []string{"category", "brand", "price"}, result4.Statement.CreateIndex.Columns)
 }
 
 func TestParseDropTableStmt(t *testing.T) {

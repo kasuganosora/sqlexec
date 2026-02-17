@@ -380,6 +380,19 @@ func (b *QueryBuilder) executeCreate(ctx context.Context, stmt *CreateStatement)
 			})
 		}
 
+		// Handle PERSISTENT option for hybrid data source
+		if stmt.Persistent {
+			// Check if data source supports EnablePersistence (HybridDataSource)
+			type persistenceEnabler interface {
+				EnablePersistence(ctx context.Context, tableName string) error
+			}
+			if pe, ok := b.dataSource.(persistenceEnabler); ok {
+				if err := pe.EnablePersistence(ctx, stmt.Name); err != nil {
+					return nil, fmt.Errorf("failed to enable persistence: %w", err)
+				}
+			}
+		}
+
 		err := b.dataSource.CreateTable(ctx, tableInfo)
 		if err != nil {
 			return nil, fmt.Errorf("create table failed: %w", err)
@@ -431,14 +444,6 @@ func (b *QueryBuilder) executeCreateIndex(ctx context.Context, stmt *CreateIndex
 		return b.executeCreateVectorIndex(ctx, stmt)
 	}
 
-	// 检查数据源是否支持传统索引操作
-	indexManager, ok := b.dataSource.(interface {
-		CreateIndex(tableName, columnName string, indexType string, unique bool) error
-	})
-	if !ok {
-		return nil, fmt.Errorf("data source does not support CREATE INDEX")
-	}
-
 	// 转换索引类型
 	var idxType string
 	switch strings.ToUpper(stmt.IndexType) {
@@ -452,15 +457,19 @@ func (b *QueryBuilder) executeCreateIndex(ctx context.Context, stmt *CreateIndex
 		idxType = "btree" // 默认使用 btree
 	}
 
-	// 调用数据源的 CreateIndex 方法
-	err := indexManager.CreateIndex(stmt.TableName, stmt.ColumnName, idxType, stmt.Unique)
+	// 使用支持多列索引的接口
+	indexManager, ok := b.dataSource.(interface {
+		CreateIndexWithColumns(tableName string, columnNames []string, indexType string, unique bool) error
+	})
+	if !ok {
+		return nil, fmt.Errorf("data source does not support CREATE INDEX")
+	}
+
+	err := indexManager.CreateIndexWithColumns(stmt.TableName, stmt.Columns, idxType, stmt.Unique)
 	if err != nil {
 		return nil, fmt.Errorf("create index failed: %w", err)
 	}
-
-	return &domain.QueryResult{
-		Total: 0,
-	}, nil
+	return &domain.QueryResult{Total: 0}, nil
 }
 
 // executeCreateVectorIndex 执行 CREATE VECTOR INDEX
@@ -492,7 +501,7 @@ func (b *QueryBuilder) executeCreateVectorIndex(ctx context.Context, stmt *Creat
 		}
 		
 		// 调用向量索引创建方法
-		_, err := indexManager.CreateVectorIndex(stmt.TableName, stmt.ColumnName, metricType, indexType, dimension, params)
+		_, err := indexManager.CreateVectorIndex(stmt.TableName, stmt.Columns[0], metricType, indexType, dimension, params)
 		if err != nil {
 			return nil, fmt.Errorf("create vector index failed: %w", err)
 		}
@@ -505,7 +514,7 @@ func (b *QueryBuilder) executeCreateVectorIndex(ctx context.Context, stmt *Creat
 	// 调用数据源的 CreateVectorIndex 方法
 	err := vectorIndexManager.CreateVectorIndex(
 		stmt.TableName,
-		stmt.ColumnName,
+		stmt.Columns[0],
 		stmt.VectorMetric,
 		stmt.VectorIndexType,
 		stmt.VectorDim,

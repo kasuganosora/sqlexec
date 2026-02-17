@@ -96,7 +96,7 @@ func TestTiDBVectorIndexSyntax(t *testing.T) {
 			require.Equal(t, tc.expectIndexType, createIndexStmt.IndexType, "IndexType")
 
 			// 验证列名
-			require.Equal(t, tc.expectColumn, createIndexStmt.ColumnName, "ColumnName")
+			require.Equal(t, []string{tc.expectColumn}, createIndexStmt.Columns, "Columns")
 
 			if tc.expectVector {
 				// 验证度量类型
@@ -149,7 +149,7 @@ func TestTiDBVectorDistanceFunctions(t *testing.T) {
 
 			createIndexStmt := result.Statement.CreateIndex
 			require.NotNil(t, createIndexStmt)
-			require.Equal(t, tc.expectCol, createIndexStmt.ColumnName, "列名应该正确")
+			require.Equal(t, []string{tc.expectCol}, createIndexStmt.Columns, "列名应该正确")
 			require.Equal(t, tc.expectMet, createIndexStmt.VectorMetric, "度量类型应该正确")
 		})
 	}
@@ -204,7 +204,7 @@ func TestWithClausePreprocess(t *testing.T) {
 			require.Equal(t, tc.expectIndexType, createIndexStmt.IndexType, "IndexType")
 
 			// 验证列名
-			require.Equal(t, tc.expectColumn, createIndexStmt.ColumnName, "ColumnName")
+			require.Equal(t, []string{tc.expectColumn}, createIndexStmt.Columns, "Columns")
 
 			if tc.expectVector {
 				// 验证度量类型

@@ -170,14 +170,14 @@ func TestVectorIndexParsingComprehensive(t *testing.T) {
 			stmt := result.Statement.CreateIndex
 			require.Equal(t, tc.indexName, stmt.IndexName, "索引名不匹配")
 			require.Equal(t, tc.tableName, stmt.TableName, "表名不匹配")
-			require.Equal(t, tc.column, stmt.ColumnName, "列名不匹配")
+			require.Equal(t, []string{tc.column}, stmt.Columns, "列名不匹配")
 			
 			if tc.checkFunc != nil {
 				require.True(t, tc.checkFunc(stmt), "自定义检查失败")
 			}
 			
-			t.Logf("✅ 解析成功: 索引=%s, 表=%s, 列=%s", 
-				stmt.IndexName, stmt.TableName, stmt.ColumnName)
+			t.Logf("✅ 解析成功: 索引=%s, 表=%s, 列=%v", 
+				stmt.IndexName, stmt.TableName, stmt.Columns)
 			t.Logf("  - 类型=%s, 度量=%s, 维度=%d, 向量索引=%v",
 				stmt.IndexType, stmt.VectorMetric, stmt.VectorDim, stmt.IsVectorIndex)
 			if stmt.VectorParams != nil {

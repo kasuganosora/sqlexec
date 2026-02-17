@@ -216,7 +216,7 @@ func TestVectorIndexCreationIntegration(t *testing.T) {
 	createIndexStmt := result.Statement.CreateIndex
 	require.Equal(t, "idx_embedding", createIndexStmt.IndexName)
 	require.Equal(t, "articles", createIndexStmt.TableName)
-	require.Equal(t, "embedding", createIndexStmt.ColumnName)
+	require.Equal(t, []string{"embedding"}, createIndexStmt.Columns)
 	require.True(t, createIndexStmt.IsVectorIndex)
 	require.Equal(t, "hnsw", createIndexStmt.VectorIndexType)
 	require.Equal(t, "cosine", createIndexStmt.VectorMetric)

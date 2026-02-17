@@ -26,7 +26,7 @@ func TestIndexManager_CreateIndex_BTree(t *testing.T) {
 
 	info := idx.GetIndexInfo()
 	assert.Equal(t, "test_table", info.TableName)
-	assert.Equal(t, "test_column", info.Column)
+	assert.Equal(t, []string{"test_column"}, info.Columns)
 	assert.Equal(t, IndexTypeBTree, info.Type)
 	assert.False(t, info.Unique)
 }
@@ -113,8 +113,8 @@ func TestIndexManager_CreateIndex_MultipleColumns(t *testing.T) {
 
 	info1 := idx1.GetIndexInfo()
 	info2 := idx2.GetIndexInfo()
-	assert.Equal(t, "col1", info1.Column)
-	assert.Equal(t, "col2", info2.Column)
+	assert.Equal(t, []string{"col1"}, info1.Columns)
+	assert.Equal(t, []string{"col2"}, info2.Columns)
 }
 
 func TestIndexManager_GetIndex(t *testing.T) {

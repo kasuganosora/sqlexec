@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -217,8 +218,13 @@ func (m *MVCCDataSource) TruncateTable(ctx context.Context, tableName string) er
 	return nil
 }
 
-// CreateIndex creates an index
+// CreateIndex creates an index (backward compatibility wrapper)
 func (m *MVCCDataSource) CreateIndex(tableName, columnName, indexType string, unique bool) error {
+	return m.CreateIndexWithColumns(tableName, []string{columnName}, indexType, unique)
+}
+
+// CreateIndexWithColumns creates an index on one or more columns (composite index support)
+func (m *MVCCDataSource) CreateIndexWithColumns(tableName string, columnNames []string, indexType string, unique bool) error {
 	// Convert index type
 	var idxType IndexType
 	switch indexType {
@@ -233,9 +239,9 @@ func (m *MVCCDataSource) CreateIndex(tableName, columnName, indexType string, un
 	}
 
 	// Create index
-	_, err := m.indexManager.CreateIndex(tableName, columnName, idxType, unique)
+	_, err := m.indexManager.CreateIndexWithColumns(tableName, columnNames, idxType, unique)
 	if err != nil {
-		return domain.NewErrIndexCreationFailed(tableName, columnName, err.Error())
+		return domain.NewErrIndexCreationFailed(tableName, strings.Join(columnNames, ","), err.Error())
 	}
 
 	return nil

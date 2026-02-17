@@ -60,7 +60,7 @@ func NewAdvancedFullTextIndex(
 		info: &IndexInfo{
 			Name:      fmt.Sprintf("idx_ft_%s_%s", tableName, columnName),
 			TableName: tableName,
-			Column:    columnName,
+			Columns:   []string{columnName},
 			Type:      IndexTypeFullText,
 			Unique:    false,
 		},
