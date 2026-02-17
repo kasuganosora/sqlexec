@@ -460,7 +460,19 @@ func (m *Migrator) generateCreateTableSQLFromSchema(s *schema.Schema) string {
 		}
 
 		if field.DefaultValue != "" && field.DefaultValue != "nil" {
-			def += " DEFAULT " + fmt.Sprintf("%v", field.DefaultValue)
+			defaultVal := field.DefaultValue
+			// Check if the default value is a string (needs quoting)
+			if field.DefaultValueInterface != nil {
+				switch field.DefaultValueInterface.(type) {
+				case string:
+					// String default values need to be quoted
+					defaultVal = "'" + escapeStringValue(defaultVal) + "'"
+				default:
+					// Numeric and other types don't need quotes
+					defaultVal = fmt.Sprintf("%v", field.DefaultValueInterface)
+				}
+			}
+			def += " DEFAULT " + defaultVal
 		}
 
 		if field.AutoIncrement {
