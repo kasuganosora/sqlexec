@@ -441,16 +441,12 @@ func (m *Migrator) generateCreateTableSQLFromSchema(s *schema.Schema) string {
 	var primaryKeys []string
 
 	for _, field := range s.Fields {
-		// Skip fields with empty DBName (e.g., embedded structs without proper tags)
-		colName := field.DBName
-		if colName == "" {
-			// Fallback to struct field name if DBName is empty
-			colName = field.Name
-		}
-		if colName == "" {
-			// Skip fields with no name at all
+		// Skip fields with empty DBName (e.g., fields with gorm:"-" tag)
+		// These fields should not be mapped to database columns
+		if field.DBName == "" {
 			continue
 		}
+		colName := field.DBName
 
 		colType := m.Dialector.DataTypeOf(field)
 		def := quoteIdentifier(colName) + " " + colType

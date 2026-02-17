@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.6.0
+	github.com/lib/pq v1.11.2
 	github.com/mark3labs/mcp-go v0.43.2
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20260117064255-9c0773b008bd
 	github.com/stretchr/testify v1.11.1
@@ -24,7 +25,6 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/lib/pq v1.11.2 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
