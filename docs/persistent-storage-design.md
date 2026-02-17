@@ -206,7 +206,33 @@ func NewHybridDataSource(config *HybridDataSourceConfig) (*HybridDataSource, err
 }
 ```
 
-### 2. 表级持久化控制
+### 2. SQL 语法支持 (NEW)
+
+You can enable persistence directly in SQL using the `ENGINE=PERSISTENT` syntax:
+
+```sql
+-- Create a persistent table using ENGINE clause
+CREATE TABLE important_data (
+    id INT PRIMARY KEY,
+    data TEXT,
+    created_at TIMESTAMP
+) ENGINE = PERSISTENT;
+
+-- The table will be automatically persisted to disk
+INSERT INTO important_data VALUES (1, 'Critical information', NOW());
+
+-- Query works the same as regular tables
+SELECT * FROM important_data WHERE id = 1;
+
+-- Index also works with persistent tables
+CREATE INDEX idx_created ON important_data(created_at);
+
+-- Note: When creating a persistent table, you can also use CREATE TABLE ... AS SELECT
+CREATE TABLE persistent_summary ENGINE = PERSISTENT
+AS SELECT category, COUNT(*) as count FROM orders GROUP BY category;
+```
+
+### 3. 表级持久化控制 (API)
 
 ```go
 // 为特定表启用持久化
@@ -222,7 +248,7 @@ func (ds *HybridDataSource) GetPersistenceConfig(tableName string) (*TableConfig
 func (ds *HybridDataSource) ListPersistentTables() []string
 ```
 
-### 3. 数据迁移
+### 4. 数据迁移
 
 ```go
 // 将内存表迁移到持久化存储
@@ -234,6 +260,70 @@ func (ds *HybridDataSource) LoadToMemory(ctx context.Context, tableName string) 
 // 同步内存和持久化数据
 func (ds *HybridDataSource) SyncTable(ctx context.Context, tableName string) error
 ```
+
+---
+
+## SQL 语法详解
+
+### CREATE TABLE 扩展
+
+```sql
+CREATE TABLE table_name (
+    column1 datatype [constraints],
+    column2 datatype [constraints],
+    ...
+) ENGINE = PERSISTENT;
+```
+
+**Parameters:**
+- `ENGINE = PERSISTENT` - Specifies that the table should be persisted to disk
+- If omitted, the table remains in-memory only (default behavior)
+
+**Examples:**
+
+```sql
+-- Basic persistent table
+CREATE TABLE users (
+    id INT PRIMARY KEY,
+    name VARCHAR(100),
+    email VARCHAR(100) UNIQUE
+) ENGINE = PERSISTENT;
+
+-- Persistent table with indexes
+CREATE TABLE orders (
+    id INT PRIMARY KEY,
+    user_id INT,
+    order_date TIMESTAMP,
+    amount DECIMAL(10,2),
+    status VARCHAR(20)
+) ENGINE = PERSISTENT;
+
+CREATE INDEX idx_user ON orders(user_id);
+CREATE INDEX idx_date ON orders(order_date);
+
+-- Composite index on persistent table
+CREATE INDEX idx_user_date ON orders(user_id, order_date);
+```
+
+### 与 API 的关系
+
+The `ENGINE=PERSISTENT` SQL syntax is equivalent to calling the Go API:
+
+```go
+// SQL: CREATE TABLE ... ENGINE = PERSISTENT
+// Equivalent Go API call:
+ds.EnablePersistence(ctx, "table_name")
+```
+
+**Advantages of SQL syntax:**
+1. **Declarative** - Specify persistence at creation time
+2. **Portable** - Works across different clients and tools
+3. **Simple** - No additional API calls needed
+
+**Advantages of API approach:**
+1. **Flexible** - Enable/disable persistence dynamically
+2. **Configurable** - Fine-tune options like `SyncOnWrite` and `CacheInMemory`
+3. **Programmatic** - Control persistence based on application logic
 
 ---
 

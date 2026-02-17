@@ -4,6 +4,8 @@ Indexes are the core mechanism for accelerating database queries. SQLExec suppor
 
 > **Note**: Currently only the Memory data source supports indexing. MySQL and PostgreSQL data sources use their native indexing mechanisms.
 
+> **New Feature**: Composite (multi-column) indexes are now supported! You can create indexes on multiple columns for more efficient queries.
+
 ## Index Types
 
 | Index Type | Applicable Queries | Operators | Characteristics |
@@ -55,19 +57,35 @@ CREATE VECTOR INDEX idx_embedding ON documents(embedding)
     WITH (metric = 'cosine', m = 16, ef_construction = 200);
 ```
 
-## Composite Indexes
+## Composite Indexes (NEW)
 
-B-Tree indexes support multi-column composite indexes, following the leftmost prefix matching principle:
+B-Tree and Hash indexes support multi-column composite indexes, following the leftmost prefix matching principle:
 
 ```sql
--- Create a composite index
+-- Create a composite index on multiple columns
 CREATE INDEX idx_user_name_age ON users(name, age);
+
+-- Create a composite index on three columns
+CREATE INDEX idx_order_customer_date ON orders(customer_id, order_date, status);
 
 -- The following queries can utilize this index
 SELECT * FROM users WHERE name = '张三';                    -- Uses index
 SELECT * FROM users WHERE name = '张三' AND age > 20;       -- Uses index
-SELECT * FROM users WHERE age > 20;                         -- Does not use this index
+SELECT * FROM users WHERE name = '张三' AND age = 25;       -- Uses index
+SELECT * FROM users WHERE age > 20;                         -- Does not use this index (missing first column)
 ```
+
+### Composite Index Benefits
+
+- **More efficient filtering**: Multi-column conditions can be satisfied with a single index scan
+- **Covering index**: If all selected columns are in the index, table lookup can be avoided
+- **Sorted retrieval**: Composite indexes maintain ordering across all columns
+
+### Limitations
+
+- **Leftmost prefix rule**: Queries must include the first column to use the index
+- **Full-text indexes**: Currently only support single-column indexes
+- **Hash indexes**: Support composite indexes but only for exact equality matches on all columns
 
 ## Dropping Indexes
 
@@ -95,6 +113,8 @@ SQLExec's query optimizer automatically selects the optimal index for queries:
 | Text keyword search | Fulltext |
 | Vector similarity search | Vector (HNSW) |
 | Uniqueness constraint | UNIQUE (B-Tree) |
+| Multi-column filtering | Composite B-Tree |
+| Multi-column exact match | Composite Hash |
 
 ## Example
 
@@ -127,8 +147,12 @@ CREATE VECTOR INDEX idx_feature ON products(feature_vector)
     USING HNSW
     WITH (metric = 'cosine', m = 16, ef_construction = 200);
 
+-- Create a composite index for multi-column queries
+CREATE INDEX idx_category_price ON products(category, price);
+
 -- The optimizer automatically selects indexes during queries
 SELECT * FROM products WHERE category = '电子产品';           -- Uses Hash index
 SELECT * FROM products WHERE price BETWEEN 100 AND 500;       -- Uses B-Tree index
 SELECT * FROM products WHERE MATCH(description) AGAINST('蓝牙'); -- Uses Fulltext index
+SELECT * FROM products WHERE category = '电子产品' AND price > 1000; -- Uses composite index
 ```
