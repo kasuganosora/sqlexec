@@ -353,6 +353,42 @@ func TestMigrator_AutoMigrate(t *testing.T) {
     }
 }
 
+// TestMigrator_AutoMigrate_EmbeddedStruct tests that embedded structs
+// with empty DBName are handled correctly (fallback to field name or skip)
+func TestMigrator_AutoMigrate_EmbeddedStruct(t *testing.T) {
+    db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
+    defer db.Close()
+    config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
+    memoryDS := memory.NewMVCCDataSource(config)
+    db.RegisterDataSource("test", memoryDS)
+    dialector := NewDialector(db.Session())
+    gormDB, _ := gorm.Open(dialector, &gorm.Config{})
+    defer func() {
+        if sqlDB, _ := gormDB.DB(); sqlDB != nil {
+            sqlDB.Close()
+        }
+    }()
+
+    // Model with embedded struct that might cause empty DBName
+    type BaseModel struct {
+        ID        uint `gorm:"primaryKey"`
+        CreatedAt int64
+    }
+
+    type Order struct {
+        BaseModel
+        Symbol   string `gorm:"column:symbol"`
+        Quantity int    `gorm:"column:quantity"`
+    }
+
+    migrator := gormDB.Migrator()
+    // This should not panic or generate SQL with empty column names
+    err := migrator.AutoMigrate(&Order{})
+    if err != nil {
+        t.Errorf("Failed to auto migrate with embedded struct: %v", err)
+    }
+}
+
 func TestMigrator_HasColumn(t *testing.T) {
     db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
     defer db.Close()
