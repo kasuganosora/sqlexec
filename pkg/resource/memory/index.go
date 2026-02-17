@@ -74,11 +74,11 @@ type Index interface {
 
 // IndexInfo 索引信息
 type IndexInfo struct {
-	Name      string
-	TableName string
-	Column    string
-	Type      IndexType
-	Unique    bool
+	Name      string    `json:"name"`
+	TableName string    `json:"table_name"`
+	Columns   []string  `json:"columns"`     // Support composite index (multi-column)
+	Type      IndexType `json:"type"`
+	Unique    bool      `json:"unique"`
 }
 
 // ==================== B-Tree 索引实现 ====================
@@ -116,7 +116,24 @@ func NewBTreeIndex(tableName, columnName string, unique bool) *BTreeIndex {
 		info: &IndexInfo{
 			Name:      fmt.Sprintf("idx_%s_%s", tableName, columnName),
 			TableName: tableName,
-			Column:    columnName,
+			Columns:   []string{columnName},
+			Type:      IndexTypeBTree,
+			Unique:    unique,
+		},
+		root:  NewBTreeNode(true),
+		height: 1,
+		unique: unique,
+	}
+}
+
+// NewBTreeIndexComposite creates a composite B-Tree index on multiple columns
+func NewBTreeIndexComposite(tableName string, columnNames []string, unique bool) *BTreeIndex {
+	name := fmt.Sprintf("idx_%s_%s", tableName, strings.Join(columnNames, "_"))
+	return &BTreeIndex{
+		info: &IndexInfo{
+			Name:      name,
+			TableName: tableName,
+			Columns:   columnNames,
 			Type:      IndexTypeBTree,
 			Unique:    unique,
 		},
@@ -206,7 +223,23 @@ func NewHashIndex(tableName, columnName string, unique bool) *HashIndex {
 		info: &IndexInfo{
 			Name:      fmt.Sprintf("idx_%s_%s", tableName, columnName),
 			TableName: tableName,
-			Column:    columnName,
+			Columns:   []string{columnName},
+			Type:      IndexTypeHash,
+			Unique:    unique,
+		},
+		data:  make(map[interface{}][]int64),
+		unique: unique,
+	}
+}
+
+// NewHashIndexComposite creates a composite hash index on multiple columns
+func NewHashIndexComposite(tableName string, columnNames []string, unique bool) *HashIndex {
+	name := fmt.Sprintf("idx_%s_%s", tableName, strings.Join(columnNames, "_"))
+	return &HashIndex{
+		info: &IndexInfo{
+			Name:      name,
+			TableName: tableName,
+			Columns:   columnNames,
 			Type:      IndexTypeHash,
 			Unique:    unique,
 		},
@@ -339,7 +372,7 @@ func NewFullTextIndex(tableName, columnName string) *FullTextIndex {
 		info: &IndexInfo{
 			Name:      fmt.Sprintf("idx_ft_%s_%s", tableName, columnName),
 			TableName: tableName,
-			Column:    columnName,
+			Columns:   []string{columnName},
 			Type:      IndexTypeFullText,
 			Unique:    false,
 		},

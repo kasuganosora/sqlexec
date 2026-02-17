@@ -286,3 +286,20 @@ func toTime(v interface{}) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("cannot convert %T to time.Time", v)
 	}
 }
+
+// ToString converts any value to string for indexing
+func (c *ValueConverter) ToString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	switch val := v.(type) {
+	case string:
+		return val
+	case []byte:
+		return string(val)
+	case time.Time:
+		return val.Format(time.RFC3339Nano)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}

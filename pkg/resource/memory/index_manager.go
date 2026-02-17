@@ -30,8 +30,18 @@ func NewIndexManager() *IndexManager {
 	}
 }
 
-// CreateIndex 创建索引
+// CreateIndex creates a single-column index (convenience wrapper for CreateIndexWithColumns)
+// This method is kept for internal use and testing
 func (m *IndexManager) CreateIndex(tableName, columnName string, indexType IndexType, unique bool) (Index, error) {
+	return m.CreateIndexWithColumns(tableName, []string{columnName}, indexType, unique)
+}
+
+// CreateIndexWithColumns creates an index on one or more columns (composite index support)
+func (m *IndexManager) CreateIndexWithColumns(tableName string, columnNames []string, indexType IndexType, unique bool) (Index, error) {
+	if len(columnNames) == 0 {
+		return nil, fmt.Errorf("at least one column is required for index")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -50,27 +60,44 @@ func (m *IndexManager) CreateIndex(tableName, columnName string, indexType Index
 	tableIdxs.mu.Lock()
 	defer tableIdxs.mu.Unlock()
 
-	// 检查列是否已有索引
-	if _, exists := tableIdxs.columnMap[columnName]; exists {
-		return nil, fmt.Errorf("index already exists for column: %s", columnName)
+	// For single column, check if column already has index
+	if len(columnNames) == 1 {
+		if _, exists := tableIdxs.columnMap[columnNames[0]]; exists {
+			return nil, fmt.Errorf("index already exists for column: %s", columnNames[0])
+		}
 	}
 
-	// 根据类型创建索引
+	// Create index based on type
 	var idx Index
 	switch indexType {
 	case IndexTypeBTree:
-		idx = NewBTreeIndex(tableName, columnName, unique)
+		if len(columnNames) == 1 {
+			idx = NewBTreeIndex(tableName, columnNames[0], unique)
+		} else {
+			idx = NewBTreeIndexComposite(tableName, columnNames, unique)
+		}
 	case IndexTypeHash:
-		idx = NewHashIndex(tableName, columnName, unique)
+		if len(columnNames) == 1 {
+			idx = NewHashIndex(tableName, columnNames[0], unique)
+		} else {
+			idx = NewHashIndexComposite(tableName, columnNames, unique)
+		}
 	case IndexTypeFullText:
-		idx = NewFullTextIndex(tableName, columnName)
+		// FullText index only supports single column
+		if len(columnNames) > 1 {
+			return nil, fmt.Errorf("fulltext index does not support multiple columns")
+		}
+		idx = NewFullTextIndex(tableName, columnNames[0])
 	default:
 		return nil, fmt.Errorf("unsupported index type: %s", indexType)
 	}
 
-	// 存储索引
-	tableIdxs.indexes[idx.GetIndexInfo().Name] = idx
-	tableIdxs.columnMap[columnName] = idx
+	// Store index
+	info := idx.GetIndexInfo()
+	tableIdxs.indexes[info.Name] = idx
+
+	// Map first column for quick lookup (backward compatibility)
+	tableIdxs.columnMap[columnNames[0]] = idx
 
 	return idx, nil
 }

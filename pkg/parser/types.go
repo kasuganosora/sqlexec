@@ -114,10 +114,11 @@ type DeleteStatement struct {
 
 // CreateStatement CREATE 语句
 type CreateStatement struct {
-	Type      string           `json:"type"` // TABLE, DATABASE, INDEX, etc.
-	Name      string           `json:"name"`
-	Columns   []ColumnInfo     `json:"columns,omitempty"`
-	Options   map[string]interface{} `json:"options,omitempty"`
+	Type       string                 `json:"type"` // TABLE, DATABASE, INDEX, etc.
+	Name       string                 `json:"name"`
+	Columns    []ColumnInfo           `json:"columns,omitempty"`
+	Options    map[string]interface{} `json:"options,omitempty"`
+	Persistent bool                   `json:"persistent,omitempty"` // PERSISTENT=1 for hybrid storage
 }
 
 // DropStatement DROP 语句
@@ -144,18 +145,18 @@ type AlterAction struct {
 
 // CreateIndexStatement CREATE INDEX 语句
 type CreateIndexStatement struct {
-	IndexName  string   `json:"index_name"`
-	TableName  string   `json:"table_name"`
-	ColumnName string   `json:"column_name"`
-	IndexType  string   `json:"index_type"` // BTREE, HASH, FULLTEXT, VECTOR
-	Unique     bool     `json:"unique"`
-	IfExists   bool   `json:"if_exists"`
-	
+	IndexName string   `json:"index_name"`
+	TableName string   `json:"table_name"`
+	Columns   []string `json:"columns"` // Support composite index (multi-column)
+	IndexType string   `json:"index_type"` // BTREE, HASH, FULLTEXT, VECTOR
+	Unique    bool     `json:"unique"`
+	IfExists  bool     `json:"if_exists"`
+
 	// Vector Index 配置
-	IsVectorIndex   bool              `json:"is_vector_index,omitempty"`
-	VectorIndexType string            `json:"vector_index_type,omitempty"` // hnsw, ivf_flat, flat
-	VectorMetric    string            `json:"vector_metric,omitempty"`     // cosine, l2, inner_product
-	VectorDim       int               `json:"vector_dim,omitempty"`
+	IsVectorIndex   bool                   `json:"is_vector_index,omitempty"`
+	VectorIndexType string                 `json:"vector_index_type,omitempty"` // hnsw, ivf_flat, flat
+	VectorMetric    string                 `json:"vector_metric,omitempty"`     // cosine, l2, inner_product
+	VectorDim       int                    `json:"vector_dim,omitempty"`
 	VectorParams    map[string]interface{} `json:"vector_params,omitempty"`
 }
 

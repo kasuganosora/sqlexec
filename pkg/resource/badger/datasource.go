@@ -486,6 +486,11 @@ func (ds *BadgerDataSource) queryTable(ctx context.Context, tableInfo *domain.Ta
 		return nil, err
 	}
 
+	// Apply ORDER BY
+	if options.OrderBy != "" {
+		ds.sortRows(result.Rows, options.OrderBy, options.Order)
+	}
+
 	// Apply limit and offset
 	if options.Offset > 0 && options.Offset < len(result.Rows) {
 		result.Rows = result.Rows[options.Offset:]
@@ -496,6 +501,31 @@ func (ds *BadgerDataSource) queryTable(ctx context.Context, tableInfo *domain.Ta
 
 	result.Total = int64(len(result.Rows))
 	return result, nil
+}
+
+// sortRows sorts rows by the specified column
+func (ds *BadgerDataSource) sortRows(rows []domain.Row, orderBy, order string) {
+	if len(rows) == 0 || orderBy == "" {
+		return
+	}
+
+	// Determine sort direction
+	ascending := true
+	if order == "DESC" || order == "desc" {
+		ascending = false
+	}
+
+	// Simple bubble sort (for small datasets)
+	// For production, consider using sort.Slice with a more efficient comparison
+	for i := 0; i < len(rows)-1; i++ {
+		for j := i + 1; j < len(rows); j++ {
+			cmp := ds.compareValues(rows[i][orderBy], rows[j][orderBy])
+			shouldSwap := (ascending && cmp > 0) || (!ascending && cmp < 0)
+			if shouldSwap {
+				rows[i], rows[j] = rows[j], rows[i]
+			}
+		}
+	}
 }
 
 // matchesFilters checks if a row matches the filter conditions
@@ -587,10 +617,39 @@ func (ds *BadgerDataSource) compareValues(a, b interface{}) int {
 }
 
 // matchLike performs LIKE pattern matching
+// Supports SQL wildcards: % (matches any sequence) and _ (matches any single character)
 func (ds *BadgerDataSource) matchLike(s, pattern string) bool {
-	// Simple implementation - convert SQL LIKE to regex
-	// TODO: implement proper LIKE matching
-	return s == pattern
+	// Convert SQL LIKE pattern to regex-like matching
+	// % matches any sequence of characters
+	// _ matches any single character
+
+	sIdx := 0
+	pIdx := 0
+	starIdx := -1
+	sTmpIdx := 0
+
+	for sIdx < len(s) {
+		if pIdx < len(pattern) && (pattern[pIdx] == s[sIdx] || pattern[pIdx] == '_') {
+			sIdx++
+			pIdx++
+		} else if pIdx < len(pattern) && pattern[pIdx] == '%' {
+			starIdx = pIdx
+			sTmpIdx = sIdx
+			pIdx++
+		} else if starIdx != -1 {
+			pIdx = starIdx + 1
+			sTmpIdx++
+			sIdx = sTmpIdx
+		} else {
+			return false
+		}
+	}
+
+	for pIdx < len(pattern) && pattern[pIdx] == '%' {
+		pIdx++
+	}
+
+	return pIdx == len(pattern)
 }
 
 // matchIn checks if value is in list
@@ -691,12 +750,30 @@ func (ds *BadgerDataSource) generateAutoIncrementPK(txn *badger.Txn, tableInfo *
 // updateIndexes updates index entries
 func (ds *BadgerDataSource) updateIndexes(txn *badger.Txn, tableInfo *domain.TableInfo, pk string, newRow, oldRow domain.Row) error {
 	for _, col := range tableInfo.Columns {
-		// Check if column is indexed
-		// TODO: check actual index definitions
-		_ = col
+		// Create index for primary key and unique columns
+		if !col.Primary && !col.Unique {
+			continue
+		}
 
-		// For now, skip index updates
-		// Index management will be implemented separately
+		// Handle old row - remove from index
+		if oldRow != nil {
+			if oldVal, ok := oldRow[col.Name]; ok && oldVal != nil {
+				oldValStr := ds.valueConv.ToString(oldVal)
+				if err := ds.indexManager.RemoveFromIndex(txn, tableInfo.Name, col.Name, oldValStr, pk); err != nil {
+					return fmt.Errorf("failed to remove from index %s.%s: %w", tableInfo.Name, col.Name, err)
+				}
+			}
+		}
+
+		// Handle new row - add to index
+		if newRow != nil {
+			if newVal, ok := newRow[col.Name]; ok && newVal != nil {
+				newValStr := ds.valueConv.ToString(newVal)
+				if err := ds.indexManager.AddToIndex(txn, tableInfo.Name, col.Name, newValStr, pk); err != nil {
+					return fmt.Errorf("failed to add to index %s.%s: %w", tableInfo.Name, col.Name, err)
+				}
+			}
+		}
 	}
 	return nil
 }

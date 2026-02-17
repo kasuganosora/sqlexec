@@ -2,6 +2,7 @@ package badger
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 type IndexManager struct {
 	mu      sync.RWMutex
 	db      *badger.DB
-	indexes map[string]map[string]*IndexInfo // table -> column -> index
+	indexes map[string]map[string]*IndexInfo // table -> indexName -> indexInfo
 	codec   *IndexValueCodec
 	encoder *KeyEncoder
 }
@@ -27,8 +28,18 @@ func NewIndexManager(db *badger.DB) *IndexManager {
 	}
 }
 
-// CreateIndex creates an index on a column
+// CreateIndex creates an index on a column (convenience wrapper for CreateIndexWithColumns)
+// This method is kept for internal use
 func (m *IndexManager) CreateIndex(tableName, columnName string, unique bool) error {
+	return m.CreateIndexWithColumns(tableName, []string{columnName}, unique)
+}
+
+// CreateIndexWithColumns creates an index on one or more columns (composite index support)
+func (m *IndexManager) CreateIndexWithColumns(tableName string, columnNames []string, unique bool) error {
+	if len(columnNames) == 0 {
+		return fmt.Errorf("at least one column is required for index")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -36,27 +47,37 @@ func (m *IndexManager) CreateIndex(tableName, columnName string, unique bool) er
 		m.indexes[tableName] = make(map[string]*IndexInfo)
 	}
 
-	if _, ok := m.indexes[tableName][columnName]; ok {
-		return fmt.Errorf("index already exists on %s.%s", tableName, columnName)
+	// Generate index name from columns
+	indexName := fmt.Sprintf("idx_%s_%s", tableName, strings.Join(columnNames, "_"))
+	if _, ok := m.indexes[tableName][indexName]; ok {
+		return fmt.Errorf("index already exists: %s", indexName)
 	}
 
-	m.indexes[tableName][columnName] = &IndexInfo{
-		TableName:  tableName,
-		ColumnName: columnName,
-		Unique:     unique,
-		CreatedAt:  time.Now(),
+	m.indexes[tableName][indexName] = &IndexInfo{
+		TableName: tableName,
+		Columns:   columnNames,
+		Unique:    unique,
+		CreatedAt: time.Now(),
 	}
 
 	return nil
 }
 
-// DropIndex drops an index
+// DropIndex drops an index by column name (drops all indexes containing this column)
 func (m *IndexManager) DropIndex(tableName, columnName string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if tableIndexes, ok := m.indexes[tableName]; ok {
-		delete(tableIndexes, columnName)
+		// Find and delete all indexes that contain this column
+		for indexName, idxInfo := range tableIndexes {
+			for _, col := range idxInfo.Columns {
+				if col == columnName {
+					delete(tableIndexes, indexName)
+					break
+				}
+			}
+		}
 		if len(tableIndexes) == 0 {
 			delete(m.indexes, tableName)
 		}
@@ -65,26 +86,37 @@ func (m *IndexManager) DropIndex(tableName, columnName string) error {
 	return nil
 }
 
-// HasIndex checks if an index exists
+// HasIndex checks if an index exists on a column
 func (m *IndexManager) HasIndex(tableName, columnName string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if tableIndexes, ok := m.indexes[tableName]; ok {
-		_, ok = tableIndexes[columnName]
-		return ok
+		// Check if any index contains this column
+		for _, idxInfo := range tableIndexes {
+			for _, col := range idxInfo.Columns {
+				if col == columnName {
+					return true
+				}
+			}
+		}
 	}
 	return false
 }
 
-// IsUnique checks if an index is unique
+// IsUnique checks if an index on a column is unique
 func (m *IndexManager) IsUnique(tableName, columnName string) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if tableIndexes, ok := m.indexes[tableName]; ok {
-		if idx, ok := tableIndexes[columnName]; ok {
-			return idx.Unique
+		// Find the first index containing this column and return its uniqueness
+		for _, idxInfo := range tableIndexes {
+			for _, col := range idxInfo.Columns {
+				if col == columnName {
+					return idxInfo.Unique
+				}
+			}
 		}
 	}
 	return false

@@ -703,6 +703,16 @@ func (a *SQLAdapter) convertCreateTableStmt(stmt *ast.CreateTableStmt) (*CreateS
 		createStmt.Columns = append(createStmt.Columns, colInfo)
 	}
 
+	// Parse table options for PERSISTENT storage
+	// Support: ENGINE=PERSISTENT syntax
+	for _, opt := range stmt.Options {
+		if opt.Tp == ast.TableOptionEngine {
+			if strings.ToUpper(opt.StrValue) == "PERSISTENT" {
+				createStmt.Persistent = true
+			}
+		}
+	}
+
 	return createStmt, nil
 }
 
@@ -1249,34 +1259,39 @@ if createIndexStmt.IsVectorIndex && stmt.IndexOption != nil && stmt.IndexOption.
 	}
 }
 
-	// 获取列名（从 IndexPartSpecifications）
+	// 获取列名（从 IndexPartSpecifications）- 支持复合索引
 	if len(stmt.IndexPartSpecifications) > 0 {
-		// 获取第一个列名（简化处理，不支持多列索引）
-		spec := stmt.IndexPartSpecifications[0]
-		if spec.Column != nil {
-			// 传统列索引
-			createIndexStmt.ColumnName = spec.Column.Name.String()
-		} else if spec.Expr != nil {
-			// TiDB 向量索引语法：CREATE VECTOR INDEX idx ((VEC_COSINE_DISTANCE(embedding)))
-			// 解析表达式提取列名和度量类型
-			columnName, metric, err := extractVectorDistanceFunc(spec.Expr)
-			if err != nil {
-				return nil, fmt.Errorf("invalid vector index expression: %w", err)
+		columns := make([]string, 0, len(stmt.IndexPartSpecifications))
+		
+		for _, spec := range stmt.IndexPartSpecifications {
+			if spec.Column != nil {
+				// 传统列索引
+				columns = append(columns, spec.Column.Name.String())
+			} else if spec.Expr != nil {
+				// TiDB 向量索引语法：CREATE VECTOR INDEX idx ((VEC_COSINE_DISTANCE(embedding)))
+				// 解析表达式提取列名和度量类型
+				columnName, metric, err := extractVectorDistanceFunc(spec.Expr)
+				if err != nil {
+					return nil, fmt.Errorf("invalid vector index expression: %w", err)
+				}
+				columns = append(columns, columnName)
+				// 如果之前没有设置度量类型，使用函数名推导的度量类型
+				if createIndexStmt.VectorMetric == "" {
+					createIndexStmt.VectorMetric = metric
+				}
+				// 标记为向量索引
+				createIndexStmt.IsVectorIndex = true
+				if createIndexStmt.IndexType != "VECTOR" {
+					createIndexStmt.IndexType = "VECTOR"
+				}
+			} else {
+				// 如果 Column 和 Expr 都为 nil，报错
+				return nil, fmt.Errorf("invalid index specification: column is required")
 			}
-			createIndexStmt.ColumnName = columnName
-			// 如果之前没有设置度量类型，使用函数名推导的度量类型
-			if createIndexStmt.VectorMetric == "" {
-				createIndexStmt.VectorMetric = metric
-			}
-			// 标记为向量索引
-			createIndexStmt.IsVectorIndex = true
-			if createIndexStmt.IndexType != "VECTOR" {
-				createIndexStmt.IndexType = "VECTOR"
-			}
-		} else {
-			// 如果 Column 和 Expr 都为 nil，报错
-			return nil, fmt.Errorf("invalid index specification: column is required")
 		}
+		
+		// 设置列名
+		createIndexStmt.Columns = columns
 	} else {
 		// 如果没有 IndexPartSpecifications，返回错误
 		return nil, fmt.Errorf("CREATE INDEX requires at least one column")

@@ -67,10 +67,10 @@ func DefaultDataSourceConfig(dataDir string) *DataSourceConfig {
 
 // IndexInfo index metadata
 type IndexInfo struct {
-	TableName  string    `json:"table_name"`
-	ColumnName string    `json:"column_name"`
-	Unique     bool      `json:"unique"`
-	CreatedAt  time.Time `json:"created_at"`
+	TableName string    `json:"table_name"`
+	Columns   []string  `json:"columns"`     // Support composite index (multi-column)
+	Unique    bool      `json:"unique"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // TableConfig table-level persistence configuration

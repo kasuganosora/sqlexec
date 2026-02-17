@@ -287,3 +287,131 @@ func TestPrimaryKeyGenerator(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "user-123", pk)
 }
+
+func TestBadgerDataSource_OrderBy(t *testing.T) {
+	// Create temp directory for test data
+	tmpDir, err := os.MkdirTemp("", "badger-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Create data source
+	config := &domain.DataSourceConfig{
+		Name: "test",
+		Type: domain.DataSourceTypeMemory,
+		Options: map[string]interface{}{
+			"in_memory": true,
+		},
+	}
+
+	ds := NewBadgerDataSource(config)
+
+	ctx := context.Background()
+	err = ds.Connect(ctx)
+	require.NoError(t, err)
+	defer ds.Close(ctx)
+
+	// Create table
+	tableInfo := &domain.TableInfo{
+		Name: "products",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "VARCHAR(64)", Primary: true},
+			{Name: "name", Type: "VARCHAR(255)"},
+			{Name: "price", Type: "INT"},
+		},
+	}
+	err = ds.CreateTable(ctx, tableInfo)
+	require.NoError(t, err)
+
+	// Insert rows
+	rows := []domain.Row{
+		{"id": "p-3", "name": "Product C", "price": 300},
+		{"id": "p-1", "name": "Product A", "price": 100},
+		{"id": "p-2", "name": "Product B", "price": 200},
+	}
+	_, err = ds.Insert(ctx, "products", rows, nil)
+	require.NoError(t, err)
+
+	// Test ORDER BY ASC
+	result, err := ds.Query(ctx, "products", &domain.QueryOptions{
+		OrderBy: "price",
+		Order:   "ASC",
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Rows, 3)
+	assert.Equal(t, "p-1", result.Rows[0]["id"])
+	assert.Equal(t, "p-2", result.Rows[1]["id"])
+	assert.Equal(t, "p-3", result.Rows[2]["id"])
+
+	// Test ORDER BY DESC
+	result, err = ds.Query(ctx, "products", &domain.QueryOptions{
+		OrderBy: "price",
+		Order:   "DESC",
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Rows, 3)
+	assert.Equal(t, "p-3", result.Rows[0]["id"])
+	assert.Equal(t, "p-2", result.Rows[1]["id"])
+	assert.Equal(t, "p-1", result.Rows[2]["id"])
+}
+
+func TestBadgerDataSource_LikePattern(t *testing.T) {
+	// Create temp directory for test data
+	tmpDir, err := os.MkdirTemp("", "badger-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Create data source
+	config := &domain.DataSourceConfig{
+		Name: "test",
+		Type: domain.DataSourceTypeMemory,
+		Options: map[string]interface{}{
+			"in_memory": true,
+		},
+	}
+
+	ds := NewBadgerDataSource(config)
+
+	ctx := context.Background()
+	err = ds.Connect(ctx)
+	require.NoError(t, err)
+	defer ds.Close(ctx)
+
+	// Create table
+	tableInfo := &domain.TableInfo{
+		Name: "users",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "VARCHAR(64)", Primary: true},
+			{Name: "email", Type: "VARCHAR(255)"},
+		},
+	}
+	err = ds.CreateTable(ctx, tableInfo)
+	require.NoError(t, err)
+
+	// Insert rows
+	rows := []domain.Row{
+		{"id": "1", "email": "alice@example.com"},
+		{"id": "2", "email": "bob@test.org"},
+		{"id": "3", "email": "charlie@example.org"},
+		{"id": "4", "email": "david@example.com"},
+	}
+	_, err = ds.Insert(ctx, "users", rows, nil)
+	require.NoError(t, err)
+
+	// Test LIKE with %
+	result, err := ds.Query(ctx, "users", &domain.QueryOptions{
+		Filters: []domain.Filter{
+			{Field: "email", Operator: "LIKE", Value: "%example.com"},
+		},
+	})
+	require.NoError(t, err)
+	assert.Len(t, result.Rows, 2) // alice, david (charlie has .org not .com)
+
+	// Test LIKE with _ (single character)
+	result, err = ds.Query(ctx, "users", &domain.QueryOptions{
+		Filters: []domain.Filter{
+			{Field: "id", Operator: "LIKE", Value: "_"},
+		},
+	})
+	require.NoError(t, err)
+	assert.Len(t, result.Rows, 4) // all single character IDs
+}

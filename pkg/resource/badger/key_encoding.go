@@ -63,6 +63,14 @@ func (e *KeyEncoder) EncodeIndexKey(tableName, columnName, value string) []byte 
 	return []byte(fmt.Sprintf("%s%s:%s:%s", PrefixIndex, tableName, columnName, value))
 }
 
+// EncodeCompositeIndexKey encodes composite index key for multiple columns
+// Format: idx:{table_name}:{col1_col2_col3}:{value1|value2|value3}
+func (e *KeyEncoder) EncodeCompositeIndexKey(tableName string, columnNames []string, values []string) []byte {
+	columnKey := strings.Join(columnNames, "_")
+	valueKey := strings.Join(values, "|")
+	return []byte(fmt.Sprintf("%s%s:%s:%s", PrefixIndex, tableName, columnKey, valueKey))
+}
+
 // DecodeIndexKey decodes index key components
 func (e *KeyEncoder) DecodeIndexKey(key []byte) (tableName, columnName, value string, ok bool) {
 	s := string(key)
@@ -74,6 +82,21 @@ func (e *KeyEncoder) DecodeIndexKey(key []byte) (tableName, columnName, value st
 		return "", "", "", false
 	}
 	return parts[0], parts[1], parts[2], true
+}
+
+// DecodeCompositeIndexKey decodes composite index key into column names and values
+func (e *KeyEncoder) DecodeCompositeIndexKey(key []byte) (tableName string, columnNames []string, values []string, ok bool) {
+	s := string(key)
+	if !strings.HasPrefix(s, PrefixIndex) {
+		return "", nil, nil, false
+	}
+	parts := strings.SplitN(s[len(PrefixIndex):], ":", 3)
+	if len(parts) != 3 {
+		return "", nil, nil, false
+	}
+	columnNames = strings.Split(parts[1], "_")
+	values = strings.Split(parts[2], "|")
+	return parts[0], columnNames, values, true
 }
 
 // EncodeIndexPrefix encodes index key prefix for column scan
