@@ -6,6 +6,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/dataaccess"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
+	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/types"
 	"github.com/stretchr/testify/assert"
@@ -411,6 +412,83 @@ func TestBaseExecutor_Execute_Sort(t *testing.T) {
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
+}
+
+func TestBaseExecutor_Execute_LimitWithSort(t *testing.T) {
+	// Reproduce GORM issue: SELECT ... ORDER BY ... LIMIT
+	// Plan: Limit -> Sort -> TableScan
+	mockService := &MockDataService{}
+	mockService.queryResult = &domain.QueryResult{
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "int"},
+			{Name: "name", Type: "string"},
+		},
+		Rows: []domain.Row{
+			{"id": 3, "name": "Charlie"},
+			{"id": 1, "name": "Alice"},
+			{"id": 2, "name": "Bob"},
+		},
+	}
+
+	executor := NewExecutor(mockService).(*BaseExecutor)
+
+	// TableScan plan
+	tableScanPlan := &plan.Plan{
+		ID:   "table_scan",
+		Type: plan.TypeTableScan,
+		OutputSchema: []types.ColumnInfo{
+			{Name: "id", Type: "int"},
+			{Name: "name", Type: "string"},
+		},
+		Config: &plan.TableScanConfig{
+			TableName: "orders",
+			Columns: []types.ColumnInfo{
+				{Name: "id", Type: "int"},
+				{Name: "name", Type: "string"},
+			},
+		},
+	}
+
+	// Sort plan (ORDER BY id)
+	sortPlan := &plan.Plan{
+		ID:   "sort",
+		Type: plan.TypeSort,
+		OutputSchema: []types.ColumnInfo{
+			{Name: "id", Type: "int"},
+			{Name: "name", Type: "string"},
+		},
+		Config: &plan.SortConfig{
+			OrderByItems: []*parser.OrderItem{
+				{
+					Expr:      parser.Expression{Type: parser.ExprTypeColumn, Column: "id"},
+					Direction: "ASC",
+				},
+			},
+		},
+		Children: []*plan.Plan{tableScanPlan},
+	}
+
+	// Limit plan (LIMIT 1)
+	limitPlan := &plan.Plan{
+		ID:   "limit",
+		Type: plan.TypeLimit,
+		OutputSchema: []types.ColumnInfo{
+			{Name: "id", Type: "int"},
+			{Name: "name", Type: "string"},
+		},
+		Config: &plan.LimitConfig{
+			Limit:  1,
+			Offset: 0,
+		},
+		Children: []*plan.Plan{sortPlan},
+	}
+
+	result, err := executor.Execute(context.Background(), limitPlan)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result.Rows, 1)
+	// After sorting by id ASC and limiting to 1, should get id=1
+	assert.Equal(t, 1, result.Rows[0]["id"])
 }
 
 func TestBaseExecutor_Execute_Union(t *testing.T) {

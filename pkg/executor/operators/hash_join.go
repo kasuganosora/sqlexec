@@ -161,6 +161,16 @@ func buildOperator(p *plan.Plan, das dataaccess.Service) (Operator, error) {
 		return NewAggregateOperator(p, das)
 	case plan.TypeHashJoin:
 		return NewHashJoinOperator(p, das)
+	case plan.TypeSort:
+		return NewSortOperator(p, das)
+	case plan.TypeInsert:
+		return NewInsertOperator(p, das)
+	case plan.TypeUpdate:
+		return NewUpdateOperator(p, das)
+	case plan.TypeDelete:
+		return NewDeleteOperator(p, das)
+	case plan.TypeUnion:
+		return NewUnionOperator(p, das)
 	default:
 		return nil, fmt.Errorf("unsupported plan type: %s", p.Type)
 	}
