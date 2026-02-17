@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // bindParams binds parameters to SQL query placeholders
@@ -72,6 +73,10 @@ func paramToSQLLiteral(v interface{}) ([]byte, error) {
 		hex := "0x" + fmt.Sprintf("%x", val)
 		return []byte(hex), nil
 
+	case time.Time:
+		// Format time as standard datetime string for SQL
+		return []byte(fmt.Sprintf("'%s'", val.Format("2006-01-02 15:04:05.999999999"))), nil
+
 	default:
 		// Try to format as string (fallback)
 		str := fmt.Sprintf("%v", val)
@@ -102,6 +107,8 @@ func ParamToString(v interface{}) string {
 		return "FALSE"
 	case []byte:
 		return "0x" + fmt.Sprintf("%x", val)
+	case time.Time:
+		return fmt.Sprintf("'%s'", val.Format("2006-01-02 15:04:05.999999999"))
 	default:
 		str := fmt.Sprintf("%v", val)
 		return fmt.Sprintf("'%s'", strings.ReplaceAll(str, "'", "''"))

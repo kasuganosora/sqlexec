@@ -2,6 +2,7 @@ package api
 
 import (
 	"testing"
+	"time"
 )
 
 func TestBindParams(t *testing.T) {
@@ -194,6 +195,16 @@ func TestParamToString(t *testing.T) {
 			name:     "bytes",
 			value:    []byte{0x01, 0x02},
 			expected: "0x0102",
+		},
+		{
+			name:     "time.Time",
+			value:    time.Date(2024, 1, 15, 10, 30, 0, 123456789, time.UTC),
+			expected: "'2024-01-15 10:30:00.123456789'",
+		},
+		{
+			name:     "time.Time without nanoseconds",
+			value:    time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+			expected: "'2024-01-15 10:30:00'",
 		},
 	}
 

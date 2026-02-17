@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	domain "github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/generated"
@@ -752,6 +753,8 @@ func (b *QueryBuilder) convertValue(val interface{}) interface{} {
 		return v
 	case bool:
 		return v
+	case time.Time:
+		return v.Format("2006-01-02 15:04:05.999999999")
 	case []interface{}:
 		result := make([]interface{}, len(v))
 		for i, item := range v {
