@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -33,6 +34,35 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	sourceData := tableVer.versions[tableVer.latest]
 	schema := deepCopySchema(sourceData.schema) // Deep copy so we can release the lock
 	tableVer.mu.RUnlock()
+
+	// Process auto-increment columns and fill in generated IDs
+	// Note: lastInsertID is tracked but not returned via the interface (interface only returns rowsAffected)
+	// The auto-incremented ID is set in the row map, so callers can read it from there
+	for _, row := range rows {
+		// Convert types based on schema (e.g., int64(0/1) to bool for BOOL columns)
+		convertRowTypesBasedOnSchema(row, schema)
+
+		// Handle auto-increment columns
+		for _, col := range schema.Columns {
+			if col.AutoIncrement {
+				key := tableName + "." + col.Name
+				// Check if the value is missing or is 0/null
+				if val, exists := row[col.Name]; !exists || val == nil || val == int64(0) || val == float64(0) {
+					// Generate next auto-increment ID
+					m.autoIncCounters[key]++
+					nextID := m.autoIncCounters[key]
+					row[col.Name] = nextID
+				} else {
+					// Value was provided, update counter if needed
+					if intVal, ok := val.(int64); ok && intVal > m.autoIncCounters[key] {
+						m.autoIncCounters[key] = intVal
+					} else if floatVal, ok := val.(float64); ok && int64(floatVal) > m.autoIncCounters[key] {
+						m.autoIncCounters[key] = int64(floatVal)
+					}
+				}
+			}
+		}
+	}
 
 	// Process generated columns: distinguish between STORED and VIRTUAL types
 	processedRows := make([]domain.Row, 0, len(rows))
@@ -174,6 +204,28 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	tableVer.latest = newVer
 
 	return int64(len(rows)), nil
+}
+
+// convertRowTypesBasedOnSchema converts row values based on column types defined in schema
+func convertRowTypesBasedOnSchema(row domain.Row, schema *domain.TableInfo) {
+	for _, col := range schema.Columns {
+		val, exists := row[col.Name]
+		if !exists {
+			continue
+		}
+
+		// Convert int64(0/1) to bool for BOOL/BOOLEAN columns
+		// Use case-insensitive comparison for column type
+		colType := strings.ToUpper(col.Type)
+		if colType == "BOOL" || colType == "BOOLEAN" || colType == "TINYINT" {
+			if intVal, ok := val.(int64); ok {
+				row[col.Name] = intVal != 0
+			} else if floatVal, ok := val.(float64); ok {
+				// Also handle float64(0.0/1.0) to bool
+				row[col.Name] = floatVal != 0.0
+			}
+		}
+	}
 }
 
 // Update updates data

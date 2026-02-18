@@ -33,6 +33,9 @@ type MVCCDataSource struct {
 
 	// Temporary tables (automatically deleted when session ends)
 	tempTables map[string]bool
+
+	// Auto-increment counters: tableName.columnName -> next value
+	autoIncCounters map[string]int64
 }
 
 // maxRetainedVersions is the maximum number of old versions to keep per table
@@ -58,17 +61,18 @@ func NewMVCCDataSource(config *domain.DataSourceConfig, opts ...*PagingConfig) *
 
 	indexMgr := NewIndexManager()
 	return &MVCCDataSource{
-		config:        config,
-		connected:     false,
-		indexManager:  indexMgr,
-		queryPlanner:  NewQueryPlanner(indexMgr),
-		bufferPool:    NewBufferPool(pagingCfg),
-		nextTxID:      1,
-		currentVer:    0,
-		snapshots:     make(map[int64]*Snapshot),
-		activeTxns:    make(map[int64]*Transaction),
-		tables:        make(map[string]*TableVersions),
-		tempTables:    make(map[string]bool),
+		config:          config,
+		connected:       false,
+		indexManager:    indexMgr,
+		queryPlanner:    NewQueryPlanner(indexMgr),
+		bufferPool:      NewBufferPool(pagingCfg),
+		nextTxID:        1,
+		currentVer:      0,
+		snapshots:       make(map[int64]*Snapshot),
+		activeTxns:      make(map[int64]*Transaction),
+		tables:          make(map[string]*TableVersions),
+		tempTables:      make(map[string]bool),
+		autoIncCounters: make(map[string]int64),
 	}
 }
 

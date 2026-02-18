@@ -64,7 +64,7 @@ func (op *InsertOperator) Execute(ctx context.Context) (*domain.QueryResult, err
 		}
 
 		// 插入数据
-		rowsAffected, err = op.insertValues(ctx, values)
+		rowsAffected, lastInsertID, err = op.insertValues(ctx, values)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +79,7 @@ func (op *InsertOperator) Execute(ctx context.Context) (*domain.QueryResult, err
 			}
 		}
 
-		rowsAffected, err = op.insertValues(ctx, values)
+		rowsAffected, lastInsertID, err = op.insertValues(ctx, values)
 		if err != nil {
 			return nil, err
 		}
@@ -101,21 +101,25 @@ func (op *InsertOperator) Execute(ctx context.Context) (*domain.QueryResult, err
 }
 
 // insertValues 插入值列表
-func (op *InsertOperator) insertValues(ctx context.Context, values [][]interface{}) (int64, error) {
+func (op *InsertOperator) insertValues(ctx context.Context, values [][]interface{}) (int64, int64, error) {
+	var lastInsertID int64
 	for i, row := range values {
-		err := op.insertRow(ctx, row)
+		id, err := op.insertRow(ctx, row)
 		if err != nil {
-			return int64(i), fmt.Errorf("insert row %d failed: %w", i, err)
+			return int64(i), 0, fmt.Errorf("insert row %d failed: %w", i, err)
+		}
+		if id > lastInsertID {
+			lastInsertID = id
 		}
 	}
-	return int64(len(values)), nil
+	return int64(len(values)), lastInsertID, nil
 }
 
-// insertRow 插入单行
-func (op *InsertOperator) insertRow(ctx context.Context, row []interface{}) error {
+// insertRow 插入单行，返回 lastInsertID
+func (op *InsertOperator) insertRow(ctx context.Context, row []interface{}) (int64, error) {
 	// 使用数据访问服务插入数据
 	insertData := make(map[string]interface{})
-	
+
 	// 如果指定了列，按指定列插入
 	if len(op.config.Columns) > 0 {
 		for i, col := range op.config.Columns {
@@ -131,7 +135,7 @@ func (op *InsertOperator) insertRow(ctx context.Context, row []interface{}) erro
 		}
 	}
 
-	err := op.dataAccessService.Insert(ctx, op.config.TableName, insertData)
+	lastInsertID, err := op.dataAccessService.Insert(ctx, op.config.TableName, insertData)
 	if err != nil {
 		// 处理 ON DUPLICATE KEY UPDATE：仅在插入失败时才执行更新
 		if op.config.OnDuplicate != nil {
@@ -156,14 +160,14 @@ func (op *InsertOperator) insertRow(ctx context.Context, row []interface{}) erro
 			}
 
 			if updateErr := op.dataAccessService.Update(ctx, op.config.TableName, updateData, filter); updateErr != nil {
-				return fmt.Errorf("ON DUPLICATE KEY UPDATE failed: %w", updateErr)
+				return 0, fmt.Errorf("ON DUPLICATE KEY UPDATE failed: %w", updateErr)
 			}
-			return nil
+			return 0, nil
 		}
-		return fmt.Errorf("insert data failed: %w", err)
+		return 0, fmt.Errorf("insert data failed: %w", err)
 	}
 
-	return nil
+	return lastInsertID, nil
 }
 
 // evaluateExpression 评估表达式

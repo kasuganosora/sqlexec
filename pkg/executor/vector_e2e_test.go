@@ -58,9 +58,9 @@ func TestVectorSearchEndToEnd(t *testing.T) {
 			"title":     "Article " + string(rune(i)),
 			"embedding": vec,
 		}
-		err := das.Insert(ctx, "articles", row)
+		_, err := das.Insert(ctx, "articles", row)
 		require.NoError(t, err)
-		
+
 		// 同时插入向量索引
 		err = vectorIdx.Insert(int64(i), vec)
 		require.NoError(t, err)
@@ -238,9 +238,9 @@ func TestVectorSearchWithFilters(t *testing.T) {
 			"category": category,
 			"features": vec,
 		}
-		err := das.Insert(ctx, "products", row)
+		_, err := das.Insert(ctx, "products", row)
 		require.NoError(t, err)
-		
+
 		err = vectorIdx.Insert(int64(i), vec)
 		require.NoError(t, err)
 	}

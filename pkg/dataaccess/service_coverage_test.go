@@ -99,7 +99,7 @@ func TestDataService_Insert_EmptyData(t *testing.T) {
 	ctx := context.Background()
 	data := map[string]interface{}{}
 	
-	err := service.Insert(ctx, "test_table", data)
+	_, err := service.Insert(ctx, "test_table", data)
 	require.NoError(t, err)
 }
 

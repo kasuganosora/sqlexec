@@ -165,14 +165,75 @@ gormDB.AutoMigrate(&Product{})
 
 Supported GORM tags: `primaryKey`, `autoIncrement`, `size`, `not null`, `default`.
 
+## Using as SQL Mock for Testing
+
+SQLExec can be used as a sqlmock alternative for unit testing, with the advantage of executing real SQL instead of mocking:
+
+```go
+package myservice_test
+
+import (
+    "context"
+    "testing"
+
+    "github.com/kasuganosora/sqlexec/pkg/api"
+    sqlexecgorm "github.com/kasuganosora/sqlexec/pkg/api/gorm"
+    "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+    "github.com/kasuganosora/sqlexec/pkg/resource/memory"
+    "gorm.io/gorm"
+)
+
+func SetupTestDB(t *testing.T) *gorm.DB {
+    t.Helper()
+
+    // 1. Create database
+    db, err := api.NewDB(nil)
+    if err != nil {
+        t.Fatal(err)
+    }
+    t.Cleanup(func() { db.Close() })
+
+    // 2. Configure memory data source (CRITICAL!)
+    memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+        Type:     domain.DataSourceTypeMemory,  // Must be memory
+        Name:     "default",                    // Must be "default"
+        Writable: true,                          // Must be true
+    })
+
+    // 3. Connect data source (REQUIRED!)
+    memDS.Connect(context.Background())
+
+    // 4. Register data source (REQUIRED!)
+    db.RegisterDataSource("default", memDS)
+
+    // 5. Create GORM connection
+    gormDB, err := gorm.Open(
+        sqlexecgorm.NewDialector(db.Session()),
+        &gorm.Config{SkipDefaultTransaction: true},
+    )
+    if err != nil {
+        t.Fatal(err)
+    }
+
+    return gormDB
+}
+```
+
+For a complete testing guide, see [TESTING_WITH_GORM.md](../../docs/TESTING_WITH_GORM.md).
+
 ## Notes
 
 | Item | Description |
 |------|-------------|
 | SkipDefaultTransaction | Recommended to set to `true` to avoid unnecessary transaction overhead |
 | Data Source Type | Requires a writable data source (e.g., Memory) |
+| Data Source Name | Must be `"default"` |
+| Writable | Must be set to `true` for INSERT/UPDATE/DELETE operations |
+| Connect() | Must call `memDS.Connect()` to connect the data source |
+| RegisterDataSource | Must call `db.RegisterDataSource()` to register the data source |
 | Associations | Preload/Association depends on underlying SQL support |
 | Type Mapping | GORM data types are automatically mapped to SQLExec-supported types |
+| Bool Type | Fully supported, TRUE/FALSE is correctly converted to Go bool |
 
 ## Data Type Mapping
 

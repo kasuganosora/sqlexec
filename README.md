@@ -15,7 +15,7 @@ SQLExec is a MySQL-compatible database engine written in Go. It can run as a **s
 - **向量搜索 / Vector Search** — 10 种向量索引算法（HNSW、IVF 等），支持 cosine/L2/inner product
 - **全文搜索 / Full-Text Search** — BM25 评分的倒排索引，内置中文分词（Jieba）
 - **查询优化器 / Query Optimizer** — 基于代价的优化器，谓词下推、索引选择、JOIN 重排序
-- **GORM 集成 / GORM Integration** — 完整的 GORM Dialector，支持 AutoMigrate 和 ORM 操作
+- **GORM 集成 / GORM Integration** — 完整的 GORM Dialector，支持 AutoMigrate 和 ORM 操作，可用于替代 sqlmock 进行单元测试
 - **插件系统 / Plugin System** — 自定义数据源、用户自定义函数（UDF）、原生插件（DLL/SO）
 - **审计追踪 / Audit Trail** — Trace-ID 贯穿所有入口，完整的请求追踪和审计日志
 

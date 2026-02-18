@@ -302,7 +302,116 @@ gormDB, _ := gorm.Open(sqlexecgorm.NewDialector(session), &gorm.Config{
 })
 ```
 
-### 6.2 当前限制
+### 6.2 常见配置错误 / Common Pitfalls
+
+#### 错误 1：未注册数据源
+
+**错误信息：**
+```
+Error: table not found
+```
+
+**原因：** 数据源未注册。
+
+**解决方案：**
+```go
+// 错误
+db, _ := api.NewDB(nil)
+gormDB, _ := gorm.Open(sqlexecgorm.NewDialector(db.Session()), ...)
+
+// 正确
+db, _ := api.NewDB(nil)
+memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+    Type:     domain.DataSourceTypeMemory,
+    Name:     "default",
+    Writable: true,
+})
+memDS.Connect(context.Background())
+db.RegisterDataSource("default", memDS)  // <-- 必须注册！
+gormDB, _ := gorm.Open(sqlexecgorm.NewDialector(db.Session()), ...)
+```
+
+#### 错误 2：未设置 Writable
+
+**错误信息：**
+```
+Error: data source is read-only, INSERT operation not allowed
+```
+
+**原因：** `Writable` 未设置为 `true`。
+
+**解决方案：**
+```go
+// 错误
+memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+    Type: domain.DataSourceTypeMemory,
+    Name: "default",
+    // Writable 默认为 false！
+})
+
+// 正确
+memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+    Type:     domain.DataSourceTypeMemory,
+    Name:     "default",
+    Writable: true,  // <-- 必须为 true 才能执行 INSERT/UPDATE/DELETE
+})
+```
+
+#### 错误 3：未调用 Connect()
+
+**错误信息：**
+```
+Error: data source not connected
+```
+
+**原因：** 未调用 `Connect()`。
+
+**解决方案：**
+```go
+memDS := memory.NewMVCCDataSource(...)
+memDS.Connect(context.Background())  // <-- 必须调用！
+db.RegisterDataSource("default", memDS)
+```
+
+#### 错误 4：数据源名称错误
+
+**错误信息：**
+```
+Error: no data source found
+```
+
+**原因：** 数据源名称必须是 `"default"`。
+
+**解决方案：**
+```go
+// 错误
+memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+    Name: "mydb",  // 错误名称
+    ...
+})
+
+// 正确
+memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+    Name: "default",  // 必须是 "default"
+    ...
+})
+```
+
+### 6.3 配置检查清单 / Configuration Checklist
+
+运行测试前，请确认：
+
+- [ ] 调用 `api.NewDB(nil)` 创建数据库
+- [ ] 正确配置 `memory.NewMVCCDataSource()`:
+  - [ ] `Type: domain.DataSourceTypeMemory`
+  - [ ] `Name: "default"`
+  - [ ] `Writable: true`
+- [ ] 调用 `memDS.Connect(context.Background())` 连接数据源
+- [ ] 调用 `db.RegisterDataSource("default", memDS)` 注册数据源
+- [ ] 设置 `gorm.Config{SkipDefaultTransaction: true}`
+- [ ] 在 cleanup 中调用 `db.Close()`
+
+### 6.4 当前限制
 
 | 限制 | 说明 |
 |------|------|

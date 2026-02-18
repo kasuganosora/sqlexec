@@ -165,14 +165,75 @@ gormDB.AutoMigrate(&Product{})
 
 支持的 GORM 标签：`primaryKey`、`autoIncrement`、`size`、`not null`、`default`。
 
+## 作为 SQL Mock 使用 / Using as SQL Mock
+
+SQLExec 可以作为 sqlmock 的替代品用于单元测试，优势是执行真实的 SQL 而不是模拟：
+
+```go
+package myservice_test
+
+import (
+    "context"
+    "testing"
+
+    "github.com/kasuganosora/sqlexec/pkg/api"
+    sqlexecgorm "github.com/kasuganosora/sqlexec/pkg/api/gorm"
+    "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+    "github.com/kasuganosora/sqlexec/pkg/resource/memory"
+    "gorm.io/gorm"
+)
+
+func SetupTestDB(t *testing.T) *gorm.DB {
+    t.Helper()
+
+    // 1. 创建数据库
+    db, err := api.NewDB(nil)
+    if err != nil {
+        t.Fatal(err)
+    }
+    t.Cleanup(func() { db.Close() })
+
+    // 2. 配置内存数据源（关键配置！）
+    memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+        Type:     domain.DataSourceTypeMemory,  // 必须是 memory
+        Name:     "default",                    // 必须是 "default"
+        Writable: true,                          // 必须是 true
+    })
+
+    // 3. 连接数据源（必须！）
+    memDS.Connect(context.Background())
+
+    // 4. 注册数据源（必须！）
+    db.RegisterDataSource("default", memDS)
+
+    // 5. 创建 GORM 连接
+    gormDB, err := gorm.Open(
+        sqlexecgorm.NewDialector(db.Session()),
+        &gorm.Config{SkipDefaultTransaction: true},
+    )
+    if err != nil {
+        t.Fatal(err)
+    }
+
+    return gormDB
+}
+```
+
+完整测试指南请参考 [TESTING_WITH_GORM.md](../../docs/TESTING_WITH_GORM.md)。
+
 ## 注意事项
 
 | 项目 | 说明 |
 |------|------|
 | SkipDefaultTransaction | 建议设为 `true`，避免不必要的事务开销 |
 | 数据源类型 | 需要使用支持写入的数据源（如 Memory） |
+| 数据源名称 | 必须是 `"default"` |
+| Writable | 必须设为 `true` 才能执行 INSERT/UPDATE/DELETE |
+| Connect() | 必须调用 `memDS.Connect()` 连接数据源 |
+| RegisterDataSource | 必须调用 `db.RegisterDataSource()` 注册数据源 |
 | 关联操作 | Preload/Association 依赖底层 SQL 支持情况 |
 | 类型映射 | GORM 数据类型自动映射为 SQLExec 支持的类型 |
+| Bool 类型 | 已支持，TRUE/FALSE 会正确转换为 Go bool |
 
 ## 数据类型映射
 
