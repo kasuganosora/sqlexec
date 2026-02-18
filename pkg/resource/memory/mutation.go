@@ -208,6 +208,9 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 
 // convertRowTypesBasedOnSchema converts row values based on column types defined in schema
 func convertRowTypesBasedOnSchema(row domain.Row, schema *domain.TableInfo) {
+	if schema == nil {
+		return
+	}
 	for _, col := range schema.Columns {
 		val, exists := row[col.Name]
 		if !exists {
@@ -216,13 +219,21 @@ func convertRowTypesBasedOnSchema(row domain.Row, schema *domain.TableInfo) {
 
 		// Convert int64(0/1) to bool for BOOL/BOOLEAN columns
 		// Use case-insensitive comparison for column type
+		// Note: In MySQL, BOOLEAN is an alias for TINYINT(1)
+		// TiDB parser converts BOOLEAN to tinyint, so we need to check both
 		colType := strings.ToUpper(col.Type)
-		if colType == "BOOL" || colType == "BOOLEAN" || colType == "TINYINT" {
-			if intVal, ok := val.(int64); ok {
-				row[col.Name] = intVal != 0
-			} else if floatVal, ok := val.(float64); ok {
-				// Also handle float64(0.0/1.0) to bool
-				row[col.Name] = floatVal != 0.0
+		shouldConvertToBool := colType == "BOOL" || colType == "BOOLEAN" || colType == "TINYINT"
+
+		if shouldConvertToBool {
+			switch v := val.(type) {
+			case int64:
+				row[col.Name] = v != 0
+			case int:
+				row[col.Name] = v != 0
+			case float64:
+				row[col.Name] = v != 0.0
+			case float32:
+				row[col.Name] = v != 0.0
 			}
 		}
 	}

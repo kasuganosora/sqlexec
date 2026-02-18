@@ -544,12 +544,17 @@ func (ds *BadgerDataSource) convertRowTypesBasedOnSchema(row domain.Row, tableIn
 		}
 
 		colType := strings.ToUpper(col.Type)
-		// Handle BOOL/BOOLEAN/TINYINT conversion
-		if colType == "BOOL" || colType == "BOOLEAN" || colType == "TINYINT" {
-			if intVal, ok := val.(int64); ok {
-				row[col.Name] = intVal != 0
-			} else if floatVal, ok := val.(float64); ok {
-				row[col.Name] = int64(floatVal) != 0
+		// Handle BOOL/BOOLEAN conversion only (TINYINT is numeric, not boolean)
+		if colType == "BOOL" || colType == "BOOLEAN" {
+			switch v := val.(type) {
+			case int64:
+				row[col.Name] = v != 0
+			case int:
+				row[col.Name] = v != 0
+			case float64:
+				row[col.Name] = v != 0.0
+			case float32:
+				row[col.Name] = v != 0.0
 			}
 		}
 	}
