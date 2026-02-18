@@ -100,24 +100,143 @@ func main() {
 
 ## 查询下推
 
-所有 SQL 查询都将直接下推到 MySQL 执行，SQLExec 不会在本地解析或处理查询逻辑。这意味着：
+SQLExec 会解析 SQL 查询并构建执行计划，通过优化器将适合下推的操作下发到 MySQL 执行，而非简单地透传整个查询。
 
-- 可以使用 MySQL 原生的全部 SQL 语法和函数。
-- 查询性能取决于 MySQL 服务器本身。
-- 索引、执行计划等均由 MySQL 管理。
+### 下推机制
+
+SQLExec 的查询优化器实现了以下下推规则：
+
+| 规则 | 说明 |
+|------|------|
+| **PredicatePushDown** | 将 WHERE 条件下推到数据源 |
+| **LimitPushDown** | 将 LIMIT/OFFSET 下推到数据源 |
+| **TopNPushDown** | 将 ORDER BY + LIMIT 组合下推 |
+
+### 支持下推的条件
+
+| 条件类型 | 支持下推 | 示例 |
+|----------|----------|------|
+| 比较运算符 | ✅ | `age > 30`, `name = 'Alice'` |
+| LIKE 模糊匹配 | ✅ | `name LIKE 'John%'` |
+| IN 列表 | ✅ | `id IN (1, 2, 3)` |
+| BETWEEN | ✅ | `age BETWEEN 20 AND 30` |
+| IS NULL / IS NOT NULL | ✅ | `email IS NULL` |
+| AND 组合条件 | ✅ | 分解后分别下推 |
+| OR 条件 | ⚠️ 部分 | 转换为 UNION 后下推 |
+| LIMIT / OFFSET | ✅ | 直接下推 |
+| ORDER BY + LIMIT (TopN) | ✅ | 穿透下推 |
+
+### 不支持下推的操作
+
+以下操作由 SQLExec 在本地执行：
+
+- 聚合函数（SUM, COUNT, AVG 等）
+- 复杂表达式和函数调用
+- 子查询（视情况可能解关联后下推）
+
+### 执行流程
+
+```
+SQL 语句
+    ↓
+SQLExec 解析并构建逻辑计划
+    ↓
+优化器应用下推规则
+    ↓
+将可下推的条件转换为 MySQL SQL
+    ↓
+发送到 MySQL 执行，返回结果
+```
+
+### 查询示例
 
 ```sql
--- 切换到 MySQL 数据源
-USE mydb;
+-- WHERE 条件和 LIMIT 会被下推到 MySQL
+SELECT id, name FROM users WHERE age > 30 LIMIT 10;
 
--- 以下查询直接由 MySQL 执行
-SELECT u.name, COUNT(o.id) AS order_count
-FROM users u
-LEFT JOIN orders o ON u.id = o.user_id
-WHERE u.created_at > '2025-01-01'
-GROUP BY u.name
-ORDER BY order_count DESC
-LIMIT 20;
+-- 实际发送到 MySQL 的 SQL：
+-- SELECT id, name FROM users WHERE age > 30 LIMIT 10
+
+-- ORDER BY + LIMIT (TopN) 也会被下推
+SELECT * FROM orders ORDER BY created_at DESC LIMIT 20;
+
+-- 聚合函数在本地执行
+SELECT COUNT(*) FROM users WHERE status = 'active';
+-- WHERE status = 'active' 会被下推，但 COUNT(*) 由 SQLExec 计算
+```
+
+## 混合数据源 JOIN
+
+SQLExec 支持跨数据源的 JOIN 查询，例如 MySQL 表与内存表、或其他外部数据源表之间的连接。
+
+### 执行流程
+
+```
+SELECT * FROM mysql_table m JOIN memory_table t ON m.id = t.ref_id WHERE m.status = 'active' AND t.type = 1
+                                    ↓
+                        SQLExec 解析并构建逻辑计划
+                                    ↓
+                        优化器分析谓词引用的表
+                                    ↓
+              ┌─────────────────────┴─────────────────────┐
+              ↓                                           ↓
+    mysql.status = 'active'                      memory.type = 1
+    下推到 MySQL 执行                              下推到内存数据源
+              ↓                                           ↓
+    返回过滤后的数据                               返回过滤后的数据
+              ↓                                           ↓
+              └─────────────────────┬─────────────────────┘
+                                    ↓
+                        SQLExec 本地执行 JOIN
+                                    ↓
+                          返回最终结果
+```
+
+### 谓词下推策略
+
+在混合数据源 JOIN 场景中，SQLExec 会智能地将谓词下推到对应的数据源：
+
+| 谓词类型 | 下推策略 |
+|----------|----------|
+| 仅引用左表的谓词 | 下推到左表数据源 |
+| 仅引用右表的谓词 | 下推到右表数据源 |
+| 同时引用两表的 JOIN 条件 | 本地执行 |
+| 复杂表达式 | 本地执行 |
+
+### 示例
+
+```sql
+-- MySQL 表 users 与内存表 orders 进行 JOIN
+SELECT u.name, o.order_no
+FROM mysql_db.users u
+JOIN memory.orders o ON u.id = o.user_id
+WHERE u.status = 'active'    -- 下推到 MySQL
+  AND o.amount > 100;        -- 下推到内存数据源
+
+-- 执行过程：
+-- 1. MySQL 执行: SELECT id, name FROM users WHERE status = 'active'
+-- 2. 内存数据源执行: SELECT user_id, order_no, amount FROM orders WHERE amount > 100
+-- 3. SQLExec 本地执行 JOIN: ON u.id = o.user_id
+-- 4. 返回结果
+```
+
+### 性能建议
+
+1. **优先过滤**：确保每个数据源都能收到过滤条件，减少数据传输量
+2. **小表驱动**：让数据量较小的表作为 JOIN 的驱动表
+3. **避免全表扫描**：为 JOIN 字段和过滤字段建立索引
+4. **限制结果集**：使用 LIMIT 限制最终结果大小
+
+```sql
+-- 好的做法：每个表都有过滤条件
+SELECT *
+FROM mysql_db.large_table m
+JOIN memory.small_table s ON m.id = s.ref_id
+WHERE m.created_at > '2025-01-01'  -- MySQL 过滤
+  AND s.status = 'valid';          -- 内存过滤
+
+-- 避免：无过滤条件的跨数据源 JOIN（数据量大时性能差）
+SELECT * FROM mysql_db.large_table m JOIN memory.small_table s ON m.id = s.ref_id;
 ```
 
 ## 注意事项
@@ -126,3 +245,4 @@ LIMIT 20;
 - 连接池参数应根据实际负载进行调优。
 - 建议在生产环境启用 SSL 连接（`ssl_mode: required`）。
 - 密码不应硬编码在配置文件中，建议使用环境变量。
+- 混合数据源 JOIN 在本地执行，大数据量时需注意内存使用。
