@@ -3,6 +3,7 @@ package badger
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/dgraph-io/badger/v4"
@@ -472,6 +473,9 @@ func (ds *BadgerDataSource) queryTable(ctx context.Context, tableInfo *domain.Ta
 				continue
 			}
 
+			// Convert row types based on schema before returning
+			ds.convertRowTypesBasedOnSchema(row, tableInfo)
+
 			// Apply filters
 			if !ds.matchesFilters(row, options.Filters) {
 				continue
@@ -523,6 +527,29 @@ func (ds *BadgerDataSource) sortRows(rows []domain.Row, orderBy, order string) {
 			shouldSwap := (ascending && cmp > 0) || (!ascending && cmp < 0)
 			if shouldSwap {
 				rows[i], rows[j] = rows[j], rows[i]
+			}
+		}
+	}
+}
+
+// convertRowTypesBasedOnSchema converts row values based on column types defined in schema
+func (ds *BadgerDataSource) convertRowTypesBasedOnSchema(row domain.Row, tableInfo *domain.TableInfo) {
+	if tableInfo == nil || row == nil {
+		return
+	}
+	for _, col := range tableInfo.Columns {
+		val, exists := row[col.Name]
+		if !exists || val == nil {
+			continue
+		}
+
+		colType := strings.ToUpper(col.Type)
+		// Handle BOOL/BOOLEAN/TINYINT conversion
+		if colType == "BOOL" || colType == "BOOLEAN" || colType == "TINYINT" {
+			if intVal, ok := val.(int64); ok {
+				row[col.Name] = intVal != 0
+			} else if floatVal, ok := val.(float64); ok {
+				row[col.Name] = int64(floatVal) != 0
 			}
 		}
 	}
@@ -693,10 +720,13 @@ func (ds *BadgerDataSource) Insert(ctx context.Context, tableName string, rows [
 	var inserted int64
 	err := ds.db.Update(func(txn *badger.Txn) error {
 		for _, row := range rows {
+			// Convert row types based on schema before processing
+			ds.convertRowTypesBasedOnSchema(row, tableInfo)
+
 			// Generate primary key
 			pk, err := ds.pkGenerator.GenerateFromRow(tableInfo, row)
 			if err != nil {
-				// Try to generate auto-increment key
+				// Try to generate auto-increment key (also writes ID to row)
 				pk, err = ds.generateAutoIncrementPK(txn, tableInfo, row)
 				if err != nil {
 					return fmt.Errorf("failed to generate primary key: %w", err)
@@ -728,7 +758,7 @@ func (ds *BadgerDataSource) Insert(ctx context.Context, tableName string, rows [
 	return inserted, err
 }
 
-// generateAutoIncrementPK generates auto-increment primary key
+// generateAutoIncrementPK generates auto-increment primary key and writes it to row
 func (ds *BadgerDataSource) generateAutoIncrementPK(txn *badger.Txn, tableInfo *domain.TableInfo, row domain.Row) (string, error) {
 	for _, col := range tableInfo.Columns {
 		if col.AutoIncrement {
@@ -741,7 +771,10 @@ func (ds *BadgerDataSource) generateAutoIncrementPK(txn *badger.Txn, tableInfo *
 			if err != nil {
 				return "", err
 			}
-			return ds.pkGenerator.FormatIntKey(int64(num)), nil
+			autoID := int64(num)
+			// Write auto-increment ID back to row for LastInsertID support
+			row[col.Name] = autoID
+			return ds.pkGenerator.FormatIntKey(autoID), nil
 		}
 	}
 	return "", fmt.Errorf("no auto-increment column found")
