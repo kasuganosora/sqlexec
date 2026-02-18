@@ -5,6 +5,8 @@ import (
 	"math"
 	"strconv"
 	"testing"
+
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 func TestToString(t *testing.T) {
@@ -508,6 +510,115 @@ func TestTypeConversionErrors(t *testing.T) {
 			_, err := tt.testFunc(tt.arg)
 			if err == nil {
 				t.Error("expected error but got nil")
+			}
+		})
+	}
+}
+
+func TestConvertBoolColumnsBasedOnSchema(t *testing.T) {
+	tests := []struct {
+		name      string
+		row       domain.Row
+		tableInfo *domain.TableInfo
+		expected  domain.Row
+	}{
+		{
+			name: "Convert TINYINT to bool",
+			row: domain.Row{
+				"id":     int64(1),
+				"active": int64(1),
+			},
+			tableInfo: &domain.TableInfo{
+				Columns: []domain.ColumnInfo{
+					{Name: "id", Type: "INT"},
+					{Name: "active", Type: "TINYINT"},
+				},
+			},
+			expected: domain.Row{
+				"id":     int64(1),
+				"active": true,
+			},
+		},
+		{
+			name: "Convert BOOLEAN to bool",
+			row: domain.Row{
+				"id":     int64(1),
+				"active": int64(0),
+			},
+			tableInfo: &domain.TableInfo{
+				Columns: []domain.ColumnInfo{
+					{Name: "id", Type: "INT"},
+					{Name: "active", Type: "BOOLEAN"},
+				},
+			},
+			expected: domain.Row{
+				"id":     int64(1),
+				"active": false,
+			},
+		},
+		{
+			name: "Convert float to bool",
+			row: domain.Row{
+				"active": float64(1.0),
+			},
+			tableInfo: &domain.TableInfo{
+				Columns: []domain.ColumnInfo{
+					{Name: "active", Type: "BOOL"},
+				},
+			},
+			expected: domain.Row{
+				"active": true,
+			},
+		},
+		{
+			name: "Leave non-bool types unchanged",
+			row: domain.Row{
+				"id":   int64(1),
+				"name": "test",
+			},
+			tableInfo: &domain.TableInfo{
+				Columns: []domain.ColumnInfo{
+					{Name: "id", Type: "INT"},
+					{Name: "name", Type: "VARCHAR"},
+				},
+			},
+			expected: domain.Row{
+				"id":   int64(1),
+				"name": "test",
+			},
+		},
+		{
+			name:      "Nil tableInfo",
+			row:       domain.Row{"id": int64(1)},
+			tableInfo: nil,
+			expected:  domain.Row{"id": int64(1)},
+		},
+		{
+			name:      "Nil row",
+			row:       nil,
+			tableInfo: &domain.TableInfo{Columns: []domain.ColumnInfo{{Name: "id", Type: "INT"}}},
+			expected:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ConvertBoolColumnsBasedOnSchema(tt.row, tt.tableInfo)
+
+			if tt.row == nil && tt.expected == nil {
+				return
+			}
+
+			for key, expectedVal := range tt.expected {
+				actualVal, exists := tt.row[key]
+				if !exists {
+					t.Errorf("key %s not found in row", key)
+					continue
+				}
+
+				if actualVal != expectedVal {
+					t.Errorf("key %s: expected %v (%T), got %v (%T)", key, expectedVal, expectedVal, actualVal, actualVal)
+				}
 			}
 		})
 	}

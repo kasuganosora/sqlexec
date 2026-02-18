@@ -115,7 +115,7 @@ func TestDataService_Insert_Error(t *testing.T) {
 		"id": 1,
 	}
 	
-	err := service.Insert(ctx, "test_table", data)
+	_, err := service.Insert(ctx, "test_table", data)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insert data failed")
 }

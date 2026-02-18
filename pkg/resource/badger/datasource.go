@@ -7,6 +7,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	domain "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // BadgerDataSource implements domain.DataSource using Badger KV store
@@ -472,6 +473,9 @@ func (ds *BadgerDataSource) queryTable(ctx context.Context, tableInfo *domain.Ta
 				continue
 			}
 
+			// Convert row types based on schema before returning
+			ds.convertRowTypesBasedOnSchema(row, tableInfo)
+
 			// Apply filters
 			if !ds.matchesFilters(row, options.Filters) {
 				continue
@@ -526,6 +530,11 @@ func (ds *BadgerDataSource) sortRows(rows []domain.Row, orderBy, order string) {
 			}
 		}
 	}
+}
+
+// convertRowTypesBasedOnSchema converts row values based on column types defined in schema
+func (ds *BadgerDataSource) convertRowTypesBasedOnSchema(row domain.Row, tableInfo *domain.TableInfo) {
+	utils.ConvertBoolColumnsBasedOnSchema(row, tableInfo)
 }
 
 // matchesFilters checks if a row matches the filter conditions
@@ -693,10 +702,13 @@ func (ds *BadgerDataSource) Insert(ctx context.Context, tableName string, rows [
 	var inserted int64
 	err := ds.db.Update(func(txn *badger.Txn) error {
 		for _, row := range rows {
+			// Convert row types based on schema before processing
+			ds.convertRowTypesBasedOnSchema(row, tableInfo)
+
 			// Generate primary key
 			pk, err := ds.pkGenerator.GenerateFromRow(tableInfo, row)
 			if err != nil {
-				// Try to generate auto-increment key
+				// Try to generate auto-increment key (also writes ID to row)
 				pk, err = ds.generateAutoIncrementPK(txn, tableInfo, row)
 				if err != nil {
 					return fmt.Errorf("failed to generate primary key: %w", err)
@@ -728,7 +740,7 @@ func (ds *BadgerDataSource) Insert(ctx context.Context, tableName string, rows [
 	return inserted, err
 }
 
-// generateAutoIncrementPK generates auto-increment primary key
+// generateAutoIncrementPK generates auto-increment primary key and writes it to row
 func (ds *BadgerDataSource) generateAutoIncrementPK(txn *badger.Txn, tableInfo *domain.TableInfo, row domain.Row) (string, error) {
 	for _, col := range tableInfo.Columns {
 		if col.AutoIncrement {
@@ -741,7 +753,10 @@ func (ds *BadgerDataSource) generateAutoIncrementPK(txn *badger.Txn, tableInfo *
 			if err != nil {
 				return "", err
 			}
-			return ds.pkGenerator.FormatIntKey(int64(num)), nil
+			autoID := int64(num)
+			// Write auto-increment ID back to row for LastInsertID support
+			row[col.Name] = autoID
+			return ds.pkGenerator.FormatIntKey(autoID), nil
 		}
 	}
 	return "", fmt.Errorf("no auto-increment column found")

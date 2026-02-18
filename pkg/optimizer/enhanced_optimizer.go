@@ -15,6 +15,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/types"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // EnhancedOptimizer 增强的优化器
@@ -1087,14 +1088,39 @@ func convertPredicatesToFilters(conditions []*parser.Expression) []domain.Filter
 	filters := make([]domain.Filter, 0, len(conditions))
 	for _, cond := range conditions {
 		if cond != nil {
-			filters = append(filters, domain.Filter{
-				Field:    expressionToString(cond),
-				Operator:  "=/",
-				Value:     cond.Value,
-			})
+			filter := expressionToFilter(cond)
+			if filter != nil {
+				filters = append(filters, *filter)
+			}
 		}
 	}
 	return filters
+}
+
+// expressionToFilter converts a parser expression to a domain filter
+func expressionToFilter(expr *parser.Expression) *domain.Filter {
+	if expr == nil || expr.Type != parser.ExprTypeOperator {
+		return nil
+	}
+
+	// Handle binary comparison expressions
+	if expr.Left != nil && expr.Right != nil && expr.Operator != "" {
+		// Left side is column name
+		if expr.Left.Type == parser.ExprTypeColumn && expr.Left.Column != "" {
+			// Right side is constant value
+			if expr.Right.Type == parser.ExprTypeValue {
+				// Use MapOperator to normalize operator (handles like, not like, etc.)
+				operator := utils.MapOperator(expr.Operator)
+				return &domain.Filter{
+					Field:    expr.Left.Column,
+					Operator: operator,
+					Value:    expr.Right.Value,
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 

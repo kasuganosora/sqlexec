@@ -10,6 +10,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // SelectionOperator 选择算子
@@ -121,6 +122,10 @@ func (op *SelectionOperator) evaluateOperator(row domain.Row, expr *parser.Expre
 		return op.compareValues(leftVal, rightVal) < 0
 	case "lte":
 		return op.compareValues(leftVal, rightVal) <= 0
+	case "like":
+		return op.likeValues(leftVal, rightVal)
+	case "not like":
+		return !op.likeValues(leftVal, rightVal)
 	default:
 		return false
 	}
@@ -207,4 +212,17 @@ func toInt(v interface{}) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+// likeValues implements SQL LIKE pattern matching
+func (op *SelectionOperator) likeValues(value, pattern interface{}) bool {
+	valStr, ok := value.(string)
+	if !ok {
+		valStr = utils.ToString(value)
+	}
+	patStr, ok := pattern.(string)
+	if !ok {
+		patStr = utils.ToString(pattern)
+	}
+	return utils.MatchesLike(valStr, patStr)
 }

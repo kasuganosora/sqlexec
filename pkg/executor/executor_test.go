@@ -35,8 +35,8 @@ func (m *MockDataService) GetTableInfo(ctx context.Context, tableName string) (*
 	return nil, nil
 }
 
-func (m *MockDataService) Insert(ctx context.Context, tableName string, data map[string]interface{}) error {
-	return nil
+func (m *MockDataService) Insert(ctx context.Context, tableName string, data map[string]interface{}) (int64, error) {
+	return 0, nil
 }
 
 func (m *MockDataService) Update(ctx context.Context, tableName string, data map[string]interface{}, where *domain.Filter) error {

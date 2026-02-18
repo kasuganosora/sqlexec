@@ -927,6 +927,9 @@ func convertTiDBValue(val interface{}) (interface{}, error) {
 
 	// 首先尝试类型断言
 	switch v := val.(type) {
+	case bool:
+		// 保持bool类型，不要转换为float64
+		return v, nil
 	case float32:
 		return float64(v), nil
 	case float64:

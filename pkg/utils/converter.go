@@ -3,6 +3,9 @@ package utils
 import (
 	"fmt"
 	"strconv"
+	"strings"
+
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // ToString converts any value to string
@@ -170,5 +173,37 @@ func ToFloat64(arg interface{}) (float64, error) {
 		return 0, fmt.Errorf("cannot convert %T to float64", arg)
 	default:
 		return 0, fmt.Errorf("cannot convert %T to float64", arg)
+	}
+}
+
+// ConvertBoolColumnsBasedOnSchema converts numeric values to bool for BOOL/BOOLEAN/TINYINT columns
+// This is used for GORM compatibility as MySQL BOOLEAN is an alias for TINYINT(1)
+// and TiDB parser converts BOOLEAN to tinyint
+func ConvertBoolColumnsBasedOnSchema(row domain.Row, tableInfo *domain.TableInfo) {
+	if tableInfo == nil || row == nil {
+		return
+	}
+	for _, col := range tableInfo.Columns {
+		val, exists := row[col.Name]
+		if !exists || val == nil {
+			continue
+		}
+
+		colType := strings.ToUpper(col.Type)
+		// Handle BOOL/BOOLEAN/TINYINT conversion for GORM compatibility
+		shouldConvertToBool := colType == "BOOL" || colType == "BOOLEAN" || colType == "TINYINT"
+
+		if shouldConvertToBool {
+			switch v := val.(type) {
+			case int64:
+				row[col.Name] = v != 0
+			case int:
+				row[col.Name] = v != 0
+			case float64:
+				row[col.Name] = v != 0.0
+			case float32:
+				row[col.Name] = v != 0.0
+			}
+		}
 	}
 }

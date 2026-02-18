@@ -236,6 +236,10 @@ func (o *Optimizer) mapOperator(parserOp string) string {
 		return "="
 	case "ne", "!=":
 		return "!="
+	case "like", "LIKE":
+		return "LIKE"
+	case "not like", "NOT LIKE", "notlike", "NOTLIKE":
+		return "NOT LIKE"
 	default:
 		return parserOp
 	}

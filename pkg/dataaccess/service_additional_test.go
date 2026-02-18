@@ -19,7 +19,7 @@ func TestDataService_Insert_WithReplace(t *testing.T) {
 		"name": "Alice",
 	}
 	
-	err := service.Insert(ctx, "test_table", data)
+	_, err := service.Insert(ctx, "test_table", data)
 	require.NoError(t, err)
 }
 
@@ -120,7 +120,7 @@ func TestDataService_Insert_Multiple(t *testing.T) {
 		"name": "Alice",
 	}
 	
-	err := service.Insert(ctx, "test_table", data)
+	_, err := service.Insert(ctx, "test_table", data)
 	require.NoError(t, err)
 }
 

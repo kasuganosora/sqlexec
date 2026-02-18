@@ -201,5 +201,11 @@ func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *d
 		}
 	}
 
+	// Convert row types based on schema (e.g., int64(0/1) to bool for BOOL columns)
+	schema := tableData.schema
+	for _, row := range queryResult.Rows {
+		convertRowTypesBasedOnSchema(row, schema)
+	}
+
 	return queryResult, nil
 }

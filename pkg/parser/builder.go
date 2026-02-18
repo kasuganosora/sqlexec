@@ -257,8 +257,35 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 		return nil, fmt.Errorf("insert failed: %w", err)
 	}
 
+	// Get last insert ID from auto-increment column
+	var lastInsertID int64
+	tableInfo2, _ := b.dataSource.GetTableInfo(ctx, stmt.Table)
+	if tableInfo2 != nil {
+		for _, col := range tableInfo2.Columns {
+			if col.AutoIncrement {
+				// Find the last inserted row's ID
+				if len(rows) > 0 {
+					if val, ok := rows[len(rows)-1][col.Name]; ok {
+						switch v := val.(type) {
+						case int64:
+							lastInsertID = v
+						case int:
+							lastInsertID = int64(v)
+						case float64:
+							lastInsertID = int64(v)
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+
 	return &domain.QueryResult{
 		Total: affected,
+		Rows: []domain.Row{
+			{"rows_affected": affected, "last_insert_id": lastInsertID},
+		},
 	}, nil
 }
 

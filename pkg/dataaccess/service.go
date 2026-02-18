@@ -18,8 +18,8 @@ type Service interface {
 	// GetTableInfo 获取表信息
 	GetTableInfo(ctx context.Context, tableName string) (*domain.TableInfo, error)
 
-	// Insert 插入数据
-	Insert(ctx context.Context, tableName string, data map[string]interface{}) error
+	// Insert 插入数据，返回 lastInsertID 和 error
+	Insert(ctx context.Context, tableName string, data map[string]interface{}) (int64, error)
 
 	// Update 更新数据
 	Update(ctx context.Context, tableName string, data map[string]interface{}, where *domain.Filter) error
@@ -29,7 +29,7 @@ type Service interface {
 }
 
 // InsertData 实现Service的Insert方法
-func (s *DataService) Insert(ctx context.Context, tableName string, data map[string]interface{}) error {
+func (s *DataService) Insert(ctx context.Context, tableName string, data map[string]interface{}) (int64, error) {
 	// 转换为Row格式
 	row := make(domain.Row)
 	for k, v := range data {
@@ -42,10 +42,25 @@ func (s *DataService) Insert(ctx context.Context, tableName string, data map[str
 	// 调用数据源的Insert方法
 	_, err := s.dataSource.Insert(ctx, tableName, []domain.Row{row}, options)
 	if err != nil {
-		return fmt.Errorf("insert data failed: %w", err)
+		return 0, fmt.Errorf("insert data failed: %w", err)
 	}
 
-	return nil
+	// The auto-increment ID should be set in the row map by the data source
+	// Return the lastInsertID from the row if available
+	for _, colName := range []string{"id", "ID", "Id"} {
+		if lastID, ok := row[colName]; ok {
+			switch v := lastID.(type) {
+			case int64:
+				return v, nil
+			case int:
+				return int64(v), nil
+			case float64:
+				return int64(v), nil
+			}
+		}
+	}
+
+	return 0, nil
 }
 
 // UpdateData 实现Service的Update方法
@@ -138,8 +153,9 @@ func (s *DataService) Query(ctx context.Context, tableName string, options *Quer
 
 	// 构建查询选项
 	queryOptions := &domain.QueryOptions{
-		Offset: options.Offset,
-		Limit:  options.Limit,
+		Filters: options.Filters,
+		Offset:  options.Offset,
+		Limit:   options.Limit,
 	}
 
 	// 查询数据
