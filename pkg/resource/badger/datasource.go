@@ -543,20 +543,24 @@ func (ds *BadgerDataSource) convertRowTypesBasedOnSchema(row domain.Row, tableIn
 			continue
 		}
 
-		colType := strings.ToUpper(col.Type)
-		// Handle BOOL/BOOLEAN conversion only (TINYINT is numeric, not boolean)
-		if colType == "BOOL" || colType == "BOOLEAN" {
-			switch v := val.(type) {
-			case int64:
-				row[col.Name] = v != 0
-			case int:
-				row[col.Name] = v != 0
-			case float64:
-				row[col.Name] = v != 0.0
-			case float32:
-				row[col.Name] = v != 0.0
-			}
+colType := strings.ToUpper(col.Type)
+	// Handle BOOL/BOOLEAN/TINYINT conversion for GORM compatibility
+	// Note: In MySQL, BOOLEAN is an alias for TINYINT(1)
+	// TiDB parser converts BOOLEAN to tinyint, so we need to check all three
+	shouldConvertToBool := colType == "BOOL" || colType == "BOOLEAN" || colType == "TINYINT"
+
+	if shouldConvertToBool {
+		switch v := val.(type) {
+		case int64:
+			row[col.Name] = v != 0
+		case int:
+			row[col.Name] = v != 0
+		case float64:
+			row[col.Name] = v != 0.0
+		case float32:
+			row[col.Name] = v != 0.0
 		}
+	}
 	}
 }
 

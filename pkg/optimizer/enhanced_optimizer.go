@@ -15,6 +15,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/types"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // EnhancedOptimizer 增强的优化器
@@ -1108,13 +1109,8 @@ func expressionToFilter(expr *parser.Expression) *domain.Filter {
 		if expr.Left.Type == parser.ExprTypeColumn && expr.Left.Column != "" {
 			// Right side is constant value
 			if expr.Right.Type == parser.ExprTypeValue {
-				operator := expr.Operator
-				// Normalize operator to uppercase for LIKE
-				if operator == "like" {
-					operator = "LIKE"
-				} else if operator == "not like" {
-					operator = "NOT LIKE"
-				}
+				// Use MapOperator to normalize operator (handles like, not like, etc.)
+				operator := utils.MapOperator(expr.Operator)
 				return &domain.Filter{
 					Field:    expr.Left.Column,
 					Operator: operator,
