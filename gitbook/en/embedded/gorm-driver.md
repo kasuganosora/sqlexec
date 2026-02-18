@@ -42,10 +42,10 @@ func main() {
 
     // 2. Register in-memory data source
     memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
-        Type: domain.DataSourceTypeMemory, Name: "default", Writable: true,
+        Type: domain.DataSourceTypeMemory, Name: "primary", Writable: true,
     })
     memDS.Connect(context.Background())
-    db.RegisterDataSource("default", memDS)
+    db.RegisterDataSource("primary", memDS)
 
     // 3. Create GORM connection
     gormDB, err := gorm.Open(
@@ -196,7 +196,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
     // 2. Configure memory data source (CRITICAL!)
     memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
         Type:     domain.DataSourceTypeMemory,  // Must be memory
-        Name:     "default",                    // Must be "default"
+        Name:     "mydb",                       // Can be any name
         Writable: true,                          // Must be true
     })
 
@@ -204,7 +204,10 @@ func SetupTestDB(t *testing.T) *gorm.DB {
     memDS.Connect(context.Background())
 
     // 4. Register data source (REQUIRED!)
-    db.RegisterDataSource("default", memDS)
+    db.RegisterDataSource("mydb", memDS)
+
+    // 5. Set as default (optional, first registered becomes default automatically)
+    db.SetDefaultDataSource("mydb")
 
     // 5. Create GORM connection
     gormDB, err := gorm.Open(
@@ -227,7 +230,8 @@ For a complete testing guide, see [TESTING_WITH_GORM.md](../../docs/TESTING_WITH
 |------|-------------|
 | SkipDefaultTransaction | Recommended to set to `true` to avoid unnecessary transaction overhead |
 | Data Source Type | Requires a writable data source (e.g., Memory) |
-| Data Source Name | Must be `"default"` |
+| Data Source Name | Can be any string, recommend using meaningful names (e.g., "mydb", "primary") |
+| Default Data Source | First registered data source becomes default automatically, or use `SetDefaultDataSource()` |
 | Writable | Must be set to `true` for INSERT/UPDATE/DELETE operations |
 | Connect() | Must call `memDS.Connect()` to connect the data source |
 | RegisterDataSource | Must call `db.RegisterDataSource()` to register the data source |
