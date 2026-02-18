@@ -2,7 +2,6 @@ package optimizer
 
 import (
 	"context"
-	"fmt"
 )
 
 // HintAwareSubqueryRule 支持 hints 的子查询规则
@@ -52,20 +51,20 @@ func (r *HintAwareSubqueryRule) ApplyWithHints(ctx context.Context, plan Logical
 
 	// Priority 1: SEMI_JOIN_REWRITE hint - 启用 Semi Join 改写
 	if hints.SemiJoinRewrite {
-		fmt.Printf("  [HINT SUBQUERY] SEMI_JOIN_REWRITE hint applied\n")
+		debugf("  [HINT SUBQUERY] SEMI_JOIN_REWRITE hint applied\n")
 		return r.semiJoinRewriteRule.Apply(ctx, apply, optCtx)
 	}
 
 	// Priority 2: NO_DECORRELATE hint - 禁用子查询去关联
 	if hints.NoDecorrelate {
-		fmt.Printf("  [HINT SUBQUERY] NO_DECORRELATE hint applied - skipping decorrelation\n")
+		debugf("  [HINT SUBQUERY] NO_DECORRELATE hint applied - skipping decorrelation\n")
 		// 返回原始 plan，不进行去关联
 		return apply, nil
 	}
 
 	// Priority 3: USE_TOJA hint - 使用 TOJA (Try to Join with Aggregation)
 	if hints.UseTOJA {
-		fmt.Printf("  [HINT SUBQUERY] USE_TOJA hint applied\n")
+		debugf("  [HINT SUBQUERY] USE_TOJA hint applied\n")
 		// TOJA 是一种优化技术，这里简化实现
 		return r.applyTOJA(ctx, apply, optCtx)
 	}
@@ -106,7 +105,7 @@ func (r *HintAwareSubqueryRule) applyTOJA(ctx context.Context, apply *LogicalApp
 	// 4. 应该有合适的连接条件
 
 	// 这里只是框架实现，实际 TOJA 需要更复杂的逻辑
-	fmt.Printf("  [TOJA] Attempting TOJA transformation\n")
+	debugf("  [TOJA] Attempting TOJA transformation\n")
 
 	// 标记已应用 TOJA hint
 	// 注意：LogicalApply 可能没有 SetHintApplied 方法，这里简化处理

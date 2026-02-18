@@ -83,7 +83,7 @@ func (wtm *WriteTriggerManager) RegisterTable(tableName string) {
 			PendingRefresh:  false,
 			WriteHistory:    make([]WriteRecord, 0, 100),
 		}
-		fmt.Printf("  [WRITE TRIGGER] Registered table: %s\n", tableName)
+		debugf("  [WRITE TRIGGER] Registered table: %s\n", tableName)
 	}
 }
 
@@ -93,7 +93,7 @@ func (wtm *WriteTriggerManager) UnregisterTable(tableName string) {
 	defer wtm.mu.Unlock()
 
 	delete(wtm.triggers, tableName)
-	fmt.Printf("  [WRITE TRIGGER] Unregistered table: %s\n", tableName)
+	debugf("  [WRITE TRIGGER] Unregistered table: %s\n", tableName)
 }
 
 // OnWrite 写入事件回调
@@ -193,9 +193,9 @@ func (wtm *WriteTriggerManager) triggerRefresh(tableName string, operation strin
 	// 提交到队列
 	select {
 	case wtm.refreshQueue <- task:
-		fmt.Printf("  [WRITE TRIGGER] Queued refresh task for %s: %s\n", tableName, task.Reason)
+		debugf("  [WRITE TRIGGER] Queued refresh task for %s: %s\n", tableName, task.Reason)
 	default:
-		fmt.Printf("  [WRITE TRIGGER] Warning: refresh queue full for %s\n", tableName)
+		debugf("  [WRITE TRIGGER] Warning: refresh queue full for %s\n", tableName)
 	}
 }
 
@@ -204,11 +204,11 @@ func (wtm *WriteTriggerManager) refreshWorker(ctx context.Context, workerID int)
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("  [WRITE TRIGGER] Worker %d stopped\n", workerID)
+			debugf("  [WRITE TRIGGER] Worker %d stopped\n", workerID)
 			return
 
 		case task := <-wtm.refreshQueue:
-			fmt.Printf("  [WRITE TRIGGER] Worker %d processing task for %s\n", workerID, task.TableName)
+			debugf("  [WRITE TRIGGER] Worker %d processing task for %s\n", workerID, task.TableName)
 			wtm.processRefreshTask(task)
 		}
 	}
@@ -221,10 +221,10 @@ func (wtm *WriteTriggerManager) processRefreshTask(task *RefreshTask) {
 
 	stats, err := wtm.collector.CollectStatistics(context.Background(), task.TableName)
 	if err != nil {
-		fmt.Printf("  [WRITE TRIGGER] Failed to refresh %s: %v\n", task.TableName, err)
+		debugf("  [WRITE TRIGGER] Failed to refresh %s: %v\n", task.TableName, err)
 	} else {
 		duration := time.Since(startTime)
-		fmt.Printf("  [WRITE TRIGGER] Refreshed %s: %d rows (took %v)\n",
+		debugf("  [WRITE TRIGGER] Refreshed %s: %d rows (took %v)\n",
 			task.TableName, stats.RowCount, duration)
 	}
 
@@ -249,7 +249,7 @@ func (wtm *WriteTriggerManager) ForceRefresh(tableName string) error {
 	// 提交到队列
 	select {
 	case wtm.refreshQueue <- task:
-		fmt.Printf("  [WRITE TRIGGER] Force refresh queued for %s\n", tableName)
+		debugf("  [WRITE TRIGGER] Force refresh queued for %s\n", tableName)
 		return nil
 	default:
 		return fmt.Errorf("refresh queue full")
@@ -347,7 +347,7 @@ func (wtm *WriteTriggerManager) Stop() {
 	// 等待队列处理完成
 	close(wtm.refreshQueue)
 
-	fmt.Println("  [WRITE TRIGGER] Stopped")
+	debugln("  [WRITE TRIGGER] Stopped")
 }
 
 // WriteTriggerDataSource 带写入触发器的数据源包装器

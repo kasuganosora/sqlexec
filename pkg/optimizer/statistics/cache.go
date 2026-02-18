@@ -2,7 +2,6 @@ package statistics
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -280,7 +279,7 @@ func (arc *AutoRefreshStatisticsCache) autoRefreshLoop(ctx context.Context, inte
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("  [STATS] Auto refresh stopped")
+			debugln("  [STATS] Auto refresh stopped")
 			return
 		case <-ticker.C:
 			arc.refreshExpiredStats()
@@ -302,15 +301,15 @@ func (arc *AutoRefreshStatisticsCache) refreshExpiredStats() {
 	arc.mu.RUnlock()
 
 	if len(expiredTables) > 0 {
-		fmt.Printf("  [STATS] Refreshing %d expired tables\n", len(expiredTables))
+		debugf("  [STATS] Refreshing %d expired tables\n", len(expiredTables))
 
 		// 并发刷新过期表
 		for _, tableName := range expiredTables {
 			stats, err := arc.refresh(tableName)
 			if err != nil {
-				fmt.Printf("  [STATS] Failed to refresh %s: %v\n", tableName, err)
+				debugf("  [STATS] Failed to refresh %s: %v\n", tableName, err)
 			} else {
-				fmt.Printf("  [STATS] Refreshed %s: %d rows\n", tableName, stats.RowCount)
+				debugf("  [STATS] Refreshed %s: %d rows\n", tableName, stats.RowCount)
 			}
 		}
 	}

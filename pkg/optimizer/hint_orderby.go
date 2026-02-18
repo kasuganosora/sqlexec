@@ -2,7 +2,6 @@ package optimizer
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
@@ -51,7 +50,7 @@ func (r *OrderByHintRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *O
 		return plan, nil
 	}
 
-	fmt.Println("  [ORDER BY HINT] Processing ORDER BY hints")
+	debugln("  [ORDER BY HINT] Processing ORDER BY hints")
 
 	// 处理每个排序项
 	for _, item := range orderByItems {
@@ -63,14 +62,14 @@ func (r *OrderByHintRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *O
 
 		// 检查 ORDER_INDEX hint
 		if indexName, ok := optCtx.Hints.OrderIndex[tableName]; ok {
-			fmt.Printf("  [ORDER BY HINT] Applying ORDER_INDEX: table=%s, index=%s\n", tableName, indexName)
+			debugf("  [ORDER BY HINT] Applying ORDER_INDEX: table=%s, index=%s\n", tableName, indexName)
 			r.applyOrderIndexHint(sortPlan, tableName, columnName, indexName)
 			continue
 		}
 
 		// 检查 NO_ORDER_INDEX hint
 		if _, ok := optCtx.Hints.NoOrderIndex[tableName]; ok {
-			fmt.Printf("  [ORDER BY HINT] Applying NO_ORDER_INDEX: table=%s\n", tableName)
+			debugf("  [ORDER BY HINT] Applying NO_ORDER_INDEX: table=%s\n", tableName)
 			r.applyNoOrderIndexHint(sortPlan, tableName, columnName)
 		}
 	}
@@ -106,7 +105,7 @@ func (r *OrderByHintRule) applyOrderIndexHint(sortPlan *LogicalSort, tableName, 
 	// 设置一个标记，表示应该使用指定索引进行排序
 	// 这里简化处理，实际应该在物理计划中应用
 
-	fmt.Printf("  [ORDER BY HINT] Will use index %s for ordering %s.%s\n", indexName, tableName, columnName)
+	debugf("  [ORDER BY HINT] Will use index %s for ordering %s.%s\n", indexName, tableName, columnName)
 
 	// 可以在LogicalSort中添加字段来存储这个hint
 	// 例如：
@@ -118,7 +117,7 @@ func (r *OrderByHintRule) applyNoOrderIndexHint(sortPlan *LogicalSort, tableName
 	// 标记不使用索引排序
 	// 实际实现应该在物理计划中避免使用索引排序
 
-	fmt.Printf("  [ORDER BY HINT] Will NOT use index for ordering %s.%s\n", tableName, columnName)
+	debugf("  [ORDER BY HINT] Will NOT use index for ordering %s.%s\n", tableName, columnName)
 
 	// 可以在LogicalSort中添加字段
 	// 例如：
@@ -221,14 +220,14 @@ func ApplyOrderByHintsToPhysicalPlan(plan *LogicalSort, hints *OptimizerHints, o
 		if indexName, ok := hints.OrderIndex[tableName]; ok {
 			enhancedSort.ForceIndex = indexName
 			enhancedSort.SortMethod = "INDEX_SORT"
-			fmt.Printf("  [ORDER BY HINT] Applied ORDER_INDEX %s to table %s\n", indexName, tableName)
+			debugf("  [ORDER BY HINT] Applied ORDER_INDEX %s to table %s\n", indexName, tableName)
 		}
 
 		// 检查NO_ORDER_INDEX hint
 		if _, ok := hints.NoOrderIndex[tableName]; ok {
 			enhancedSort.DisableIndex = true
 			enhancedSort.SortMethod = "EXTERNAL_SORT"
-			fmt.Printf("  [ORDER BY HINT] Applied NO_ORDER_INDEX to table %s\n", tableName)
+			debugf("  [ORDER BY HINT] Applied NO_ORDER_INDEX to table %s\n", tableName)
 		}
 	}
 

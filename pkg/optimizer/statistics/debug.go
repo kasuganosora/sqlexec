@@ -1,4 +1,4 @@
-package optimizer
+package statistics
 
 import "fmt"
 
@@ -6,25 +6,11 @@ import "fmt"
 // Default is false for production performance.
 var debugEnabled = false
 
-// SetDebug enables or disables debug logging for the optimizer.
+// SetDebug enables or disables debug logging for the statistics package.
 func SetDebug(enabled bool) { debugEnabled = enabled }
 
 // IsDebugEnabled returns whether debug logging is enabled.
 func IsDebugEnabled() bool { return debugEnabled }
-
-// Debugf prints debug message if debug mode is enabled (public version for sub-packages)
-func Debugf(format string, args ...interface{}) {
-	if debugEnabled {
-		fmt.Printf(format, args...)
-	}
-}
-
-// Debugln prints debug line if debug mode is enabled (public version for sub-packages)
-func Debugln(args ...interface{}) {
-	if debugEnabled {
-		fmt.Println(args...)
-	}
-}
 
 func debugf(format string, args ...interface{}) {
 	if debugEnabled {

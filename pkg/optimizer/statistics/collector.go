@@ -50,7 +50,7 @@ func (sc *SamplingCollector) CollectStatistics(ctx context.Context, tableName st
 		sampleSize = 100 // 最小采样100行
 	}
 
-	fmt.Printf("  [STATISTICS] Sampling table %s: total=%d, sampleRate=%.2f%%, sampleSize=%d\n",
+	debugf("  [STATISTICS] Sampling table %s: total=%d, sampleRate=%.2f%%, sampleSize=%d\n",
 		tableName, totalRows, sc.sampleRate*100, sampleSize)
 
 	// 第三步：执行采样查询
@@ -65,7 +65,7 @@ func (sc *SamplingCollector) CollectStatistics(ctx context.Context, tableName st
 	// 估算总行数（基于采样比例）
 	stats.EstimatedRowCount = totalRows
 
-	fmt.Printf("  [STATISTICS] Collected statistics for %s: rows=%d, columns=%d\n",
+	debugf("  [STATISTICS] Collected statistics for %s: rows=%d, columns=%d\n",
 		tableName, stats.RowCount, len(stats.ColumnStats))
 
 	return stats, nil

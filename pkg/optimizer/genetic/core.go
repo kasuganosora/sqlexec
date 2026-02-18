@@ -347,7 +347,7 @@ func (ga *GeneticAlgorithm) Run(ctx context.Context, candidates []*IndexCandidat
 		// 检查上下文取消
 		select {
 		case <-ctx.Done():
-			fmt.Printf("[GeneticAlgorithm] Context cancelled at generation %d\n", generation)
+			debugf("[GeneticAlgorithm] Context cancelled at generation %d\n", generation)
 			best := ga.GetBestIndividual(pop)
 			return ga.ExtractSolution(best)
 		default:
@@ -401,14 +401,14 @@ func (ga *GeneticAlgorithm) Run(ctx context.Context, candidates []*IndexCandidat
 
 		// 检查收敛（使用改进的收敛判断）
 		if generation > 10 && ga.IsConverged(pop, convergenceThreshold) {
-			fmt.Printf("[GeneticAlgorithm] Converged at generation %d (metric: %.4f, change rate: %.6f)\n",
+			debugf("[GeneticAlgorithm] Converged at generation %d (metric: %.4f, change rate: %.6f)\n",
 				generation, convergenceMetric, changeRate)
 			break
 		}
 
 		if generation%10 == 0 {
 			best := ga.GetBestIndividual(pop)
-			fmt.Printf("[GeneticAlgorithm] Generation %d, Best fitness: %.4f, Mutation: %.3f, Crossover: %.3f\n",
+			debugf("[GeneticAlgorithm] Generation %d, Best fitness: %.4f, Mutation: %.3f, Crossover: %.3f\n",
 				generation, best.Fitness, ga.config.MutationRate, ga.config.CrossoverRate)
 		}
 	}

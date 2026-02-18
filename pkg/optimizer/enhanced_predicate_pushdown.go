@@ -48,7 +48,7 @@ func (r *EnhancedPredicatePushdownRule) Apply(ctx context.Context, plan LogicalP
 	if dataSource, ok := child.(*LogicalDataSource); ok {
 		pushedDown := r.tryPushDownToDataSource(selection, dataSource)
 		if pushedDown {
-			fmt.Println("  [PUSHDOWN] Predicates pushed down to DataSource")
+			debugln("  [PUSHDOWN] Predicates pushed down to DataSource")
 			// 如果所有条件都已下推，返回DataSource
 			if len(selection.Conditions()) == 0 {
 				return dataSource, nil
@@ -60,13 +60,13 @@ func (r *EnhancedPredicatePushdownRule) Apply(ctx context.Context, plan LogicalP
 	if join, ok := child.(*LogicalJoin); ok {
 		pushedDown := r.tryPushDownAcrossJoin(selection, join)
 		if pushedDown {
-			fmt.Println("  [PUSHDOWN] Predicates pushed down across JOIN")
+			debugln("  [PUSHDOWN] Predicates pushed down across JOIN")
 		}
 	}
 
 	// 3. 处理OR条件，转换为UNION
 	if orPlan := r.tryConvertORToUnion(selection); orPlan != nil {
-		fmt.Println("  [PUSHDOWN] Converted OR to UNION")
+		debugln("  [PUSHDOWN] Converted OR to UNION")
 		return orPlan, nil
 	}
 

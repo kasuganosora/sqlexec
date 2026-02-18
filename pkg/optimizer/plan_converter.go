@@ -78,7 +78,7 @@ func (pc *PlanConverter) convertDataSource(ctx context.Context, p *LogicalDataSo
 	var indexSelection *index.IndexSelection
 	if pc.indexSelector != nil {
 		indexSelection = pc.indexSelector.SelectBestIndex(tableName, filters, requiredCols)
-		fmt.Printf("  [CONVERTER] Index Selection: %s\n", indexSelection.String())
+		debugf("  [CONVERTER] Index Selection: %s\n", indexSelection.String())
 	}
 
 	// Use index or full table scan
@@ -104,7 +104,7 @@ func (pc *PlanConverter) convertDataSource(ctx context.Context, p *LogicalDataSo
 				Nullable: col.Nullable,
 			})
 		}
-		fmt.Printf("  [CONVERTER] Applying column pruning: %d columns reduced to %d\n", len(p.TableInfo.Columns), len(p.Columns))
+		debugf("  [CONVERTER] Applying column pruning: %d columns reduced to %d\n", len(p.TableInfo.Columns), len(p.Columns))
 	}
 
 	// Update cost
@@ -264,7 +264,7 @@ func (pc *PlanConverter) convertJoin(ctx context.Context, p *LogicalJoin, optCtx
 
 	_ = pc.costModel.JoinCost(10000, 10000, costJoinType, convertJoinConditionsToExpressions(p.GetJoinConditions()))
 
-	fmt.Println("  [CONVERTER] Using original JOIN plan")
+	debugln("  [CONVERTER] Using original JOIN plan")
 
 	// Build output schema
 	outputSchema := make([]types.ColumnInfo, 0, len(left.OutputSchema)+len(right.OutputSchema))
