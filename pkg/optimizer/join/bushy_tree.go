@@ -35,7 +35,7 @@ func (bjtb *BushyJoinTreeBuilder) BuildBushyTree(tables []string, joinNodes inte
 	// 简化实现：返回一个虚拟的树结构用于测试
 	// 实际实现需要完整的 Bushy Tree 构建算法
 
-	fmt.Printf("  [BUSHY TREE] Building bushy tree for %d tables (maxBushiness=%d)\n", n, bjtb.maxBushiness)
+	debugf("  [BUSHY TREE] Building bushy tree for %d tables (maxBushiness=%d)\n", n, bjtb.maxBushiness)
 
 	// 返回一个虚拟的树结构，用于测试
 	virtualTree := map[string]interface{}{

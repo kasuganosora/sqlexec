@@ -275,20 +275,20 @@ func (a *costModelAdapter) ProjectCost(inputRows int64, projCols int) float64 {
 
 // Optimize 优化查询（增强版）
 func (eo *EnhancedOptimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (*plan.Plan, error) {
-	fmt.Println("=== Enhanced Optimizer Started ===")
-	
+	debugln("=== Enhanced Optimizer Started ===")
+
 	// 1. 解析 Hints（如果 SQL 中有）
 	var hints *OptimizerHints
 	if stmt != nil && stmt.RawSQL != "" {
 		parsedHints, cleanSQLStr, err := eo.hintsParser.ExtractHintsFromSQL(stmt.RawSQL)
 		if err != nil {
-			fmt.Printf("  [HINTS] Warning: Failed to parse hints: %v\n", err)
+			debugf("  [HINTS] Warning: Failed to parse hints: %v\n", err)
 			hints = &OptimizerHints{} // 使用空 hints 继续
 		} else {
 			// 转换 ParsedHints 为 OptimizerHints
 			hints = convertParsedHints(parsedHints)
 			if hints != nil {
-				fmt.Printf("  [HINTS] Parsed hints from SQL\n")
+				debugf("  [HINTS] Parsed hints from SQL\n")
 			}
 			// 更新 SQL（去除 hints）
 			if cleanSQLStr != "" {
@@ -298,13 +298,13 @@ func (eo *EnhancedOptimizer) Optimize(ctx context.Context, stmt *parser.SQLState
 	} else {
 		hints = &OptimizerHints{} // 使用空 hints
 	}
-	
+
 	// 2. 转换为逻辑计划
 	logicalPlan, err := eo.baseOptimizer.convertToLogicalPlan(stmt)
 	if err != nil {
 		return nil, fmt.Errorf("convert to logical plan failed: %w", err)
 	}
-	fmt.Printf("  [ENHANCED] Logical Plan: %s\n", logicalPlan.Explain())
+	debugf("  [ENHANCED] Logical Plan: %s\n", logicalPlan.Explain())
 
 	// 3. 创建增强的优化上下文（包含 hints）
 	optCtx := &OptimizationContext{
@@ -320,14 +320,14 @@ func (eo *EnhancedOptimizer) Optimize(ctx context.Context, stmt *parser.SQLState
 	if err != nil {
 		return nil, fmt.Errorf("apply enhanced rules failed: %w", err)
 	}
-	fmt.Printf("  [ENHANCED] Optimized Plan: %s\n", optimizedPlan.Explain())
+	debugf("  [ENHANCED] Optimized Plan: %s\n", optimizedPlan.Explain())
 
 	// 5. 转换为可序列化的Plan（增强版）
 	executionPlan, err := eo.convertToPlanEnhanced(ctx, optimizedPlan, optCtx)
 	if err != nil {
 		return nil, fmt.Errorf("convert to plan failed: %w", err)
 	}
-	fmt.Printf("  [ENHANCED] Execution Plan generated\n")
+	debugf("  [ENHANCED] Execution Plan generated\n")
 
 	return executionPlan, nil
 }
@@ -358,10 +358,10 @@ func (eo *EnhancedOptimizer) applyEnhancedRules(ctx context.Context, plan Logica
 	allRules := append(enhancedRuleSet, advancedRules...)
 	ruleSet := RuleSet(allRules)
 
-	fmt.Println("  [ENHANCED] Applying enhanced optimization rules...")
-	fmt.Printf("  [ENHANCED] Total rules: %d\n", len(allRules))
+	debugln("  [ENHANCED] Applying enhanced optimization rules...")
+	debugf("  [ENHANCED] Total rules: %d\n", len(allRules))
 	for i, r := range allRules {
-		fmt.Printf("  [ENHANCED]   Rule %d: %s\n", i, r.Name())
+		debugf("  [ENHANCED]   Rule %d: %s\n", i, r.Name())
 	}
 	optimizedPlan, err := ruleSet.Apply(ctx, plan, optCtx)
 	if err != nil {
@@ -416,11 +416,11 @@ func (eo *EnhancedOptimizer) convertDataSourceEnhanced(ctx context.Context, p *L
 	
 	// 选择最佳索引
 	indexSelection := eo.indexSelector.SelectBestIndex(tableName, filters, requiredCols)
-	fmt.Printf("  [ENHANCED] Index Selection: %s\n", indexSelection.String())
-	
+	debugf("  [ENHANCED] Index Selection: %s\n", indexSelection.String())
+
 	// 使用索引或全表扫描
 	useIndex := indexSelection.SelectedIndex != nil
-	
+
 	// 构建列信息
 	columns := make([]types.ColumnInfo, 0, len(p.TableInfo.Columns))
 	for _, col := range p.TableInfo.Columns {
@@ -430,7 +430,7 @@ func (eo *EnhancedOptimizer) convertDataSourceEnhanced(ctx context.Context, p *L
 			Nullable: col.Nullable,
 		})
 	}
-	
+
 	// 应用列裁剪
 	if len(p.Columns) < len(p.TableInfo.Columns) {
 		columns = make([]types.ColumnInfo, 0, len(p.Columns))
@@ -441,7 +441,7 @@ func (eo *EnhancedOptimizer) convertDataSourceEnhanced(ctx context.Context, p *L
 				Nullable: col.Nullable,
 			})
 		}
-		fmt.Printf("  [ENHANCED] Applying column pruning: %d columns reduced to %d\n", len(p.TableInfo.Columns), len(p.Columns))
+		debugf("  [ENHANCED] Applying column pruning: %d columns reduced to %d\n", len(p.TableInfo.Columns), len(p.Columns))
 	}
 
 	// 更新成本
@@ -595,8 +595,8 @@ func (eo *EnhancedOptimizer) convertJoinEnhanced(ctx context.Context, p *Logical
 	// 计算JOIN成本
 	_ = eo.costModel.JoinCost(10000, 10000, cost.JoinType(p.GetJoinType()), convertJoinConditionsToExpressions(p.GetJoinConditions()))
 
-	fmt.Println("  [ENHANCED] Using original JOIN plan")
-	
+	debugln("  [ENHANCED] Using original JOIN plan")
+
 	// 构建输出Schema
 	outputSchema := make([]types.ColumnInfo, 0, len(left.OutputSchema)+len(right.OutputSchema))
 	outputSchema = append(outputSchema, left.OutputSchema...)
@@ -862,7 +862,7 @@ func (a *DPJoinReorderAdapter) Apply(ctx context.Context, plan LogicalPlan, optC
 		return plan, nil
 	}
 
-	fmt.Println("  [DP REORDER] 开始DP JOIN重排序优化")
+	debugln("  [DP REORDER] Starting DP JOIN reorder optimization")
 
 	// 适配器：将 optimizer.LogicalPlan 转换为 join.LogicalPlan
 	joinPlan := a.convertToJoinPlan(plan)
@@ -870,22 +870,22 @@ func (a *DPJoinReorderAdapter) Apply(ctx context.Context, plan LogicalPlan, optC
 	// 调用 join 包的 DP 重排序算法
 	reorderedPlan, err := a.dpReorder.Reorder(ctx, joinPlan)
 	if err != nil {
-		fmt.Printf("  [DP REORDER] 重排序失败: %v，使用原计划\n", err)
+		debugf("  [DP REORDER] Reorder failed: %v, using original plan\n", err)
 		return join, nil
 	}
 
 	// 如果重排序后的计划为空或与原计划相同，返回原计划
 	if reorderedPlan == nil {
-		fmt.Println("  [DP REORDER] 未找到更优的JOIN顺序")
+		debugln("  [DP REORDER] No better JOIN order found")
 		return join, nil
 	}
 
-	fmt.Println("  [DP REORDER] DP JOIN重排序成功")
+	debugln("  [DP REORDER] DP JOIN reorder successful")
 
 	// 适配器：将 join.LogicalPlan 转换回 optimizer.LogicalPlan
 	result := a.convertFromJoinPlan(reorderedPlan)
 	if result == nil {
-		fmt.Println("  [DP REORDER] 转换失败，使用原计划")
+		debugln("  [DP REORDER] Conversion failed, using original plan")
 		return join, nil
 	}
 
@@ -911,7 +911,7 @@ func (a *DPJoinReorderAdapter) convertFromJoinPlan(plan join.LogicalPlan) Logica
 
 	// 无法直接访问 join 包的内部类型，返回nil使用原计划
 	// 完整实现需要通过接口方法访问 mockPlan 的信息
-	fmt.Println("  [DP REORDER] 无法转换 mockLogicalPlan，使用原计划")
+	debugln("  [DP REORDER] Cannot convert mockLogicalPlan, using original plan")
 	return nil
 }
 
@@ -960,16 +960,16 @@ func (a *BushyTreeAdapter) Apply(ctx context.Context, plan LogicalPlan, optCtx *
 	// 当前 Bushy Tree 构建器返回 nil，表示保持线性树
 	// 如果需要真正启用 Bushy Tree，需要在 bushy_tree.go 中实现完整逻辑
 
-	fmt.Println("  [BUSHY TREE] 开始 Bushy JOIN Tree 构建优化")
+	debugln("  [BUSHY TREE] Starting Bushy JOIN Tree build optimization")
 
 	// 检查是否有足够的表进行 Bushy Tree 构建
 	tables := a.collectTables(plan)
 	if len(tables) < 3 {
-		fmt.Printf("  [BUSHY TREE] 表数量 %d < 3，使用线性树\n", len(tables))
+		debugf("  [BUSHY TREE] Table count %d < 3, using linear tree\n", len(tables))
 		return plan, nil
 	}
 
-	fmt.Printf("  [BUSHY TREE] 检测到 %d 个表，考虑 Bushy Tree\n", len(tables))
+	debugf("  [BUSHY TREE] Detected %d tables, considering Bushy Tree\n", len(tables))
 
 	// 调用 Bushy Tree 构建器
 	tableNames := make([]string, 0, len(tables))
@@ -981,11 +981,11 @@ func (a *BushyTreeAdapter) Apply(ctx context.Context, plan LogicalPlan, optCtx *
 	bushyTree := a.bushyTree.BuildBushyTree(tableNames, nil)
 
 	if bushyTree == nil {
-		fmt.Println("  [BUSHY TREE] Bushy Tree 构建器返回 nil，保持原线性树")
+		debugln("  [BUSHY TREE] Bushy Tree builder returned nil, keeping linear tree")
 		return plan, nil
 	}
 
-	fmt.Println("  [BUSHY TREE] Bushy Tree 构建成功")
+	debugln("  [BUSHY TREE] Bushy Tree build successful")
 
 	// 转换为 optimizer.LogicalPlan
 	return a.convertBushyTreeToPlan(bushyTree), nil
@@ -1019,7 +1019,7 @@ func (a *BushyTreeAdapter) convertBushyTreeToPlan(bushyTree interface{}) Logical
 	// 简化实现：返回 nil，实际需要解析 bushyTree 结构
 	// bushyTree 是 interface{} 类型，实际应该是某种树结构
 
-	fmt.Println("  [BUSHY TREE] Bushy Tree 转换功能（框架实现）")
+	debugln("  [BUSHY TREE] Bushy Tree conversion (framework implementation)")
 
 	return nil
 }
@@ -1075,7 +1075,7 @@ func (a *IndexSelectionAdapter) Apply(ctx context.Context, plan LogicalPlan, opt
 
 	if indexSelection.SelectedIndex != nil {
 		// 输出日志
-		fmt.Printf("  [INDEX SELECT] Selected index: %s for table %s\n",
+		debugf("  [INDEX SELECT] Selected index: %s for table %s\n",
 			indexSelection.SelectedIndex.Name, tableName)
 	}
 

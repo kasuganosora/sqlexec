@@ -134,7 +134,7 @@ func (isc *IncrementalStatisticsCollector) CollectStatistics(ctx context.Context
 
 	if needFullCollect {
 		// 全量收集
-		fmt.Printf("  [INCREMENTAL STATS] Full collect for table %s\n", tableName)
+		debugf("  [INCREMENTAL STATS] Full collect for table %s\n", tableName)
 		stats, err := isc.baseCollector.CollectStatistics(ctx, tableName)
 		if err != nil {
 			return nil, err
@@ -155,7 +155,7 @@ func (isc *IncrementalStatisticsCollector) CollectStatistics(ctx context.Context
 
 // collectIncrementalStats 增量收集统计信息
 func (isc *IncrementalStatisticsCollector) collectIncrementalStats(ctx context.Context, tableName string, buffer *DeltaBuffer) (*TableStatistics, error) {
-	fmt.Printf("  [INCREMENTAL STATS] Incremental collect for table %s (delta: %d)\n", tableName, buffer.BufferSize)
+	debugf("  [INCREMENTAL STATS] Incremental collect for table %s (delta: %d)\n", tableName, buffer.BufferSize)
 
 	// 获取基础统计信息
 	baseStats, err := isc.baseCollector.CollectStatistics(ctx, tableName)
@@ -266,7 +266,7 @@ func (isc *IncrementalStatisticsCollector) FlushAllBuffers(ctx context.Context) 
 		_, err := isc.CollectStatistics(ctx, tableName)
 		if err != nil {
 			lastError = err
-			fmt.Printf("  [INCREMENTAL STATS] Failed to flush buffer for %s: %v\n", tableName, err)
+			debugf("  [INCREMENTAL STATS] Failed to flush buffer for %s: %v\n", tableName, err)
 		}
 	}
 

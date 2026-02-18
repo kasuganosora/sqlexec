@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-02-18T12:52:52+08:00",
-  "go_version": "go1.24.2",
+  "timestamp": "2026-02-18T15:52:50+08:00",
+  "go_version": "go1.26.0",
   "system_info": {
     "cpu_cores": 12,
     "memory_gb": 0,

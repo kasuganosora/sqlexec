@@ -137,3 +137,4 @@ rows, _ := session.QueryAll(`
 - [Transaction Management](transactions.md) -- Transaction operations and isolation levels
 - [GORM Driver](gorm-driver.md) -- Using SQLExec through GORM ORM
 - [Slice Adapter](slice-adapter.md) -- Execute SQL directly on Go data structures
+- [Testing Best Practices](testing.md) -- Writing well-isolated unit tests

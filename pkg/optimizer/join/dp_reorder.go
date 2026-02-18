@@ -83,13 +83,13 @@ func (dpr *DPJoinReorder) Reorder(ctx context.Context, plan LogicalPlan) (Logica
 		return plan, nil
 	}
 
-	fmt.Printf("  [JOIN REORDER] Reordering %d tables\n", len(tables))
+	debugf("  [JOIN REORDER] Reordering %d tables\n", len(tables))
 
 	// 使用DP算法找最优顺序
 	result := dpr.dpSearch(tables, joinNodes)
 
 	if result.Plan != nil {
-		fmt.Printf("  [JOIN REORDER] Found optimal order: %v, cost=%.2f\n", result.Order, result.Cost)
+		debugf("  [JOIN REORDER] Found optimal order: %v, cost=%.2f\n", result.Order, result.Cost)
 		return result.Plan, nil
 	}
 
@@ -147,7 +147,7 @@ func (dpr *DPJoinReorder) dpSearch(tables []string, joinNodes []LogicalPlan) *Re
 	// 检查缓存
 	cacheKey := dpr.generateCacheKey(tables)
 	if cached := dpr.cache.Get(cacheKey); cached != nil {
-		fmt.Printf("  [JOIN REORDER] Cache hit for key: %s\n", cacheKey)
+		debugf("  [JOIN REORDER] Cache hit for key: %s\n", cacheKey)
 		return cached
 	}
 
@@ -321,7 +321,7 @@ func (dpr *DPJoinReorder) greedyReorder(tables []string, joinNodes []LogicalPlan
 		}
 	}
 
-	fmt.Printf("  [JOIN REORDER] Greedy order: %v, cost=%.2f\n", order, totalCost)
+	debugf("  [JOIN REORDER] Greedy order: %v, cost=%.2f\n", order, totalCost)
 
 	return dpr.buildPlanFromOrder(order, joinNodes)
 }

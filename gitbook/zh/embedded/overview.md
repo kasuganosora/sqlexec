@@ -137,3 +137,4 @@ rows, _ := session.QueryAll(`
 - [事务管理](transactions.md) -- 事务操作和隔离级别
 - [GORM 驱动](gorm-driver.md) -- 通过 GORM ORM 使用 SQLExec
 - [Slice 适配器](slice-adapter.md) -- 直接对 Go 数据结构执行 SQL
+- [测试最佳实践](testing.md) -- 编写隔离性良好的单元测试

@@ -24,6 +24,7 @@
 * [事务管理](embedded/transactions.md)
 * [GORM 驱动](embedded/gorm-driver.md)
 * [Slice 适配器](embedded/slice-adapter.md)
+* [测试最佳实践](embedded/testing.md)
 
 ## 数据源
 

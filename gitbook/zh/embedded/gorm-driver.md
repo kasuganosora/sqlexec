@@ -42,10 +42,10 @@ func main() {
 
     // 2. 注册内存数据源
     memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
-        Type: domain.DataSourceTypeMemory, Name: "default", Writable: true,
+        Type: domain.DataSourceTypeMemory, Name: "primary", Writable: true,
     })
     memDS.Connect(context.Background())
-    db.RegisterDataSource("default", memDS)
+    db.RegisterDataSource("primary", memDS)
 
     // 3. 创建 GORM 连接
     gormDB, err := gorm.Open(
@@ -196,7 +196,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
     // 2. 配置内存数据源（关键配置！）
     memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
         Type:     domain.DataSourceTypeMemory,  // 必须是 memory
-        Name:     "default",                    // 必须是 "default"
+        Name:     "mydb",                       // 可以是任意名称
         Writable: true,                          // 必须是 true
     })
 
@@ -204,7 +204,10 @@ func SetupTestDB(t *testing.T) *gorm.DB {
     memDS.Connect(context.Background())
 
     // 4. 注册数据源（必须！）
-    db.RegisterDataSource("default", memDS)
+    db.RegisterDataSource("mydb", memDS)
+    
+    // 5. 设置为默认数据源（可选，如果是第一个注册的数据源会自动成为默认）
+    db.SetDefaultDataSource("mydb")
 
     // 5. 创建 GORM 连接
     gormDB, err := gorm.Open(
@@ -227,7 +230,8 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 |------|------|
 | SkipDefaultTransaction | 建议设为 `true`，避免不必要的事务开销 |
 | 数据源类型 | 需要使用支持写入的数据源（如 Memory） |
-| 数据源名称 | 必须是 `"default"` |
+| 数据源名称 | 可以是任意字符串，建议使用有意义的名称（如 "mydb"、"primary" 等） |
+| 默认数据源 | 第一个注册的数据源自动成为默认数据源，也可用 `SetDefaultDataSource()` 设置 |
 | Writable | 必须设为 `true` 才能执行 INSERT/UPDATE/DELETE |
 | Connect() | 必须调用 `memDS.Connect()` 连接数据源 |
 | RegisterDataSource | 必须调用 `db.RegisterDataSource()` 注册数据源 |

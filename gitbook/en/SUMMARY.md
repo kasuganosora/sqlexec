@@ -24,6 +24,7 @@
 * [Transactions](embedded/transactions.md)
 * [GORM Driver](embedded/gorm-driver.md)
 * [Slice Adapter](embedded/slice-adapter.md)
+* [Testing Best Practices](embedded/testing.md)
 
 ## Data Sources
 
