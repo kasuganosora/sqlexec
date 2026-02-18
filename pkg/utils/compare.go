@@ -170,8 +170,8 @@ func compareBetween(a, b interface{}) (bool, error) {
 }
 
 // MapOperator 映射parser操作符到标准操作符
-// 支持的parser操作符: gt, gte, lt, lte, eq, ne, ===, !=
-// 返回标准SQL操作符: >, >=, <, <=, =, !=
+// 支持的parser操作符: gt, gte, lt, lte, eq, ne, ===, !=, like, not like
+// 返回标准SQL操作符: >, >=, <, <=, =, !=, LIKE, NOT LIKE
 func MapOperator(parserOp string) string {
 	switch parserOp {
 	case "gt":
@@ -186,6 +186,10 @@ func MapOperator(parserOp string) string {
 		return "="
 	case "ne", "!=":
 		return "!="
+	case "like", "LIKE":
+		return "LIKE"
+	case "not like", "NOT LIKE", "notlike", "NOTLIKE":
+		return "NOT LIKE"
 	default:
 		return parserOp
 	}

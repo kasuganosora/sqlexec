@@ -153,8 +153,9 @@ func (s *DataService) Query(ctx context.Context, tableName string, options *Quer
 
 	// 构建查询选项
 	queryOptions := &domain.QueryOptions{
-		Offset: options.Offset,
-		Limit:  options.Limit,
+		Filters: options.Filters,
+		Offset:  options.Offset,
+		Limit:   options.Limit,
 	}
 
 	// 查询数据

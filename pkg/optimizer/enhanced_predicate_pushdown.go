@@ -104,6 +104,8 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownToDataSource(selection *Logic
 		for _, cond := range pushableConditions {
 			dataSource.PushDownPredicates([]*parser.Expression{cond})
 		}
+		// 清除已下推的条件
+		selection.filterConditions = nil
 		return true
 	}
 
@@ -112,6 +114,8 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownToDataSource(selection *Logic
 		for _, cond := range pushableConditions {
 			dataSource.PushDownPredicates([]*parser.Expression{cond})
 		}
+		// 更新剩余条件
+		selection.filterConditions = remainingConditions
 	}
 
 	return len(pushableConditions) > 0

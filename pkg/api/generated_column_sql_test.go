@@ -275,9 +275,9 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 			SELECT triangle_check1, triangle_check2, triangle_check3 
 			FROM triangles WHERE id = 1
 		`)
-		assert.Equal(t, int64(1), row["triangle_check1"])
-		assert.Equal(t, int64(1), row["triangle_check2"])
-		assert.Equal(t, int64(1), row["triangle_check3"])
+		assert.Equal(t, true, row["triangle_check1"])
+		assert.Equal(t, true, row["triangle_check2"])
+		assert.Equal(t, true, row["triangle_check3"])
 
 		// 插入无效三角形 (1, 1, 10)
 		_, err = session.Execute(`INSERT INTO triangles (id, sidea, sideb, sidec) VALUES (2, 1.0, 1.0, 10.0)`)
@@ -288,8 +288,8 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 			SELECT triangle_check1, triangle_check2, triangle_check3 
 			FROM triangles WHERE id = 2
 		`)
-		// 1 + 1 > 10 应该为false (布尔值转换为int64: 0)
-		assert.Equal(t, int64(0), row["triangle_check1"])
+		// 1 + 1 > 10 应该为false
+		assert.Equal(t, false, row["triangle_check1"])
 	})
 
 	t.Run("implicit virtual generated column", func(t *testing.T) {
