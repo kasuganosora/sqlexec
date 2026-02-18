@@ -2,12 +2,12 @@ package memory
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/generated"
 	"github.com/kasuganosora/sqlexec/pkg/resource/util"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // ==================== Data Mutation ====================
@@ -208,35 +208,7 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 
 // convertRowTypesBasedOnSchema converts row values based on column types defined in schema
 func convertRowTypesBasedOnSchema(row domain.Row, schema *domain.TableInfo) {
-	if schema == nil {
-		return
-	}
-	for _, col := range schema.Columns {
-		val, exists := row[col.Name]
-		if !exists {
-			continue
-		}
-
-		// Convert int64(0/1) to bool for BOOL/BOOLEAN columns
-		// Use case-insensitive comparison for column type
-		// Note: In MySQL, BOOLEAN is an alias for TINYINT(1)
-		// TiDB parser converts BOOLEAN to tinyint, so we need to check both
-		colType := strings.ToUpper(col.Type)
-		shouldConvertToBool := colType == "BOOL" || colType == "BOOLEAN" || colType == "TINYINT"
-
-		if shouldConvertToBool {
-			switch v := val.(type) {
-			case int64:
-				row[col.Name] = v != 0
-			case int:
-				row[col.Name] = v != 0
-			case float64:
-				row[col.Name] = v != 0.0
-			case float32:
-				row[col.Name] = v != 0.0
-			}
-		}
-	}
+	utils.ConvertBoolColumnsBasedOnSchema(row, schema)
 }
 
 // Update updates data

@@ -3,11 +3,11 @@ package badger
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/dgraph-io/badger/v4"
 	domain "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // BadgerDataSource implements domain.DataSource using Badger KV store
@@ -534,34 +534,7 @@ func (ds *BadgerDataSource) sortRows(rows []domain.Row, orderBy, order string) {
 
 // convertRowTypesBasedOnSchema converts row values based on column types defined in schema
 func (ds *BadgerDataSource) convertRowTypesBasedOnSchema(row domain.Row, tableInfo *domain.TableInfo) {
-	if tableInfo == nil || row == nil {
-		return
-	}
-	for _, col := range tableInfo.Columns {
-		val, exists := row[col.Name]
-		if !exists || val == nil {
-			continue
-		}
-
-colType := strings.ToUpper(col.Type)
-	// Handle BOOL/BOOLEAN/TINYINT conversion for GORM compatibility
-	// Note: In MySQL, BOOLEAN is an alias for TINYINT(1)
-	// TiDB parser converts BOOLEAN to tinyint, so we need to check all three
-	shouldConvertToBool := colType == "BOOL" || colType == "BOOLEAN" || colType == "TINYINT"
-
-	if shouldConvertToBool {
-		switch v := val.(type) {
-		case int64:
-			row[col.Name] = v != 0
-		case int:
-			row[col.Name] = v != 0
-		case float64:
-			row[col.Name] = v != 0.0
-		case float32:
-			row[col.Name] = v != 0.0
-		}
-	}
-	}
+	utils.ConvertBoolColumnsBasedOnSchema(row, tableInfo)
 }
 
 // matchesFilters checks if a row matches the filter conditions
