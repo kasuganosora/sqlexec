@@ -2,43 +2,123 @@ package api
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 )
 
 // bindParams binds parameters to SQL query placeholders
-// Supports ? placeholders
+// Supports ? placeholders, including slice expansion for IN clauses
 func bindParams(sql string, params []interface{}) (string, error) {
 	if len(params) == 0 {
 		return sql, nil
 	}
 
+	// First, expand slices and count total values needed
+	expandedParams := make([]interface{}, 0, len(params))
+	for _, p := range params {
+		if isSlice(p) {
+			// Expand slice into individual elements
+			slice := reflect.ValueOf(p)
+			for i := 0; i < slice.Len(); i++ {
+				expandedParams = append(expandedParams, slice.Index(i).Interface())
+			}
+		} else {
+			expandedParams = append(expandedParams, p)
+		}
+	}
+
 	// Count placeholders
 	placeholderCount := strings.Count(sql, "?")
 	if placeholderCount != len(params) {
-		return "", fmt.Errorf("parameter count mismatch: expected %d placeholders, got %d params",
-			placeholderCount, len(params))
+		// Check if this might be due to slice expansion
+		// For "id in (?,?,?)" pattern, we need to handle slice specially
+		if placeholderCount == len(expandedParams) {
+			// Continue with expanded params
+		} else if placeholderCount != len(params) {
+			return "", fmt.Errorf("parameter count mismatch: expected %d placeholders, got %d params",
+				placeholderCount, len(params))
+		}
 	}
 
 	result := make([]byte, 0, len(sql)*2)
 	paramIndex := 0
+	expandedIndex := 0
 
 	for i := 0; i < len(sql); i++ {
 		if sql[i] == '?' && paramIndex < len(params) {
-			// Convert parameter to SQL literal
-			value, err := paramToSQLLiteral(params[paramIndex])
-			if err != nil {
-				return "", fmt.Errorf("error binding parameter %d: %w", paramIndex+1, err)
+			p := params[paramIndex]
+
+			// Check if this is a slice and we need to expand it for IN clause
+			if isSlice(p) && isINClause(sql, i) {
+				slice := reflect.ValueOf(p)
+				if slice.Len() == 0 {
+					// Empty slice -> (NULL) to avoid SQL syntax error
+					result = append(result, "(NULL)"...)
+				} else {
+					result = append(result, '(')
+					for j := 0; j < slice.Len(); j++ {
+						if j > 0 {
+							result = append(result, ',')
+						}
+						value, err := paramToSQLLiteral(slice.Index(j).Interface())
+						if err != nil {
+							return "", fmt.Errorf("error binding slice element %d: %w", j+1, err)
+						}
+						result = append(result, value...)
+					}
+					result = append(result, ')')
+				}
+				paramIndex++
+				expandedIndex += slice.Len()
+			} else {
+				// Single value
+				value, err := paramToSQLLiteral(p)
+				if err != nil {
+					return "", fmt.Errorf("error binding parameter %d: %w", paramIndex+1, err)
+				}
+				result = append(result, value...)
+				paramIndex++
+				expandedIndex++
 			}
-			result = append(result, value...)
-			paramIndex++
 		} else {
 			result = append(result, sql[i])
 		}
 	}
 
 	return string(result), nil
+}
+
+// isSlice checks if a value is a slice (but not []byte which is handled specially)
+func isSlice(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	typ := reflect.TypeOf(v)
+	if typ.Kind() == reflect.Slice {
+		// []byte is handled as a single value (hex)
+		if typ.Elem().Kind() == reflect.Uint8 {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// isINClause checks if the ? is part of an IN clause
+func isINClause(sql string, questionIndex int) bool {
+	// Look back for "IN" keyword (case insensitive)
+	lookback := 20
+	start := questionIndex - lookback
+	if start < 0 {
+		start = 0
+	}
+	before := strings.ToUpper(sql[start:questionIndex])
+	return strings.HasSuffix(before, "IN ") ||
+		strings.HasSuffix(before, "IN(") ||
+		strings.Contains(before, "IN ") ||
+		strings.Contains(before, "IN(")
 }
 
 // paramToSQLLiteral converts a Go value to SQL literal string

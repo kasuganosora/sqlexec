@@ -923,6 +923,14 @@ func (a *SQLAdapter) convertExpression(node ast.ExprNode) (*Expression, error) {
 		left, _ := a.convertExpression(n.Expr)
 		expr.Left = left
 
+	case *ast.ParenthesesExpr:
+		// 括号表达式，直接返回内部表达式的转换结果
+		innerExpr, err := a.convertExpression(n.Expr)
+		if err != nil {
+			return nil, err
+		}
+		return innerExpr, nil
+
 	default:
 		expr.Type = ExprTypeValue
 	}
