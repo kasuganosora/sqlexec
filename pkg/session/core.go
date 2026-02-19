@@ -229,6 +229,15 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 			showStmt.Like = descStmt.Column
 		}
 		result, err = s.executor.ExecuteShow(queryCtx, showStmt)
+	} else if parseResult.Statement.Create != nil {
+		// 处理 CREATE 语句
+		result, err = s.executeCreateStatement(queryCtx, parseResult.Statement.Create)
+	} else if parseResult.Statement.Set != nil {
+		// 处理 SET 语句 (SET NAMES, SET CHARACTER SET, SET SESSION var, etc.)
+		result, err = s.executeSetStatement(queryCtx, parseResult.Statement.Set)
+	} else if parseResult.Statement.Drop != nil {
+		// 处理 DROP 语句 (DROP TABLE t1, t2, etc.)
+		result, err = s.executor.ExecuteDrop(queryCtx, parseResult.Statement.Drop)
 	} else {
 		return nil, fmt.Errorf("statement type not supported yet")
 	}
@@ -712,6 +721,137 @@ func (s *CoreSession) GetAdapter() *parser.SQLAdapter {
 	return s.adapter
 }
 
+// executeCreateStatement executes CREATE TABLE statement
+func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *parser.CreateStatement) (*domain.QueryResult, error) {
+	// Note: This function is called from ExecuteQuery which already holds the lock,
+	// so we don't acquire the lock here to avoid deadlock
+
+	if s.closed {
+		return nil, fmt.Errorf("session is closed")
+	}
+
+	// Only support CREATE TABLE
+	if createStmt.Type != "TABLE" {
+		return nil, fmt.Errorf("CREATE %s is not supported yet", createStmt.Type)
+	}
+
+	tableName := createStmt.Name
+	if tableName == "" {
+		return nil, fmt.Errorf("table name is required")
+	}
+
+	// Determine target database:
+	// 1. If createStmt.Database is set (db.table format), use it
+	// 2. Otherwise use currentDB
+	// 3. If currentDB is empty, try "test" as default (MariaDB test compatibility)
+	var targetDB string
+	if createStmt.Database != "" {
+		targetDB = createStmt.Database
+	} else {
+		targetDB = s.currentDB
+		if targetDB == "" {
+			// Auto-create "test" database if not exists (MariaDB/MySQL compatibility)
+			if s.dsManager != nil {
+				if _, err := s.dsManager.Get("test"); err == nil {
+					targetDB = "test"
+					s.currentDB = "test"
+					// 同步更新 executor 的 currentDB
+					if s.executor != nil {
+						s.executor.SetCurrentDB("test")
+					}
+				} else {
+					// Auto-create test database using memory factory
+					registry := s.dsManager.GetRegistry()
+					if registry != nil {
+						if factory, err := registry.Get(domain.DataSourceTypeMemory); err == nil {
+							testDS, createErr := factory.Create(&domain.DataSourceConfig{
+								Type:     domain.DataSourceTypeMemory,
+								Name:     "test",
+								Writable: true,
+							})
+							if createErr == nil {
+								if connectErr := testDS.Connect(ctx); connectErr == nil {
+							if regErr := s.dsManager.Register("test", testDS); regErr == nil {
+									targetDB = "test"
+									s.currentDB = "test"
+									// 同步更新 executor 的 currentDB
+									if s.executor != nil {
+										s.executor.SetCurrentDB("test")
+									}
+								}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if targetDB == "" {
+		return nil, fmt.Errorf("no database selected")
+	}
+
+	// Check if this is a virtual database
+	if s.vdbRegistry != nil && s.vdbRegistry.IsVirtualDB(targetDB) {
+		return nil, fmt.Errorf("%s is a virtual database: CREATE TABLE operation not supported", targetDB)
+	}
+
+	// Get data source for target database
+	var ds domain.DataSource
+	if s.dsManager != nil {
+		var err error
+		ds, err = s.dsManager.Get(targetDB)
+		if err != nil {
+			return nil, fmt.Errorf("database '%s' not found: %w", targetDB, err)
+		}
+	} else {
+		ds = s.dataSource
+	}
+
+	// Build table info from columns
+	tableInfo := &domain.TableInfo{
+		Name:    tableName,
+		Columns: make([]domain.ColumnInfo, 0, len(createStmt.Columns)),
+	}
+
+	for _, col := range createStmt.Columns {
+		// Convert Default to string if present
+		var defaultVal string
+		if col.Default != nil {
+			switch v := col.Default.(type) {
+			case string:
+				defaultVal = v
+			default:
+				defaultVal = fmt.Sprintf("%v", v)
+			}
+		}
+
+		colInfo := domain.ColumnInfo{
+			Name:          col.Name,
+			Type:          col.Type,
+			Nullable:      col.Nullable,
+			Default:       defaultVal,
+			AutoIncrement: col.AutoInc,
+			Primary:       col.Primary,
+			Unique:        col.Unique,
+		}
+		tableInfo.Columns = append(tableInfo.Columns, colInfo)
+	}
+
+	// Create table
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		return nil, fmt.Errorf("failed to create table '%s': %w", tableName, err)
+	}
+
+	// Return success result
+	return &domain.QueryResult{
+		Columns: []domain.ColumnInfo{},
+		Rows:    []domain.Row{},
+		Total:   0,
+	}, nil
+}
+
 // executeUseStatement 执行 USE 语句
 func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain.QueryResult, error) {
 	// Note: This function is called from ExecuteQuery which already holds the lock,
@@ -758,6 +898,30 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 	s.SetCurrentDB(dbName)
 
 	// 返回成功结果
+	return &domain.QueryResult{
+		Columns: []domain.ColumnInfo{},
+		Rows:    []domain.Row{},
+		Total:   0,
+	}, nil
+}
+
+// executeSetStatement executes SET statement (SET NAMES, SET CHARACTER SET, etc.)
+// For compatibility, we accept the statement but ignore the actual values
+// since we always use utf8mb4 internally
+func (s *CoreSession) executeSetStatement(ctx context.Context, setStmt *parser.SetStatement) (*domain.QueryResult, error) {
+	// For compatibility, accept all SET statements
+	// We always use utf8mb4 internally, so we ignore charset settings
+	// Variables are accepted but not stored (future enhancement)
+	switch setStmt.Type {
+	case "NAMES":
+		// SET NAMES 'charset' - accept any charset, we use utf8mb4 internally
+	case "CHARACTER SET":
+		// SET CHARACTER SET charset - accept any charset
+	case "VARIABLE":
+		// SET SESSION/GLOBAL var = value - accept but ignore
+	}
+
+	// Return OK result - we accept all SET statements for compatibility
 	return &domain.QueryResult{
 		Columns: []domain.ColumnInfo{},
 		Rows:    []domain.Row{},
