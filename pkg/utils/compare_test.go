@@ -100,6 +100,14 @@ func TestCompareValues(t *testing.T) {
 
 		// 特殊情况
 		{"不支持的运算符", 10, 20, "UNKNOWN", false, true},
+
+		// IS NULL / IS NOT NULL 操作符
+		{"IS NULL true", nil, nil, "IS NULL", true, false},
+		{"IS NULL false", "value", nil, "IS NULL", false, false},
+		{"IS NOT NULL true", "value", nil, "IS NOT NULL", true, false},
+		{"IS NOT NULL false", nil, nil, "IS NOT NULL", false, false},
+		{"ISNULL true", nil, nil, "ISNULL", true, false},
+		{"ISNOTNULL true", "value", nil, "ISNOTNULL", true, false},
 	}
 
 	for _, tt := range tests {

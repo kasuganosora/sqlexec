@@ -1,6 +1,8 @@
 package util
 
 import (
+	"strings"
+
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
@@ -89,6 +91,23 @@ func MatchFilter(row domain.Row, filter domain.Filter) bool {
 	}
 	if filter.LogicOp == "AND" || filter.LogicOp == "and" {
 		return MatchesAllSubFilters(row, filter.SubFilters)
+	}
+
+	// 处理 IS NULL 和 IS NOT NULL 操作符
+	op := strings.ToUpper(filter.Operator)
+	if op == "IS NULL" || op == "ISNULL" {
+		value, exists := row[filter.Field]
+		if !exists {
+			return true // 不存在的字段视为 NULL
+		}
+		return value == nil
+	}
+	if op == "IS NOT NULL" || op == "ISNOTNULL" {
+		value, exists := row[filter.Field]
+		if !exists {
+			return false // 不存在的字段视为 NULL
+		}
+		return value != nil
 	}
 
 	// 处理普通字段比较

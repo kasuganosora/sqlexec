@@ -42,6 +42,23 @@ func MatchesFilter(row domain.Row, filter domain.Filter) (bool, error) {
 		return MatchesAllSubFilters(row, filter.SubFilters)
 	}
 
+	// Handle IS NULL and IS NOT NULL operators specially
+	op := strings.ToUpper(filter.Operator)
+	if op == "IS NULL" || op == "ISNULL" {
+		value, exists := row[filter.Field]
+		if !exists {
+			return true, nil // Non-existent field is considered NULL
+		}
+		return value == nil, nil
+	}
+	if op == "IS NOT NULL" || op == "ISNOTNULL" {
+		value, exists := row[filter.Field]
+		if !exists {
+			return false, nil // Non-existent field is considered NULL
+		}
+		return value != nil, nil
+	}
+
 	// Handle regular field comparison
 	value, exists := row[filter.Field]
 	if !exists {

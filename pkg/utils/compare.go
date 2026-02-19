@@ -28,6 +28,10 @@ func CompareValues(a, b interface{}, operator string) (bool, error) {
 	case "NOT LIKE":
 		result, err := compareLike(a, b)
 		return !result, err
+	case "IS NULL", "ISNULL":
+		return a == nil, nil
+	case "IS NOT NULL", "ISNOTNULL":
+		return a != nil, nil
 	}
 
 	// Handle nil values
@@ -213,6 +217,10 @@ func CompareValuesWithCollation(a, b interface{}, operator, collation string) (b
 		return !result, err
 	case "IN", "NOT IN", "BETWEEN", "NOT BETWEEN":
 		return CompareValues(a, b, operator)
+	case "IS NULL", "ISNULL":
+		return a == nil, nil
+	case "IS NOT NULL", "ISNOTNULL":
+		return a != nil, nil
 	}
 
 	if a == nil || b == nil {
