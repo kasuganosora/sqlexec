@@ -17,6 +17,16 @@ func (f *ParquetFactory) GetType() domain.DataSourceType {
 	return domain.DataSourceTypeParquet
 }
 
+// GetMetadata 实现DataSourceFactory接口
+func (f *ParquetFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "Parquet storage engine with MVCC transaction support",
+		Transactions: "YES",
+		XA:           "NO",
+		Savepoints:   "NO",
+	}
+}
+
 // Create 实现DataSourceFactory接口
 func (f *ParquetFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	// 使用ParquetAdapter（继承MVCCDataSource）

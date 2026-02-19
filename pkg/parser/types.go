@@ -32,6 +32,7 @@ const (
 	SQLTypeGrant       SQLType = "GRANT"
 	SQLTypeRevoke      SQLType = "REVOKE"
 	SQLTypeSetPasswd   SQLType = "SET PASSWORD"
+	SQLTypeSet         SQLType = "SET"
 	SQLTypeUnknown     SQLType = "UNKNOWN"
 )
 
@@ -70,6 +71,7 @@ type SQLStatement struct {
 	Grant        *GrantStatement      `json:"grant,omitempty"`
 	Revoke       *RevokeStatement     `json:"revoke,omitempty"`
 	SetPassword  *SetPasswordStatement `json:"set_password,omitempty"`
+	Set          *SetStatement          `json:"set,omitempty"`
 }
 
 // SelectStatement SELECT 语句
@@ -115,6 +117,7 @@ type DeleteStatement struct {
 // CreateStatement CREATE 语句
 type CreateStatement struct {
 	Type       string                 `json:"type"` // TABLE, DATABASE, INDEX, etc.
+	Database   string                 `json:"database,omitempty"` // Database name for db.table format
 	Name       string                 `json:"name"`
 	Columns    []ColumnInfo           `json:"columns,omitempty"`
 	Options    map[string]interface{} `json:"options,omitempty"`
@@ -123,9 +126,10 @@ type CreateStatement struct {
 
 // DropStatement DROP 语句
 type DropStatement struct {
-	Type      string `json:"type"` // TABLE, DATABASE, INDEX, etc.
-	Name      string `json:"name"`
-	IfExists  bool   `json:"if_exists"`
+	Type      string   `json:"type"` // TABLE, DATABASE, INDEX, etc.
+	Name      string   `json:"name"`
+	Names     []string `json:"names,omitempty"` // Multiple tables for DROP TABLE t1, t2
+	IfExists  bool     `json:"if_exists"`
 }
 
 // AlterStatement ALTER 语句
@@ -329,6 +333,13 @@ type SetPasswordStatement struct {
 	Username    string `json:"username"`
 	Host        string `json:"host,omitempty"` // Default is '%'
 	NewPassword string `json:"new_password"` // PASSWORD('password')
+}
+
+// SetStatement SET statement (SET NAMES, SET CHARACTER SET, SET SESSION var, etc.)
+type SetStatement struct {
+	Type      string            `json:"type"`       // "NAMES", "CHARACTER SET", or "VARIABLE"
+	Value     string            `json:"value"`      // charset name or variable value
+	Variables map[string]string `json:"variables"`  // for SET var1=val1, var2=val2
 }
 
 // ParseResult 解析结果

@@ -262,3 +262,186 @@ func TestProcessListProviderIntegration(t *testing.T) {
 	// Reset
 	processListProvider = nil
 }
+
+// TestExecuteShowVariables tests SHOW VARIABLES execution
+func TestExecuteShowVariables(t *testing.T) {
+	executor := NewShowExecutor("test_db", nil, nil)
+	ctx := context.Background()
+
+	tests := []struct {
+		name          string
+		showStmt      *parser.ShowStatement
+		expectedVars  []string
+		expectMinRows int
+	}{
+		{
+			name: "SHOW VARIABLES - all",
+			showStmt: &parser.ShowStatement{
+				Type: "VARIABLES",
+			},
+			expectedVars:  []string{"version", "port", "hostname"},
+			expectMinRows: 10,
+		},
+		{
+			name: "SHOW VARIABLES LIKE 'version%'",
+			showStmt: &parser.ShowStatement{
+				Type: "VARIABLES",
+				Like: "'version%'",
+			},
+			expectedVars:  []string{"version", "version_comment"},
+			expectMinRows: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := executor.executeShowVariables(ctx, tt.showStmt)
+			if err != nil {
+				t.Errorf("Did not expect error: %v", err)
+				return
+			}
+
+			if result == nil {
+				t.Fatal("Expected result to be non-nil")
+			}
+
+			// Check columns
+			if len(result.Columns) != 2 {
+				t.Errorf("Expected 2 columns, got %d", len(result.Columns))
+			}
+			if result.Columns[0].Name != "Variable_name" {
+				t.Errorf("Expected first column 'Variable_name', got '%s'", result.Columns[0].Name)
+			}
+			if result.Columns[1].Name != "Value" {
+				t.Errorf("Expected second column 'Value', got '%s'", result.Columns[1].Name)
+			}
+
+			// Check minimum rows
+			if len(result.Rows) < tt.expectMinRows {
+				t.Errorf("Expected at least %d rows, got %d", tt.expectMinRows, len(result.Rows))
+			}
+
+			// Check expected variables exist
+			for _, expectedVar := range tt.expectedVars {
+				found := false
+				for _, row := range result.Rows {
+					if varName, ok := row["Variable_name"].(string); ok && varName == expectedVar {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected variable '%s' not found in result", expectedVar)
+				}
+			}
+		})
+	}
+}
+
+// TestExecuteShowStatus tests SHOW STATUS execution
+func TestExecuteShowStatus(t *testing.T) {
+	executor := NewShowExecutor("test_db", nil, nil)
+	ctx := context.Background()
+
+	tests := []struct {
+		name          string
+		showStmt      *parser.ShowStatement
+		expectedVars  []string
+		expectMinRows int
+	}{
+		{
+			name: "SHOW STATUS - all",
+			showStmt: &parser.ShowStatement{
+				Type: "STATUS",
+			},
+			expectedVars:  []string{"Threads_connected", "Threads_running", "Queries"},
+			expectMinRows: 5,
+		},
+		{
+			name: "SHOW STATUS LIKE 'Threads%'",
+			showStmt: &parser.ShowStatement{
+				Type: "STATUS",
+				Like: "'Threads%'",
+			},
+			expectedVars:  []string{"Threads_connected", "Threads_running"},
+			expectMinRows: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := executor.executeShowStatus(ctx, tt.showStmt)
+			if err != nil {
+				t.Errorf("Did not expect error: %v", err)
+				return
+			}
+
+			if result == nil {
+				t.Fatal("Expected result to be non-nil")
+			}
+
+			// Check columns
+			if len(result.Columns) != 2 {
+				t.Errorf("Expected 2 columns, got %d", len(result.Columns))
+			}
+			if result.Columns[0].Name != "Variable_name" {
+				t.Errorf("Expected first column 'Variable_name', got '%s'", result.Columns[0].Name)
+			}
+			if result.Columns[1].Name != "Value" {
+				t.Errorf("Expected second column 'Value', got '%s'", result.Columns[1].Name)
+			}
+
+			// Check minimum rows
+			if len(result.Rows) < tt.expectMinRows {
+				t.Errorf("Expected at least %d rows, got %d", tt.expectMinRows, len(result.Rows))
+			}
+
+			// Check expected variables exist
+			for _, expectedVar := range tt.expectedVars {
+				found := false
+				for _, row := range result.Rows {
+					if varName, ok := row["Variable_name"].(string); ok && varName == expectedVar {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Expected status variable '%s' not found in result", expectedVar)
+				}
+			}
+		})
+	}
+}
+
+// TestMatchLike tests the matchLike helper function
+func TestMatchLike(t *testing.T) {
+	tests := []struct {
+		s       string
+		pattern string
+		expect  bool
+	}{
+		{"version", "version", true},
+		{"version_comment", "version%", true},
+		{"version", "ver%", true},
+		{"version", "%sion", true},
+		{"version", "%vers%", true},
+		{"port", "port", true},
+		{"port", "por%", true},
+		{"port", "p%", true},
+		{"port", "%t", true},
+		{"port", "xyz", false},
+		{"port", "xyz%", false},
+		{"port", "%xyz", false},
+		{"max_connections", "max_%", true},
+		{"max_connections", "%connections", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.s+"_"+tt.pattern, func(t *testing.T) {
+			result := matchLike(tt.s, tt.pattern)
+			if result != tt.expect {
+				t.Errorf("matchLike(%q, %q) = %v, expected %v", tt.s, tt.pattern, result, tt.expect)
+			}
+		})
+	}
+}

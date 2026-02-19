@@ -112,6 +112,16 @@ func (f *DLLDataSourceFactory) GetType() domain.DataSourceType {
 	return f.pluginType
 }
 
+// GetMetadata returns the driver metadata for information_schema.ENGINES
+func (f *DLLDataSourceFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "Plugin-based storage engine",
+		Transactions: "NO",
+		XA:           "NO",
+		Savepoints:   "NO",
+	}
+}
+
 // Create creates a new DLL-backed datasource
 func (f *DLLDataSourceFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	ds := &DLLDataSource{

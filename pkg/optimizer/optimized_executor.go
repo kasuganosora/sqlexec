@@ -455,7 +455,14 @@ func (e *OptimizedExecutor) ExecuteCreate(ctx context.Context, stmt *parser.Crea
 
 // ExecuteDrop 执行 DROP
 func (e *OptimizedExecutor) ExecuteDrop(ctx context.Context, stmt *parser.DropStatement) (*domain.QueryResult, error) {
-	builder := parser.NewQueryBuilder(e.dataSource)
+	// 使用当前数据库的数据源（如果设置了）
+	ds := e.dataSource
+	if e.dsManager != nil && e.currentDB != "" {
+		if currentDS, err := e.dsManager.Get(e.currentDB); err == nil {
+			ds = currentDS
+		}
+	}
+	builder := parser.NewQueryBuilder(ds)
 	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
 		Type:  parser.SQLTypeDrop,
 		Drop:  stmt,
@@ -464,7 +471,14 @@ func (e *OptimizedExecutor) ExecuteDrop(ctx context.Context, stmt *parser.DropSt
 
 // ExecuteAlter 执行 ALTER
 func (e *OptimizedExecutor) ExecuteAlter(ctx context.Context, stmt *parser.AlterStatement) (*domain.QueryResult, error) {
-	builder := parser.NewQueryBuilder(e.dataSource)
+	// 使用当前数据库的数据源
+	ds := e.dataSource
+	if e.dsManager != nil && e.currentDB != "" {
+		if currentDS, err := e.dsManager.Get(e.currentDB); err == nil {
+			ds = currentDS
+		}
+	}
+	builder := parser.NewQueryBuilder(ds)
 	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
 		Type:  parser.SQLTypeAlter,
 		Alter: stmt,
@@ -473,7 +487,14 @@ func (e *OptimizedExecutor) ExecuteAlter(ctx context.Context, stmt *parser.Alter
 
 // ExecuteCreateIndex 执行 CREATE INDEX
 func (e *OptimizedExecutor) ExecuteCreateIndex(ctx context.Context, stmt *parser.CreateIndexStatement) (*domain.QueryResult, error) {
-	builder := parser.NewQueryBuilder(e.dataSource)
+	// 使用当前数据库的数据源
+	ds := e.dataSource
+	if e.dsManager != nil && e.currentDB != "" {
+		if currentDS, err := e.dsManager.Get(e.currentDB); err == nil {
+			ds = currentDS
+		}
+	}
+	builder := parser.NewQueryBuilder(ds)
 	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
 		Type:       parser.SQLTypeCreate,
 		CreateIndex: stmt,
@@ -482,7 +503,14 @@ func (e *OptimizedExecutor) ExecuteCreateIndex(ctx context.Context, stmt *parser
 
 // ExecuteDropIndex 执行 DROP INDEX
 func (e *OptimizedExecutor) ExecuteDropIndex(ctx context.Context, stmt *parser.DropIndexStatement) (*domain.QueryResult, error) {
-	builder := parser.NewQueryBuilder(e.dataSource)
+	// 使用当前数据库的数据源
+	ds := e.dataSource
+	if e.dsManager != nil && e.currentDB != "" {
+		if currentDS, err := e.dsManager.Get(e.currentDB); err == nil {
+			ds = currentDS
+		}
+	}
+	builder := parser.NewQueryBuilder(ds)
 	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
 		Type:     parser.SQLTypeDrop,
 		DropIndex: stmt,

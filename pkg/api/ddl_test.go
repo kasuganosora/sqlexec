@@ -252,12 +252,10 @@ func TestDDL_DropTable(t *testing.T) {
 		session := db.Session()
 		defer session.Close()
 
-		// 注意：当前实现中，DROP TABLE IF EXISTS 的 IF EXISTS 不会被特别处理
-		// 如果表不存在，会返回错误，这是预期的行为
+		// MySQL standard: DROP TABLE IF EXISTS for non-existent table should succeed
 		_, err = session.Execute("DROP TABLE IF EXISTS non_existent_table")
-		// 预期会报错
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not found")
+		// IF EXISTS should NOT return error for non-existent table
+		assert.NoError(t, err)
 	})
 
 	t.Run("drop non-existent table", func(t *testing.T) {

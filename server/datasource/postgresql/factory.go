@@ -18,6 +18,16 @@ func (f *PostgreSQLFactory) GetType() domain.DataSourceType {
 	return domain.DataSourceTypePostgreSQL
 }
 
+// GetMetadata returns the driver metadata for information_schema.ENGINES
+func (f *PostgreSQLFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "Supports transactions, row-level locking, and foreign keys",
+		Transactions: "YES",
+		XA:           "YES",
+		Savepoints:   "YES",
+	}
+}
+
 // Create creates a new PostgreSQL datasource from config.
 func (f *PostgreSQLFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	sqlCfg, err := sqlcommon.ParseSQLConfig(config)

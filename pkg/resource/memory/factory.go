@@ -26,6 +26,16 @@ func (f *MemoryFactory) GetType() domain.DataSourceType {
 	return domain.DataSourceTypeMemory
 }
 
+// GetMetadata 实现DataSourceFactory接口
+func (f *MemoryFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "MVCC-based in-memory storage with transaction support",
+		Transactions: "YES",
+		XA:           "NO",
+		Savepoints:   "NO",
+	}
+}
+
 // Create 实现DataSourceFactory接口
 func (f *MemoryFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	// 内存数据源默认可写

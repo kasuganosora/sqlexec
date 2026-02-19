@@ -64,6 +64,16 @@ func (f *Factory) GetType() domain.DataSourceType {
 	return "slice"
 }
 
+// GetMetadata 实现DataSourceFactory接口
+func (f *Factory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "Slice data source for []map[string]any or []struct with MVCC transaction support",
+		Transactions: "YES",
+		XA:           "NO",
+		Savepoints:   "NO",
+	}
+}
+
 // Description 工厂描述
 func (f *Factory) Description() string {
 	return "Slice data source for []map[string]any or []struct"

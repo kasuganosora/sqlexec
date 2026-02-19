@@ -441,13 +441,24 @@ func (b *QueryBuilder) executeDrop(ctx context.Context, stmt *DropStatement) (*d
 	}
 
 	if stmt.Type == "TABLE" {
-		err := b.dataSource.DropTable(ctx, stmt.Name)
-		if err != nil {
-			return nil, fmt.Errorf("drop table failed: %w", err)
+		// Support multiple tables: DROP TABLE t1, t2, t3
+		tables := stmt.Names
+		if len(tables) == 0 && stmt.Name != "" {
+			tables = []string{stmt.Name}
+		}
+
+		for _, tableName := range tables {
+			err := b.dataSource.DropTable(ctx, tableName)
+			if err != nil {
+				// If IF EXISTS, continue on error
+				if !stmt.IfExists {
+					return nil, fmt.Errorf("drop table '%s' failed: %w", tableName, err)
+				}
+			}
 		}
 
 		return &domain.QueryResult{
-			Total: 0,
+			Total: int64(len(tables)),
 		}, nil
 	}
 

@@ -193,17 +193,17 @@ func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row pars
 
 	// 根据运算符类型计算
 	switch strings.ToLower(expr.Operator) {
-	case "=":
+	case "=", "eq":
 		return utils.CompareValuesForSort(left, right) == 0, nil
-	case "!=", "<>":
+	case "!=", "<>", "neq":
 		return utils.CompareValuesForSort(left, right) != 0, nil
-	case ">":
+	case ">", "gt":
 		return utils.CompareValuesForSort(left, right) > 0, nil
-	case ">=":
+	case ">=", "gte":
 		return utils.CompareValuesForSort(left, right) >= 0, nil
-	case "<":
+	case "<", "lt":
 		return utils.CompareValuesForSort(left, right) < 0, nil
-	case "<=":
+	case "<=", "lte":
 		return utils.CompareValuesForSort(left, right) <= 0, nil
 	case "+", "plus":
 		return e.addValues(left, right)

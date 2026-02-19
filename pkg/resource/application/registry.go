@@ -82,6 +82,18 @@ func (r *Registry) List() []domain.DataSourceType {
 	return types
 }
 
+// ListFactories returns all registered factories with their metadata
+func (r *Registry) ListFactories() map[domain.DataSourceType]domain.DataSourceFactory {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make(map[domain.DataSourceType]domain.DataSourceFactory, len(r.factories))
+	for t, f := range r.factories {
+		result[t] = f
+	}
+	return result
+}
+
 // Exists 检查工厂是否存在
 func (r *Registry) Exists(factoryType domain.DataSourceType) bool {
 	r.mu.RLock()

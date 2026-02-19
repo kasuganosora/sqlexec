@@ -17,6 +17,16 @@ func (f *HTTPFactory) GetType() domain.DataSourceType {
 	return domain.DataSourceTypeHTTP
 }
 
+// GetMetadata 返回驱动元数据
+func (f *HTTPFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "HTTP remote data source",
+		Transactions: "NO",
+		XA:           "NO",
+		Savepoints:   "NO",
+	}
+}
+
 // Create 创建 HTTP 数据源实例
 func (f *HTTPFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	httpCfg, err := ParseHTTPConfig(config)

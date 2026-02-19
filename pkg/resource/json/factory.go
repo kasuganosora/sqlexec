@@ -19,6 +19,16 @@ func (f *JSONFactory) GetType() domain.DataSourceType {
 	return domain.DataSourceTypeJSON
 }
 
+// GetMetadata 实现DataSourceFactory接口
+func (f *JSONFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "JSON storage engine with MVCC transaction support",
+		Transactions: "YES",
+		XA:           "NO",
+		Savepoints:   "NO",
+	}
+}
+
 // Create 实现 DataSourceFactory 接口
 func (f *JSONFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	if config == nil {

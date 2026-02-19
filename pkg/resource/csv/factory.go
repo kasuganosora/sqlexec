@@ -19,6 +19,16 @@ func (f *CSVFactory) GetType() domain.DataSourceType {
 	return domain.DataSourceTypeCSV
 }
 
+// GetMetadata 实现DataSourceFactory接口
+func (f *CSVFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "CSV storage engine with MVCC transaction support",
+		Transactions: "YES",
+		XA:           "NO",
+		Savepoints:   "NO",
+	}
+}
+
 // Create 实现DataSourceFactory接口
 func (f *CSVFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	if config == nil {

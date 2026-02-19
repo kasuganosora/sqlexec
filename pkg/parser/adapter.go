@@ -245,6 +245,11 @@ func (a *SQLAdapter) convertToStatement(node ast.StmtNode) (*SQLStatement, error
 		}
 		stmt.CreateView = createViewStmt
 
+	case *ast.SetStmt:
+		stmt.Type = SQLTypeSet
+		setStmt := a.convertSetStmt(stmtNode)
+		stmt.Set = setStmt
+
 	default:
 		stmt.Type = SQLTypeUnknown
 	}
@@ -646,6 +651,11 @@ func (a *SQLAdapter) convertCreateTableStmt(stmt *ast.CreateTableStmt) (*CreateS
 		Options: make(map[string]interface{}),
 	}
 
+	// Check for db.table format
+	if stmt.Table.Schema.String() != "" {
+		createStmt.Database = stmt.Table.Schema.String()
+	}
+
 	// 解析列定义
 	for _, col := range stmt.Cols {
 		colInfo := ColumnInfo{
@@ -749,11 +759,23 @@ func extractVectorDimension(typeStr string) int {
 
 // convertDropTableStmt 转换 DROP TABLE 语句
 func (a *SQLAdapter) convertDropTableStmt(stmt *ast.DropTableStmt) (*DropStatement, error) {
-	return &DropStatement{
+	dropStmt := &DropStatement{
 		Type:     "TABLE",
-		Name:     stmt.Tables[0].Name.String(),
 		IfExists: stmt.IfExists,
-	}, nil
+	}
+
+	// Support multiple tables: DROP TABLE t1, t2, t3
+	if len(stmt.Tables) > 0 {
+		dropStmt.Name = stmt.Tables[0].Name.String()
+		if len(stmt.Tables) > 1 {
+			dropStmt.Names = make([]string, len(stmt.Tables))
+			for i, t := range stmt.Tables {
+				dropStmt.Names[i] = t.Name.String()
+			}
+		}
+	}
+
+	return dropStmt, nil
 }
 
 // convertAlterTableStmt 转换 ALTER TABLE 语句
@@ -1122,13 +1144,25 @@ func (a *SQLAdapter) convertShowStmt(stmt *ast.ShowStmt) (*ShowStatement, error)
 	case ast.ShowProcessList:
 		showStmt.Type = "PROCESSLIST"
 		showStmt.Full = stmt.Full
+	case ast.ShowVariables:
+		showStmt.Type = "VARIABLES"
+	case ast.ShowStatus:
+		showStmt.Type = "STATUS"
 	default:
 		showStmt.Type = "UNKNOWN"
 	}
 
-	// 处理 LIKE 子句
-	if stmt.Pattern != nil {
-		showStmt.Like = stmt.Pattern.OriginalText()
+	// 处理 LIKE 子句 - Pattern 是 *PatternLikeOrIlikeExpr 类型
+	// 其中 Pattern.Pattern 是实际的模式表达式 (ValueExpr)
+	if stmt.Pattern != nil && stmt.Pattern.Pattern != nil {
+		// 尝试获取字符串值
+		// Pattern.Pattern 可能是 *test_driver.ValueExpr，其 GetDatumString() 方法可以获取值
+		if getter, ok := stmt.Pattern.Pattern.(interface{ GetDatumString() string }); ok {
+			showStmt.Like = getter.GetDatumString()
+		} else {
+			// fallback to OriginalText
+			showStmt.Like = stmt.Pattern.Pattern.OriginalText()
+		}
 	}
 
 	// 处理 WHERE 子句
@@ -1548,6 +1582,68 @@ func (a *SQLAdapter) convertDropViewStmt(stmt *ast.DropTableStmt) (*DropViewStat
 
 	return dropViewStmt, nil
 }
+
+// convertSetStmt converts SET statement (SET NAMES, SET CHARACTER SET, etc.)
+func (a *SQLAdapter) convertSetStmt(stmt *ast.SetStmt) *SetStatement {
+	setStmt := &SetStatement{
+		Variables: make(map[string]string),
+	}
+
+	for _, varAssign := range stmt.Variables {
+		// Check for SET NAMES charset
+		if strings.ToUpper(varAssign.Name) == "NAMES" {
+			setStmt.Type = "NAMES"
+			if varAssign.Value != nil {
+				if val, err := a.extractValue(varAssign.Value); err == nil {
+					if str, ok := val.(string); ok {
+						setStmt.Value = str
+					}
+				}
+			}
+			return setStmt
+		}
+
+		// Check for SET CHARACTER SET charset
+		if strings.ToUpper(varAssign.Name) == "CHARACTER SET" || strings.ToUpper(varAssign.Name) == "CHARSET" {
+			setStmt.Type = "CHARACTER SET"
+			if varAssign.Value != nil {
+				if val, err := a.extractValue(varAssign.Value); err == nil {
+					if str, ok := val.(string); ok {
+						setStmt.Value = str
+					}
+				}
+			}
+			return setStmt
+		}
+
+		// Regular SET variable = value
+		setStmt.Type = "VARIABLE"
+		varName := varAssign.Name
+		if varAssign.IsGlobal {
+			varName = "GLOBAL " + varName
+		} else if varAssign.IsSystem {
+			varName = "SESSION " + varName
+		}
+
+		if varAssign.Value != nil {
+			if val, err := a.extractValue(varAssign.Value); err == nil {
+				switch v := val.(type) {
+				case string:
+					setStmt.Variables[varName] = v
+				case int64:
+					setStmt.Variables[varName] = fmt.Sprintf("%d", v)
+				case float64:
+					setStmt.Variables[varName] = fmt.Sprintf("%v", v)
+				default:
+					setStmt.Variables[varName] = fmt.Sprintf("%v", v)
+				}
+			}
+		}
+	}
+
+	return setStmt
+}
+
 
 
 

@@ -305,3 +305,86 @@ func TestInferType(t *testing.T) {
 		})
 	}
 }
+
+// TestEvaluateComparisonOperators tests comparison operators (gt, lt, gte, lte, eq, neq)
+func TestEvaluateComparisonOperators(t *testing.T) {
+	exprEvaluator := NewExpressionEvaluatorWithoutAPI()
+	ctx := NewSimpleExpressionContext(nil)
+
+	tests := []struct {
+		name     string
+		operator string
+		left     interface{}
+		right    interface{}
+		expected bool
+	}{
+		// Greater than (gt)
+		{"gt - 5 > 3", "gt", 5, 3, true},
+		{"gt - 3 > 5", "gt", 3, 5, false},
+		{"gt - 5 > 5", "gt", 5, 5, false},
+		{"> - 5 > 3", ">", 5, 3, true},
+		{"> - 3 > 5", ">", 3, 5, false},
+
+		// Less than (lt)
+		{"lt - 3 < 5", "lt", 3, 5, true},
+		{"lt - 5 < 3", "lt", 5, 3, false},
+		{"lt - 5 < 5", "lt", 5, 5, false},
+		{"< - 3 < 5", "<", 3, 5, true},
+		{"< - 5 < 3", "<", 5, 3, false},
+
+		// Greater than or equal (gte)
+		{"gte - 5 >= 3", "gte", 5, 3, true},
+		{"gte - 3 >= 5", "gte", 3, 5, false},
+		{"gte - 5 >= 5", "gte", 5, 5, true},
+		{">= - 5 >= 3", ">=", 5, 3, true},
+		{">= - 3 >= 5", ">=", 3, 5, false},
+
+		// Less than or equal (lte)
+		{"lte - 3 <= 5", "lte", 3, 5, true},
+		{"lte - 5 <= 3", "lte", 5, 3, false},
+		{"lte - 5 <= 5", "lte", 5, 5, true},
+		{"<= - 3 <= 5", "<=", 3, 5, true},
+		{"<= - 5 <= 3", "<=", 5, 3, false},
+
+		// Equal (eq)
+		{"eq - 5 = 5", "eq", 5, 5, true},
+		{"eq - 5 = 3", "eq", 5, 3, false},
+		{"= - 5 = 5", "=", 5, 5, true},
+		{"= - 5 = 3", "=", 5, 3, false},
+
+		// Not equal (neq)
+		{"neq - 5 != 3", "neq", 5, 3, true},
+		{"neq - 5 != 5", "neq", 5, 5, false},
+		{"!= - 5 != 3", "!=", 5, 3, true},
+		{"!= - 5 != 5", "!=", 5, 5, false},
+		{"<> - 5 <> 3", "<>", 5, 3, true},
+		{"<> - 5 <> 5", "<>", 5, 5, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			expr := &parser.Expression{
+				Type:     parser.ExprTypeOperator,
+				Operator: tt.operator,
+				Left:     &parser.Expression{Type: parser.ExprTypeValue, Value: tt.left},
+				Right:    &parser.Expression{Type: parser.ExprTypeValue, Value: tt.right},
+			}
+
+			result, err := exprEvaluator.Evaluate(expr, ctx)
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			boolResult, ok := result.(bool)
+			if !ok {
+				t.Errorf("Expected bool result, got %T", result)
+				return
+			}
+
+			if boolResult != tt.expected {
+				t.Errorf("Expected %v, got %v for %v %s %v", tt.expected, boolResult, tt.left, tt.operator, tt.right)
+			}
+		})
+	}
+}

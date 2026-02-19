@@ -25,6 +25,15 @@ func (m *MockFactory) GetType() domain.DataSourceType {
 	return m.dsType
 }
 
+func (m *MockFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "Mock data source for testing",
+		Transactions: "NO",
+		XA:           "NO",
+		Savepoints:   "NO",
+	}
+}
+
 // MockDataSource 模拟数据源
 type MockDataSource struct {
 	connected bool

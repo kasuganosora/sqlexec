@@ -18,6 +18,16 @@ func (f *MySQLFactory) GetType() domain.DataSourceType {
 	return domain.DataSourceTypeMySQL
 }
 
+// GetMetadata returns the driver metadata for information_schema.ENGINES
+func (f *MySQLFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "Supports transactions, row-level locking, and foreign keys",
+		Transactions: "YES",
+		XA:           "YES",
+		Savepoints:   "YES",
+	}
+}
+
 // Create creates a new MySQL datasource from config.
 func (f *MySQLFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	sqlCfg, err := sqlcommon.ParseSQLConfig(config)
