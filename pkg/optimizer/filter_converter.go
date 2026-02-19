@@ -1,6 +1,8 @@
 package optimizer
 
 import (
+	"strings"
+
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
@@ -56,6 +58,21 @@ func (o *Optimizer) extractFiltersFromCondition(expr *parser.Expression) []domai
 func (o *Optimizer) convertExpressionToFilter(expr *parser.Expression) *domain.Filter {
 	if expr == nil || expr.Type != parser.ExprTypeOperator {
 		return nil
+	}
+
+	// 处理一元操作符 (IS NULL / IS NOT NULL)
+	if expr.Left != nil && expr.Right == nil {
+		op := strings.ToLower(expr.Operator)
+		if op == "is null" || op == "isnull" || op == "is not null" || op == "isnotnull" {
+			// 左边必须是列名
+			if expr.Left.Type == parser.ExprTypeColumn && expr.Left.Column != "" {
+				return &domain.Filter{
+					Field:    expr.Left.Column,
+					Operator: utils.MapOperator(expr.Operator),
+					Value:    nil,
+				}
+			}
+		}
 	}
 
 	// 处理二元比较表达式 (e.g., age > 30, name = 'Alice')

@@ -289,6 +289,12 @@ func (e *ExpressionEvaluator) evaluateUnaryOp(expr *parser.Expression, row parse
 	case "not":
 		// 逻辑非
 		return !e.isTrue(operand), nil
+	case "is null", "isnull":
+		// IS NULL 检查
+		return operand == nil, nil
+	case "is not null", "isnotnull":
+		// IS NOT NULL 检查
+		return operand != nil, nil
 	default:
 		return nil, fmt.Errorf("unsupported unary operator: %s", expr.Operator)
 	}

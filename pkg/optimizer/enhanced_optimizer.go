@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/cost"
@@ -1101,6 +1102,21 @@ func convertPredicatesToFilters(conditions []*parser.Expression) []domain.Filter
 func expressionToFilter(expr *parser.Expression) *domain.Filter {
 	if expr == nil || expr.Type != parser.ExprTypeOperator {
 		return nil
+	}
+
+	// Handle unary operators (IS NULL / IS NOT NULL)
+	if expr.Left != nil && expr.Right == nil {
+		op := strings.ToLower(expr.Operator)
+		if op == "is null" || op == "isnull" || op == "is not null" || op == "isnotnull" {
+			// Left side must be column name
+			if expr.Left.Type == parser.ExprTypeColumn && expr.Left.Column != "" {
+				return &domain.Filter{
+					Field:    expr.Left.Column,
+					Operator: expr.Operator,
+					Value:    nil,
+				}
+			}
+		}
 	}
 
 	// Handle binary comparison expressions
