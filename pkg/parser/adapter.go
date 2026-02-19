@@ -884,6 +884,45 @@ func (a *SQLAdapter) convertExpression(node ast.ExprNode) (*Expression, error) {
 			Value: []interface{}{leftBound, rightBound},
 		}
 
+	case *ast.PatternInExpr:
+		// 处理 IN 表达式
+		expr.Type = ExprTypeOperator
+		if n.Not {
+			expr.Operator = "NOT IN"
+		} else {
+			expr.Operator = "IN"
+		}
+		left, _ := a.convertExpression(n.Expr)
+		expr.Left = left
+		// 提取 IN 列表中的所有值
+		values := make([]interface{}, 0, len(n.List))
+		for _, item := range n.List {
+			if valExpr, ok := item.(ast.ValueExpr); ok {
+				values = append(values, valExpr.GetValue())
+			} else {
+				// 复杂表达式，尝试转换
+				converted, _ := a.convertExpression(item)
+				if converted != nil && converted.Type == ExprTypeValue {
+					values = append(values, converted.Value)
+				}
+			}
+		}
+		expr.Right = &Expression{
+			Type:  ExprTypeValue,
+			Value: values,
+		}
+
+	case *ast.IsNullExpr:
+		// 处理 IS NULL / IS NOT NULL 表达式
+		expr.Type = ExprTypeOperator
+		if n.Not {
+			expr.Operator = "IS NOT NULL"
+		} else {
+			expr.Operator = "IS NULL"
+		}
+		left, _ := a.convertExpression(n.Expr)
+		expr.Left = left
+
 	default:
 		expr.Type = ExprTypeValue
 	}
