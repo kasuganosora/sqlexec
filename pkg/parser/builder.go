@@ -441,13 +441,24 @@ func (b *QueryBuilder) executeDrop(ctx context.Context, stmt *DropStatement) (*d
 	}
 
 	if stmt.Type == "TABLE" {
-		err := b.dataSource.DropTable(ctx, stmt.Name)
-		if err != nil {
-			return nil, fmt.Errorf("drop table failed: %w", err)
+		// Support multiple tables: DROP TABLE t1, t2, t3
+		tables := stmt.Names
+		if len(tables) == 0 && stmt.Name != "" {
+			tables = []string{stmt.Name}
+		}
+
+		for _, tableName := range tables {
+			err := b.dataSource.DropTable(ctx, tableName)
+			if err != nil {
+				// If IF EXISTS, continue on error
+				if !stmt.IfExists {
+					return nil, fmt.Errorf("drop table '%s' failed: %w", tableName, err)
+				}
+			}
 		}
 
 		return &domain.QueryResult{
-			Total: 0,
+			Total: int64(len(tables)),
 		}, nil
 	}
 
@@ -528,17 +539,23 @@ func (b *QueryBuilder) executeCreateVectorIndex(ctx context.Context, stmt *Creat
 		}
 		
 		// 调用向量索引创建方法
+		if len(stmt.Columns) == 0 {
+			return nil, fmt.Errorf("vector index requires at least one column")
+		}
 		_, err := indexManager.CreateVectorIndex(stmt.TableName, stmt.Columns[0], metricType, indexType, dimension, params)
 		if err != nil {
 			return nil, fmt.Errorf("create vector index failed: %w", err)
 		}
-		
+
 		return &domain.QueryResult{
 			Total: 0,
 		}, nil
 	}
 
 	// 调用数据源的 CreateVectorIndex 方法
+	if len(stmt.Columns) == 0 {
+		return nil, fmt.Errorf("vector index requires at least one column")
+	}
 	err := vectorIndexManager.CreateVectorIndex(
 		stmt.TableName,
 		stmt.Columns[0],
@@ -637,6 +654,27 @@ func (b *QueryBuilder) convertExpressionToFiltersInternal(expr *Expression, isIn
 
 	switch expr.Type {
 	case ExprTypeOperator:
+		// 处理 IS NULL / IS NOT NULL（一元运算符，只有 Left，没有 Right）
+		if expr.Left != nil && expr.Right == nil {
+			op := strings.ToUpper(expr.Operator)
+			if (op == "IS NULL" || op == "ISNULL") && expr.Left.Type == ExprTypeColumn {
+				filters = append(filters, domain.Filter{
+					Field:    expr.Left.Column,
+					Operator: "IS NULL",
+					Value:    nil,
+				})
+				return filters
+			}
+			if (op == "IS NOT NULL" || op == "ISNOTNULL") && expr.Left.Type == ExprTypeColumn {
+				filters = append(filters, domain.Filter{
+					Field:    expr.Left.Column,
+					Operator: "IS NOT NULL",
+					Value:    nil,
+				})
+				return filters
+			}
+		}
+
 		if expr.Left != nil && expr.Right != nil {
 			if expr.Operator == "and" || expr.Operator == "or" {
 				leftFilters := b.convertExpressionToFiltersInternal(expr.Left, expr.Operator == "or")

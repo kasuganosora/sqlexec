@@ -439,6 +439,4 @@ func isTrue(value interface{}) bool {
 	}
 }
 
-// compareValuesEqual 比较两个值是否相等
-
 

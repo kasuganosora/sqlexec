@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kasuganosora/sqlexec/pkg/information_schema"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
@@ -15,6 +16,7 @@ type ExpressionExecutor struct {
 	currentDB     string
 	functionAPI   interface{} // 避免循环依赖，实际类型为 *builtin.FunctionAPI
 	exprEvaluator *ExpressionEvaluator
+	sessionVars   map[string]string // 会话级系统变量覆盖
 }
 
 // NewExpressionExecutor 创建表达式执行器
@@ -24,6 +26,11 @@ func NewExpressionExecutor(currentDB string, functionAPI interface{}, exprEvalua
 		functionAPI:   functionAPI,
 		exprEvaluator: exprEvaluator,
 	}
+}
+
+// SetSessionVars sets session-level variable overrides for SELECT @@variable queries
+func (e *ExpressionExecutor) SetSessionVars(vars map[string]string) {
+	e.sessionVars = vars
 }
 
 // SetCurrentDB 设置当前数据库
@@ -279,23 +286,23 @@ func (e *ExpressionExecutor) evaluateSystemVariable(varName string) (interface{}
 
 	debugf("  [DEBUG] evaluateSystemVariable: 系统变量=%s\n", name)
 
-	// 处理已知的系统变量
-	switch name {
-	case "VERSION_COMMENT", "@@VERSION_COMMENT":
-		return "sqlexec MySQL-compatible database", nil
-	case "VERSION":
-		return "8.0.0-sqlexec", nil
-	case "PORT":
-		return 3307, nil
-	case "HOSTNAME":
-		return "localhost", nil
-	case "DATADIR":
-		return "/var/lib/mysql", nil
-	case "SERVER_ID":
-		return 1, nil
-	default:
-		return nil, fmt.Errorf("unknown system variable: %s", name)
+	nameLower := strings.ToLower(name)
+
+	// Check session-level overrides first (from SET statements)
+	if e.sessionVars != nil {
+		if val, ok := e.sessionVars[nameLower]; ok {
+			return val, nil
+		}
 	}
+
+	// Fall back to shared system variable definitions (single source of truth)
+	for _, v := range information_schema.GetSystemVariableDefs() {
+		if v.Name == nameLower {
+			return v.Value, nil
+		}
+	}
+
+	return nil, fmt.Errorf("unknown system variable: %s", name)
 }
 
 // evaluateSessionVariable 评估会话变量

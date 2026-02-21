@@ -353,6 +353,18 @@ func (m *DataSourceManager) GetDefaultName() string {
 	return m.defaultDS
 }
 
+// GetAllDataSources returns all registered data sources with their configs
+func (m *DataSourceManager) GetAllDataSources() map[string]domain.DataSource {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make(map[string]domain.DataSource, len(m.sources))
+	for name, ds := range m.sources {
+		result[name] = ds
+	}
+	return result
+}
+
 // ==================== 全局数据源管理器 ====================
 
 var (

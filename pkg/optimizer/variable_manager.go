@@ -24,7 +24,7 @@ func NewDefaultVariableManager() *DefaultVariableManager {
 // initDefaultVariables 初始化默认的系统变量
 func (vm *DefaultVariableManager) initDefaultVariables() {
 	// 系统变量
-	vm.variables["VERSION"] = "8.0.0-sqlexec"
+	vm.variables["VERSION"] = "8.0.32-sqlexec"
 	vm.variables["VERSION_COMMENT"] = "sqlexec MySQL-compatible database"
 	vm.variables["PORT"] = 3307
 	vm.variables["HOSTNAME"] = "localhost"
@@ -33,15 +33,15 @@ func (vm *DefaultVariableManager) initDefaultVariables() {
 
 	// 常用变量
 	vm.variables["AUTOCOMMIT"] = "ON"
-	vm.variables["SQL_MODE"] = "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES"
+	vm.variables["SQL_MODE"] = "STRICT_TRANS_TABLES"
 	vm.variables["CHARACTER_SET_CLIENT"] = "utf8mb4"
 	vm.variables["CHARACTER_SET_CONNECTION"] = "utf8mb4"
 	vm.variables["CHARACTER_SET_DATABASE"] = "utf8mb4"
 	vm.variables["CHARACTER_SET_RESULTS"] = "utf8mb4"
 	vm.variables["CHARACTER_SET_SERVER"] = "utf8mb4"
-	vm.variables["COLLATION_CONNECTION"] = "utf8mb4_unicode_ci"
-	vm.variables["COLLATION_DATABASE"] = "utf8mb4_unicode_ci"
-	vm.variables["COLLATION_SERVER"] = "utf8mb4_unicode_ci"
+	vm.variables["COLLATION_CONNECTION"] = "utf8mb4_0900_ai_ci"
+	vm.variables["COLLATION_DATABASE"] = "utf8mb4_0900_ai_ci"
+	vm.variables["COLLATION_SERVER"] = "utf8mb4_0900_ai_ci"
 
 	// 时区
 	vm.variables["TIME_ZONE"] = "SYSTEM"

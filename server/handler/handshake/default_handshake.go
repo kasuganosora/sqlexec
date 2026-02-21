@@ -31,7 +31,7 @@ func (h *DefaultHandshakeHandler) Handle(conn net.Conn, sess *pkg_session.Sessio
 	handshakePacket := &protocol.HandshakeV10Packet{}
 	handshakePacket.Packet.SequenceID = 0
 	handshakePacket.ProtocolVersion = 10
-	handshakePacket.ServerVersion = "8.0.32"
+	handshakePacket.ServerVersion = "8.0.32-sqlexec"
 	handshakePacket.ThreadID = sess.ThreadID
 	// Generate random 20-byte scramble for mysql_native_password
 	scramble := make([]byte, 20)
@@ -45,7 +45,7 @@ func (h *DefaultHandshakeHandler) Handle(conn net.Conn, sess *pkg_session.Sessio
 	handshakePacket.AuthPluginDataPart = scramble[:8]
 	handshakePacket.AuthPluginDataPart2 = scramble[8:]
 	handshakePacket.CapabilityFlags1 = 0xf7ff
-	handshakePacket.CharacterSet = 0x21 // utf8_general_ci
+	handshakePacket.CharacterSet = 0xff // utf8mb4_0900_ai_ci (MySQL 8.0 default)
 	handshakePacket.StatusFlags = 0x0002
 	handshakePacket.CapabilityFlags2 = 0x00bf
 	handshakePacket.MariaDBCaps = 0x00000000

@@ -113,6 +113,7 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 	dsManager := db.GetDSManager()
 
 	// 注册数据源工厂
+	dsManager.GetRegistry().Register(memory.NewMemoryFactory())
 	dsManager.GetRegistry().Register(httpds.NewHTTPFactory())
 	dsManager.GetRegistry().Register(mysqlds.NewMySQLFactory())
 	dsManager.GetRegistry().Register(pgds.NewPostgreSQLFactory())
@@ -310,6 +311,14 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 
 	s.logger.Printf("开始获取或创建会话: remoteAddr=%s, addr=%s, port=%s", remoteAddr, addr, port)
 	sess, err := s.sessionMgr.GetOrCreateSession(s.ctx, addr, port)
+
+	// 确保连接断开时清理 session 和 ThreadID
+	if sess != nil {
+		defer func() {
+			s.sessionMgr.CleanupSession(s.ctx, sess)
+			s.logger.Printf("已清理会话: SessionID=%s, ThreadID=%d", sess.ID, sess.ThreadID)
+		}()
+	}
 	if err != nil {
 		s.logger.Printf("获取或创建会话失败: %v", err)
 		return err

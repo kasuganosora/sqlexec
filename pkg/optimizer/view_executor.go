@@ -56,8 +56,14 @@ func (ve *ViewExecutor) ExecuteAsTempTable(ctx context.Context, viewInfo *domain
 		return nil, fmt.Errorf("failed to execute view query: %w", err)
 	}
 
-	if result == nil || result.Rows == nil {
-		// Empty result - return empty result with correct columns
+	if result == nil {
+		return &domain.QueryResult{
+			Columns: []domain.ColumnInfo{},
+			Rows:    []domain.Row{},
+			Total:   0,
+		}, nil
+	}
+	if result.Rows == nil {
 		return &domain.QueryResult{
 			Columns: result.Columns,
 			Rows:    []domain.Row{},

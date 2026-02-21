@@ -3,8 +3,10 @@ package optimizer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/kasuganosora/sqlexec/pkg/information_schema"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
@@ -45,6 +47,10 @@ func (e *ShowExecutor) ExecuteShow(ctx context.Context, showStmt *parser.ShowSta
 		return e.executeShowColumns(ctx, showStmt)
 	case "PROCESSLIST":
 		return e.executeShowProcessList(ctx, showStmt.Full)
+	case "VARIABLES":
+		return e.executeShowVariables(ctx, showStmt)
+	case "STATUS":
+		return e.executeShowStatus(ctx, showStmt)
 	default:
 		return nil, fmt.Errorf("unsupported SHOW type: %s", showStmt.Type)
 	}
@@ -236,4 +242,126 @@ func (e *ShowExecutor) executeShowProcessList(ctx context.Context, full bool) (*
 		Rows:    rows,
 		Total:   int64(len(rows)),
 	}, nil
+}
+
+// executeShowVariables executes SHOW VARIABLES
+func (e *ShowExecutor) executeShowVariables(ctx context.Context, showStmt *parser.ShowStatement) (*domain.QueryResult, error) {
+	// Build variables from shared definitions (single source of truth)
+	defs := information_schema.GetSystemVariableDefs()
+	variables := make([]domain.Row, 0, len(defs))
+	for _, v := range defs {
+		variables = append(variables, domain.Row{
+			"Variable_name": v.Name,
+			"Value":         v.Value,
+		})
+	}
+
+	// Apply LIKE filter if provided
+	if showStmt.Like != "" {
+		filtered := make([]domain.Row, 0)
+		pattern := showStmt.Like
+		// Remove quotes if present
+		if len(pattern) >= 2 && (pattern[0] == '\'' || pattern[0] == '"') {
+			pattern = pattern[1 : len(pattern)-1]
+		}
+		for _, row := range variables {
+			varName, _ := row["Variable_name"].(string)
+			if matchLike(varName, pattern) {
+				filtered = append(filtered, row)
+			}
+		}
+		variables = filtered
+	}
+
+	columns := []domain.ColumnInfo{
+		{Name: "Variable_name", Type: "VARCHAR"},
+		{Name: "Value", Type: "VARCHAR"},
+	}
+
+	return &domain.QueryResult{
+		Columns: columns,
+		Rows:    variables,
+		Total:   int64(len(variables)),
+	}, nil
+}
+
+// executeShowStatus executes SHOW STATUS
+func (e *ShowExecutor) executeShowStatus(ctx context.Context, showStmt *parser.ShowStatement) (*domain.QueryResult, error) {
+	// Return basic status variables (all values must be strings per MySQL protocol)
+	status := []domain.Row{
+		{"Variable_name": "Threads_connected", "Value": "1"},
+		{"Variable_name": "Threads_running", "Value": "1"},
+		{"Variable_name": "Queries", "Value": "0"},
+		{"Variable_name": "Uptime", "Value": "0"},
+		{"Variable_name": "Connections", "Value": "1"},
+		{"Variable_name": "Bytes_received", "Value": "0"},
+		{"Variable_name": "Bytes_sent", "Value": "0"},
+	}
+
+	// Apply LIKE filter if provided
+	if showStmt.Like != "" {
+		filtered := make([]domain.Row, 0)
+		pattern := showStmt.Like
+		if len(pattern) >= 2 && (pattern[0] == '\'' || pattern[0] == '"') {
+			pattern = pattern[1 : len(pattern)-1]
+		}
+		for _, row := range status {
+			varName, _ := row["Variable_name"].(string)
+			if matchLike(varName, pattern) {
+				filtered = append(filtered, row)
+			}
+		}
+		status = filtered
+	}
+
+	columns := []domain.ColumnInfo{
+		{Name: "Variable_name", Type: "VARCHAR"},
+		{Name: "Value", Type: "VARCHAR"},
+	}
+
+	return &domain.QueryResult{
+		Columns: columns,
+		Rows:    status,
+		Total:   int64(len(status)),
+	}, nil
+}
+
+// matchLike performs simple SQL LIKE pattern matching (case-insensitive)
+func matchLike(s, pattern string) bool {
+	// Convert both strings to lowercase for case-insensitive matching
+	s = strings.ToLower(s)
+	pattern = strings.ToLower(pattern)
+
+	// Convert SQL LIKE pattern to simple wildcard matching
+	// % matches any sequence, _ matches single character
+	i, j := 0, 0
+	for i < len(s) && j < len(pattern) {
+		if pattern[j] == '%' {
+			// Skip consecutive %
+			for j < len(pattern) && pattern[j] == '%' {
+				j++
+			}
+			if j == len(pattern) {
+				return true
+			}
+			// Try to match rest of pattern
+			for i < len(s) {
+				if matchLike(s[i:], pattern[j:]) {
+					return true
+				}
+				i++
+			}
+			return false
+		} else if pattern[j] == '_' || pattern[j] == s[i] {
+			i++
+			j++
+		} else {
+			return false
+		}
+	}
+	// Skip trailing %
+	for j < len(pattern) && pattern[j] == '%' {
+		j++
+	}
+	return i == len(s) && j == len(pattern)
 }

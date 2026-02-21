@@ -19,6 +19,16 @@ func (f *ExcelFactory) GetType() domain.DataSourceType {
 	return domain.DataSourceTypeExcel
 }
 
+// GetMetadata 实现DataSourceFactory接口
+func (f *ExcelFactory) GetMetadata() domain.DriverMetadata {
+	return domain.DriverMetadata{
+		Comment:      "Excel file storage engine with MVCC transaction support",
+		Transactions: "YES",
+		XA:           "NO",
+		Savepoints:   "NO",
+	}
+}
+
 // Create 实现DataSourceFactory接口
 func (f *ExcelFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
 	if config == nil {

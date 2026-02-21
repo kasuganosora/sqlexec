@@ -109,19 +109,17 @@ func (p *PhysicalMergeJoin) mergeRows(
 
 	switch joinType {
 	case InnerJoin:
-		// INNER JOIN: 只有两边都有的行
+		// INNER JOIN: 只有两边都匹配的行
 		for i < leftCount && j < rightCount {
 			leftVal := leftRows[i][leftCol]
 			rightVal := rightRows[j][rightCol]
 
 			cmp := compareValuesForSort(leftVal, rightVal)
 			if cmp < 0 {
-				// 左值小，取左行
-				output = append(output, p.mergeRow(leftRows[i], rightRows[j]))
+				// 左值小，推进左指针
 				i++
 			} else if cmp > 0 {
-				// 右值小，取右行
-				output = append(output, p.mergeRow(leftRows[i], rightRows[j]))
+				// 右值小，推进右指针
 				j++
 			} else {
 				// 相等，合并行并推进两个指针
@@ -133,6 +131,8 @@ func (p *PhysicalMergeJoin) mergeRows(
 
 	case LeftOuterJoin:
 		// LEFT JOIN: 左表所有行，右表匹配的行
+		// 构建右侧NULL行模板（用于无匹配时）
+		rightNullRow := p.buildNullRow(rightRows, rightCol)
 		for i < leftCount {
 			leftRow := leftRows[i]
 			leftVal := leftRow[leftCol]
@@ -155,7 +155,7 @@ func (p *PhysicalMergeJoin) mergeRows(
 
 			if !matchFound {
 				// 没有匹配，左行 + 右NULL
-				output = append(output, p.mergeRowWithNull(leftRow, rightRows[0]))
+				output = append(output, p.mergeRowWithNull(leftRow, rightNullRow))
 			}
 
 			i++
@@ -163,6 +163,8 @@ func (p *PhysicalMergeJoin) mergeRows(
 
 	case RightOuterJoin:
 		// RIGHT JOIN: 右表所有行，左表匹配的行
+		// 构建左侧NULL行模板（用于无匹配时）
+		leftNullRow := p.buildNullRow(leftRows, leftCol)
 		for j < rightCount {
 			rightRow := rightRows[j]
 			rightVal := rightRow[rightCol]
@@ -185,7 +187,7 @@ func (p *PhysicalMergeJoin) mergeRows(
 
 			if !matchFound {
 				// 没有匹配，左NULL + 右行
-				output = append(output, p.mergeRowWithNull(leftRows[0], rightRow))
+				output = append(output, p.mergeRowWithNull(leftNullRow, rightRow))
 			}
 
 			j++
@@ -217,6 +219,18 @@ func (p *PhysicalMergeJoin) mergeRow(left, right domain.Row) domain.Row {
 	}
 
 	return merged
+}
+
+// buildNullRow 构建一个NULL行模板，用于LEFT/RIGHT JOIN无匹配时
+// 如果rows非空，使用第一行的列名作为模板；否则使用Schema获取列信息
+func (p *PhysicalMergeJoin) buildNullRow(rows []domain.Row, col string) domain.Row {
+	nullRow := make(domain.Row)
+	if len(rows) > 0 {
+		for k := range rows[0] {
+			nullRow[k] = nil
+		}
+	}
+	return nullRow
 }
 
 // mergeRowWithNull 合并行数据，一边为NULL

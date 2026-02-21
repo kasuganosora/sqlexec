@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,16 +36,18 @@ type CoreSession struct {
 	traceID        string           // 追踪ID (来自协议层 Session)
 	queryMu        sync.Mutex       // 查询锁
 	vdbRegistry    *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
+	sessionVars    map[string]string // 会话级系统变量覆盖 (SET NAMES, SET @@var, etc.)
 }
 
 // NewCoreSession 创建核心会话（默认使用增强优化器）
 func NewCoreSession(dataSource domain.DataSource) *CoreSession {
 	return &CoreSession{
-		dataSource: dataSource,
-		executor:   optimizer.NewOptimizedExecutor(dataSource, true), // 默认启用增强优化器
-		adapter:    parser.NewSQLAdapter(),
-		tempTables: []string{},
-		closed:     false,
+		dataSource:  dataSource,
+		executor:    optimizer.NewOptimizedExecutor(dataSource, true), // 默认启用增强优化器
+		adapter:     parser.NewSQLAdapter(),
+		tempTables:  []string{},
+		closed:      false,
+		sessionVars: make(map[string]string),
 	}
 }
 
@@ -67,6 +70,7 @@ func NewCoreSessionWithDSManagerAndEnhanced(dataSource domain.DataSource, dsMana
 		closed:       false,
 		queryTimeout: 0, // 默认不限制
 		threadID:     0, // 后续设置
+		sessionVars:  make(map[string]string),
 	}
 }
 
@@ -229,6 +233,15 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 			showStmt.Like = descStmt.Column
 		}
 		result, err = s.executor.ExecuteShow(queryCtx, showStmt)
+	} else if parseResult.Statement.Create != nil {
+		// 处理 CREATE 语句
+		result, err = s.executeCreateStatement(queryCtx, parseResult.Statement.Create)
+	} else if parseResult.Statement.Set != nil {
+		// 处理 SET 语句 (SET NAMES, SET CHARACTER SET, SET SESSION var, etc.)
+		result, err = s.executeSetStatement(queryCtx, parseResult.Statement.Set)
+	} else if parseResult.Statement.Drop != nil {
+		// 处理 DROP 语句 (DROP TABLE t1, t2, etc.)
+		result, err = s.executor.ExecuteDrop(queryCtx, parseResult.Statement.Drop)
 	} else {
 		return nil, fmt.Errorf("statement type not supported yet")
 	}
@@ -712,6 +725,137 @@ func (s *CoreSession) GetAdapter() *parser.SQLAdapter {
 	return s.adapter
 }
 
+// executeCreateStatement executes CREATE TABLE statement
+func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *parser.CreateStatement) (*domain.QueryResult, error) {
+	// Note: This function is called from ExecuteQuery which already holds the lock,
+	// so we don't acquire the lock here to avoid deadlock
+
+	if s.closed {
+		return nil, fmt.Errorf("session is closed")
+	}
+
+	// Only support CREATE TABLE
+	if createStmt.Type != "TABLE" {
+		return nil, fmt.Errorf("CREATE %s is not supported yet", createStmt.Type)
+	}
+
+	tableName := createStmt.Name
+	if tableName == "" {
+		return nil, fmt.Errorf("table name is required")
+	}
+
+	// Determine target database:
+	// 1. If createStmt.Database is set (db.table format), use it
+	// 2. Otherwise use currentDB
+	// 3. If currentDB is empty, try "test" as default (MariaDB test compatibility)
+	var targetDB string
+	if createStmt.Database != "" {
+		targetDB = createStmt.Database
+	} else {
+		targetDB = s.currentDB
+		if targetDB == "" {
+			// Auto-create "test" database if not exists (MariaDB/MySQL compatibility)
+			if s.dsManager != nil {
+				if _, err := s.dsManager.Get("test"); err == nil {
+					targetDB = "test"
+					s.currentDB = "test"
+					// 同步更新 executor 的 currentDB
+					if s.executor != nil {
+						s.executor.SetCurrentDB("test")
+					}
+				} else {
+					// Auto-create test database using memory factory
+					registry := s.dsManager.GetRegistry()
+					if registry != nil {
+						if factory, err := registry.Get(domain.DataSourceTypeMemory); err == nil {
+							testDS, createErr := factory.Create(&domain.DataSourceConfig{
+								Type:     domain.DataSourceTypeMemory,
+								Name:     "test",
+								Writable: true,
+							})
+							if createErr == nil {
+								if connectErr := testDS.Connect(ctx); connectErr == nil {
+							if regErr := s.dsManager.Register("test", testDS); regErr == nil {
+									targetDB = "test"
+									s.currentDB = "test"
+									// 同步更新 executor 的 currentDB
+									if s.executor != nil {
+										s.executor.SetCurrentDB("test")
+									}
+								}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if targetDB == "" {
+		return nil, fmt.Errorf("no database selected")
+	}
+
+	// Check if this is a virtual database
+	if s.vdbRegistry != nil && s.vdbRegistry.IsVirtualDB(targetDB) {
+		return nil, fmt.Errorf("%s is a virtual database: CREATE TABLE operation not supported", targetDB)
+	}
+
+	// Get data source for target database
+	var ds domain.DataSource
+	if s.dsManager != nil {
+		var err error
+		ds, err = s.dsManager.Get(targetDB)
+		if err != nil {
+			return nil, fmt.Errorf("database '%s' not found: %w", targetDB, err)
+		}
+	} else {
+		ds = s.dataSource
+	}
+
+	// Build table info from columns
+	tableInfo := &domain.TableInfo{
+		Name:    tableName,
+		Columns: make([]domain.ColumnInfo, 0, len(createStmt.Columns)),
+	}
+
+	for _, col := range createStmt.Columns {
+		// Convert Default to string if present
+		var defaultVal string
+		if col.Default != nil {
+			switch v := col.Default.(type) {
+			case string:
+				defaultVal = v
+			default:
+				defaultVal = fmt.Sprintf("%v", v)
+			}
+		}
+
+		colInfo := domain.ColumnInfo{
+			Name:          col.Name,
+			Type:          col.Type,
+			Nullable:      col.Nullable,
+			Default:       defaultVal,
+			AutoIncrement: col.AutoInc,
+			Primary:       col.Primary,
+			Unique:        col.Unique,
+		}
+		tableInfo.Columns = append(tableInfo.Columns, colInfo)
+	}
+
+	// Create table
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		return nil, fmt.Errorf("failed to create table '%s': %w", tableName, err)
+	}
+
+	// Return success result
+	return &domain.QueryResult{
+		Columns: []domain.ColumnInfo{},
+		Rows:    []domain.Row{},
+		Total:   0,
+	}, nil
+}
+
 // executeUseStatement 执行 USE 语句
 func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain.QueryResult, error) {
 	// Note: This function is called from ExecuteQuery which already holds the lock,
@@ -763,6 +907,64 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 		Rows:    []domain.Row{},
 		Total:   0,
 	}, nil
+}
+
+// executeSetStatement executes SET statement (SET NAMES, SET CHARACTER SET, etc.)
+// Stores session variables so they can be queried via SELECT @@variable.
+func (s *CoreSession) executeSetStatement(ctx context.Context, setStmt *parser.SetStatement) (*domain.QueryResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	switch setStmt.Type {
+	case "NAMES":
+		// SET NAMES 'charset' [COLLATE 'collation']
+		// Sets character_set_client, character_set_connection, character_set_results
+		charset := setStmt.Value
+		if charset == "" {
+			charset = "utf8mb4"
+		}
+		s.sessionVars["character_set_client"] = charset
+		s.sessionVars["character_set_connection"] = charset
+		s.sessionVars["character_set_results"] = charset
+
+	case "CHARACTER SET":
+		// SET CHARACTER SET charset
+		charset := setStmt.Value
+		if charset == "" {
+			charset = "utf8mb4"
+		}
+		s.sessionVars["character_set_client"] = charset
+		s.sessionVars["character_set_results"] = charset
+
+	case "VARIABLE":
+		// SET [SESSION|GLOBAL] var = value
+		for varName, varValue := range setStmt.Variables {
+			// Normalize: remove scope prefix and lowercase
+			name := strings.ToLower(varName)
+			name = strings.TrimPrefix(name, "global ")
+			name = strings.TrimPrefix(name, "session ")
+			s.sessionVars[name] = varValue
+		}
+	}
+
+	// Sync session vars to executor for SELECT @@variable queries
+	if s.executor != nil {
+		s.executor.SetSessionVars(s.sessionVars)
+	}
+
+	return &domain.QueryResult{
+		Columns: []domain.ColumnInfo{},
+		Rows:    []domain.Row{},
+		Total:   0,
+	}, nil
+}
+
+// GetSessionVar returns a session variable value, or empty string if not set
+func (s *CoreSession) GetSessionVar(name string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	val, ok := s.sessionVars[strings.ToLower(name)]
+	return val, ok
 }
 
 // GetCurrentDB 获取当前使用的数据库名

@@ -193,17 +193,17 @@ func (e *ExpressionEvaluator) evaluateOperator(expr *parser.Expression, row pars
 
 	// 根据运算符类型计算
 	switch strings.ToLower(expr.Operator) {
-	case "=":
+	case "=", "eq":
 		return utils.CompareValuesForSort(left, right) == 0, nil
-	case "!=", "<>":
+	case "!=", "<>", "neq":
 		return utils.CompareValuesForSort(left, right) != 0, nil
-	case ">":
+	case ">", "gt":
 		return utils.CompareValuesForSort(left, right) > 0, nil
-	case ">=":
+	case ">=", "gte":
 		return utils.CompareValuesForSort(left, right) >= 0, nil
-	case "<":
+	case "<", "lt":
 		return utils.CompareValuesForSort(left, right) < 0, nil
-	case "<=":
+	case "<=", "lte":
 		return utils.CompareValuesForSort(left, right) <= 0, nil
 	case "+", "plus":
 		return e.addValues(left, right)
@@ -547,7 +547,7 @@ func ReplaceCorrelatedColumns(expr *parser.Expression, mapping map[string]string
 
 	// Replace function arguments
 	if len(expr.Args) > 0 {
-		newArgs := make([]parser.Expression, 0, len(expr.Args))
+		newArgs := make([]parser.Expression, len(expr.Args))
 		for i, arg := range expr.Args {
 			replacedArg := ReplaceCorrelatedColumns(&arg, mapping)
 			newArgs[i] = *replacedArg

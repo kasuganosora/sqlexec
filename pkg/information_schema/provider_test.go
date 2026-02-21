@@ -44,7 +44,7 @@ func TestListVirtualTables(t *testing.T) {
 
 	tables := provider.ListVirtualTables()
 
-	assert.Len(t, tables, 7) // Should have 7 tables (schemata, tables, columns, table_constraints, key_column_usage, views, collations)
+	assert.Len(t, tables, 10) // Should have 10 tables
 	assert.Contains(t, tables, "schemata")
 	assert.Contains(t, tables, "tables")
 	assert.Contains(t, tables, "columns")
@@ -52,6 +52,9 @@ func TestListVirtualTables(t *testing.T) {
 	assert.Contains(t, tables, "key_column_usage")
 	assert.Contains(t, tables, "views")
 	assert.Contains(t, tables, "collations")
+	assert.Contains(t, tables, "system_variables")
+	assert.Contains(t, tables, "plugins")
+	assert.Contains(t, tables, "engines")
 }
 
 func TestHasTable(t *testing.T) {
@@ -61,6 +64,29 @@ func TestHasTable(t *testing.T) {
 	assert.True(t, provider.HasTable("schemata"))
 	assert.True(t, provider.HasTable("tables"))
 
+	// Check case-insensitive lookup
+	assert.True(t, provider.HasTable("PLUGINS"))
+	assert.True(t, provider.HasTable("plugins"))
+	assert.True(t, provider.HasTable("ENGINES"))
+	assert.True(t, provider.HasTable("engines"))
+
 	// Check non-existent table
 	assert.False(t, provider.HasTable("nonexistent"))
+}
+
+func TestGetVirtualTable_CaseInsensitive(t *testing.T) {
+	provider := NewProvider(nil)
+
+	// Should work with any casing
+	table, err := provider.GetVirtualTable("PLUGINS")
+	assert.NoError(t, err)
+	assert.NotNil(t, table)
+
+	table, err = provider.GetVirtualTable("plugins")
+	assert.NoError(t, err)
+	assert.NotNil(t, table)
+
+	table, err = provider.GetVirtualTable("Engines")
+	assert.NoError(t, err)
+	assert.NotNil(t, table)
 }

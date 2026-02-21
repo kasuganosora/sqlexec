@@ -157,6 +157,26 @@ func (m *SessionMgr) DeleteSession(ctx context.Context, sessionID string) error 
 	return m.driver.DeleteSession(ctx, sessionID)
 }
 
+// DeleteThreadID 删除 ThreadID 映射
+func (m *SessionMgr) DeleteThreadID(ctx context.Context, threadID uint32) error {
+	return m.driver.DeleteThreadId(ctx, threadID)
+}
+
+// CleanupSession 清理会话及其关联资源
+func (m *SessionMgr) CleanupSession(ctx context.Context, sess *Session) {
+	if sess == nil {
+		return
+	}
+	// 关闭 API Session
+	if closer, ok := sess.APISession.(interface{ Close() error }); ok {
+		closer.Close()
+	}
+	// 删除 ThreadID 映射
+	m.DeleteThreadID(ctx, sess.ThreadID)
+	// 删除 Session
+	m.DeleteSession(ctx, sess.ID)
+}
+
 func (m *SessionMgr) GetSessions(ctx context.Context) (sesses []*Session, err error) {
 	sesses, err = m.driver.GetSessions(ctx)
 	if err != nil {

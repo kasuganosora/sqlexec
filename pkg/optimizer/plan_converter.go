@@ -271,18 +271,23 @@ func (pc *PlanConverter) convertJoin(ctx context.Context, p *LogicalJoin, optCtx
 	outputSchema = append(outputSchema, left.OutputSchema...)
 	outputSchema = append(outputSchema, right.OutputSchema...)
 
-	return &plan.Plan{
-		ID:   fmt.Sprintf("join_%d", len(p.GetJoinConditions())),
+	joinConditions := p.GetJoinConditions()
+	joinPlan := &plan.Plan{
+		ID:   fmt.Sprintf("join_%d", len(joinConditions)),
 		Type: plan.TypeHashJoin,
 		OutputSchema: outputSchema,
 		Children: []*plan.Plan{left, right},
 		Config: &plan.HashJoinConfig{
 			JoinType:  types.JoinType(p.GetJoinType()),
-			LeftCond:  convertToTypesJoinCondition(p.GetJoinConditions()[0]),
-			RightCond: convertToTypesJoinCondition(p.GetJoinConditions()[0]),
 			BuildSide: "left",
 		},
-	}, nil
+	}
+	if len(joinConditions) > 0 {
+		cfg := joinPlan.Config.(*plan.HashJoinConfig)
+		cfg.LeftCond = convertToTypesJoinCondition(joinConditions[0])
+		cfg.RightCond = convertToTypesJoinCondition(joinConditions[0])
+	}
+	return joinPlan, nil
 }
 
 func (pc *PlanConverter) convertAggregate(ctx context.Context, p *LogicalAggregate, optCtx *OptimizationContext) (*plan.Plan, error) {

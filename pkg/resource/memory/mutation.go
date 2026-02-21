@@ -93,22 +93,8 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 				computedRow = generated.SetGeneratedColumnsToNULL(filteredRow, schema)
 			}
 
-			// Remove VIRTUAL columns (don't store)
+			// Remove VIRTUAL columns (don't store, only keep base + STORED generated)
 			storedRow = m.removeVirtualColumns(computedRow, schema)
-			// Ensure only base columns and STORED generated columns are kept
-			storedRow = make(map[string]interface{})
-			for k, v := range computedRow {
-				keep := true
-				for _, col := range schema.Columns {
-					if col.Name == k && col.IsGenerated && col.GeneratedType == "VIRTUAL" {
-						keep = false
-						break
-					}
-				}
-				if keep {
-					storedRow[k] = v
-				}
-			}
 		} else {
 			// No VIRTUAL columns, keep original logic
 			computedRow, err := evaluator.EvaluateAll(filteredRow, schema)
