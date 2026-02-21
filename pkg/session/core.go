@@ -693,13 +693,15 @@ func (s *CoreSession) ExecuteDropIndex(ctx context.Context, sql string) (*domain
 	return result, nil
 }
 
-// persistIndexMetaIfNeeded saves index metadata to disk if the table has XML persistence
-func (s *CoreSession) persistIndexMetaIfNeeded(ctx context.Context, tableName string) {
-	cfg := s.getTablePersistence(s.currentDB, tableName)
-	if cfg == nil {
-		return
-	}
+// tableIndexLister is a local interface for datasources that can list table indexes.
+// Both *memory.MVCCDataSource and file adapters (CSV/JSON/JSONL) satisfy this via embedding.
+type tableIndexLister interface {
+	GetTableIndexes(tableName string) ([]*memory.IndexInfo, error)
+}
 
+// persistIndexMetaIfNeeded saves index metadata to disk for tables that support persistence.
+// This handles both XML persistence tables and file-based datasources (CSV/JSON/JSONL).
+func (s *CoreSession) persistIndexMetaIfNeeded(ctx context.Context, tableName string) {
 	var ds domain.DataSource
 	if s.dsManager != nil {
 		var err error
@@ -711,20 +713,54 @@ func (s *CoreSession) persistIndexMetaIfNeeded(ctx context.Context, tableName st
 		ds = s.dataSource
 	}
 
-	mvccDS, ok := ds.(*memory.MVCCDataSource)
+	// Path 1: XML persistence tables
+	if cfg := s.getTablePersistence(s.currentDB, tableName); cfg != nil {
+		mvccDS, ok := ds.(*memory.MVCCDataSource)
+		if !ok {
+			return
+		}
+
+		indexInfos, err := mvccDS.GetTableIndexes(tableName)
+		if err != nil {
+			return
+		}
+
+		indexes := make([]*xmlpersist.IndexMeta, 0, len(indexInfos))
+		for _, info := range indexInfos {
+			indexes = append(indexes, &xmlpersist.IndexMeta{
+				Name:    info.Name,
+				Table:   info.TableName,
+				Type:    string(info.Type),
+				Unique:  info.Unique,
+				Columns: info.Columns,
+			})
+		}
+
+		if err := xmlpersist.PersistIndexMeta(cfg, indexes); err != nil {
+			log.Printf("warning: failed to persist index metadata for %s: %v", tableName, err)
+		}
+		return
+	}
+
+	// Path 2: File-based datasources implementing IndexPersister
+	persister, ok := ds.(domain.IndexPersister)
 	if !ok {
 		return
 	}
 
-	indexInfos, err := mvccDS.GetTableIndexes(tableName)
+	lister, ok := ds.(tableIndexLister)
+	if !ok {
+		return
+	}
+
+	indexInfos, err := lister.GetTableIndexes(tableName)
 	if err != nil {
 		return
 	}
 
-	// Convert to persistence format
-	indexes := make([]*xmlpersist.IndexMeta, 0, len(indexInfos))
+	indexes := make([]domain.IndexMetaInfo, 0, len(indexInfos))
 	for _, info := range indexInfos {
-		indexes = append(indexes, &xmlpersist.IndexMeta{
+		indexes = append(indexes, domain.IndexMetaInfo{
 			Name:    info.Name,
 			Table:   info.TableName,
 			Type:    string(info.Type),
@@ -733,7 +769,7 @@ func (s *CoreSession) persistIndexMetaIfNeeded(ctx context.Context, tableName st
 		})
 	}
 
-	if err := xmlpersist.PersistIndexMeta(cfg, indexes); err != nil {
+	if err := persister.PersistIndexMeta(indexes); err != nil {
 		log.Printf("warning: failed to persist index metadata for %s: %v", tableName, err)
 	}
 }

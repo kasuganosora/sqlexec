@@ -228,6 +228,21 @@ type Schema struct {
 	Constraints []*Constraint `json:"constraints"`
 }
 
+// IndexMetaInfo holds index metadata for persistence by file-based datasources.
+type IndexMetaInfo struct {
+	Name    string
+	Table   string
+	Type    string
+	Unique  bool
+	Columns []string
+}
+
+// IndexPersister is implemented by datasources that can persist index metadata
+// to a sidecar file alongside the data file (e.g. CSV, JSON, JSONL).
+type IndexPersister interface {
+	PersistIndexMeta(indexes []IndexMetaInfo) error
+}
+
 // ViewAlgorithm 视图算法类型
 type ViewAlgorithm string
 

@@ -2,6 +2,7 @@ package xml
 
 import (
 	"bytes"
+	"encoding/gob"
 	"encoding/xml"
 	"fmt"
 	"os"
@@ -67,11 +68,6 @@ type xmlSchemaCol struct {
 	AutoIncrement bool     `xml:"autoIncrement,attr,omitempty"`
 	Unique        bool     `xml:"unique,attr,omitempty"`
 	Default       string   `xml:"default,attr,omitempty"`
-}
-
-type xmlIndexFile struct {
-	XMLName xml.Name    `xml:"IndexMeta"`
-	Indexes []IndexMeta `xml:"Index"`
 }
 
 // ParseStorageMode extracts xml_mode from a COMMENT string
@@ -232,7 +228,7 @@ func persistFilePerRow(tableDir, rootTag string, tableInfo *domain.TableInfo, ro
 			continue
 		}
 		name := entry.Name()
-		if name == "__schema__.xml" || name == "__meta__.xml" {
+		if name == "__schema__.xml" || name == "__meta__.gob" || name == "__meta__.xml" {
 			continue
 		}
 		if strings.HasSuffix(name, ".xml") && !writtenFiles[name] {
@@ -319,31 +315,31 @@ func escapeXMLAttrInto(buf *bytes.Buffer, s string) {
 	buf.WriteString(s[last:])
 }
 
-// PersistIndexMeta saves index metadata to __meta__.xml
+// PersistIndexMeta saves index metadata to __meta__.gob using gob encoding.
 func PersistIndexMeta(cfg *TablePersistConfig, indexes []*IndexMeta) error {
 	tableDir := cfg.TableDir()
 	if err := os.MkdirAll(tableDir, 0755); err != nil {
 		return fmt.Errorf("failed to create table directory %s: %w", tableDir, err)
 	}
 
-	meta := xmlIndexFile{
-		Indexes: make([]IndexMeta, len(indexes)),
-	}
+	flat := make([]IndexMeta, len(indexes))
 	for i, idx := range indexes {
-		meta.Indexes[i] = *idx
+		flat[i] = *idx
 	}
 
-	data, err := xml.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal index metadata: %w", err)
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(flat); err != nil {
+		return fmt.Errorf("failed to encode index metadata: %w", err)
 	}
 
-	content := []byte(xml.Header)
-	content = append(content, data...)
-	content = append(content, '\n')
+	metaPath := filepath.Join(tableDir, "__meta__.gob")
+	if err := os.WriteFile(metaPath, buf.Bytes(), 0644); err != nil {
+		return err
+	}
 
-	metaPath := filepath.Join(tableDir, "__meta__.xml")
-	return os.WriteFile(metaPath, content, 0644)
+	// Remove legacy XML meta file if present
+	os.Remove(filepath.Join(tableDir, "__meta__.xml"))
+	return nil
 }
 
 // LoadPersistedTables scans basePath for table directories with __schema__.xml
@@ -449,7 +445,7 @@ func loadFilePerRowBatched(tableDir string, tableInfo *domain.TableInfo, pageSiz
 			continue
 		}
 		name := entry.Name()
-		if name == "__schema__.xml" || name == "__meta__.xml" || name == "data.xml" {
+		if name == "__schema__.xml" || name == "__meta__.gob" || name == "__meta__.xml" || name == "data.xml" {
 			continue
 		}
 		if strings.HasSuffix(name, ".xml") {
@@ -681,7 +677,7 @@ func loadFilePerRowData(tableDir string, tableInfo *domain.TableInfo) ([]domain.
 			continue
 		}
 		name := entry.Name()
-		if name == "__schema__.xml" || name == "__meta__.xml" || name == "data.xml" {
+		if name == "__schema__.xml" || name == "__meta__.gob" || name == "__meta__.xml" || name == "data.xml" {
 			continue
 		}
 		if strings.HasSuffix(name, ".xml") {
@@ -754,7 +750,33 @@ func loadSingleFileData(tableDir string, tableInfo *domain.TableInfo) ([]domain.
 	return parseMultiRowXML(data, tableInfo)
 }
 
+// loadIndexMeta loads index metadata from __meta__.gob (preferred) or __meta__.xml (legacy fallback).
+// The metaPath parameter is the directory-based path without extension; both .gob and .xml are tried.
 func loadIndexMeta(metaPath string) ([]*IndexMeta, error) {
+	// metaPath is expected to be e.g. "<tableDir>/__meta__.xml" from existing callers.
+	// Derive the gob path from the same directory.
+	dir := filepath.Dir(metaPath)
+	gobPath := filepath.Join(dir, "__meta__.gob")
+
+	// Try gob first (fast path)
+	if data, err := os.ReadFile(gobPath); err == nil {
+		var indexes []IndexMeta
+		if err := gob.NewDecoder(bytes.NewReader(data)).Decode(&indexes); err != nil {
+			return nil, err
+		}
+		result := make([]*IndexMeta, len(indexes))
+		for i := range indexes {
+			result[i] = &indexes[i]
+		}
+		return result, nil
+	}
+
+	// Fallback: try legacy XML format
+	type xmlIndexFile struct {
+		XMLName xml.Name    `xml:"IndexMeta"`
+		Indexes []IndexMeta `xml:"Index"`
+	}
+
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
 		return nil, nil // No index metadata
@@ -965,7 +987,7 @@ func deleteDataFiles(tableDir string) error {
 			continue
 		}
 		name := entry.Name()
-		if name == "__schema__.xml" || name == "__meta__.xml" {
+		if name == "__schema__.xml" || name == "__meta__.gob" || name == "__meta__.xml" {
 			continue
 		}
 		if strings.HasSuffix(name, ".xml") {

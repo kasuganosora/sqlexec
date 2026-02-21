@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/filemeta"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 )
 
@@ -55,6 +57,9 @@ func NewJSONAdapter(config *domain.DataSourceConfig, filePath string) *JSONAdapt
 
 // Connect 连接数据源 - 加载JSON文件到内存
 func (a *JSONAdapter) Connect(ctx context.Context) error {
+	// Check for sidecar metadata
+	meta, _ := filemeta.Load(filemeta.MetaPath(a.filePath))
+
 	// 读取JSON文件
 	data, err := os.ReadFile(a.filePath)
 	if err != nil {
@@ -91,12 +96,29 @@ func (a *JSONAdapter) Connect(ctx context.Context) error {
 		return fmt.Errorf("no JSON array found in file (use array_root option for nested arrays)")
 	}
 
-	// 推断列信息和转换数据（允许空数组作为空表）
+	// Determine schema: use sidecar if available, otherwise infer from data
 	var columns []domain.ColumnInfo
 	var convertedRows []domain.Row
-	if len(rows) > 0 {
-		columns = a.inferColumnTypes(rows)
-		convertedRows = a.convertToRows(rows)
+
+	if meta != nil && len(meta.Schema.Columns) > 0 {
+		// Use stored schema
+		columns = make([]domain.ColumnInfo, len(meta.Schema.Columns))
+		for i, col := range meta.Schema.Columns {
+			columns[i] = domain.ColumnInfo{
+				Name:     col.Name,
+				Type:     col.Type,
+				Nullable: col.Nullable,
+			}
+		}
+		if len(rows) > 0 {
+			convertedRows = a.convertToRows(rows)
+		}
+	} else {
+		// Infer schema from data
+		if len(rows) > 0 {
+			columns = a.inferColumnTypes(rows)
+			convertedRows = a.convertToRows(rows)
+		}
 	}
 
 	// 创建表信息
@@ -111,8 +133,51 @@ func (a *JSONAdapter) Connect(ctx context.Context) error {
 		return fmt.Errorf("failed to load JSON data: %w", err)
 	}
 
+	// Rebuild indexes from sidecar metadata
+	if meta != nil {
+		for _, idx := range meta.Indexes {
+			if err := a.MVCCDataSource.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
+				log.Printf("warning: failed to rebuild index %s on %s: %v", idx.Name, idx.Table, err)
+			}
+		}
+	}
+
 	// 连接MVCC数据源
 	return a.MVCCDataSource.Connect(ctx)
+}
+
+// PersistIndexMeta saves index metadata to a sidecar file alongside the JSON data file.
+func (a *JSONAdapter) PersistIndexMeta(indexes []domain.IndexMetaInfo) error {
+	tableInfo, err := a.MVCCDataSource.GetTableInfo(context.Background(), "json_data")
+	if err != nil {
+		return err
+	}
+
+	fm := &filemeta.FileMeta{
+		Schema: filemeta.SchemaMeta{
+			TableName: tableInfo.Name,
+			Columns:   make([]filemeta.ColumnMeta, len(tableInfo.Columns)),
+		},
+		Indexes: make([]filemeta.IndexMeta, len(indexes)),
+	}
+	for i, col := range tableInfo.Columns {
+		fm.Schema.Columns[i] = filemeta.ColumnMeta{
+			Name:     col.Name,
+			Type:     col.Type,
+			Nullable: col.Nullable,
+		}
+	}
+	for i, idx := range indexes {
+		fm.Indexes[i] = filemeta.IndexMeta{
+			Name:    idx.Name,
+			Table:   idx.Table,
+			Type:    idx.Type,
+			Unique:  idx.Unique,
+			Columns: idx.Columns,
+		}
+	}
+
+	return filemeta.Save(filemeta.MetaPath(a.filePath), fm)
 }
 
 // Close 关闭连接 - 可选写回JSON文件

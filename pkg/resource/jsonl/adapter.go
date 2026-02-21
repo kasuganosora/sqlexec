@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/filemeta"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 )
 
@@ -53,56 +55,152 @@ func NewJSONLAdapter(config *domain.DataSourceConfig, filePath string) *JSONLAda
 	}
 }
 
-// Connect 连接数据源 - 加载JSONL文件到内存
+// Connect 连接数据源 - 流式加载JSONL文件到内存
 func (a *JSONLAdapter) Connect(ctx context.Context) error {
+	// Check for sidecar metadata
+	meta, _ := filemeta.Load(filemeta.MetaPath(a.filePath))
+
 	f, err := os.Open(a.filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open JSONL file %q: %w", a.filePath, err)
 	}
 	defer f.Close()
 
-	var rows []domain.Row
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024) // 最大 10MB 每行
 
-	lineNum := 0
-	for scanner.Scan() {
-		lineNum++
+	pageSize := a.GetBufferPool().PageSize()
+
+	// Determine schema: use sidecar if available, otherwise infer from first batch
+	var columns []domain.ColumnInfo
+	var firstBatch []domain.Row
+
+	if meta != nil && len(meta.Schema.Columns) > 0 {
+		// Use stored schema
+		columns = make([]domain.ColumnInfo, len(meta.Schema.Columns))
+		for i, col := range meta.Schema.Columns {
+			columns[i] = domain.ColumnInfo{
+				Name:     col.Name,
+				Type:     col.Type,
+				Nullable: col.Nullable,
+			}
+		}
+	} else {
+		// Read first batch for type inference
+		firstBatch, err = a.readRows(scanner, pageSize)
+		if err != nil {
+			return err
+		}
+		if len(firstBatch) > 0 {
+			columns = a.inferColumnTypes(firstBatch)
+		}
+	}
+
+	// Create table with schema
+	tableInfo := &domain.TableInfo{
+		Name:    "jsonl_data",
+		Schema:  "",
+		Columns: columns,
+	}
+	if err := a.MVCCDataSource.CreateTable(ctx, tableInfo); err != nil {
+		return fmt.Errorf("failed to create JSONL table: %w", err)
+	}
+
+	// Stream data via BulkLoad
+	if err := a.MVCCDataSource.BulkLoad("jsonl_data", func(addPage func([]domain.Row)) error {
+		// Feed the first batch (read during inference) if any
+		if len(firstBatch) > 0 {
+			addPage(firstBatch)
+		}
+
+		// Continue reading remaining rows in pages
+		for {
+			batch, err := a.readRows(scanner, pageSize)
+			if err != nil {
+				return err
+			}
+			if len(batch) == 0 {
+				return nil
+			}
+			addPage(batch)
+		}
+	}); err != nil {
+		return fmt.Errorf("failed to bulk load JSONL data: %w", err)
+	}
+
+	// Rebuild indexes from sidecar metadata
+	if meta != nil {
+		for _, idx := range meta.Indexes {
+			if err := a.MVCCDataSource.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
+				log.Printf("warning: failed to rebuild index %s on %s: %v", idx.Name, idx.Table, err)
+			}
+		}
+	}
+
+	return a.MVCCDataSource.Connect(ctx)
+}
+
+// readRows reads up to n rows from the scanner. Returns nil, nil at EOF.
+func (a *JSONLAdapter) readRows(scanner *bufio.Scanner, n int) ([]domain.Row, error) {
+	var rows []domain.Row
+	for i := 0; i < n; i++ {
+		if !scanner.Scan() {
+			break
+		}
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
+			i-- // Don't count empty lines
 			continue
 		}
 
 		var obj map[string]interface{}
 		if err := json.Unmarshal([]byte(line), &obj); err != nil {
 			if a.skipErrors {
+				i-- // Don't count skipped lines
 				continue
 			}
-			return fmt.Errorf("failed to parse JSONL line %d: %w", lineNum, err)
+			return nil, fmt.Errorf("failed to parse JSONL line: %w", err)
 		}
 		rows = append(rows, domain.Row(obj))
 	}
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("failed to read JSONL file: %w", err)
+		return nil, fmt.Errorf("failed to read JSONL file: %w", err)
+	}
+	return rows, nil
+}
+
+// PersistIndexMeta saves index metadata to a sidecar file alongside the JSONL data file.
+func (a *JSONLAdapter) PersistIndexMeta(indexes []domain.IndexMetaInfo) error {
+	tableInfo, err := a.MVCCDataSource.GetTableInfo(context.Background(), "jsonl_data")
+	if err != nil {
+		return err
 	}
 
-	// 推断列信息（允许空文件作为空表）
-	var columns []domain.ColumnInfo
-	if len(rows) > 0 {
-		columns = a.inferColumnTypes(rows)
+	fm := &filemeta.FileMeta{
+		Schema: filemeta.SchemaMeta{
+			TableName: tableInfo.Name,
+			Columns:   make([]filemeta.ColumnMeta, len(tableInfo.Columns)),
+		},
+		Indexes: make([]filemeta.IndexMeta, len(indexes)),
+	}
+	for i, col := range tableInfo.Columns {
+		fm.Schema.Columns[i] = filemeta.ColumnMeta{
+			Name:     col.Name,
+			Type:     col.Type,
+			Nullable: col.Nullable,
+		}
+	}
+	for i, idx := range indexes {
+		fm.Indexes[i] = filemeta.IndexMeta{
+			Name:    idx.Name,
+			Table:   idx.Table,
+			Type:    idx.Type,
+			Unique:  idx.Unique,
+			Columns: idx.Columns,
+		}
 	}
 
-	tableInfo := &domain.TableInfo{
-		Name:    "jsonl_data",
-		Schema:  "",
-		Columns: columns,
-	}
-
-	if err := a.LoadTable("jsonl_data", tableInfo, rows); err != nil {
-		return fmt.Errorf("failed to load JSONL data: %w", err)
-	}
-
-	return a.MVCCDataSource.Connect(ctx)
+	return filemeta.Save(filemeta.MetaPath(a.filePath), fm)
 }
 
 // Close 关闭连接 - 可选写回JSONL文件

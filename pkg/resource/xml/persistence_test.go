@@ -184,12 +184,12 @@ func TestPersistIndexMeta(t *testing.T) {
 	err := PersistIndexMeta(cfg, indexes)
 	require.NoError(t, err)
 
-	// Verify file exists
-	metaPath := filepath.Join(tmpDir, "users", "__meta__.xml")
-	assert.FileExists(t, metaPath)
+	// Verify gob file exists
+	gobPath := filepath.Join(tmpDir, "users", "__meta__.gob")
+	assert.FileExists(t, gobPath)
 
-	// Verify it can be loaded back
-	loaded, err := loadIndexMeta(metaPath)
+	// Verify it can be loaded back (loadIndexMeta takes the legacy xml path but tries gob first)
+	loaded, err := loadIndexMeta(filepath.Join(tmpDir, "users", "__meta__.xml"))
 	require.NoError(t, err)
 	require.Len(t, loaded, 2)
 	assert.Equal(t, "idx_name", loaded[0].Name)

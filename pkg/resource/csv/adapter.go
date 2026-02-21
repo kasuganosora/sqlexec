@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/filemeta"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 )
 
@@ -60,9 +63,11 @@ func NewCSVAdapter(config *domain.DataSourceConfig, filePath string) *CSVAdapter
 	}
 }
 
-// Connect 连接数据源 - 加载CSV文件到内存
+// Connect 连接数据源 - 流式加载CSV文件到内存
 func (a *CSVAdapter) Connect(ctx context.Context) error {
-	// 读取CSV文件
+	// Check for sidecar metadata
+	meta, _ := filemeta.Load(filemeta.MetaPath(a.filePath))
+
 	file, err := os.Open(a.filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open CSV file %q: %w", a.filePath, err)
@@ -72,51 +77,163 @@ func (a *CSVAdapter) Connect(ctx context.Context) error {
 	reader := csv.NewReader(file)
 	reader.Comma = a.delimiter
 
-	// 读取所有行
-	records, err := reader.ReadAll()
-	if err != nil {
-		return fmt.Errorf("failed to read CSV file: %w", err)
+	// Read the header line (if applicable)
+	var headers []string
+	if a.hasHeader {
+		record, err := reader.Read()
+		if err != nil {
+			return fmt.Errorf("failed to read CSV header: %w", err)
+		}
+		headers = record
 	}
 
-	if len(records) == 0 {
+	// Determine schema: use sidecar if available, otherwise infer from data
+	var columns []domain.ColumnInfo
+	var firstBatch [][]string
+
+	if meta != nil && len(meta.Schema.Columns) > 0 {
+		// Use stored schema
+		columns = make([]domain.ColumnInfo, len(meta.Schema.Columns))
+		for i, col := range meta.Schema.Columns {
+			columns[i] = domain.ColumnInfo{
+				Name:     col.Name,
+				Type:     col.Type,
+				Nullable: col.Nullable,
+			}
+		}
+		// Derive headers from schema if not read from file
+		if headers == nil {
+			headers = make([]string, len(columns))
+			for i, col := range columns {
+				headers[i] = col.Name
+			}
+		}
+	} else {
+		// Need to read first batch for type inference
+		pageSize := a.GetBufferPool().PageSize()
+		firstBatch, err = a.readRecords(reader, pageSize)
+		if err != nil {
+			return fmt.Errorf("failed to read CSV data: %w", err)
+		}
+
+		// Generate headers if no header row
+		if headers == nil {
+			width := 0
+			if len(firstBatch) > 0 {
+				width = len(firstBatch[0])
+			}
+			headers = make([]string, width)
+			for i := range headers {
+				headers[i] = fmt.Sprintf("column_%d", i+1)
+			}
+		}
+
+		columns = a.inferColumnTypes(headers, firstBatch)
+	}
+
+	if len(columns) == 0 && len(headers) == 0 {
 		return fmt.Errorf("CSV file is empty")
 	}
 
-	// 推断列信息
-	var headers []string
-	var dataRows [][]string
-
-	if a.hasHeader {
-		headers = records[0]
-		dataRows = records[1:]
-	} else {
-		headers = make([]string, len(records[0]))
-		for i := range headers {
-			headers[i] = fmt.Sprintf("column_%d", i+1)
-		}
-		dataRows = records
-	}
-
-	// 推断列类型
-	columns := a.inferColumnTypes(headers, dataRows)
-
-	// 转换为Row格式
-	rows := a.convertToRows(headers, columns, dataRows)
-
-	// 创建表信息
+	// Create table with schema
 	tableInfo := &domain.TableInfo{
 		Name:    "csv_data",
 		Schema:  "",
 		Columns: columns,
 	}
+	if err := a.MVCCDataSource.CreateTable(ctx, tableInfo); err != nil {
+		return fmt.Errorf("failed to create CSV table: %w", err)
+	}
 
-	// 加载到MVCC内存源
-	if err := a.LoadTable("csv_data", tableInfo, rows); err != nil {
-		return fmt.Errorf("failed to load CSV data: %w", err)
+	// Stream data via BulkLoad
+	pageSize := a.GetBufferPool().PageSize()
+	if err := a.MVCCDataSource.BulkLoad("csv_data", func(addPage func([]domain.Row)) error {
+		// Feed the first batch (read during inference) if any
+		if len(firstBatch) > 0 {
+			rows := a.convertToRows(headers, columns, firstBatch)
+			addPage(rows)
+		}
+
+		// Continue reading remaining records in pages
+		for {
+			batch, err := a.readRecords(reader, pageSize)
+			if len(batch) > 0 {
+				rows := a.convertToRows(headers, columns, batch)
+				addPage(rows)
+			}
+			if err != nil {
+				return err
+			}
+			if len(batch) == 0 {
+				return nil
+			}
+		}
+	}); err != nil {
+		return fmt.Errorf("failed to bulk load CSV data: %w", err)
+	}
+
+	// Rebuild indexes from sidecar metadata
+	if meta != nil {
+		for _, idx := range meta.Indexes {
+			if err := a.MVCCDataSource.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
+				log.Printf("warning: failed to rebuild index %s on %s: %v", idx.Name, idx.Table, err)
+			}
+		}
 	}
 
 	// 连接MVCC数据源
 	return a.MVCCDataSource.Connect(ctx)
+}
+
+// readRecords reads up to n records from the csv.Reader. Returns nil, nil at EOF.
+func (a *CSVAdapter) readRecords(reader *csv.Reader, n int) ([][]string, error) {
+	var records [][]string
+	for i := 0; i < n; i++ {
+		record, err := reader.Read()
+		if err == io.EOF {
+			return records, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, nil
+}
+
+// PersistIndexMeta saves index metadata to a sidecar file alongside the CSV data file.
+func (a *CSVAdapter) PersistIndexMeta(indexes []domain.IndexMetaInfo) error {
+	// Read current schema from in-memory table
+	tableInfo, err := a.MVCCDataSource.GetTableInfo(context.Background(), "csv_data")
+	if err != nil {
+		return err
+	}
+
+	fm := &filemeta.FileMeta{
+		Schema: filemeta.SchemaMeta{
+			TableName: tableInfo.Name,
+			Columns:   make([]filemeta.ColumnMeta, len(tableInfo.Columns)),
+		},
+		Indexes: make([]filemeta.IndexMeta, len(indexes)),
+	}
+	for i, col := range tableInfo.Columns {
+		fm.Schema.Columns[i] = filemeta.ColumnMeta{
+			Name:     col.Name,
+			Type:     col.Type,
+			Nullable: col.Nullable,
+		}
+	}
+	for i, idx := range indexes {
+		fm.Indexes[i] = filemeta.IndexMeta{
+			Name:    idx.Name,
+			Table:   idx.Table,
+			Type:    idx.Type,
+			Unique:  idx.Unique,
+			Columns: idx.Columns,
+		}
+	}
+
+	return filemeta.Save(filemeta.MetaPath(a.filePath), fm)
 }
 
 // Close 关闭连接 - 可选写回CSV文件
