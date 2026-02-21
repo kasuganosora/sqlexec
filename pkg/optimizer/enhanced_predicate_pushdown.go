@@ -3,6 +3,7 @@ package optimizer
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
@@ -141,7 +142,12 @@ func (r *EnhancedPredicatePushdownRule) canPushDownToDataSource(cond *parser.Exp
 	}
 
 	for _, col := range cols {
-		if !schemaSet[col] {
+		// Strip table qualifier (e.g., "accounts.deleted_at" → "deleted_at")
+		colName := col
+		if idx := strings.LastIndex(col, "."); idx >= 0 {
+			colName = col[idx+1:]
+		}
+		if !schemaSet[colName] {
 			return false
 		}
 	}

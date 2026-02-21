@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/dataaccess"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/feedback"
@@ -88,7 +89,15 @@ func (op *SelectionOperator) evaluateCondition(row domain.Row, cond *parser.Expr
 	case parser.ExprTypeOperator:
 		return op.evaluateOperator(row, cond)
 	case parser.ExprTypeColumn:
-		if val, ok := row[cond.Column]; ok && val != nil {
+		col := cond.Column
+		val, ok := row[col]
+		if !ok {
+			// Try stripping table qualifier
+			if idx := strings.LastIndex(col, "."); idx >= 0 {
+				val, ok = row[col[idx+1:]]
+			}
+		}
+		if ok && val != nil {
 			switch v := val.(type) {
 			case bool:
 				return v
@@ -106,21 +115,35 @@ func (op *SelectionOperator) evaluateCondition(row domain.Row, cond *parser.Expr
 
 // evaluateOperator 评估操作符表达式
 func (op *SelectionOperator) evaluateOperator(row domain.Row, expr *parser.Expression) bool {
+	// Handle unary and logical operators first (no need for both left/right values)
+	switch expr.Operator {
+	case "IS NULL", "is null":
+		leftVal := op.getExpressionValue(row, expr.Left)
+		return leftVal == nil
+	case "IS NOT NULL", "is not null":
+		leftVal := op.getExpressionValue(row, expr.Left)
+		return leftVal != nil
+	case "AND", "and":
+		return op.evaluateCondition(row, expr.Left) && op.evaluateCondition(row, expr.Right)
+	case "OR", "or":
+		return op.evaluateCondition(row, expr.Left) || op.evaluateCondition(row, expr.Right)
+	}
+
 	leftVal := op.getExpressionValue(row, expr.Left)
 	rightVal := op.getExpressionValue(row, expr.Right)
 
 	switch expr.Operator {
-	case "eq", "===":
+	case "eq", "===", "=":
 		return op.compareValues(leftVal, rightVal) == 0
-	case "ne", "!=":
+	case "ne", "!=", "<>":
 		return op.compareValues(leftVal, rightVal) != 0
-	case "gt":
+	case "gt", ">":
 		return op.compareValues(leftVal, rightVal) > 0
-	case "gte":
+	case "gte", ">=":
 		return op.compareValues(leftVal, rightVal) >= 0
-	case "lt":
+	case "lt", "<":
 		return op.compareValues(leftVal, rightVal) < 0
-	case "lte":
+	case "lte", "<=":
 		return op.compareValues(leftVal, rightVal) <= 0
 	case "like":
 		return op.likeValues(leftVal, rightVal)
@@ -139,7 +162,14 @@ func (op *SelectionOperator) getExpressionValue(row domain.Row, expr *parser.Exp
 
 	switch expr.Type {
 	case parser.ExprTypeColumn:
-		return row[expr.Column]
+		if val, ok := row[expr.Column]; ok {
+			return val
+		}
+		// Try stripping table qualifier (e.g., "accounts.deleted_at" → "deleted_at")
+		if idx := strings.LastIndex(expr.Column, "."); idx >= 0 {
+			return row[expr.Column[idx+1:]]
+		}
+		return nil
 	case parser.ExprTypeValue:
 		return expr.Value
 	case parser.ExprTypeOperator:
