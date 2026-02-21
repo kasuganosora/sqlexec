@@ -18,8 +18,8 @@ func TestParseRecommendIndexRun(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "RUN", stmt.Action)
 	assert.True(t, stmt.ForQuery)
-	// TiDB parser normalizes identifiers to uppercase
-	assert.Equal(t, "SELECT * FROM T1 WHERE A = 1", stmt.Query)
+	// Case is preserved from the original query
+	assert.Equal(t, "SELECT * FROM t1 WHERE a = 1", stmt.Query)
 }
 
 // TestParseRecommendIndexRunWorkload 测试解析工作负载模式
@@ -58,8 +58,8 @@ func TestParseRecommendIndexSet(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "SET", stmt1.Action)
-	// TiDB parser normalizes identifiers to uppercase
-	assert.Equal(t, "MAX_NUM_INDEX", stmt1.OptionName)
+	// Case is preserved - matches ApplyConfig lowercase switch cases
+	assert.Equal(t, "max_num_index", stmt1.OptionName)
 	assert.Equal(t, "10", stmt1.OptionValue)
 
 	// Test SET string parameter (with quotes)
@@ -68,8 +68,8 @@ func TestParseRecommendIndexSet(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "SET", stmt2.Action)
-	// TiDB parser normalizes identifiers to uppercase
-	assert.Equal(t, "TIMEOUT", stmt2.OptionName)
+	// Case is preserved - matches ApplyConfig lowercase switch cases
+	assert.Equal(t, "timeout", stmt2.OptionName)
 	assert.Equal(t, "60", stmt2.OptionValue)
 }
 

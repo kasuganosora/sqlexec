@@ -28,18 +28,18 @@ func NewRecommendIndexParser() *RecommendIndexParser {
 
 // Parse 解析 RECOMMEND INDEX 语句
 func (p *RecommendIndexParser) Parse(sql string) (*RecommendIndexStatement, error) {
-	// 标准化 SQL
+	// 标准化 SQL - only uppercase for prefix matching, preserve original for content
 	sql = strings.TrimSpace(sql)
-	sql = strings.ToUpper(sql)
+	upperSQL := strings.ToUpper(sql)
 
 	// 检查是否为 RECOMMEND INDEX 语句
-	if !strings.HasPrefix(sql, "RECOMMEND INDEX") {
+	if !strings.HasPrefix(upperSQL, "RECOMMEND INDEX") {
 		return nil, fmt.Errorf("not a RECOMMEND INDEX statement")
 	}
 
-	// 移除 "RECOMMEND INDEX"
-	sql = strings.TrimPrefix(sql, "RECOMMEND INDEX")
-	sql = strings.TrimSpace(sql)
+	// 移除 "RECOMMEND INDEX" (use length of prefix to preserve original case of remainder)
+	sql = strings.TrimSpace(sql[len("RECOMMEND INDEX"):])
+	upperSQL = strings.ToUpper(sql)
 
 	// 提取动作
 	action, remaining, err := p.extractAction(sql)
@@ -71,8 +71,10 @@ func (p *RecommendIndexParser) extractAction(sql string) (string, string, error)
 		return "", "", fmt.Errorf("no action specified")
 	}
 
-	action := parts[0]
-	remaining := strings.Join(parts[1:], " ")
+	// Uppercase only the action keyword, preserve rest
+	action := strings.ToUpper(parts[0])
+	// Reconstruct remaining from original sql to preserve case
+	remaining := strings.TrimSpace(sql[len(parts[0]):])
 
 	return action, remaining, nil
 }
@@ -81,10 +83,10 @@ func (p *RecommendIndexParser) extractAction(sql string) (string, string, error)
 func (p *RecommendIndexParser) parseRunAction(stmt *RecommendIndexStatement, sql string) (*RecommendIndexStatement, error) {
 	sql = strings.TrimSpace(sql)
 
-	// 检查是否有 FOR 子句
-	if strings.HasPrefix(sql, "FOR") {
+	// 检查是否有 FOR 子句 (case-insensitive)
+	if strings.HasPrefix(strings.ToUpper(sql), "FOR") {
 		stmt.ForQuery = true
-		sql = strings.TrimPrefix(sql, "FOR")
+		sql = sql[len("FOR"):]
 		sql = strings.TrimSpace(sql)
 
 		// 提取 SQL（用引号包裹）
@@ -107,7 +109,7 @@ func (p *RecommendIndexParser) parseShowAction(stmt *RecommendIndexStatement, sq
 	sql = strings.TrimSpace(sql)
 
 	// SHOW OPTION - 显示配置
-	if sql == "OPTION" {
+	if strings.ToUpper(sql) == "OPTION" {
 		return stmt, nil
 	}
 

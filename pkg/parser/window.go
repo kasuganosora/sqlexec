@@ -107,11 +107,9 @@ func ParseWindowFrame(mode FrameMode, start BoundType, startValue Expression, en
 		},
 	}
 	
-	if end != BoundUnboundedFollowing {
-		frame.End = &FrameBound{
-			Type:  end,
-			Value: endValue,
-		}
+	frame.End = &FrameBound{
+		Type:  end,
+		Value: endValue,
 	}
 	
 	return frame
@@ -260,8 +258,8 @@ func ValidateWindowExpression(we *WindowExpression) error {
 			return fmt.Errorf("NTILE() requires 1 argument")
 		}
 	case "LAG", "LEAD":
-		if len(we.Args) == 0 || len(we.Args) > 2 {
-			return fmt.Errorf("%s() requires 1 or 2 arguments", we.FuncName)
+		if len(we.Args) == 0 || len(we.Args) > 3 {
+			return fmt.Errorf("%s() requires 1 to 3 arguments", we.FuncName)
 		}
 	case "FIRST_VALUE", "LAST_VALUE":
 		if len(we.Args) != 1 {
