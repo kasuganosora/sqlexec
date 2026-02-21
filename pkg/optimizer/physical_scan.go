@@ -109,7 +109,10 @@ func NewPhysicalProjection(exprs []*parser.Expression, aliases []string, child P
 
 	columns := make([]ColumnInfo, len(exprs))
 	for i, expr := range exprs {
-		name := aliases[i]
+		name := ""
+		if i < len(aliases) {
+			name = aliases[i]
+		}
 		if name == "" {
 			if expr.Type == parser.ExprTypeColumn {
 				name = expr.Column

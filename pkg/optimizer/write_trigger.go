@@ -208,7 +208,10 @@ func (wtm *WriteTriggerManager) refreshWorker(ctx context.Context, workerID int)
 			debugf("  [WRITE TRIGGER] Worker %d stopped\n", workerID)
 			return
 
-		case task := <-wtm.refreshQueue:
+		case task, ok := <-wtm.refreshQueue:
+			if !ok || task == nil {
+				return
+			}
 			debugf("  [WRITE TRIGGER] Worker %d processing task for %s\n", workerID, task.TableName)
 			wtm.processRefreshTask(task)
 		}
@@ -344,10 +347,8 @@ func (wtm *WriteTriggerManager) SetTriggerThreshold(threshold int64) {
 // Stop 停止触发器管理器
 func (wtm *WriteTriggerManager) Stop() {
 	wtm.cancel()
-
-	// 等待队列处理完成
-	close(wtm.refreshQueue)
-
+	// Do not close refreshQueue: senders may still be active.
+	// Workers will exit via ctx.Done().
 	debugln("  [WRITE TRIGGER] Stopped")
 }
 

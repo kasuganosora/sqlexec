@@ -122,25 +122,31 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownToDataSource(selection *Logic
 }
 
 // canPushDownToDataSource 检查条件是否可以下推到DataSource
+// ALL referenced columns must be present in the DataSource schema
 func (r *EnhancedPredicatePushdownRule) canPushDownToDataSource(cond *parser.Expression, dataSource *LogicalDataSource) bool {
-	// 简化：检查条件引用的列是否在DataSource中
 	schema := dataSource.Schema()
 	if len(schema) == 0 {
 		return false
 	}
 
-	// 检查所有引用的列
+	// 检查所有引用的列是否都在DataSource中
 	cols := r.extractColumnsFromExpression(cond)
+	if len(cols) == 0 {
+		return false
+	}
+
+	schemaSet := make(map[string]bool, len(schema))
+	for _, schemaCol := range schema {
+		schemaSet[schemaCol.Name] = true
+	}
+
 	for _, col := range cols {
-		// 检查列是否在DataSource的schema中
-		for _, schemaCol := range schema {
-			if col == schemaCol.Name {
-				return true
-			}
+		if !schemaSet[col] {
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
 // tryPushDownAcrossJoin 尝试跨JOIN下推谓词
@@ -213,8 +219,11 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownAcrossJoin(selection *Logical
 // createOrMergeSelection 创建或合并Selection节点
 func (r *EnhancedPredicatePushdownRule) createOrMergeSelection(child LogicalPlan, conditions []*parser.Expression) LogicalPlan {
 	if existingSelection, ok := child.(*LogicalSelection); ok {
-		// 合并条件
-		mergedConditions := append(existingSelection.Conditions(), conditions...)
+		// 合并条件 - 创建新切片避免修改原始切片
+		existingConds := existingSelection.Conditions()
+		mergedConditions := make([]*parser.Expression, 0, len(existingConds)+len(conditions))
+		mergedConditions = append(mergedConditions, existingConds...)
+		mergedConditions = append(mergedConditions, conditions...)
 		return NewLogicalSelection(mergedConditions, existingSelection.Children()[0])
 	}
 	// 创建新的Selection
@@ -256,8 +265,12 @@ func (r *EnhancedPredicatePushdownRule) mergeAdjacentSelections(selection *Logic
 
 	// 检查子节点是否也是Selection
 	if childSelection, ok := child.(*LogicalSelection); ok {
-		// 合并两个Selection的条件
-		mergedConditions := append(selection.Conditions(), childSelection.Conditions()...)
+		// 合并两个Selection的条件 - 创建新切片避免修改原始切片
+		selConds := selection.Conditions()
+		childConds := childSelection.Conditions()
+		mergedConditions := make([]*parser.Expression, 0, len(selConds)+len(childConds))
+		mergedConditions = append(mergedConditions, selConds...)
+		mergedConditions = append(mergedConditions, childConds...)
 		return NewLogicalSelection(mergedConditions, childSelection.Children()[0])
 	}
 

@@ -47,12 +47,15 @@ func NewPlanCache(maxSize int) *PlanCache {
 func (pc *PlanCache) Get(fingerprint uint64) (*plan.Plan, bool) {
 	pc.mu.RLock()
 	entry, ok := pc.cache[fingerprint]
-	pc.mu.RUnlock()
-
 	if !ok {
+		pc.mu.RUnlock()
 		atomic.AddInt64(&pc.misses, 1)
 		return nil, false
 	}
+	// Read fields under RLock to avoid data race
+	cachedPlan := entry.Plan
+	lastHit := entry.LastHit
+	pc.mu.RUnlock()
 
 	atomic.AddInt64(&pc.hits, 1)
 	atomic.AddInt64(&entry.HitCount, 1)
@@ -60,13 +63,13 @@ func (pc *PlanCache) Get(fingerprint uint64) (*plan.Plan, bool) {
 	// Update last hit time under write lock only occasionally
 	// to avoid write contention on hot plans
 	now := time.Now()
-	if now.Sub(entry.LastHit) > time.Second {
+	if now.Sub(lastHit) > time.Second {
 		pc.mu.Lock()
 		entry.LastHit = now
 		pc.mu.Unlock()
 	}
 
-	return entry.Plan, true
+	return cachedPlan, true
 }
 
 // Put stores an optimized plan in the cache.

@@ -94,13 +94,12 @@ func (p *PhysicalMergeJoin) sortByColumn(rows []domain.Row, column string) []dom
 }
 
 // mergeRows 使用两路归并算法合并已排序的行
+// 正确处理重复键：对于匹配的键组产生笛卡尔积
 func (p *PhysicalMergeJoin) mergeRows(
 	leftRows, rightRows []domain.Row,
 	leftCol, rightCol string,
 	joinType JoinType,
 ) []domain.Row {
-	
-	// 使用归并排序算法
 	i, j := 0, 0
 	leftCount := len(leftRows)
 	rightCount := len(rightRows)
@@ -109,92 +108,80 @@ func (p *PhysicalMergeJoin) mergeRows(
 
 	switch joinType {
 	case InnerJoin:
-		// INNER JOIN: 只有两边都匹配的行
 		for i < leftCount && j < rightCount {
 			leftVal := leftRows[i][leftCol]
 			rightVal := rightRows[j][rightCol]
 
 			cmp := compareValuesForSort(leftVal, rightVal)
 			if cmp < 0 {
-				// 左值小，推进左指针
 				i++
 			} else if cmp > 0 {
-				// 右值小，推进右指针
 				j++
 			} else {
-				// 相等，合并行并推进两个指针
-				output = append(output, p.mergeRow(leftRows[i], rightRows[j]))
-				i++
-				j++
+				// 找到匹配：确定右侧重复组的范围
+				jStart := j
+				for j < rightCount && compareValuesForSort(leftRows[i][leftCol], rightRows[j][rightCol]) == 0 {
+					j++
+				}
+				// 对左侧每一行与右侧整组产生笛卡尔积
+				for i < leftCount && compareValuesForSort(leftRows[i][leftCol], rightRows[jStart][rightCol]) == 0 {
+					for k := jStart; k < j; k++ {
+						output = append(output, p.mergeRow(leftRows[i], rightRows[k]))
+					}
+					i++
+				}
 			}
 		}
 
 	case LeftOuterJoin:
-		// LEFT JOIN: 左表所有行，右表匹配的行
-		// 构建右侧NULL行模板（用于无匹配时）
 		rightNullRow := p.buildNullRow(rightRows, rightCol)
 		for i < leftCount {
-			leftRow := leftRows[i]
-			leftVal := leftRow[leftCol]
+			leftVal := leftRows[i][leftCol]
 
-			// 在右表中查找匹配
-			matchFound := false
-			for j < rightCount {
-				rightVal := rightRows[j][rightCol]
-
-				if compareValuesForSort(leftVal, rightVal) == 0 {
-					output = append(output, p.mergeRow(leftRow, rightRows[j]))
-					matchFound = true
-					break
-				} else if compareValuesForSort(leftVal, rightVal) < 0 {
-					// 右表的值已经更大，不需要继续查找
-					break
-				}
+			// 推进右指针到 >= leftVal
+			for j < rightCount && compareValuesForSort(rightRows[j][rightCol], leftVal) < 0 {
 				j++
 			}
 
+			// 检查是否有匹配
+			matchFound := false
+			for k := j; k < rightCount && compareValuesForSort(rightRows[k][rightCol], leftVal) == 0; k++ {
+				output = append(output, p.mergeRow(leftRows[i], rightRows[k]))
+				matchFound = true
+			}
+
 			if !matchFound {
-				// 没有匹配，左行 + 右NULL
-				output = append(output, p.mergeRowWithNull(leftRow, rightNullRow))
+				output = append(output, p.mergeRowWithNull(leftRows[i], rightNullRow))
 			}
 
 			i++
 		}
 
 	case RightOuterJoin:
-		// RIGHT JOIN: 右表所有行，左表匹配的行
-		// 构建左侧NULL行模板（用于无匹配时）
 		leftNullRow := p.buildNullRow(leftRows, leftCol)
 		for j < rightCount {
-			rightRow := rightRows[j]
-			rightVal := rightRow[rightCol]
+			rightVal := rightRows[j][rightCol]
 
-			// 在左表中查找匹配
-			matchFound := false
-			for i < leftCount {
-				leftVal := leftRows[i][leftCol]
-
-				if compareValuesForSort(leftVal, rightVal) == 0 {
-					output = append(output, p.mergeRow(leftRows[i], rightRow))
-					matchFound = true
-					break
-				} else if compareValuesForSort(leftVal, rightVal) < 0 {
-					// 左表的值已经更大，不需要继续查找
-					break
-				}
+			// 推进左指针到 >= rightVal
+			for i < leftCount && compareValuesForSort(leftRows[i][leftCol], rightVal) < 0 {
 				i++
 			}
 
+			// 检查是否有匹配
+			matchFound := false
+			for k := i; k < leftCount && compareValuesForSort(leftRows[k][leftCol], rightVal) == 0; k++ {
+				output = append(output, p.mergeRow(leftRows[k], rightRows[j]))
+				matchFound = true
+			}
+
 			if !matchFound {
-				// 没有匹配，左NULL + 右行
-				output = append(output, p.mergeRowWithNull(leftNullRow, rightRow))
+				output = append(output, p.mergeRowWithNull(leftNullRow, rightRows[j]))
 			}
 
 			j++
 		}
 
 	default:
-		// 其他JOIN类型：默认为INNER JOIN
 		return p.mergeRows(leftRows, rightRows, leftCol, rightCol, InnerJoin)
 	}
 

@@ -420,7 +420,7 @@ func TestEnhancedCardinalityEstimator_GetDefaultSelectivity(t *testing.T) {
 		expected float64
 	}{
 		{"equality", "=", 0.1},
-		{"not equal", "!=", 0.1},
+		{"not equal", "!=", 0.9},
 		{"greater than", ">", 0.3},
 		{"greater than or equal", ">=", 0.3},
 		{"less than", "<", 0.3},

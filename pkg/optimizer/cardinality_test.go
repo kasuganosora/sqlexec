@@ -397,7 +397,7 @@ func TestSimpleCardinalityEstimatorGetDefaultSelectivity(t *testing.T) {
 		expected float64
 	}{
 		{"=", 0.1},
-		{"!=", 0.1},
+		{"!=", 0.9},
 		{">", 0.3},
 		{">=", 0.3},
 		{"<", 0.3},

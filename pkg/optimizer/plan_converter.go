@@ -141,13 +141,18 @@ func (pc *PlanConverter) convertSelection(ctx context.Context, p *LogicalSelecti
 	// Calculate cost
 	_ = pc.costModel.FilterCost(int64(10000), 0.1, nil)
 
+	conditions := p.GetConditions()
+	if len(conditions) == 0 {
+		return nil, fmt.Errorf("selection has no conditions")
+	}
+
 	return &plan.Plan{
-		ID:   fmt.Sprintf("sel_%d", len(p.GetConditions())),
+		ID:   fmt.Sprintf("sel_%d", len(conditions)),
 		Type: plan.TypeSelection,
 		OutputSchema: child.OutputSchema,
 		Children: []*plan.Plan{child},
 		Config: &plan.SelectionConfig{
-			Condition: p.GetConditions()[0],
+			Condition: conditions[0],
 		},
 	}, nil
 }

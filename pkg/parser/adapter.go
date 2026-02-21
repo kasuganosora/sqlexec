@@ -822,6 +822,13 @@ func (a *SQLAdapter) convertSelectField(field *ast.SelectField) (*SelectColumn, 
 		col.Name = expr.Name.Name.String()
 		col.Table = expr.Name.Schema.String()
 		col.IsWildcard = expr.Name.Name.String() == "*"
+	} else if varExpr, ok := field.Expr.(*ast.VariableExpr); ok {
+		// 系统/会话变量
+		if varExpr.IsSystem {
+			col.Name = "@@" + varExpr.Name
+		} else {
+			col.Name = "@" + varExpr.Name
+		}
 	}
 
 	// 处理函数调用 - 将表达式转换为 Expression
@@ -956,6 +963,15 @@ func (a *SQLAdapter) convertExpression(node ast.ExprNode) (*Expression, error) {
 			return nil, err
 		}
 		return innerExpr, nil
+
+	case *ast.VariableExpr:
+		// 系统变量或会话变量：@@var_name 或 @var_name
+		expr.Type = ExprTypeColumn
+		if n.IsSystem {
+			expr.Column = "@@" + n.Name
+		} else {
+			expr.Column = "@" + n.Name
+		}
 
 	default:
 		expr.Type = ExprTypeValue

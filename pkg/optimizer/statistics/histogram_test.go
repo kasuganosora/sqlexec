@@ -522,7 +522,7 @@ func TestHistogram_TotalCount(t *testing.T) {
 				},
 				NullCount: 5,
 			},
-			expected: 35,
+			expected: 30, // totalCount excludes NullCount
 		},
 		{
 			name:     "only buckets",
@@ -540,7 +540,7 @@ func TestHistogram_TotalCount(t *testing.T) {
 				Buckets:  []*HistogramBucket{},
 				NullCount: 100,
 			},
-			expected: 100,
+			expected: 0, // totalCount excludes NullCount
 		},
 		{
 			name:     "empty",

@@ -224,14 +224,8 @@ func (e *ExpressionExecutor) evaluateNoFromExpression(expr *parser.Expression, r
 
 	switch expr.Type {
 	case parser.ExprTypeValue:
-		// 常量值
+		// 常量值（包括 NULL 字面量）
 		debugf("  [DEBUG] evaluateNoFromExpression: 常量值=%v\n", expr.Value)
-		// 特殊处理：如果 Value 为 nil，返回默认的系统变量值
-		// 注意：这是启发式方法，因为解析器无法提供原始变量名
-		if expr.Value == nil {
-			// 返回 @@version_comment 的默认值
-			return "sqlexec MySQL-compatible database", nil
-		}
 		return expr.Value, nil
 
 	case parser.ExprTypeColumn:

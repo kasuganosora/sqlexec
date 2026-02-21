@@ -51,8 +51,12 @@ func (r *PredicatePushDownRule) Apply(ctx context.Context, plan LogicalPlan, opt
 
 	// If child node is Selection, merge conditions
 	if childSelection, ok := child.(*LogicalSelection); ok {
-		// Merge condition lists
-		mergedConditions := append(selection.Conditions(), childSelection.Conditions()...)
+		// Merge condition lists - create new slice to avoid modifying original
+		selConds := selection.Conditions()
+		childConds := childSelection.Conditions()
+		mergedConditions := make([]*parser.Expression, 0, len(selConds)+len(childConds))
+		mergedConditions = append(mergedConditions, selConds...)
+		mergedConditions = append(mergedConditions, childConds...)
 		return NewLogicalSelection(mergedConditions, childSelection.Children()[0]), nil
 	}
 
@@ -229,12 +233,8 @@ func (r *LimitPushDownRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 		return child, nil
 	}
 
-	// 如果子节点是 Selection，可以下推到Selection的子节点
-	if selection, ok := child.(*LogicalSelection); ok {
-		// 创建新的 Selection，其子节点是新的 Limit
-		newLimit := NewLogicalLimit(limit.GetLimit(), limit.GetOffset(), selection.Children()[0])
-		return NewLogicalSelection(selection.Conditions(), newLimit), nil
-	}
+	// Do NOT push LIMIT below Selection (WHERE clause):
+	// LIMIT must be applied after filtering, not before.
 
 	return plan, nil
 }
@@ -264,15 +264,19 @@ func (r *ConstantFoldingRule) Apply(ctx context.Context, plan LogicalPlan, optCt
 func (r *ConstantFoldingRule) foldConstants(plan LogicalPlan, evaluator *ExpressionEvaluator) (LogicalPlan, error) {
 	// 先处理子节点
 	children := plan.Children()
+	changed := false
 	for i, child := range children {
 		newChild, err := r.foldConstants(child, evaluator)
 		if err != nil {
 			return nil, err
 		}
 		if newChild != child {
-			plan.SetChildren(children...)
 			children[i] = newChild
+			changed = true
 		}
+	}
+	if changed {
+		plan.SetChildren(children...)
 	}
 
 	// 根据不同的算子类型进行常量折叠
