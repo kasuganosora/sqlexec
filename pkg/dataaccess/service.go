@@ -30,6 +30,12 @@ type Service interface {
 
 // InsertData 实现Service的Insert方法
 func (s *DataService) Insert(ctx context.Context, tableName string, data map[string]interface{}) (int64, error) {
+	// 通过路由器选择数据源
+	ds, err := s.router.Route(tableName)
+	if err != nil {
+		return 0, fmt.Errorf("route failed: %w", err)
+	}
+
 	// 转换为Row格式
 	row := make(domain.Row)
 	for k, v := range data {
@@ -40,7 +46,7 @@ func (s *DataService) Insert(ctx context.Context, tableName string, data map[str
 	options := &domain.InsertOptions{}
 
 	// 调用数据源的Insert方法
-	_, err := s.dataSource.Insert(ctx, tableName, []domain.Row{row}, options)
+	_, err = ds.Insert(ctx, tableName, []domain.Row{row}, options)
 	if err != nil {
 		return 0, fmt.Errorf("insert data failed: %w", err)
 	}
@@ -65,6 +71,12 @@ func (s *DataService) Insert(ctx context.Context, tableName string, data map[str
 
 // UpdateData 实现Service的Update方法
 func (s *DataService) Update(ctx context.Context, tableName string, data map[string]interface{}, where *domain.Filter) error {
+	// 通过路由器选择数据源
+	ds, err := s.router.Route(tableName)
+	if err != nil {
+		return fmt.Errorf("route failed: %w", err)
+	}
+
 	// 转换为Row格式
 	row := make(domain.Row)
 	for k, v := range data {
@@ -81,7 +93,7 @@ func (s *DataService) Update(ctx context.Context, tableName string, data map[str
 	options := &domain.UpdateOptions{}
 
 	// 调用数据源的Update方法
-	_, err := s.dataSource.Update(ctx, tableName, filters, row, options)
+	_, err = ds.Update(ctx, tableName, filters, row, options)
 	if err != nil {
 		return fmt.Errorf("update data failed: %w", err)
 	}
@@ -91,6 +103,12 @@ func (s *DataService) Update(ctx context.Context, tableName string, data map[str
 
 // DeleteData 实现Service的Delete方法
 func (s *DataService) Delete(ctx context.Context, tableName string, where *domain.Filter) error {
+	// 通过路由器选择数据源
+	ds, err := s.router.Route(tableName)
+	if err != nil {
+		return fmt.Errorf("route failed: %w", err)
+	}
+
 	// 构建过滤器
 	var filters []domain.Filter
 	if where != nil {
@@ -101,7 +119,7 @@ func (s *DataService) Delete(ctx context.Context, tableName string, where *domai
 	options := &domain.DeleteOptions{}
 
 	// 调用数据源的Delete方法
-	_, err := s.dataSource.Delete(ctx, tableName, filters, options)
+	_, err = ds.Delete(ctx, tableName, filters, options)
 	if err != nil {
 		return fmt.Errorf("delete data failed: %w", err)
 	}
@@ -139,6 +157,10 @@ func NewDataService(dataSource domain.DataSource) Service {
 
 // Query 查询数据
 func (s *DataService) Query(ctx context.Context, tableName string, options *QueryOptions) (*domain.QueryResult, error) {
+	if options == nil {
+		options = &QueryOptions{}
+	}
+
 	// 通过路由器选择数据源
 	ds, err := s.router.Route(tableName)
 	if err != nil {
@@ -205,11 +227,6 @@ func (s *DataService) GetTableInfo(ctx context.Context, tableName string) (*doma
 func (s *DataService) selectColumns(result *domain.QueryResult, selectColumns []string, tableInfo *domain.TableInfo) *domain.QueryResult {
 	// 如果选择所有列，直接返回
 	if len(selectColumns) == 0 {
-		return result
-	}
-
-	// 如果选择的列数 == 表的列数，大概率是 SELECT *，跳过复制
-	if len(selectColumns) >= len(tableInfo.Columns) {
 		return result
 	}
 
