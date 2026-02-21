@@ -20,7 +20,10 @@ type LogicalProjection struct {
 func NewLogicalProjection(exprs []*parser.Expression, aliases []string, child LogicalPlan) *LogicalProjection {
 	columns := make([]ColumnInfo, len(exprs))
 	for i, expr := range exprs {
-		name := aliases[i]
+		var name string
+		if i < len(aliases) {
+			name = aliases[i]
+		}
 		if name == "" {
 			if expr.Type == parser.ExprTypeColumn {
 				name = expr.Column

@@ -3,6 +3,7 @@ package optimizer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -410,29 +411,50 @@ func (wtds *WriteTriggerDataSource) Execute(ctx context.Context, sql string) (*d
 	return result, nil
 }
 
-// sqlToLower 将SQL转换为小写（简化处理）
+// sqlToLower 将SQL转换为小写
 func sqlToLower(sql string) string {
-	// 实际实现应该使用更智能的SQL解析
-	// 这里简化处理：只转换前几个字符
-	if len(sql) > 10 {
-		return sql[:10] + sql[10:]
-	}
-	return sql
+	return strings.ToLower(sql)
 }
 
 // startsWith 检查字符串是否以指定前缀开始
 func startsWith(s, prefix string) bool {
-	if len(s) < len(prefix) {
-		return false
-	}
-	return s[:len(prefix)] == prefix
+	return strings.HasPrefix(s, prefix)
 }
 
-// extractTableNameFromSQL 从SQL中提取表名（简化）
+// extractTableNameFromSQL 从SQL中提取表名
 func extractTableNameFromSQL(sql string) string {
-	// 简化实现：实际应该使用SQL解析器
-	// 这里只是示例
-	return "" // 需要实现真正的表名提取
+	sql = strings.TrimSpace(sql)
+	lower := strings.ToLower(sql)
+
+	var afterKeyword string
+	switch {
+	case strings.HasPrefix(lower, "insert"):
+		// INSERT INTO tableName ...
+		idx := strings.Index(lower, "into")
+		if idx < 0 {
+			return ""
+		}
+		afterKeyword = sql[idx+4:]
+	case strings.HasPrefix(lower, "update"):
+		// UPDATE tableName SET ...
+		afterKeyword = sql[6:]
+	case strings.HasPrefix(lower, "delete"):
+		// DELETE FROM tableName ...
+		idx := strings.Index(lower, "from")
+		if idx < 0 {
+			return ""
+		}
+		afterKeyword = sql[idx+4:]
+	default:
+		return ""
+	}
+
+	afterKeyword = strings.TrimSpace(afterKeyword)
+	fields := strings.Fields(afterKeyword)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.Trim(fields[0], "`\"")
 }
 
 // Explain 解释触发器管理器

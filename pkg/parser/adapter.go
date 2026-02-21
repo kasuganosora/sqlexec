@@ -1540,7 +1540,11 @@ func (a *SQLAdapter) convertCreateViewStmt(stmt *ast.CreateViewStmt) (*CreateVie
 
 	// 解析 SELECT 语句
 	if stmt.Select != nil {
-		selectStmt, err := a.convertSelectStmt(stmt.Select.(*ast.SelectStmt))
+		selectAst, ok := stmt.Select.(*ast.SelectStmt)
+		if !ok {
+			return nil, fmt.Errorf("invalid SELECT statement in CREATE VIEW")
+		}
+		selectStmt, err := a.convertSelectStmt(selectAst)
 		if err != nil {
 			return nil, err
 		}

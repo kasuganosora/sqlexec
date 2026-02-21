@@ -191,7 +191,7 @@ func (e *EnhancedCardinalityEstimator) estimateRangeSelectivity(histogram *Histo
 		case ">=":
 			bucketMatches = lowerFloat >= valueFloat
 		case "<":
-			bucketMatches = upperFloat <= valueFloat
+			bucketMatches = upperFloat < valueFloat
 		case "<=":
 			bucketMatches = upperFloat <= valueFloat
 		}

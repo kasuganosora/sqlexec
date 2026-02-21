@@ -539,17 +539,23 @@ func (b *QueryBuilder) executeCreateVectorIndex(ctx context.Context, stmt *Creat
 		}
 		
 		// 调用向量索引创建方法
+		if len(stmt.Columns) == 0 {
+			return nil, fmt.Errorf("vector index requires at least one column")
+		}
 		_, err := indexManager.CreateVectorIndex(stmt.TableName, stmt.Columns[0], metricType, indexType, dimension, params)
 		if err != nil {
 			return nil, fmt.Errorf("create vector index failed: %w", err)
 		}
-		
+
 		return &domain.QueryResult{
 			Total: 0,
 		}, nil
 	}
 
 	// 调用数据源的 CreateVectorIndex 方法
+	if len(stmt.Columns) == 0 {
+		return nil, fmt.Errorf("vector index requires at least one column")
+	}
 	err := vectorIndexManager.CreateVectorIndex(
 		stmt.TableName,
 		stmt.Columns[0],
