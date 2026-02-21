@@ -238,7 +238,7 @@ func TestEvaluateSystemVariable(t *testing.T) {
 		wantErr  bool
 	}{
 		{"version comment", "VERSION_COMMENT", "sqlexec MySQL-compatible database", false},
-		{"version", "VERSION", "8.0.35-sqlexec", false},
+		{"version", "VERSION", "8.0.36-sqlexec", false},
 		{"port", "PORT", "3307", false},
 		{"hostname", "HOSTNAME", "localhost", false},
 		{"datadir", "DATADIR", "/var/lib/mysql/", false},
