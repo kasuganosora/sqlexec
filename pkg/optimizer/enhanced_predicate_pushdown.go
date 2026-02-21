@@ -219,8 +219,11 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownAcrossJoin(selection *Logical
 // createOrMergeSelection 创建或合并Selection节点
 func (r *EnhancedPredicatePushdownRule) createOrMergeSelection(child LogicalPlan, conditions []*parser.Expression) LogicalPlan {
 	if existingSelection, ok := child.(*LogicalSelection); ok {
-		// 合并条件
-		mergedConditions := append(existingSelection.Conditions(), conditions...)
+		// 合并条件 - 创建新切片避免修改原始切片
+		existingConds := existingSelection.Conditions()
+		mergedConditions := make([]*parser.Expression, 0, len(existingConds)+len(conditions))
+		mergedConditions = append(mergedConditions, existingConds...)
+		mergedConditions = append(mergedConditions, conditions...)
 		return NewLogicalSelection(mergedConditions, existingSelection.Children()[0])
 	}
 	// 创建新的Selection
@@ -262,8 +265,12 @@ func (r *EnhancedPredicatePushdownRule) mergeAdjacentSelections(selection *Logic
 
 	// 检查子节点是否也是Selection
 	if childSelection, ok := child.(*LogicalSelection); ok {
-		// 合并两个Selection的条件
-		mergedConditions := append(selection.Conditions(), childSelection.Conditions()...)
+		// 合并两个Selection的条件 - 创建新切片避免修改原始切片
+		selConds := selection.Conditions()
+		childConds := childSelection.Conditions()
+		mergedConditions := make([]*parser.Expression, 0, len(selConds)+len(childConds))
+		mergedConditions = append(mergedConditions, selConds...)
+		mergedConditions = append(mergedConditions, childConds...)
 		return NewLogicalSelection(mergedConditions, childSelection.Children()[0])
 	}
 

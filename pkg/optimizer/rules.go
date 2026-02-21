@@ -51,8 +51,12 @@ func (r *PredicatePushDownRule) Apply(ctx context.Context, plan LogicalPlan, opt
 
 	// If child node is Selection, merge conditions
 	if childSelection, ok := child.(*LogicalSelection); ok {
-		// Merge condition lists
-		mergedConditions := append(selection.Conditions(), childSelection.Conditions()...)
+		// Merge condition lists - create new slice to avoid modifying original
+		selConds := selection.Conditions()
+		childConds := childSelection.Conditions()
+		mergedConditions := make([]*parser.Expression, 0, len(selConds)+len(childConds))
+		mergedConditions = append(mergedConditions, selConds...)
+		mergedConditions = append(mergedConditions, childConds...)
 		return NewLogicalSelection(mergedConditions, childSelection.Children()[0]), nil
 	}
 

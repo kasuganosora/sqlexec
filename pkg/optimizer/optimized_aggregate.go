@@ -430,7 +430,7 @@ func (p *OptimizedAggregate) calculateFinalAggregation(aggIdx int, agg *Aggregat
 		if state.perAgg[aggIdx].avgCount > 0 {
 			return state.perAgg[aggIdx].avgSum / float64(state.perAgg[aggIdx].avgCount)
 		}
-		return 0.0
+		return nil // SQL NULL for empty group
 	case Min:
 		return state.perAgg[aggIdx].minVal
 	case Max:

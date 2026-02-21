@@ -129,12 +129,19 @@ func (e *SimpleCardinalityEstimator) estimateFilterSelectivity(table string, fil
 	}
 
 	switch filter.Operator {
-	case "=", "!=":
+	case "=":
 		// 等值查询：选择率 = 1/NDV
 		if colStats.DistinctCount > 0 {
 			return 1.0 / float64(colStats.DistinctCount)
 		}
 		return 0.1
+
+	case "!=":
+		// 不等值查询：选择率 = (NDV-1)/NDV
+		if colStats.DistinctCount > 0 {
+			return (float64(colStats.DistinctCount) - 1.0) / float64(colStats.DistinctCount)
+		}
+		return 0.9
 
 	case ">", ">=", "<", "<=":
 		// 范围查询
@@ -181,17 +188,12 @@ func (e *SimpleCardinalityEstimator) estimateLogicSelectivity(table string, filt
 
 	case "OR":
 		// OR: 选择率 = 1 - (1-s1)*(1-s2)*...*(1-sn)
-		// 简化：使用包含关系
-		sel := 0.0
+		complement := 1.0
 		for _, subFilter := range filter.SubFilters {
 			subSel := e.estimateFilterSelectivity(table, subFilter)
-			sel += subSel
+			complement *= (1.0 - subSel)
 		}
-		// 避免超过1.0
-		if sel > 0.95 {
-			sel = 0.95
-		}
-		return sel
+		return 1.0 - complement
 
 	default:
 		return 1.0
@@ -269,8 +271,10 @@ func (e *SimpleCardinalityEstimator) estimateRangeSelectivity(operator string, v
 // getDefaultSelectivity 获取默认选择率
 func (e *SimpleCardinalityEstimator) getDefaultSelectivity(operator string) float64 {
 	switch operator {
-	case "=", "!=":
+	case "=":
 		return 0.1 // 等值查询：10%
+	case "!=":
+		return 0.9 // 不等值查询：90%
 	case ">", ">=", "<", "<=":
 		return 0.3 // 范围查询：30%
 	case "IN":
