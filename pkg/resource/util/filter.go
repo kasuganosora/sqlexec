@@ -93,17 +93,23 @@ func MatchFilter(row domain.Row, filter domain.Filter) bool {
 		return MatchesAllSubFilters(row, filter.SubFilters)
 	}
 
+	// Strip table qualifier from field name (e.g., "accounts.deleted_at" → "deleted_at")
+	field := filter.Field
+	if idx := strings.LastIndex(field, "."); idx >= 0 {
+		field = field[idx+1:]
+	}
+
 	// 处理 IS NULL 和 IS NOT NULL 操作符
 	op := strings.ToUpper(filter.Operator)
 	if op == "IS NULL" || op == "ISNULL" {
-		value, exists := row[filter.Field]
+		value, exists := row[field]
 		if !exists {
 			return true // 不存在的字段视为 NULL
 		}
 		return value == nil
 	}
 	if op == "IS NOT NULL" || op == "ISNOTNULL" {
-		value, exists := row[filter.Field]
+		value, exists := row[field]
 		if !exists {
 			return false // 不存在的字段视为 NULL
 		}
@@ -111,7 +117,7 @@ func MatchFilter(row domain.Row, filter domain.Filter) bool {
 	}
 
 	// 处理普通字段比较
-	value, exists := row[filter.Field]
+	value, exists := row[field]
 	if !exists {
 		return false
 	}
