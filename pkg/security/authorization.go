@@ -10,15 +10,15 @@ import (
 type Permission int
 
 const (
-	PermissionNone Permission = iota
-	PermissionRead
-	PermissionWrite
-	PermissionDelete
-	PermissionCreate
-	PermissionDrop
-	PermissionAlter
-	PermissionGrant
-	PermissionAll = 0xFF
+	PermissionNone   Permission = 0
+	PermissionRead   Permission = 1 << 0 // 1
+	PermissionWrite  Permission = 1 << 1 // 2
+	PermissionDelete Permission = 1 << 2 // 4
+	PermissionCreate Permission = 1 << 3 // 8
+	PermissionDrop   Permission = 1 << 4 // 16
+	PermissionAlter  Permission = 1 << 5 // 32
+	PermissionGrant  Permission = 1 << 6 // 64
+	PermissionAll    Permission = 0xFF
 )
 
 // Role 角色类型

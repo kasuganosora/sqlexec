@@ -15,12 +15,12 @@ func TestMapErrorCode(t *testing.T) {
 		expectedCode  uint16
 		expectedState string
 	}{
-		// nil 错误
+		// nil 错误 — should return success (0, "00000")
 		{
 			name:          "nil错误",
 			err:           nil,
-			expectedCode:  ErrParseError,
-			expectedState: SqlStateSyntaxError,
+			expectedCode:  0,
+			expectedState: "00000",
 		},
 		// 表不存在错误
 		{

@@ -75,6 +75,9 @@ func (w *WritableVirtualDataSource) GetTables(ctx context.Context) ([]string, er
 
 // GetTableInfo returns the schema information for a virtual table
 func (w *WritableVirtualDataSource) GetTableInfo(ctx context.Context, tableName string) (*domain.TableInfo, error) {
+	if w.provider == nil {
+		return nil, fmt.Errorf("writable virtual data source has no provider configured")
+	}
 	vt, err := w.provider.GetVirtualTable(tableName)
 	if err != nil {
 		return nil, err
@@ -89,6 +92,9 @@ func (w *WritableVirtualDataSource) GetTableInfo(ctx context.Context, tableName 
 
 // Query executes a query against a virtual table
 func (w *WritableVirtualDataSource) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) {
+	if w.provider == nil {
+		return nil, fmt.Errorf("writable virtual data source has no provider configured")
+	}
 	vt, err := w.provider.GetVirtualTable(tableName)
 	if err != nil {
 		return nil, err
@@ -103,6 +109,9 @@ func (w *WritableVirtualDataSource) Query(ctx context.Context, tableName string,
 
 // Insert inserts rows into a virtual table
 func (w *WritableVirtualDataSource) Insert(ctx context.Context, tableName string, rows []domain.Row, options *domain.InsertOptions) (int64, error) {
+	if w.provider == nil {
+		return 0, fmt.Errorf("writable virtual data source has no provider configured")
+	}
 	vt, err := w.provider.GetVirtualTable(tableName)
 	if err != nil {
 		return 0, err
@@ -118,6 +127,9 @@ func (w *WritableVirtualDataSource) Insert(ctx context.Context, tableName string
 
 // Update updates rows in a virtual table
 func (w *WritableVirtualDataSource) Update(ctx context.Context, tableName string, filters []domain.Filter, updates domain.Row, options *domain.UpdateOptions) (int64, error) {
+	if w.provider == nil {
+		return 0, fmt.Errorf("writable virtual data source has no provider configured")
+	}
 	vt, err := w.provider.GetVirtualTable(tableName)
 	if err != nil {
 		return 0, err
@@ -133,6 +145,9 @@ func (w *WritableVirtualDataSource) Update(ctx context.Context, tableName string
 
 // Delete deletes rows from a virtual table
 func (w *WritableVirtualDataSource) Delete(ctx context.Context, tableName string, filters []domain.Filter, options *domain.DeleteOptions) (int64, error) {
+	if w.provider == nil {
+		return 0, fmt.Errorf("writable virtual data source has no provider configured")
+	}
 	vt, err := w.provider.GetVirtualTable(tableName)
 	if err != nil {
 		return 0, err

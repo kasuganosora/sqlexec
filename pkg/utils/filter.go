@@ -69,23 +69,26 @@ func MatchesFilter(row domain.Row, filter domain.Filter) (bool, error) {
 }
 
 // MatchesAnySubFilter checks if a row matches any sub-filter (OR logic)
-// Returns the first error encountered, but continues matching
+// Returns true as soon as any filter matches. If no filter matches and
+// errors were encountered, returns the first error.
 func MatchesAnySubFilter(row domain.Row, subFilters []domain.Filter) (bool, error) {
 	if len(subFilters) == 0 {
 		return true, nil
 	}
+	var firstErr error
 	for _, subFilter := range subFilters {
 		matched, err := MatchesFilter(row, subFilter)
 		if err != nil {
-			// Log the error but continue checking other filters
-			// Return false only if all filters fail
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		if matched {
 			return true, nil
 		}
 	}
-	return false, nil
+	return false, firstErr
 }
 
 // MatchesAllSubFilters checks if a row matches all sub-filters (AND logic)

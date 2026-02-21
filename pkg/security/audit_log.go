@@ -264,6 +264,11 @@ func (al *AuditLogger) LogInjection(traceID, user, ip, query string) {
 
 // LogError 记录错误
 func (al *AuditLogger) LogError(traceID, user, database, message string, err error) {
+	metadata := map[string]interface{}{}
+	if err != nil {
+		metadata["error"] = err.Error()
+	}
+
 	event := &AuditEvent{
 		ID:        generateEventID(),
 		TraceID:   traceID,
@@ -274,9 +279,7 @@ func (al *AuditLogger) LogError(traceID, user, database, message string, err err
 		Database:  database,
 		Message:   message,
 		Success:   false,
-		Metadata: map[string]interface{}{
-			"error": err.Error(),
-		},
+		Metadata:  metadata,
 	}
 
 	al.Log(event)

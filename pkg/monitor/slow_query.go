@@ -371,6 +371,7 @@ type MonitorContext struct {
 	QueryID      int64
 	StartTime    time.Time
 	TableName    string
+	SQL          string
 }
 
 // NewMonitorContext 创建监控上下文
@@ -380,6 +381,7 @@ func NewMonitorContext(ctx context.Context, metrics *MetricsCollector, slowQuery
 		SlowQuery: slowQuery,
 		Ctx:       ctx,
 		StartTime: time.Now(),
+		SQL:       sql,
 	}
 }
 
@@ -399,6 +401,6 @@ func (mc *MonitorContext) End(success bool, rowCount int64, err error) {
 		if err != nil {
 			errMsg = err.Error()
 		}
-		mc.SlowQuery.RecordSlowQueryWithError("", duration, mc.TableName, rowCount, errMsg)
+		mc.SlowQuery.RecordSlowQueryWithError(mc.SQL, duration, mc.TableName, rowCount, errMsg)
 	}
 }

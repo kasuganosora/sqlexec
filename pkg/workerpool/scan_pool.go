@@ -142,7 +142,6 @@ func (sp *ScanPool) ExecuteParallelWithPool(ctx context.Context, tasks []ScanTas
 			err := sp.pool.SubmitWait(ctx, func(ctx context.Context) error {
 				result, err := sp.scanFunc(ctx, task)
 				if err != nil {
-					atomic.AddInt64(&errCount, 1)
 					mu.Lock()
 					results[idx] = ScanResult{
 						TaskID: task.ID,
@@ -160,10 +159,14 @@ func (sp *ScanPool) ExecuteParallelWithPool(ctx context.Context, tasks []ScanTas
 
 			if err != nil {
 				atomic.AddInt64(&errCount, 1)
+				// Only write result if it wasn't already written inside the task
+				// (e.g., SubmitWait itself failed due to pool closure)
 				mu.Lock()
-				results[idx] = ScanResult{
-					TaskID: task.ID,
-					Error:  err,
+				if results[idx].Error == nil {
+					results[idx] = ScanResult{
+						TaskID: task.ID,
+						Error:  err,
+					}
 				}
 				mu.Unlock()
 			}

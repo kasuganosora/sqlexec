@@ -82,16 +82,16 @@ func (bm *BackupManager) Backup(backupType BackupType, tables []string, data int
 		Tables:    tables,
 	}
 
-	bm.metadataLock.Lock()
-	bm.metadata[metadata.ID] = metadata
-	bm.metadataLock.Unlock()
-
 	// 序列化数据
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		metadata.Status = BackupStatusFailed
 		metadata.Error = err.Error()
 		metadata.EndTime = time.Now()
+		bm.metadataLock.Lock()
+		bm.metadata[metadata.ID] = metadata
+		bm.backups = append(bm.backups, metadata.ID)
+		bm.metadataLock.Unlock()
 		return metadata.ID, err
 	}
 
@@ -101,6 +101,10 @@ func (bm *BackupManager) Backup(backupType BackupType, tables []string, data int
 		metadata.Status = BackupStatusFailed
 		metadata.Error = err.Error()
 		metadata.EndTime = time.Now()
+		bm.metadataLock.Lock()
+		bm.metadata[metadata.ID] = metadata
+		bm.backups = append(bm.backups, metadata.ID)
+		bm.metadataLock.Unlock()
 		return metadata.ID, err
 	}
 
@@ -111,6 +115,10 @@ func (bm *BackupManager) Backup(backupType BackupType, tables []string, data int
 		metadata.Status = BackupStatusFailed
 		metadata.Error = err.Error()
 		metadata.EndTime = time.Now()
+		bm.metadataLock.Lock()
+		bm.metadata[metadata.ID] = metadata
+		bm.backups = append(bm.backups, metadata.ID)
+		bm.metadataLock.Unlock()
 		return metadata.ID, err
 	}
 
@@ -120,11 +128,11 @@ func (bm *BackupManager) Backup(backupType BackupType, tables []string, data int
 	metadata.Size = int64(len(compressed))
 	metadata.FilePath = filePath
 	metadata.RecordCount = calculateRecordCount(data)
-
-	// 计算校验和
 	metadata.Checksum = calculateChecksum(compressed)
 
+	// Store fully-populated metadata atomically
 	bm.metadataLock.Lock()
+	bm.metadata[metadata.ID] = metadata
 	bm.backups = append(bm.backups, metadata.ID)
 	bm.metadataLock.Unlock()
 

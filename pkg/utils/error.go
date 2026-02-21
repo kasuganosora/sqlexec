@@ -28,7 +28,7 @@ const (
 // 返回 (errorCode, sqlState)
 func MapErrorCode(err error) (uint16, string) {
 	if err == nil {
-		return ErrParseError, SqlStateSyntaxError
+		return 0, "00000"
 	}
 
 	// Check error message content (case-insensitive)

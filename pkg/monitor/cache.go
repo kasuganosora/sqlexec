@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -231,7 +232,25 @@ type CacheKey struct {
 
 // GenerateKey 生成缓存键
 func GenerateKey(cacheKey *CacheKey) string {
-	return string(cacheKey.SQL)
+	h := uint64(14695981039346656037) // FNV-1a offset basis
+	fnvHash := func(s string) {
+		for i := 0; i < len(s); i++ {
+			h ^= uint64(s[i])
+			h *= 1099511628211
+		}
+	}
+
+	fnvHash(cacheKey.SQL)
+	fnvHash("\x00") // separator
+	for _, p := range cacheKey.Params {
+		fnvHash(fmt.Sprintf("%v", p))
+		fnvHash("\x00")
+	}
+	fnvHash(cacheKey.Database)
+	fnvHash("\x00")
+	fnvHash(cacheKey.User)
+
+	return fmt.Sprintf("%x", h)
 }
 
 // CachedResult 缓存的查询结果

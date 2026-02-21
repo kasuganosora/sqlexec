@@ -335,11 +335,11 @@ func TestPermissionConstants(t *testing.T) {
 		PermissionNone:   0,
 		PermissionRead:   1,
 		PermissionWrite:  2,
-		PermissionDelete: 3,
-		PermissionCreate: 4,
-		PermissionDrop:   5,
-		PermissionAlter:  6,
-		PermissionGrant:  7,
+		PermissionDelete: 4,
+		PermissionCreate: 8,
+		PermissionDrop:   16,
+		PermissionAlter:  32,
+		PermissionGrant:  64,
 		PermissionAll:    0xFF,
 	}
 	

@@ -248,7 +248,11 @@ func appendSQLArg(buf []byte, arg interface{}) ([]byte, error) {
 			if rv.IsNil() {
 				buf = append(buf, "NULL"...)
 			} else {
-				buf, _ = appendSQLArg(buf, rv.Interface())
+				var err error
+				buf, err = appendSQLArg(buf, rv.Elem().Interface())
+				if err != nil {
+					return nil, err
+				}
 			}
 		default:
 			return nil, &formatError{

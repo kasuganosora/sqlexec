@@ -126,10 +126,10 @@ func (fm *FailoverManager) selectActiveNode() {
 
 	// 选择健康且权重最高的节点
 	var bestNode *Node
-	maxWeight := 0
+	maxWeight := -1
 
 	for _, node := range fm.nodes {
-		if node.Status == NodeStatusHealthy && node.Weight > maxWeight {
+		if node.Status == NodeStatusHealthy && node.Weight >= maxWeight {
 			bestNode = node
 			maxWeight = node.Weight
 		}
@@ -343,13 +343,14 @@ func (lb *LoadBalancer) LeastLoadedNode() *Node {
 	}
 
 	var bestNode *Node
-	minLoad := 1.0
+	firstFound := false
 
 	for _, node := range lb.nodes {
-		if (node.Status == NodeStatusHealthy || node.Status == NodeStatusDegraded) &&
-			node.Load < minLoad {
-			bestNode = node
-			minLoad = node.Load
+		if node.Status == NodeStatusHealthy || node.Status == NodeStatusDegraded {
+			if !firstFound || node.Load < bestNode.Load {
+				bestNode = node
+				firstFound = true
+			}
 		}
 	}
 

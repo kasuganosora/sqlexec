@@ -47,3 +47,61 @@ func TestBug7_WritableVirtualDataSource_GetTables_NilProvider(t *testing.T) {
 	_, err := ds.GetTables(ctx)
 	assert.Error(t, err, "should return error when provider is nil")
 }
+
+// ==========================================================================
+// Bug 10 (P1): WritableVirtualDataSource missing nil provider checks
+// GetTables was fixed (Bug 7), but GetTableInfo, Query, Insert, Update, Delete
+// still access w.provider without nil checks, causing nil pointer panics.
+// VirtualDataSource has nil checks in GetTables, GetTableInfo, and Query.
+// ==========================================================================
+
+func TestBug10_WritableVDS_GetTableInfo_NilProvider(t *testing.T) {
+	ds := NewWritableVirtualDataSource(nil, "test")
+	ctx := context.Background()
+
+	// Should return error, not panic
+	assert.NotPanics(t, func() {
+		_, err := ds.GetTableInfo(ctx, "some_table")
+		assert.Error(t, err, "GetTableInfo should return error when provider is nil")
+	})
+}
+
+func TestBug10_WritableVDS_Query_NilProvider(t *testing.T) {
+	ds := NewWritableVirtualDataSource(nil, "test")
+	ctx := context.Background()
+
+	assert.NotPanics(t, func() {
+		_, err := ds.Query(ctx, "some_table", nil)
+		assert.Error(t, err, "Query should return error when provider is nil")
+	})
+}
+
+func TestBug10_WritableVDS_Insert_NilProvider(t *testing.T) {
+	ds := NewWritableVirtualDataSource(nil, "test")
+	ctx := context.Background()
+
+	assert.NotPanics(t, func() {
+		_, err := ds.Insert(ctx, "some_table", nil, nil)
+		assert.Error(t, err, "Insert should return error when provider is nil")
+	})
+}
+
+func TestBug10_WritableVDS_Update_NilProvider(t *testing.T) {
+	ds := NewWritableVirtualDataSource(nil, "test")
+	ctx := context.Background()
+
+	assert.NotPanics(t, func() {
+		_, err := ds.Update(ctx, "some_table", nil, nil, nil)
+		assert.Error(t, err, "Update should return error when provider is nil")
+	})
+}
+
+func TestBug10_WritableVDS_Delete_NilProvider(t *testing.T) {
+	ds := NewWritableVirtualDataSource(nil, "test")
+	ctx := context.Background()
+
+	assert.NotPanics(t, func() {
+		_, err := ds.Delete(ctx, "some_table", nil, nil)
+		assert.Error(t, err, "Delete should return error when provider is nil")
+	})
+}
