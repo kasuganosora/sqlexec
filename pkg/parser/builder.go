@@ -462,6 +462,20 @@ func (b *QueryBuilder) executeDrop(ctx context.Context, stmt *DropStatement) (*d
 		}, nil
 	}
 
+	if stmt.Type == "TRUNCATE" {
+		tableName := stmt.Name
+		if tableName == "" {
+			return nil, fmt.Errorf("TRUNCATE TABLE requires a table name")
+		}
+		err := b.dataSource.TruncateTable(ctx, tableName)
+		if err != nil {
+			return nil, fmt.Errorf("truncate table '%s' failed: %w", tableName, err)
+		}
+		return &domain.QueryResult{
+			Total: 0,
+		}, nil
+	}
+
 	return nil, fmt.Errorf("unsupported drop type: %s", stmt.Type)
 }
 

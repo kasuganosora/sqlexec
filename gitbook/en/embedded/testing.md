@@ -11,7 +11,9 @@ Good tests should be:
 
 ## Approach 1: Independent Data Source per Test (Recommended)
 
-This is the cleanest approach where each test has its own independent database instance:
+This is the cleanest approach where each test has its own independent database instance.
+The memory data source has negligible overhead for creating tables (microseconds),
+so this approach scales well even with many tests:
 
 ```go
 package mypackage_test
@@ -40,9 +42,15 @@ func SetupTestDB(t *testing.T) *api.DB {
         Name:     dsName,
         Writable: true,
     })
-    memDS.Connect(context.Background())
+    if err := memDS.Connect(context.Background()); err != nil {
+        t.Fatalf("failed to connect datasource: %v", err)
+    }
     if err := db.RegisterDataSource(dsName, memDS); err != nil {
         t.Fatalf("failed to register datasource: %v", err)
+    }
+    // Set default data source so session can find it
+    if err := db.SetDefaultDataSource(dsName); err != nil {
+        t.Fatalf("failed to set default datasource: %v", err)
     }
 
     // Initialize schema
@@ -124,14 +132,15 @@ func TestParallel(t *testing.T) {
 - Complete isolation, tests don't affect each other
 - Safe to run tests in parallel
 - Simple implementation, easy to understand
+- Negligible overhead with memory data source
 
 ### Disadvantages
-- Slightly slower as each test creates table schema
-- May impact performance with a large number of tests
+- Each test creates table schema (but overhead is negligible for memory data sources)
 
-## Approach 2: Shared DB + Data Cleanup (High Performance)
+## Approach 2: Shared DB + Data Cleanup
 
-When you have a large number of tests, you can share the DB instance but clean data before each test:
+When you have a large number of tests with complex schemas, you can share the DB instance
+but clean data before each test:
 
 ```go
 package mypackage_test
@@ -180,7 +189,9 @@ func createSharedDB() *api.DB {
         Name:     "shared_test",
         Writable: true,
     })
-    memDS.Connect(context.Background())
+    if err := memDS.Connect(context.Background()); err != nil {
+        panic("failed to connect: " + err.Error())
+    }
     if err := db.RegisterDataSource("shared_test", memDS); err != nil {
         panic("failed to register datasource: " + err.Error())
     }
@@ -207,7 +218,7 @@ func createSharedDB() *api.DB {
 }
 
 func truncateAllTables(t *testing.T, session *api.Session) {
-    tables := []string{"orders", "users"} // Note the order - clean tables with foreign key dependencies first
+    tables := []string{"orders", "users"} // Note the order - clean tables with FK dependencies first
     for _, table := range tables {
         _, err := session.Execute("TRUNCATE TABLE " + table)
         if err != nil {
@@ -231,100 +242,155 @@ func TestWithSharedDB(t *testing.T) {
 ```
 
 ### Advantages
-- Higher performance, table schema created only once
-- Suitable for large test suites
+- Table schema created only once
+- Suitable for complex schema scenarios
 
 ### Disadvantages
 - Cannot use `t.Parallel()` for parallel testing
 - Need to maintain table list for cleanup
 
-## Approach 3: Using Unique Test Data
+## Approach 3: GORM Integration Testing
 
-Another approach is to use the same DB for all tests but distinguish data by unique identifiers:
+If your project uses SQLExec through GORM, the recommended pattern wraps `api.DB`,
+`gorm.DB`, and `api.Session` in a `TestDB` struct for both ORM and raw SQL access:
+
+```go
+package testutil
+
+import (
+    "context"
+
+    "github.com/google/uuid"
+    "github.com/kasuganosora/sqlexec/pkg/api"
+    sqlexecgorm "github.com/kasuganosora/sqlexec/pkg/api/gorm"
+    "github.com/kasuganosora/sqlexec/pkg/resource/domain"
+    "github.com/kasuganosora/sqlexec/pkg/resource/memory"
+    "gorm.io/gorm"
+)
+
+// TestDB wraps api.DB + gorm.DB + api.Session
+type TestDB struct {
+    DB      *api.DB
+    GormDB  *gorm.DB
+    Session *api.Session
+}
+
+// NewIsolatedTestDB creates a fully isolated test database (recommended for parallel tests)
+func NewIsolatedTestDB(t interface{ Cleanup(func()) }) (*TestDB, error) {
+    dsName := "test_" + uuid.New().String()[:8]
+
+    db, err := api.NewDB(nil)
+    if err != nil {
+        return nil, err
+    }
+
+    memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+        Type:     domain.DataSourceTypeMemory,
+        Name:     dsName,
+        Writable: true,
+    })
+    if err := memDS.Connect(context.Background()); err != nil {
+        db.Close()
+        return nil, err
+    }
+    db.RegisterDataSource(dsName, memDS)
+    db.SetDefaultDataSource(dsName) // Required: set default data source
+
+    session := db.Session()
+
+    gormDB, err := gorm.Open(
+        sqlexecgorm.NewDialector(session),
+        &gorm.Config{SkipDefaultTransaction: true}, // Recommended: improves performance
+    )
+    if err != nil {
+        session.Close()
+        db.Close()
+        return nil, err
+    }
+
+    testDB := &TestDB{DB: db, GormDB: gormDB, Session: session}
+
+    t.Cleanup(func() {
+        testDB.Close()
+    })
+
+    return testDB, nil
+}
+
+// Close closes the test database
+func (t *TestDB) Close() {
+    if t.Session != nil {
+        t.Session.Close()
+    }
+    if t.DB != nil {
+        t.DB.Close()
+    }
+}
+
+// AutoMigrate runs auto migration for given models
+func (t *TestDB) AutoMigrate(models ...interface{}) error {
+    return t.GormDB.AutoMigrate(models...)
+}
+
+// TruncateTables clears data from specified tables
+func (t *TestDB) TruncateTables(tables ...string) error {
+    for _, table := range tables {
+        if _, err := t.Session.Execute("TRUNCATE TABLE " + table); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+```
+
+Usage example:
 
 ```go
 package mypackage_test
 
 import (
-    "context"
-    "sync"
     "testing"
+    "time"
 
-    "github.com/kasuganosora/sqlexec/pkg/api"
-    "github.com/kasuganosora/sqlexec/pkg/resource/domain"
-    "github.com/kasuganosora/sqlexec/pkg/resource/memory"
+    "gorm.io/gorm"
 )
 
-var (
-    sharedDB     *api.DB
-    sharedDBOnce sync.Once
-    testCounter  int64
-    counterMu    sync.Mutex
-)
+type User struct {
+    ID        uint           `gorm:"primarykey"`
+    Name      string         `gorm:"size:100"`
+    Email     string         `gorm:"size:100;uniqueIndex"`
+    DeletedAt gorm.DeletedAt `gorm:"index"` // Soft delete
+    CreatedAt time.Time
+}
 
-func createSharedDB() *api.DB {
-    db, err := api.NewDB(nil)
+func TestGORMCreateAndFind(t *testing.T) {
+    testDB, err := NewIsolatedTestDB(t)
     if err != nil {
-        panic("failed to create DB: " + err.Error())
-    }
-    memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
-        Type:     domain.DataSourceTypeMemory,
-        Name:     "shared_test",
-        Writable: true,
-    })
-    memDS.Connect(context.Background())
-    if err := db.RegisterDataSource("shared_test", memDS); err != nil {
-        panic("failed to register datasource: " + err.Error())
+        t.Fatal(err)
     }
 
-    session := db.Session()
-    session.Execute(`
-        CREATE TABLE users (
-            id INT PRIMARY KEY,
-            name VARCHAR(100),
-            email VARCHAR(100),
-            test_id INT
-        )
-    `)
-    session.Close()
+    // Auto-create table schema
+    testDB.AutoMigrate(&User{})
 
-    return db
-}
+    // Create record using GORM
+    user := &User{Name: "Alice", Email: "alice@example.com"}
+    if err := testDB.GormDB.Create(user).Error; err != nil {
+        t.Fatal(err)
+    }
 
-func getUniqueID() int64 {
-    counterMu.Lock()
-    defer counterMu.Unlock()
-    testCounter++
-    return testCounter
-}
+    // Query using GORM (auto-handles soft delete: WHERE deleted_at IS NULL)
+    var found User
+    err = testDB.GormDB.Where("email = ?", "alice@example.com").First(&found).Error
+    if err != nil {
+        t.Fatal(err)
+    }
 
-func SetupTestWithUniqueData(t *testing.T) (*api.Session, int64) {
-    sharedDBOnce.Do(func() {
-        sharedDB = createSharedDB()
-    })
+    if found.Name != "Alice" {
+        t.Errorf("expected Alice, got %s", found.Name)
+    }
 
-    session := sharedDB.Session()
-    uniqueID := getUniqueID()
-
-    t.Cleanup(func() {
-        // Clean this test's data
-        session.Execute("DELETE FROM users WHERE test_id = ?", uniqueID)
-        session.Close()
-    })
-
-    return session, uniqueID
-}
-
-// Usage example
-func TestWithUniqueData(t *testing.T) {
-    session, testID := SetupTestWithUniqueData(t)
-
-    // Use testID to distinguish data
-    session.Execute("INSERT INTO users (id, name, email, test_id) VALUES (?, ?, ?, ?)",
-        1, "Alice", "alice@example.com", testID)
-
-    // Only query this test's data
-    rows, _ := session.QueryAll("SELECT * FROM users WHERE test_id = ?", testID)
+    // Raw SQL also works
+    rows, _ := testDB.Session.QueryAll("SELECT * FROM users")
     if len(rows) != 1 {
         t.Errorf("expected 1 row, got %d", len(rows))
     }
@@ -332,30 +398,58 @@ func TestWithUniqueData(t *testing.T) {
 ```
 
 ### Advantages
-- Can run tests in parallel
-- No need to create table schema each time
+- Supports both GORM ORM and raw SQL
+- `t.Cleanup` handles automatic cleanup
+- Interface parameter `interface{ Cleanup(func()) }` is more flexible than `*testing.T`
+- Use `AutoMigrate` to auto-create/sync table schemas
 
-### Disadvantages
-- Table schema requires extra `test_id` field
-- Cleanup logic is more complex
+### Key Configuration Notes
+- **`SkipDefaultTransaction: true`**: GORM wraps each operation in a transaction by default; disabling this improves performance
+- **`SetDefaultDataSource(dsName)`**: Must be called when using unique data source names, otherwise sessions can't find the data source
 
 ## Comparison
 
-| Approach | Isolation Level | Performance | Parallel-safe | Complexity | Use Case |
-|----------|-----------------|-------------|---------------|------------|----------|
-| Approach 1: Independent DS | Complete | Slower | Yes | Low | Few tests, need absolute isolation |
-| Approach 2: Shared+Cleanup | Data | Fast | No | Medium | Many tests, serial execution |
-| Approach 3: Unique Data | Data | Medium | Yes | High | Need parallel, controllable schema |
+| Approach | Isolation | Performance | Parallel-safe | Complexity | Use Case |
+|----------|-----------|-------------|---------------|------------|----------|
+| Approach 1: Independent DS | Complete | Fast | Yes | Low | Default choice for most scenarios |
+| Approach 2: Shared+Cleanup | Data | Fast | No | Medium | Complex schemas, serial tests |
+| Approach 3: GORM Integration | Complete | Fast | Yes | Medium | Projects using GORM |
 
 ## Recommendation
 
-1. **Test count < 50**: Use Approach 1 (Independent Data Source), simple and reliable
-2. **Test count > 50**: Use Approach 2 (Shared+Cleanup), better performance
-3. **Need parallel tests**: Use Approach 1 or Approach 3
+1. **Raw SQL projects**: Use Approach 1 (Independent Data Source), simple and reliable
+2. **GORM projects**: Use Approach 3 (GORM Integration), supports both ORM and raw SQL
+3. **Complex schema + serial tests**: Use Approach 2 (Shared+Cleanup)
 
 ## Common Mistakes
 
-### Mistake 1: Session has no UseDataSource method
+### Mistake 1: Not checking Connect() return value
+
+```go
+// Wrong: Ignoring the error return from Connect
+memDS.Connect(context.Background())
+
+// Correct: Check the error
+if err := memDS.Connect(context.Background()); err != nil {
+    t.Fatalf("failed to connect: %v", err)
+}
+```
+
+### Mistake 2: Using unique data source name without setting default
+
+```go
+// Wrong: Using unique name but not setting default data source
+dsName := "test_" + uuid.New().String()[:8]
+db.RegisterDataSource(dsName, memDS)
+session := db.Session() // Session doesn't know which data source to use!
+
+// Correct: Set default data source
+db.RegisterDataSource(dsName, memDS)
+db.SetDefaultDataSource(dsName)  // Required
+session := db.Session()
+```
+
+### Mistake 3: Session has no UseDataSource method
 
 ```go
 // Wrong: Session doesn't have UseDataSource method
@@ -370,7 +464,7 @@ session := db.SessionWithOptions(&api.SessionOptions{
 session.Execute("USE another_ds")
 ```
 
-### Mistake 2: Forgetting to cleanup resources
+### Mistake 4: Forgetting to cleanup resources
 
 ```go
 // Wrong: No cleanup
@@ -390,7 +484,7 @@ func TestGood(t *testing.T) {
 }
 ```
 
-### Mistake 3: Data pollution between tests
+### Mistake 5: Data pollution between tests
 
 ```go
 // Wrong: Shared variable causes pollution
@@ -442,10 +536,13 @@ func setupTestDB(t *testing.T) *api.DB {
         Name:     dsName,
         Writable: true,
     })
-    memDS.Connect(context.Background())
+    if err := memDS.Connect(context.Background()); err != nil {
+        t.Fatalf("failed to connect: %v", err)
+    }
     if err := db.RegisterDataSource(dsName, memDS); err != nil {
         t.Fatalf("failed to register datasource: %v", err)
     }
+    db.SetDefaultDataSource(dsName)
 
     session := db.Session()
     session.Execute(`

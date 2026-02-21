@@ -71,6 +71,9 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 		} else {
 			result, err = s.coreSession.ExecuteDrop(ctx, boundSQL)
 		}
+	case parser.SQLTypeTruncate:
+		// TRUNCATE TABLE reuses the Drop path (parser populates stmt.Drop for TRUNCATE)
+		result, err = s.coreSession.ExecuteDrop(ctx, boundSQL)
 	case parser.SQLTypeAlter:
 		result, err = s.coreSession.ExecuteAlter(ctx, boundSQL)
 	case parser.SQLTypeUse:
@@ -112,6 +115,10 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 			if parseResult.Statement.DropIndex != nil {
 				tableName = parseResult.Statement.DropIndex.TableName
 			} else {
+				tableName = parseResult.Statement.Drop.Name
+			}
+		case parser.SQLTypeTruncate:
+			if parseResult.Statement.Drop != nil {
 				tableName = parseResult.Statement.Drop.Name
 			}
 		}
