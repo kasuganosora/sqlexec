@@ -400,8 +400,8 @@ func TestBuildFieldPacket(t *testing.T) {
 	if pkt.Type != protocol.MYSQL_TYPE_LONG {
 		t.Errorf("Type = 0x%02x, want MYSQL_TYPE_LONG", pkt.Type)
 	}
-	if pkt.CharacterSet != 0x21 {
-		t.Errorf("CharacterSet = 0x%02x, want 0x21", pkt.CharacterSet)
+	if pkt.CharacterSet != 0xff {
+		t.Errorf("CharacterSet = 0x%02x, want 0xff", pkt.CharacterSet)
 	}
 }
 

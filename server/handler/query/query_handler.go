@@ -171,7 +171,7 @@ func (h *QueryHandler) buildFieldPacket(sequenceID uint8, col domain.ColumnInfo)
 	packet.OrgTable = ""
 	packet.Name = col.Name
 	packet.OrgName = col.Name
-	packet.CharacterSet = 0x21
+	packet.CharacterSet = 0xff // utf8mb4_0900_ai_ci (MySQL 8.0 default)
 	packet.ColumnLength = 255
 	packet.Type = h.mapMySQLType(col.Type)
 	packet.Flags = 0

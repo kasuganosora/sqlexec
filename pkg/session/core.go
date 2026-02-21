@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,16 +36,18 @@ type CoreSession struct {
 	traceID        string           // 追踪ID (来自协议层 Session)
 	queryMu        sync.Mutex       // 查询锁
 	vdbRegistry    *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
+	sessionVars    map[string]string // 会话级系统变量覆盖 (SET NAMES, SET @@var, etc.)
 }
 
 // NewCoreSession 创建核心会话（默认使用增强优化器）
 func NewCoreSession(dataSource domain.DataSource) *CoreSession {
 	return &CoreSession{
-		dataSource: dataSource,
-		executor:   optimizer.NewOptimizedExecutor(dataSource, true), // 默认启用增强优化器
-		adapter:    parser.NewSQLAdapter(),
-		tempTables: []string{},
-		closed:     false,
+		dataSource:  dataSource,
+		executor:    optimizer.NewOptimizedExecutor(dataSource, true), // 默认启用增强优化器
+		adapter:     parser.NewSQLAdapter(),
+		tempTables:  []string{},
+		closed:      false,
+		sessionVars: make(map[string]string),
 	}
 }
 
@@ -67,6 +70,7 @@ func NewCoreSessionWithDSManagerAndEnhanced(dataSource domain.DataSource, dsMana
 		closed:       false,
 		queryTimeout: 0, // 默认不限制
 		threadID:     0, // 后续设置
+		sessionVars:  make(map[string]string),
 	}
 }
 
@@ -906,27 +910,61 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 }
 
 // executeSetStatement executes SET statement (SET NAMES, SET CHARACTER SET, etc.)
-// For compatibility, we accept the statement but ignore the actual values
-// since we always use utf8mb4 internally
+// Stores session variables so they can be queried via SELECT @@variable.
 func (s *CoreSession) executeSetStatement(ctx context.Context, setStmt *parser.SetStatement) (*domain.QueryResult, error) {
-	// For compatibility, accept all SET statements
-	// We always use utf8mb4 internally, so we ignore charset settings
-	// Variables are accepted but not stored (future enhancement)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	switch setStmt.Type {
 	case "NAMES":
-		// SET NAMES 'charset' - accept any charset, we use utf8mb4 internally
+		// SET NAMES 'charset' [COLLATE 'collation']
+		// Sets character_set_client, character_set_connection, character_set_results
+		charset := setStmt.Value
+		if charset == "" {
+			charset = "utf8mb4"
+		}
+		s.sessionVars["character_set_client"] = charset
+		s.sessionVars["character_set_connection"] = charset
+		s.sessionVars["character_set_results"] = charset
+
 	case "CHARACTER SET":
-		// SET CHARACTER SET charset - accept any charset
+		// SET CHARACTER SET charset
+		charset := setStmt.Value
+		if charset == "" {
+			charset = "utf8mb4"
+		}
+		s.sessionVars["character_set_client"] = charset
+		s.sessionVars["character_set_results"] = charset
+
 	case "VARIABLE":
-		// SET SESSION/GLOBAL var = value - accept but ignore
+		// SET [SESSION|GLOBAL] var = value
+		for varName, varValue := range setStmt.Variables {
+			// Normalize: remove scope prefix and lowercase
+			name := strings.ToLower(varName)
+			name = strings.TrimPrefix(name, "global ")
+			name = strings.TrimPrefix(name, "session ")
+			s.sessionVars[name] = varValue
+		}
 	}
 
-	// Return OK result - we accept all SET statements for compatibility
+	// Sync session vars to executor for SELECT @@variable queries
+	if s.executor != nil {
+		s.executor.SetSessionVars(s.sessionVars)
+	}
+
 	return &domain.QueryResult{
 		Columns: []domain.ColumnInfo{},
 		Rows:    []domain.Row{},
 		Total:   0,
 	}, nil
+}
+
+// GetSessionVar returns a session variable value, or empty string if not set
+func (s *CoreSession) GetSessionVar(name string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	val, ok := s.sessionVars[strings.ToLower(name)]
+	return val, ok
 }
 
 // GetCurrentDB 获取当前使用的数据库名

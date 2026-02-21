@@ -95,7 +95,7 @@ func GetSystemVariableDefs() []SystemVariableDef {
 // systemVariableDefs is the canonical list of system variables
 var systemVariableDefs = []SystemVariableDef{
 		// Version
-		{"version", "8.0.0-sqlexec", "STRING", "GLOBAL", "COMPILED", "YES"},
+		{"version", "8.0.32-sqlexec", "STRING", "GLOBAL", "COMPILED", "YES"},
 		{"version_comment", "sqlexec MySQL-compatible database", "STRING", "GLOBAL", "COMPILED", "YES"},
 		{"version_compile_machine", "x86_64", "STRING", "GLOBAL", "COMPILED", "YES"},
 		{"version_compile_os", "Linux", "STRING", "GLOBAL", "COMPILED", "YES"},
@@ -120,16 +120,16 @@ var systemVariableDefs = []SystemVariableDef{
 
 		// Character set and collation
 		{"character_set_server", "utf8mb4", "STRING", "GLOBAL", "CONFIG", "NO"},
-		{"character_set_client", "utf8mb3", "STRING", "SESSION", "DYNAMIC", "NO"},
+		{"character_set_client", "utf8mb4", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"character_set_connection", "utf8mb4", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"character_set_database", "utf8mb4", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"character_set_results", "utf8mb4", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"character_set_system", "utf8mb3", "STRING", "GLOBAL", "COMPILED", "YES"},
 		{"character_set_filesystem", "latin1", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"character_sets_dir", "MYSQL_TEST_DIR/ß/", "STRING", "GLOBAL", "COMPILED", "YES"},
-		{"collation_server", "utf8mb4_general_ci", "STRING", "GLOBAL", "CONFIG", "NO"},
-		{"collation_database", "utf8mb4_general_ci", "STRING", "SESSION", "DYNAMIC", "NO"},
-		{"collation_connection", "utf8mb4_general_ci", "STRING", "SESSION", "DYNAMIC", "NO"},
+		{"collation_server", "utf8mb4_0900_ai_ci", "STRING", "GLOBAL", "CONFIG", "NO"},
+		{"collation_database", "utf8mb4_0900_ai_ci", "STRING", "SESSION", "DYNAMIC", "NO"},
+		{"collation_connection", "utf8mb4_0900_ai_ci", "STRING", "SESSION", "DYNAMIC", "NO"},
 
 		// Connections
 		{"max_connections", "151", "INT", "GLOBAL", "CONFIG", "NO"},

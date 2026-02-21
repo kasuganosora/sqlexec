@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kasuganosora/sqlexec/pkg/information_schema"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/executor"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -202,14 +203,14 @@ func (sp *DefaultShowProcessor) ProcessShowProcessList(ctx context.Context) (exe
 
 // ProcessShowVariables 处理 SHOW VARIABLES 语句
 func (sp *DefaultShowProcessor) ProcessShowVariables(ctx context.Context) (executor.ResultSet, error) {
-	// 返回基本的系统变量
-	variables := []map[string]interface{}{
-		{"Variable_name": "version", "Value": "8.0.0-sqlexec"},
-		{"Variable_name": "version_comment", "Value": "sqlexec MySQL-compatible database"},
-		{"Variable_name": "port", "Value": 3307},
-		{"Variable_name": "hostname", "Value": "localhost"},
-		{"Variable_name": "datadir", "Value": "/var/lib/mysql"},
-		{"Variable_name": "server_id", "Value": 1},
+	// Use shared system variable definitions as single source of truth
+	defs := information_schema.GetSystemVariableDefs()
+	variables := make([]map[string]interface{}, 0, len(defs))
+	for _, v := range defs {
+		variables = append(variables, map[string]interface{}{
+			"Variable_name": v.Name,
+			"Value":         v.Value,
+		})
 	}
 
 	return &defaultResultSet{

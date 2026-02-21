@@ -39,6 +39,7 @@ type OptimizedExecutor struct {
 	vdbRegistry   *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
 	functionAPI   *builtin.FunctionAPI // 函数API
 	exprEvaluator *ExpressionEvaluator // 表达式求值器
+	sessionVars   map[string]string // 会话级系统变量覆盖
 }
 
 // contextKey 是context中的key类型
@@ -129,6 +130,16 @@ func (e *OptimizedExecutor) SetCurrentUser(user string) {
 // GetCurrentUser 获取当前用户
 func (e *OptimizedExecutor) GetCurrentUser() string {
 	return e.currentUser
+}
+
+// SetSessionVars sets session-level variable overrides (from SET statements)
+func (e *OptimizedExecutor) SetSessionVars(vars map[string]string) {
+	e.sessionVars = vars
+}
+
+// GetSessionVars returns session-level variable overrides
+func (e *OptimizedExecutor) GetSessionVars() map[string]string {
+	return e.sessionVars
 }
 
 // SetVirtualDBRegistry 设置虚拟数据库注册表
@@ -269,6 +280,7 @@ func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *pars
 	if stmt.From == "" {
 		debugln("  [DEBUG] 检测到无 FROM 子句的查询")
 		exprExecutor := NewExpressionExecutor(e.currentDB, e.functionAPI, e.exprEvaluator)
+		exprExecutor.SetSessionVars(e.sessionVars)
 		result, err := exprExecutor.HandleNoFromQuery(stmt)
 		if err != nil {
 			return nil, err

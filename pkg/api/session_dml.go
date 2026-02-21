@@ -75,6 +75,9 @@ func (s *Session) Execute(sql string, args ...interface{}) (*Result, error) {
 		result, err = s.coreSession.ExecuteAlter(ctx, boundSQL)
 	case parser.SQLTypeUse:
 		result, err = s.coreSession.ExecuteQuery(ctx, boundSQL)
+	case parser.SQLTypeSet:
+		// SET NAMES, SET CHARACTER SET, SET @@variable, etc.
+		result, err = s.coreSession.ExecuteQuery(ctx, boundSQL)
 	case parser.SQLTypeSelect, parser.SQLTypeShow, parser.SQLTypeDescribe, parser.SQLTypeExplain:
 		return nil, NewError(ErrCodeInvalidParam, fmt.Sprintf("use Query() method for %s statements (or Explain() for EXPLAIN)", parseResult.Statement.Type), nil)
 	default:
