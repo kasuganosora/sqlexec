@@ -143,8 +143,8 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 		// 构建列名列表
 		selectedColumns := make([]string, 0, len(stmt.Columns))
 		for _, col := range stmt.Columns {
-			// 跳过空列名和以 _ 开头的列名
-			if len(col.Name) > 0 && col.Name[0] != '_' {
+			// 跳过空列名
+			if len(col.Name) > 0 {
 				selectedColumns = append(selectedColumns, col.Name)
 			}
 		}

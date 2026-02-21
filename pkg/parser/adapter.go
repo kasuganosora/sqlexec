@@ -161,9 +161,9 @@ func (a *SQLAdapter) convertToStatement(node ast.StmtNode) (*SQLStatement, error
 		}
 
 	case *ast.TruncateTableStmt:
-		stmt.Type = SQLTypeDrop
+		stmt.Type = SQLTypeTruncate
 		stmt.Drop = &DropStatement{
-			Type:     "TABLE",
+			Type:     "TRUNCATE",
 			Name:     stmtNode.Table.Name.String(),
 			IfExists: false,
 		}
@@ -820,7 +820,7 @@ func (a *SQLAdapter) convertSelectField(field *ast.SelectField) (*SelectColumn, 
 	// 处理列名
 	if expr, ok := field.Expr.(*ast.ColumnNameExpr); ok {
 		col.Name = expr.Name.Name.String()
-		col.Table = expr.Name.Schema.String()
+		col.Table = expr.Name.Table.String()
 		col.IsWildcard = expr.Name.Name.String() == "*"
 	} else if varExpr, ok := field.Expr.(*ast.VariableExpr); ok {
 		// 系统/会话变量
@@ -865,8 +865,12 @@ func (a *SQLAdapter) convertExpression(node ast.ExprNode) (*Expression, error) {
 	case *ast.ColumnNameExpr:
 		expr.Type = ExprTypeColumn
 		expr.Column = n.Name.Name.String()
-		if n.Name.Schema.L != "" {
-			expr.Column = n.Name.Schema.String() + "." + expr.Column
+		if n.Name.Table.L != "" {
+			if n.Name.Schema.L != "" {
+				expr.Column = n.Name.Schema.String() + "." + n.Name.Table.String() + "." + expr.Column
+			} else {
+				expr.Column = n.Name.Table.String() + "." + expr.Column
+			}
 		}
 
 	case ast.ValueExpr:
@@ -1307,38 +1311,6 @@ if !isVectorIndex {
 		}
 	}
 }
-	
-	// 检查 USING 子句中是否有向量索引类型
-	if stmt.IndexOption != nil && stmt.IndexOption.ParserName.O != "" {
-		usingType := strings.ToLower(stmt.IndexOption.ParserName.O)
-		switch usingType {
-		case "flat", "vector_flat",
-			"hnsw", "vector_hnsw",
-			"ivf_flat", "vector_ivf_flat",
-			"ivf_sq8", "vector_ivf_sq8",
-			"ivf_pq", "vector_ivf_pq",
-			"hnsw_sq", "vector_hnsw_sq",
-			"hnsw_pq", "vector_hnsw_pq",
-			"ivf_rabitq", "vector_ivf_rabitq",
-			"hnsw_prq", "vector_hnsw_prq",
-			"aisaq", "vector_aisaq":
-			createIndexStmt.IsVectorIndex = true
-			createIndexStmt.VectorIndexType = usingType
-			createIndexStmt.IndexType = "VECTOR"
-		}
-	}
-	
-	// 如果 USING 子句没有指定，检查索引名是否包含向量索引标记
-	if !createIndexStmt.IsVectorIndex {
-		if strings.Contains(strings.ToUpper(stmt.IndexName), "VECTOR") ||
-		   strings.Contains(strings.ToUpper(stmt.IndexName), "HNSW") ||
-		   strings.Contains(strings.ToUpper(stmt.IndexName), "IVF") ||
-		   strings.Contains(strings.ToUpper(stmt.IndexName), "FLAT") {
-			createIndexStmt.IsVectorIndex = true
-			createIndexStmt.VectorIndexType = "hnsw" // 默认
-			createIndexStmt.IndexType = "VECTOR"
-		}
-	}
 
 // 解析 WITH/COMMENT 子句中的参数
 if createIndexStmt.IsVectorIndex && stmt.IndexOption != nil && stmt.IndexOption.Comment != "" {

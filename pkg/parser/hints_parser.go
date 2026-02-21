@@ -250,29 +250,38 @@ func (hp *HintsParser) parseTableIndexPair(args string) (string, string) {
 
 // parseDuration 解析持续时间
 func (hp *HintsParser) parseDuration(args string) (time.Duration, error) {
+	args = strings.TrimSpace(args)
+
+	// Try pattern with unit suffix first (e.g., "500ms", "10s")
 	match := hp.durationPattern.FindStringSubmatch(args)
-	if len(match) != 3 {
-		return 0, fmt.Errorf("invalid duration format: %s", args)
+	if len(match) == 3 {
+		value, err := strconv.Atoi(match[1])
+		if err != nil {
+			return 0, err
+		}
+
+		unit := match[2]
+		switch unit {
+		case "ms":
+			return time.Duration(value) * time.Millisecond, nil
+		case "s":
+			return time.Duration(value) * time.Second, nil
+		case "m":
+			return time.Duration(value) * time.Minute, nil
+		case "h":
+			return time.Duration(value) * time.Hour, nil
+		default:
+			return 0, fmt.Errorf("unknown duration unit: %s", unit)
+		}
 	}
 
-	value, err := strconv.Atoi(match[1])
-	if err != nil {
-		return 0, err
-	}
-
-	unit := match[2]
-	switch unit {
-	case "ms":
+	// Plain integer: treat as milliseconds (common TiDB MAX_EXECUTION_TIME format)
+	value, err := strconv.Atoi(args)
+	if err == nil {
 		return time.Duration(value) * time.Millisecond, nil
-	case "s":
-		return time.Duration(value) * time.Second, nil
-	case "m":
-		return time.Duration(value) * time.Minute, nil
-	case "h":
-		return time.Duration(value) * time.Hour, nil
-	default:
-		return 0, fmt.Errorf("unknown duration unit: %s", unit)
 	}
+
+	return 0, fmt.Errorf("invalid duration format: %s", args)
 }
 
 // ParsedHints 解析后的 hints
