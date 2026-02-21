@@ -44,8 +44,12 @@ func main() {
     memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
         Type: domain.DataSourceTypeMemory, Name: "primary", Writable: true,
     })
-    memDS.Connect(context.Background())
-    db.RegisterDataSource("primary", memDS)
+    if err := memDS.Connect(context.Background()); err != nil {
+        log.Fatal(err)
+    }
+    if err := db.RegisterDataSource("primary", memDS); err != nil {
+        log.Fatal(err)
+    }
 
     // 3. 创建 GORM 连接
     gormDB, err := gorm.Open(
@@ -163,7 +167,7 @@ type Product struct {
 gormDB.AutoMigrate(&Product{})
 ```
 
-支持的 GORM 标签：`primaryKey`、`autoIncrement`、`size`、`not null`、`default`。
+支持的 GORM 标签：`primaryKey`、`autoIncrement`、`size`、`not null`、`default`、`unique`。
 
 ## 作为 SQL Mock 使用 / Using as SQL Mock
 
@@ -201,17 +205,26 @@ func SetupTestDB(t *testing.T) *gorm.DB {
     })
 
     // 3. 连接数据源（必须！）
-    memDS.Connect(context.Background())
+    if err := memDS.Connect(context.Background()); err != nil {
+        t.Fatal(err)
+    }
 
     // 4. 注册数据源（必须！）
-    db.RegisterDataSource("mydb", memDS)
-    
-    // 5. 设置为默认数据源（可选，如果是第一个注册的数据源会自动成为默认）
-    db.SetDefaultDataSource("mydb")
+    if err := db.RegisterDataSource("mydb", memDS); err != nil {
+        t.Fatal(err)
+    }
 
-    // 5. 创建 GORM 连接
+    // 5. 设置为默认数据源（可选，第一个注册的会自动成为默认）
+    if err := db.SetDefaultDataSource("mydb"); err != nil {
+        t.Fatal(err)
+    }
+
+    // 6. 创建 GORM 连接
+    session := db.Session()
+    t.Cleanup(func() { session.Close() })
+
     gormDB, err := gorm.Open(
-        sqlexecgorm.NewDialector(db.Session()),
+        sqlexecgorm.NewDialector(session),
         &gorm.Config{SkipDefaultTransaction: true},
     )
     if err != nil {
@@ -222,7 +235,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 }
 ```
 
-完整测试指南请参考 [TESTING_WITH_GORM.md](../../docs/TESTING_WITH_GORM.md)。
+完整测试指南请参考 [嵌入式测试最佳实践](testing.md)。
 
 ## 注意事项
 

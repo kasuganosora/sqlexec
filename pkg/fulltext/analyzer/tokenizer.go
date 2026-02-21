@@ -291,7 +291,7 @@ func (t *EnglishTokenizer) TokenizeForSearch(text string) ([]Token, error) {
 // 简单的词干提取（Porter Stemmer简化版）
 func (t *EnglishTokenizer) stem(word string) string {
 	// 移除常见的后缀
-	suffixes := []string{"ing", "edly", "edly", "ed", "ly", "s", "es", "ies"}
+	suffixes := []string{"ing", "edly", "ed", "ly", "s", "es", "ies"}
 	for _, suffix := range suffixes {
 		if strings.HasSuffix(word, suffix) && len(word) > len(suffix)+2 {
 			return word[:len(word)-len(suffix)]

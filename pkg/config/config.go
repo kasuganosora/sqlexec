@@ -17,7 +17,6 @@ type Config struct {
 	Cache         CacheConfig         `json:"cache"`
 	Monitor       MonitorConfig       `json:"monitor"`
 	Connection    ConnectionConfig    `json:"connection"`
-	MVCC          MVCCConfig          `json:"mvcc"`
 	Session       SessionConfig       `json:"session"`
 	Optimizer     OptimizerConfig     `json:"optimizer"`
 	HTTPAPI       HTTPAPIConfig       `json:"http_api"`
@@ -112,16 +111,6 @@ type ConnectionConfig struct {
 	IdleTimeout time.Duration `json:"idle_timeout"`
 }
 
-// MVCCConfig MVCC配置
-type MVCCConfig struct {
-	EnableWarning      bool          `json:"enable_warning"`
-	AutoDowngrade      bool          `json:"auto_downgrade"`
-	GCInterval         time.Duration `json:"gc_interval"`
-	GCAgeThreshold     time.Duration `json:"gc_age_threshold"`
-	XIDWrapThreshold   uint32        `json:"xid_wrap_threshold"`
-	MaxActiveTxns      int           `json:"max_active_txns"`
-}
-
 // SessionConfig 会话配置
 type SessionConfig struct {
 	MaxAge       time.Duration `json:"max_age"`
@@ -205,14 +194,6 @@ func DefaultConfig() *Config {
 			MaxIdle:     5,
 			Lifetime:    30 * time.Minute,
 			IdleTimeout: 5 * time.Minute,
-		},
-		MVCC: MVCCConfig{
-			EnableWarning:      true,
-			AutoDowngrade:      true,
-			GCInterval:         5 * time.Minute,
-			GCAgeThreshold:     1 * time.Hour,
-			XIDWrapThreshold:   100000,
-			MaxActiveTxns:      10000,
 		},
 		Session: SessionConfig{
 			MaxAge:     24 * time.Hour,

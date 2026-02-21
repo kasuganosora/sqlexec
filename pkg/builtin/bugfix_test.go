@@ -240,3 +240,50 @@ func TestRPad_TruncateWhenLonger(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hel", result)
 }
+
+// ============================================================
+// Bug #7 (P1): LPAD/RPAD use byte lengths, not character lengths
+// MySQL LPAD/RPAD operate on characters, not bytes.
+// Multi-byte characters are corrupted when the code uses len()
+// (byte count) instead of len([]rune()) (character count).
+// ============================================================
+
+func TestLPad_MultiByte_CharacterCount(t *testing.T) {
+	// MySQL: LPAD('hi', 5, '中') → '中中中hi' (3 padding chars + 2 original = 5 chars)
+	result, err := stringLPad([]interface{}{"hi", int64(5), "中"})
+	require.NoError(t, err)
+	str, ok := result.(string)
+	require.True(t, ok)
+	runes := []rune(str)
+	assert.Equal(t, 5, len(runes), "LPAD result should be 5 characters, got %d: %q", len(runes), str)
+	assert.Equal(t, "中中中hi", str)
+}
+
+func TestRPad_MultiByte_CharacterCount(t *testing.T) {
+	// MySQL: RPAD('hi', 5, '中') → 'hi中中中' (2 original + 3 padding = 5 chars)
+	result, err := stringRPad([]interface{}{"hi", int64(5), "中"})
+	require.NoError(t, err)
+	str, ok := result.(string)
+	require.True(t, ok)
+	runes := []rune(str)
+	assert.Equal(t, 5, len(runes), "RPAD result should be 5 characters, got %d: %q", len(runes), str)
+	assert.Equal(t, "hi中中中", str)
+}
+
+func TestLPad_MultiByte_Truncate(t *testing.T) {
+	// MySQL: LPAD('你好世界', 3, 'x') → '你好世' (truncate to 3 characters)
+	result, err := stringLPad([]interface{}{"你好世界", int64(3), "x"})
+	require.NoError(t, err)
+	str, ok := result.(string)
+	require.True(t, ok)
+	assert.Equal(t, "你好世", str, "should truncate to 3 characters, not 3 bytes")
+}
+
+func TestRPad_MultiByte_Truncate(t *testing.T) {
+	// MySQL: RPAD('你好世界', 3, 'x') → '你好世'
+	result, err := stringRPad([]interface{}{"你好世界", int64(3), "x"})
+	require.NoError(t, err)
+	str, ok := result.(string)
+	require.True(t, ok)
+	assert.Equal(t, "你好世", str, "should truncate to 3 characters, not 3 bytes")
+}

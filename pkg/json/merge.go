@@ -60,9 +60,10 @@ func (bj BinaryJSON) Merge(value interface{}) (BinaryJSON, error) {
 
 	// If other is array, wrap bj in array and append
 	if other.IsArray() {
-		merged := make([]interface{}, 0, 1+len(other.GetInterface().([]interface{})))
+		arr2, _ := other.GetArray()
+		merged := make([]interface{}, 0, 1+len(arr2))
 		merged = append(merged, bj.GetInterface())
-		merged = append(merged, other.GetInterface().([]interface{})...)
+		merged = append(merged, arr2...)
 		return NewBinaryJSON(merged)
 	}
 

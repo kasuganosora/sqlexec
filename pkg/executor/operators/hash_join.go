@@ -73,7 +73,7 @@ func (op *HashJoinOperator) Execute(ctx context.Context) (*domain.QueryResult, e
 	if joinCol != "" && rightJoinCol != "" {
 		// Hash join with condition
 		for _, rightRow := range rightResult.Rows {
-			key := fmt.Sprintf("%v", rightRow[rightJoinCol])
+			key := fmt.Sprintf("%T:%v", rightRow[rightJoinCol], rightRow[rightJoinCol])
 			hashTable[key] = append(hashTable[key], rightRow)
 		}
 	}
@@ -83,7 +83,7 @@ func (op *HashJoinOperator) Execute(ctx context.Context) (*domain.QueryResult, e
 	if joinCol != "" && rightJoinCol != "" {
 		// Probe hash table with left side
 		for _, leftRow := range leftResult.Rows {
-			key := fmt.Sprintf("%v", leftRow[joinCol])
+			key := fmt.Sprintf("%T:%v", leftRow[joinCol], leftRow[joinCol])
 			if matchedRows, ok := hashTable[key]; ok {
 				for _, rightRow := range matchedRows {
 					merged := make(domain.Row, totalCols)

@@ -54,14 +54,6 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, 30*time.Minute, config.Connection.Lifetime)
 	assert.Equal(t, 5*time.Minute, config.Connection.IdleTimeout)
 
-	// 验证MVCC配置
-	assert.True(t, config.MVCC.EnableWarning)
-	assert.True(t, config.MVCC.AutoDowngrade)
-	assert.Equal(t, 5*time.Minute, config.MVCC.GCInterval)
-	assert.Equal(t, 1*time.Hour, config.MVCC.GCAgeThreshold)
-	assert.Equal(t, uint32(100000), config.MVCC.XIDWrapThreshold)
-	assert.Equal(t, 10000, config.MVCC.MaxActiveTxns)
-
 	// 验证会话配置
 	assert.Equal(t, 24*time.Hour, config.Session.MaxAge)
 	assert.Equal(t, 1*time.Minute, config.Session.GCInterval)

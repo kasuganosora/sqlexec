@@ -69,16 +69,10 @@ func (t *TablesTable) Query(ctx context.Context, filters []domain.Filter, option
 	// 非特权用户只能看到基本的 information_schema 表
 	allowPrivilegeTables := false
 	if options != nil && options.User != "" {
-		fmt.Printf("  [DEBUG] TablesTable.Query: User=%s, checking permissions\n", options.User)
 		// root 用户可以看到所有表
 		if options.User == "root" {
 			allowPrivilegeTables = true
-			fmt.Printf("  [DEBUG] TablesTable.Query: root用户，允许查看权限表\n")
-		} else {
-			fmt.Printf("  [DEBUG] TablesTable.Query: 非特权用户，隐藏权限表\n")
 		}
-	} else {
-		fmt.Printf("  [DEBUG] TablesTable.Query: options=%v, User is empty or nil\n", options)
 	}
 
 	// Add information_schema's own tables

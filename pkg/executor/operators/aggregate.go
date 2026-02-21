@@ -91,10 +91,10 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 		}
 
 		// 执行聚合函数
-		for _, agg := range op.config.AggFuncs {
+		for aggIdx, agg := range op.config.AggFuncs {
 			alias := agg.Alias
 			if alias == "" && agg.Expr != nil {
-				alias = fmt.Sprintf("agg_%d", len(groups[groupKey]))
+				alias = fmt.Sprintf("agg_%d", aggIdx)
 			}
 
 			switch agg.Type {
@@ -145,11 +145,11 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 	resultRows := make([]domain.Row, 0, len(groups))
 	for _, group := range groups {
 		// 计算AVG
-		for _, agg := range op.config.AggFuncs {
+		for aggIdx, agg := range op.config.AggFuncs {
 			if agg.Type == types.Avg {
 				alias := agg.Alias
 				if alias == "" {
-					alias = fmt.Sprintf("agg_%d", len(group))
+					alias = fmt.Sprintf("agg_%d", aggIdx)
 				}
 				sumKey := alias + "_sum"
 				countKey := alias + "_count"
@@ -174,10 +174,10 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 			Type: "TEXT",
 		})
 	}
-	for _, agg := range op.config.AggFuncs {
+	for aggIdx, agg := range op.config.AggFuncs {
 		alias := agg.Alias
 		if alias == "" {
-			alias = fmt.Sprintf("agg_%d", len(outputColumns))
+			alias = fmt.Sprintf("agg_%d", aggIdx)
 		}
 		outputColumns = append(outputColumns, domain.ColumnInfo{
 			Name: alias,

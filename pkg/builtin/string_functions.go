@@ -691,34 +691,41 @@ func stringLPad(args []interface{}) (interface{}, error) {
 	if len(args) != 3 {
 		return nil, fmt.Errorf("lpad() requires exactly 3 arguments")
 	}
-	
+
 	str := toString(args[0])
 	length, err := toInt64(args[1])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	padStr := toString(args[2])
 
 	if length <= 0 {
 		return "", nil
 	}
 
-	if len(padStr) == 0 {
+	padRunes := []rune(padStr)
+	if len(padRunes) == 0 {
 		return str, nil
 	}
 
-	if int64(len(str)) >= length {
-		return str[:int(length)], nil
+	strRunes := []rune(str)
+	targetLen := int(length)
+
+	// Truncate if string is already longer
+	if len(strRunes) >= targetLen {
+		return string(strRunes[:targetLen]), nil
 	}
 
-	paddingNeeded := int(length) - len(str)
-	var padding strings.Builder
-	for padding.Len() < paddingNeeded {
-		padding.WriteString(padStr)
+	// Build padding using runes
+	paddingNeeded := targetLen - len(strRunes)
+	result := make([]rune, 0, targetLen)
+	for i := 0; i < paddingNeeded; i++ {
+		result = append(result, padRunes[i%len(padRunes)])
 	}
+	result = append(result, strRunes...)
 
-	return padding.String()[:paddingNeeded] + str, nil
+	return string(result), nil
 }
 
 func stringRPad(args []interface{}) (interface{}, error) {
@@ -738,21 +745,28 @@ func stringRPad(args []interface{}) (interface{}, error) {
 		return "", nil
 	}
 
-	if len(padStr) == 0 {
+	padRunes := []rune(padStr)
+	if len(padRunes) == 0 {
 		return str, nil
 	}
 
-	if int64(len(str)) >= length {
-		return str[:int(length)], nil
+	strRunes := []rune(str)
+	targetLen := int(length)
+
+	// Truncate if string is already longer
+	if len(strRunes) >= targetLen {
+		return string(strRunes[:targetLen]), nil
 	}
 
-	paddingNeeded := int(length) - len(str)
-	var padding strings.Builder
-	for padding.Len() < paddingNeeded {
-		padding.WriteString(padStr)
+	// Build result: original string + padding using runes
+	paddingNeeded := targetLen - len(strRunes)
+	result := make([]rune, 0, targetLen)
+	result = append(result, strRunes...)
+	for i := 0; i < paddingNeeded; i++ {
+		result = append(result, padRunes[i%len(padRunes)])
 	}
-	
-	return str + padding.String()[:paddingNeeded], nil
+
+	return string(result), nil
 }
 
 func stringPosition(args []interface{}) (interface{}, error) {

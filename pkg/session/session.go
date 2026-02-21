@@ -113,11 +113,10 @@ func (m *SessionMgr) GenerateSessionID(addr string, port string) string {
 }
 
 func (m *SessionMgr) GetThreadId(ctx context.Context) uint32 {
-	// 先生成一个随机数
-	randId := uint32(1)
+	candidateId := uint32(1)
 	maxAttempts := uint32(1000) // 防止无限循环
 
-	for randId <= maxAttempts {
+	for candidateId <= maxAttempts {
 		// 检查 context 是否已取消
 		select {
 		case <-ctx.Done():
@@ -126,21 +125,19 @@ func (m *SessionMgr) GetThreadId(ctx context.Context) uint32 {
 		default:
 		}
 
-		// 看看这个随机数是否存在
-		_, err := m.driver.GetThreadId(ctx, randId)
+		// 检查该 ID 是否已被占用
+		_, err := m.driver.GetThreadId(ctx, candidateId)
 		if err != nil {
-			log.Printf("GetThreadId: found available ThreadID=%d", randId)
-			return randId
+			// err != nil 表示未找到，即 ID 可用
+			return candidateId
 		}
 
-		randId++
-
-		// 如果存在，则继续生成
-		time.Sleep(time.Millisecond * 5)
+		candidateId++
 	}
 
-	log.Printf("GetThreadId: exceeded max attempts, using fallback ID")
-	return randId
+	// 所有 ID 都已耗尽，返回 0 表示失败
+	log.Printf("GetThreadId: all thread IDs (1-%d) exhausted", maxAttempts)
+	return 0
 }
 
 func (m *SessionMgr) GetSession(ctx context.Context, sessionID string) (sess *Session, err error) {
@@ -202,6 +199,12 @@ func (m *SessionMgr) GC() (err error) {
 
 	for _, s := range sessions {
 		if s.LastUsed.Before(expiredAt) {
+			// Clean up ThreadID mapping before deleting the session
+			if s.ThreadID != 0 {
+				if err := m.DeleteThreadID(ctx, s.ThreadID); err != nil {
+					log.Printf("delete thread ID %d for session %s failed: %v", s.ThreadID, s.ID, err)
+				}
+			}
 			if err := m.DeleteSession(ctx, s.ID); err != nil {
 				// 删除失败， 打印日志
 				log.Printf("delete session %s failed: %v", s.ID, err)

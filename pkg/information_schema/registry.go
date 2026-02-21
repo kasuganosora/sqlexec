@@ -28,6 +28,8 @@ func GetACLManager() *acl.ACLManager {
 
 // GetACLManagerAdapter 获取适配后的ACL Manager（实现ACLManager接口）
 func GetACLManagerAdapter() ACLManager {
+	aclManagerMutex.RLock()
+	defer aclManagerMutex.RUnlock()
 	if globalACLManager == nil {
 		return nil
 	}

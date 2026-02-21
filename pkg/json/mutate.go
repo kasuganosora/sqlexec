@@ -48,12 +48,20 @@ func setRecursive(bj BinaryJSON, legs []PathLeg, value BinaryJSON, depth int) (B
 			if bj.IsObject() {
 				obj, _ := bj.GetObject()
 				if keyLeg, ok := leg.(*KeyLeg); ok && !keyLeg.Wildcard {
-					// Create nested object
-					newObj := make(map[string]interface{})
-					obj[keyLeg.Key] = newObj
-					newBj, _ := NewBinaryJSON(newObj)
-					// Recurse into new object with remaining legs
-					return setRecursive(newBj, legs, value, depth+1)
+					// Create empty nested object and recurse into it
+					emptyObj := make(map[string]interface{})
+					emptyBj, _ := NewBinaryJSON(emptyObj)
+					result, err := setRecursive(emptyBj, legs, value, depth+1)
+					if err != nil {
+						return BinaryJSON{}, err
+					}
+					// Reconstruct parent with the nested result
+					parentObj := make(map[string]interface{})
+					for k, v := range obj {
+						parentObj[k] = v
+					}
+					parentObj[keyLeg.Key] = result.GetInterface()
+					return NewBinaryJSON(parentObj)
 				}
 			}
 		}

@@ -13,7 +13,6 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/config"
 	"github.com/kasuganosora/sqlexec/pkg/monitor"
-	"github.com/kasuganosora/sqlexec/pkg/mvcc"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/pool"
@@ -72,9 +71,6 @@ type Server struct {
 	// 监控系统
 	metricsCollector *monitor.MetricsCollector
 	cacheManager     *monitor.CacheManager
-	
-	// MVCC管理器
-	mvccManager *mvcc.Manager
 }
 
 // NewServer 创建新的服务器实例
@@ -128,9 +124,6 @@ func NewServer(cfg *config.Config) *Server {
 		cfg.Cache.SchemaCache.MaxSize,
 	)
 
-	// 创建MVCC管理器
-	mvccManager := mvcc.NewManagerFromConfig(cfg)
-
 	server := &Server{
 		sessionMgr:       session.NewSessionMgr(context.Background(), session.NewMemoryDriver()),
 		dataSourceMgr:    application.GetDefaultManager(),
@@ -141,7 +134,6 @@ func NewServer(cfg *config.Config) *Server {
 		objectPool:       objectPool,
 		metricsCollector: metricsCollector,
 		cacheManager:     cacheManager,
-		mvccManager:     mvccManager,
 	}
 
 	return server

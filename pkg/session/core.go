@@ -92,6 +92,8 @@ func (s *CoreSession) SetDatabaseDir(dir string) {
 
 // registerTablePersistence registers a table for persistence tracking
 func (s *CoreSession) registerTablePersistence(dbName, tableName string, cfg *xmlpersist.TablePersistConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.tablePersistence[dbName] == nil {
 		s.tablePersistence[dbName] = make(map[string]*xmlpersist.TablePersistConfig)
 	}
@@ -100,6 +102,8 @@ func (s *CoreSession) registerTablePersistence(dbName, tableName string, cfg *xm
 
 // getTablePersistence returns the persistence config for a table, or nil
 func (s *CoreSession) getTablePersistence(dbName, tableName string) *xmlpersist.TablePersistConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if dbTables, ok := s.tablePersistence[dbName]; ok {
 		return dbTables[tableName]
 	}
@@ -108,6 +112,8 @@ func (s *CoreSession) getTablePersistence(dbName, tableName string) *xmlpersist.
 
 // removeTablePersistence removes persistence tracking for a table
 func (s *CoreSession) removeTablePersistence(dbName, tableName string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if dbTables, ok := s.tablePersistence[dbName]; ok {
 		delete(dbTables, tableName)
 	}
@@ -231,7 +237,10 @@ func (s *CoreSession) createQueryContext(parentCtx context.Context, sql string) 
 // ExecuteQuery 执行查询（底层实现）
 // 返回 *domain.QueryResult，供 api 层封装成 Query 对象
 func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.QueryResult, error) {
-	if s.closed {
+	s.mu.RLock()
+	closed := s.closed
+	s.mu.RUnlock()
+	if closed {
 		return nil, fmt.Errorf("session is closed")
 	}
 
@@ -331,7 +340,10 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 // ExecuteInsert 执行 INSERT（底层实现）
 // 返回 *domain.QueryResult，其中 Total 字段是影响的行数
 func (s *CoreSession) ExecuteInsert(ctx context.Context, sql string, rows []domain.Row) (*domain.QueryResult, error) {
-	if s.closed {
+	s.mu.RLock()
+	closed := s.closed
+	s.mu.RUnlock()
+	if closed {
 		return nil, fmt.Errorf("session is closed")
 	}
 
@@ -395,7 +407,10 @@ func (s *CoreSession) ExecuteInsert(ctx context.Context, sql string, rows []doma
 // ExecuteUpdate 执行 UPDATE（底层实现）
 // 返回 *domain.QueryResult，其中 Total 字段是影响的行数
 func (s *CoreSession) ExecuteUpdate(ctx context.Context, sql string, _ []domain.Filter, _ domain.Row) (*domain.QueryResult, error) {
-	if s.closed {
+	s.mu.RLock()
+	closed := s.closed
+	s.mu.RUnlock()
+	if closed {
 		return nil, fmt.Errorf("session is closed")
 	}
 
@@ -459,7 +474,10 @@ func (s *CoreSession) ExecuteUpdate(ctx context.Context, sql string, _ []domain.
 // ExecuteDelete 执行 DELETE（底层实现）
 // 返回 *domain.QueryResult，其中 Total 字段是影响的行数
 func (s *CoreSession) ExecuteDelete(ctx context.Context, sql string, _ []domain.Filter) (*domain.QueryResult, error) {
-	if s.closed {
+	s.mu.RLock()
+	closed := s.closed
+	s.mu.RUnlock()
+	if closed {
 		return nil, fmt.Errorf("session is closed")
 	}
 
@@ -910,20 +928,23 @@ func (s *CoreSession) GetAdapter() *parser.SQLAdapter {
 
 // executeCreateStatement executes CREATE TABLE statement
 func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *parser.CreateStatement) (*domain.QueryResult, error) {
-	// Note: This function is called from ExecuteQuery which already holds the lock,
-	// so we don't acquire the lock here to avoid deadlock
+	// Read session state under lock to avoid data races.
+	s.mu.Lock()
 
 	if s.closed {
+		s.mu.Unlock()
 		return nil, fmt.Errorf("session is closed")
 	}
 
 	// Only support CREATE TABLE
 	if createStmt.Type != "TABLE" {
+		s.mu.Unlock()
 		return nil, fmt.Errorf("CREATE %s is not supported yet", createStmt.Type)
 	}
 
 	tableName := createStmt.Name
 	if tableName == "" {
+		s.mu.Unlock()
 		return nil, fmt.Errorf("table name is required")
 	}
 
@@ -942,7 +963,6 @@ func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *pa
 				if _, err := s.dsManager.Get("test"); err == nil {
 					targetDB = "test"
 					s.currentDB = "test"
-					// 同步更新 executor 的 currentDB
 					if s.executor != nil {
 						s.executor.SetCurrentDB("test")
 					}
@@ -958,14 +978,13 @@ func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *pa
 							})
 							if createErr == nil {
 								if connectErr := testDS.Connect(ctx); connectErr == nil {
-							if regErr := s.dsManager.Register("test", testDS); regErr == nil {
-									targetDB = "test"
-									s.currentDB = "test"
-									// 同步更新 executor 的 currentDB
-									if s.executor != nil {
-										s.executor.SetCurrentDB("test")
+									if regErr := s.dsManager.Register("test", testDS); regErr == nil {
+										targetDB = "test"
+										s.currentDB = "test"
+										if s.executor != nil {
+											s.executor.SetCurrentDB("test")
+										}
 									}
-								}
 								}
 							}
 						}
@@ -976,11 +995,13 @@ func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *pa
 	}
 
 	if targetDB == "" {
+		s.mu.Unlock()
 		return nil, fmt.Errorf("no database selected")
 	}
 
 	// Check if this is a virtual database
 	if s.vdbRegistry != nil && s.vdbRegistry.IsVirtualDB(targetDB) {
+		s.mu.Unlock()
 		return nil, fmt.Errorf("%s is a virtual database: CREATE TABLE operation not supported", targetDB)
 	}
 
@@ -990,11 +1011,14 @@ func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *pa
 		var err error
 		ds, err = s.dsManager.Get(targetDB)
 		if err != nil {
+			s.mu.Unlock()
 			return nil, fmt.Errorf("database '%s' not found: %w", targetDB, err)
 		}
 	} else {
 		ds = s.dataSource
 	}
+	databaseDir := s.databaseDir
+	s.mu.Unlock()
 
 	// Build table info from columns
 	tableInfo := &domain.TableInfo{
@@ -1036,7 +1060,7 @@ func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *pa
 		comment, _ := createStmt.Options["comment"].(string)
 		mode := xmlpersist.ParseStorageMode(comment)
 		cfg := &xmlpersist.TablePersistConfig{
-			BasePath:    filepath.Join(s.databaseDir, targetDB),
+			BasePath:    filepath.Join(databaseDir, targetDB),
 			TableName:   tableName,
 			RootTag:     "Row",
 			StorageMode: mode,
@@ -1058,10 +1082,13 @@ func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *pa
 
 // executeUseStatement 执行 USE 语句
 func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain.QueryResult, error) {
-	// Note: This function is called from ExecuteQuery which already holds the lock,
-	// so we don't acquire the lock here to avoid deadlock
+	s.mu.RLock()
+	closed := s.closed
+	vdbReg := s.vdbRegistry
+	dsMgr := s.dsManager
+	s.mu.RUnlock()
 
-	if s.closed {
+	if closed {
 		return nil, fmt.Errorf("session is closed")
 	}
 
@@ -1069,10 +1096,10 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 
 	// 验证数据库是否存在，如果不存在则自动创建
 	// 允许使用 information_schema 和所有已注册的虚拟数据库
-	isVirtual := dbName == "information_schema" || (s.vdbRegistry != nil && s.vdbRegistry.IsVirtualDB(dbName))
+	isVirtual := dbName == "information_schema" || (vdbReg != nil && vdbReg.IsVirtualDB(dbName))
 	if !isVirtual {
-		if s.dsManager != nil {
-			dsNames := s.dsManager.List()
+		if dsMgr != nil {
+			dsNames := dsMgr.List()
 			found := false
 			for _, name := range dsNames {
 				if name == dbName {
@@ -1091,7 +1118,7 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 				if err := memoryDS.Connect(context.Background()); err != nil {
 					return nil, fmt.Errorf("failed to create database '%s': %w", dbName, err)
 				}
-				if err := s.dsManager.Register(dbName, memoryDS); err != nil {
+				if err := dsMgr.Register(dbName, memoryDS); err != nil {
 					return nil, fmt.Errorf("failed to register database '%s': %w", dbName, err)
 				}
 			}
@@ -1102,7 +1129,7 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 	s.SetCurrentDB(dbName)
 
 	// Load persisted tables from disk (ENGINE=xml)
-	if !isVirtual && s.dsManager != nil {
+	if !isVirtual && dsMgr != nil {
 		s.loadPersistedTables(dbName)
 	}
 
@@ -1140,8 +1167,8 @@ func (s *CoreSession) loadPersistedTables(dbName string) {
 		// This loads rows in page-sized batches, allowing the buffer pool to evict
 		// cold pages and keep peak memory bounded regardless of table size.
 		if mvccDS, ok := ds.(*memory.MVCCDataSource); ok {
-			pageSize := mvccDS.GetBufferPool().PageSize()
-			tableInfo, indexes, err := xmlpersist.LoadTableFromDiskBatched(cfg, pageSize, nil)
+			// Load schema and index metadata only (no data parsing)
+			tableInfo, indexes, err := xmlpersist.LoadTableSchemaAndIndexes(cfg)
 			if err != nil {
 				log.Printf("warning: failed to load persisted table %s: %v", cfg.TableName, err)
 				continue
@@ -1153,7 +1180,8 @@ func (s *CoreSession) loadPersistedTables(dbName string) {
 				continue
 			}
 
-			// BulkLoad data through buffer pool — pages are registered incrementally
+			// BulkLoad data through buffer pool — single pass, pages are registered incrementally
+			pageSize := mvccDS.GetBufferPool().PageSize()
 			var rowCount int
 			if err := mvccDS.BulkLoad(cfg.TableName, func(addPage func([]domain.Row)) error {
 				_, _, err := xmlpersist.LoadTableFromDiskBatched(cfg, pageSize, func(batch []domain.Row) {

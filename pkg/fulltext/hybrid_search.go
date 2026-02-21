@@ -143,10 +143,10 @@ func (h *HybridEngine) calculateSimilarity(docID int64, queryTokens []Token) flo
 		return 0
 	}
 	
-	// 构建查询向量
+	// 构建查询向量（使用hashString保持与索引一致）
 	queryVector := make(map[int64]float64)
 	for _, token := range queryTokens {
-		termID := h.ftEngine.vocabulary.GetOrCreateID(token.Text)
+		termID := hashString(token.Text)
 		if weight, exists := queryVector[termID]; exists {
 			queryVector[termID] = weight + 1.0
 		} else {
@@ -158,13 +158,17 @@ func (h *HybridEngine) calculateSimilarity(docID int64, queryTokens []Token) flo
 	var dotProduct float64
 	var queryNorm float64
 	var docNorm float64
-	
+
+	// Compute full document vector norm
+	for _, dWeight := range docVector.Terms {
+		docNorm += dWeight * dWeight
+	}
+
 	for termID, qWeight := range queryVector {
 		queryNorm += qWeight * qWeight
-		
+
 		if dWeight, exists := docVector.Get(termID); exists {
 			dotProduct += qWeight * dWeight
-			docNorm += dWeight * dWeight
 		}
 	}
 	
@@ -298,21 +302,21 @@ func (h *HybridEngine) AutoConvertToVector(doc *Document) (map[int64]float64, er
 	
 	// 创建稀疏向量
 	sparseVector := make(map[int64]float64)
-	
-	// 更新词汇表统计
+
+	// 更新词汇表统计（使用hashString保持与索引一致）
 	for _, token := range tokens {
-		termID := h.ftEngine.vocabulary.GetOrCreateID(token.Text)
-		
+		termID := hashString(token.Text)
+
 		// 更新文档频率
 		h.ftEngine.invertedIdx.UpdateDocFreq(termID)
 	}
-	
+
 	// 计算BM25权重
 	stats := h.ftEngine.GetStats()
 	params := h.ftEngine.config.BM25Params
-	
+
 	for _, token := range tokens {
-		termID := h.ftEngine.vocabulary.GetOrCreateID(token.Text)
+		termID := hashString(token.Text)
 		
 		// 计算TF
 		tf := 0.0

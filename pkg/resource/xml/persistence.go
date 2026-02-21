@@ -400,6 +400,23 @@ func LoadTableFromDisk(cfg *TablePersistConfig) (*domain.TableInfo, []domain.Row
 	return tableInfo, rows, indexes, nil
 }
 
+// LoadTableSchemaAndIndexes loads only the schema and index metadata from disk
+// without parsing any data files. This is much faster than LoadTableFromDiskBatched
+// when only schema and index information is needed.
+func LoadTableSchemaAndIndexes(cfg *TablePersistConfig) (*domain.TableInfo, []*IndexMeta, error) {
+	tableDir := cfg.TableDir()
+
+	schemaPath := filepath.Join(tableDir, "__schema__.xml")
+	tableInfo, err := loadSchema(schemaPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load schema: %w", err)
+	}
+
+	indexes, _ := loadIndexMeta(filepath.Join(tableDir, "__meta__.xml"))
+
+	return tableInfo, indexes, nil
+}
+
 // LoadTableFromDiskBatched loads schema and index metadata, then streams row data
 // in batches of pageSize rows via batchFn callback. Each batch is a fresh []domain.Row
 // slice whose ownership is transferred to the caller. This avoids loading all rows

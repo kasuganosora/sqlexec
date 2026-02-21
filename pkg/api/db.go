@@ -51,10 +51,8 @@ func NewDB(config *DBConfig) (*DB, error) {
 		config.DefaultLogger = NewDefaultLogger(LogInfo)
 	}
 
-	// Ensure UseEnhancedOptimizer is set to true if not specified
-	if config.UseEnhancedOptimizer == false && config == nil {
-		config.UseEnhancedOptimizer = true
-	}
+	// Note: UseEnhancedOptimizer defaults via the nil-config path above.
+	// Callers providing their own DBConfig should set UseEnhancedOptimizer explicitly.
 
 	cache := NewQueryCache(CacheConfig{
 		Enabled:  config.CacheEnabled,
@@ -154,11 +152,16 @@ func (db *DB) SetDefaultDataSource(name string) error {
 
 // Session creates a new session with the default datasource and default options
 func (db *DB) Session() *Session {
+	db.mu.RLock()
+	dsName := db.defaultDS
+	cacheEnabled := db.config.CacheEnabled
+	db.mu.RUnlock()
+
 	return db.SessionWithOptions(&SessionOptions{
-		DataSourceName: db.defaultDS,
+		DataSourceName: dsName,
 		Isolation:      IsolationRepeatableRead,
 		ReadOnly:       false,
-		CacheEnabled:   db.config.CacheEnabled,
+		CacheEnabled:   cacheEnabled,
 	})
 }
 

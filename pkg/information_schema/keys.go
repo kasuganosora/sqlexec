@@ -129,7 +129,7 @@ func (t *KeyColumnUsageTable) Query(ctx context.Context, filters []domain.Filter
 							"column_name":                    column.Name,
 							"ordinal_position":               1,
 							"position_in_unique_constraint":   nil,
-							"referenced_table_schema":        column.ForeignKey.Table,
+							"referenced_table_schema":        dsName,
 							"referenced_table_name":          column.ForeignKey.Table,
 							"referenced_column_name":         column.ForeignKey.Column,
 						}

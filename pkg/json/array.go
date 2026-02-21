@@ -89,6 +89,12 @@ func ArrayInsert(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
 	pathStr := toString(args[0])
 	var position int
 
+	// Parse path
+	parsed, err := ParsePath(pathStr)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
 	// Parse arguments
 	var valueArg interface{}
 	if len(args) == 3 {
@@ -150,8 +156,19 @@ func ArrayInsert(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
 	newArr[position] = parsedValue.Value
 	copy(newArr[position+1:], arr[position:])
 
-	// Create new BinaryJSON
-	return NewBinaryJSON(newArr)
+	// Create new array BinaryJSON
+	newArrBj, err := NewBinaryJSON(newArr)
+	if err != nil {
+		return BinaryJSON{}, err
+	}
+
+	// If no path legs (root), return the array directly
+	if len(parsed.Legs) == 0 {
+		return newArrBj, nil
+	}
+
+	// Otherwise, reconstruct the full document with the updated array
+	return setRecursive(bj, parsed.Legs, newArrBj, 0)
 }
 
 // ArrayGet gets an element from an array at the specified path and index

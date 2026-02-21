@@ -84,7 +84,11 @@ func (v *VirtualDataSource) Query(ctx context.Context, tableName string, options
 	}
 
 	// Delegate query to the virtual table
-	return vt.Query(ctx, options.Filters, options)
+	var filters []domain.Filter
+	if options != nil {
+		filters = options.Filters
+	}
+	return vt.Query(ctx, filters, options)
 }
 
 // Insert is not supported - virtual data source is read-only

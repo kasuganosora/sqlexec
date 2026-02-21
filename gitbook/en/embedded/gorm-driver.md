@@ -44,8 +44,12 @@ func main() {
     memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
         Type: domain.DataSourceTypeMemory, Name: "primary", Writable: true,
     })
-    memDS.Connect(context.Background())
-    db.RegisterDataSource("primary", memDS)
+    if err := memDS.Connect(context.Background()); err != nil {
+        log.Fatal(err)
+    }
+    if err := db.RegisterDataSource("primary", memDS); err != nil {
+        log.Fatal(err)
+    }
 
     // 3. Create GORM connection
     gormDB, err := gorm.Open(
@@ -163,7 +167,7 @@ type Product struct {
 gormDB.AutoMigrate(&Product{})
 ```
 
-Supported GORM tags: `primaryKey`, `autoIncrement`, `size`, `not null`, `default`.
+Supported GORM tags: `primaryKey`, `autoIncrement`, `size`, `not null`, `default`, `unique`.
 
 ## Using as SQL Mock for Testing
 
@@ -201,17 +205,26 @@ func SetupTestDB(t *testing.T) *gorm.DB {
     })
 
     // 3. Connect data source (REQUIRED!)
-    memDS.Connect(context.Background())
+    if err := memDS.Connect(context.Background()); err != nil {
+        t.Fatal(err)
+    }
 
     // 4. Register data source (REQUIRED!)
-    db.RegisterDataSource("mydb", memDS)
+    if err := db.RegisterDataSource("mydb", memDS); err != nil {
+        t.Fatal(err)
+    }
 
     // 5. Set as default (optional, first registered becomes default automatically)
-    db.SetDefaultDataSource("mydb")
+    if err := db.SetDefaultDataSource("mydb"); err != nil {
+        t.Fatal(err)
+    }
 
-    // 5. Create GORM connection
+    // 6. Create GORM connection
+    session := db.Session()
+    t.Cleanup(func() { session.Close() })
+
     gormDB, err := gorm.Open(
-        sqlexecgorm.NewDialector(db.Session()),
+        sqlexecgorm.NewDialector(session),
         &gorm.Config{SkipDefaultTransaction: true},
     )
     if err != nil {
@@ -222,7 +235,7 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 }
 ```
 
-For a complete testing guide, see [TESTING_WITH_GORM.md](../../docs/TESTING_WITH_GORM.md).
+For a complete testing guide, see [Embedded Testing Best Practices](testing.md).
 
 ## Notes
 

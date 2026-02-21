@@ -67,6 +67,9 @@ func (w *WritableVirtualDataSource) GetConfig() *domain.DataSourceConfig {
 
 // GetTables returns all virtual table names
 func (w *WritableVirtualDataSource) GetTables(ctx context.Context) ([]string, error) {
+	if w.provider == nil {
+		return nil, fmt.Errorf("writable virtual data source has no provider configured")
+	}
 	return w.provider.ListVirtualTables(), nil
 }
 
@@ -91,7 +94,11 @@ func (w *WritableVirtualDataSource) Query(ctx context.Context, tableName string,
 		return nil, err
 	}
 
-	return vt.Query(ctx, options.Filters, options)
+	var filters []domain.Filter
+	if options != nil {
+		filters = options.Filters
+	}
+	return vt.Query(ctx, filters, options)
 }
 
 // Insert inserts rows into a virtual table

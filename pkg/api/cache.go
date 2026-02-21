@@ -173,23 +173,14 @@ func (c *QueryCache) ClearExpired() {
 	}
 
 	now := time.Now()
-	keysToDelete := []string{}
 
-	c.mu.RLock()
+	c.mu.Lock()
 	for key, entry := range c.store {
 		if now.After(entry.ExpiresAt) {
-			keysToDelete = append(keysToDelete, key)
-		}
-	}
-	c.mu.RUnlock()
-
-	if len(keysToDelete) > 0 {
-		c.mu.Lock()
-		for _, key := range keysToDelete {
 			delete(c.store, key)
 		}
-		c.mu.Unlock()
 	}
+	c.mu.Unlock()
 }
 
 // Stats 获取缓存统计信息
