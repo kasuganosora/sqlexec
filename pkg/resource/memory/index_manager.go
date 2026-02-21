@@ -164,12 +164,12 @@ func (m *IndexManager) CreateVectorIndex(
 		idx, err = NewHNSWSQIndex(columnName, config)
 	case IndexTypeVectorHNSWPQ:
 		idx, err = NewHNSWPQIndex(columnName, config)
-case IndexTypeVectorIVFRabitQ:
-	idx, err = NewIVFRabitQIndex(columnName, config)
-case IndexTypeVectorHNSWPRQ:
-	idx, err = NewHNSWPRQIndex(columnName, config)
-case IndexTypeVectorAISAQ:
-	idx, err = NewAISAQIndex(columnName, config)
+	case IndexTypeVectorIVFRabitQ:
+		idx, err = NewIVFRabitQIndex(columnName, config)
+	case IndexTypeVectorHNSWPRQ:
+		idx, err = NewHNSWPRQIndex(columnName, config)
+	case IndexTypeVectorAISAQ:
+		idx, err = NewAISAQIndex(columnName, config)
 	default:
 		return nil, fmt.Errorf("unsupported vector index type: %s", indexType)
 	}
@@ -326,6 +326,7 @@ func (m *IndexManager) RebuildIndex(tableName string, schema *domain.TableInfo, 
 			idx.mu.Lock()
 			idx.root = NewBTreeNode(true)
 			idx.height = 1
+			idx.data = make(map[interface{}][]int64)
 			idx.mu.Unlock()
 		case *HashIndex:
 			// 重置Hash索引

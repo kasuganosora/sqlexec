@@ -31,7 +31,7 @@ func (h *DefaultHandshakeHandler) Handle(conn net.Conn, sess *pkg_session.Sessio
 	handshakePacket := &protocol.HandshakeV10Packet{}
 	handshakePacket.Packet.SequenceID = 0
 	handshakePacket.ProtocolVersion = 10
-	handshakePacket.ServerVersion = "8.0.32-sqlexec"
+	handshakePacket.ServerVersion = "8.0.33-sqlexec"
 	handshakePacket.ThreadID = sess.ThreadID
 	// Generate random 20-byte scramble for mysql_native_password
 	scramble := make([]byte, 20)

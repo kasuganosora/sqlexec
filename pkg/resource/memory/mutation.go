@@ -189,6 +189,9 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	tableVer.versions[newVer] = versionData
 	tableVer.latest = newVer
 
+	// Maintain indexes: rebuild from the new version's rows
+	m.rebuildTableIndexes(tableName, versionData.schema, newRows)
+
 	return int64(len(rows)), nil
 }
 
@@ -446,6 +449,9 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 	tableVer.versions[newVer] = versionData
 	tableVer.latest = newVer
 
+	// Maintain indexes: rebuild from the new version's rows
+	m.rebuildTableIndexes(tableName, versionData.schema, newRows)
+
 	return updated, nil
 }
 
@@ -549,13 +555,14 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 	}
 
 	// Non-transaction delete, create new version
+	// Deep copy retained rows to maintain MVCC isolation between versions
 	delSrcRows := latestData.Rows()
 	newRows := make([]domain.Row, 0, len(delSrcRows))
 
 	deleted := int64(0)
 	for _, row := range delSrcRows {
 		if !util.MatchesFilters(row, filters) {
-			newRows = append(newRows, row)
+			newRows = append(newRows, deepCopyRow(row))
 		} else {
 			deleted++
 		}
@@ -570,6 +577,9 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 
 	tableVer.versions[newVer] = versionData
 	tableVer.latest = newVer
+
+	// Maintain indexes: rebuild from the new version's rows
+	m.rebuildTableIndexes(tableName, versionData.schema, newRows)
 
 	return deleted, nil
 }
@@ -590,6 +600,12 @@ func (m *MVCCDataSource) removeVirtualColumns(row domain.Row, schema *domain.Tab
 		}
 	}
 	return result
+}
+
+// rebuildTableIndexes rebuilds all indexes for a table from the given rows.
+// This is called after each non-transaction mutation to keep indexes in sync.
+func (m *MVCCDataSource) rebuildTableIndexes(tableName string, schema *domain.TableInfo, rows []domain.Row) {
+	_ = m.indexManager.RebuildIndex(tableName, schema, rows)
 }
 
 // getColumnInfo gets column information

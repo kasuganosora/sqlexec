@@ -229,6 +229,7 @@ func TestMVCCDataSource_DropTable(t *testing.T) {
 func TestMVCCDataSource_TruncateTable(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	tableInfo := &domain.TableInfo{
 		Name: "products",
@@ -280,6 +281,7 @@ func TestMVCCDataSource_TruncateTable(t *testing.T) {
 func TestMVCCDataSource_Insert(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	tableInfo := &domain.TableInfo{
 		Name: "employees",
@@ -323,6 +325,7 @@ func TestMVCCDataSource_Insert(t *testing.T) {
 func TestMVCCDataSource_Query(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	tableInfo := &domain.TableInfo{
 		Name: "students",
@@ -413,6 +416,7 @@ func TestMVCCDataSource_Query(t *testing.T) {
 func TestMVCCDataSource_Update(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	tableInfo := &domain.TableInfo{
 		Name: "tasks",
@@ -480,6 +484,7 @@ func TestMVCCDataSource_Update(t *testing.T) {
 func TestMVCCDataSource_Delete(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	tableInfo := &domain.TableInfo{
 		Name: "records",
@@ -557,6 +562,7 @@ func TestMVCCDataSource_Delete(t *testing.T) {
 func TestMVCCDataSource_Execute(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	// 内存数据源不支持SQL执行
 	_, err := ds.Execute(ctx, "SELECT * FROM users")
@@ -569,6 +575,7 @@ func TestMVCCDataSource_Execute(t *testing.T) {
 func TestMVCCDataSource_GetTableInfo(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	tableInfo := &domain.TableInfo{
 		Name: "info_table",
@@ -609,6 +616,7 @@ func TestMVCCDataSource_GetTableInfo(t *testing.T) {
 func TestMVCCDataSource_BeginTx_CommitTx(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	// 测试只读事务
 	txnID, err := ds.BeginTx(ctx, true)
@@ -649,6 +657,7 @@ func TestMVCCDataSource_BeginTx_CommitTx(t *testing.T) {
 func TestMVCCDataSource_BeginTx_RollbackTx(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	// 开始事务
 	txnID, err := ds.BeginTx(ctx, false)
@@ -672,6 +681,7 @@ func TestMVCCDataSource_BeginTx_RollbackTx(t *testing.T) {
 func TestMVCCDataSource_GetCurrentVersion(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	// 初始版本应该是0
 	version := ds.GetCurrentVersion()
@@ -803,6 +813,7 @@ func TestMVCCDataSource_GetLatestTableData(t *testing.T) {
 func TestMVCCDataSource_Comprehensive(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	// 1. 创建表
 	tableInfo := &domain.TableInfo{
@@ -895,6 +906,7 @@ func TestMVCCDataSource_Comprehensive(t *testing.T) {
 func TestMVCCDataSource_VersionManagement(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	tableInfo := &domain.TableInfo{
 		Name: "version_table",
@@ -955,6 +967,7 @@ func TestMVCCDataSource_VersionManagement(t *testing.T) {
 func TestMVCCDataSource_ConcurrentOperations(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	tableInfo := &domain.TableInfo{
 		Name: "concurrent_test",
@@ -1003,6 +1016,7 @@ func TestMVCCDataSource_ReadOnlyOperations(t *testing.T) {
 	}
 	ds := NewMVCCDataSource(config)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	tableInfo := &domain.TableInfo{
 		Name: "readonly_table",
@@ -1656,6 +1670,7 @@ func TestMVCCDataSource_GeneratedColumn_NullPropagation(t *testing.T) {
 func TestMVCCDataSource_GeneratedColumn_InvalidDependency(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	// 创建包含不存在依赖列的表（应该失败）
 	tableInfo := &domain.TableInfo{
@@ -1676,6 +1691,7 @@ func TestMVCCDataSource_GeneratedColumn_InvalidDependency(t *testing.T) {
 func TestMVCCDataSource_GeneratedColumn_CyclicDependency(t *testing.T) {
 	ds := NewMVCCDataSource(nil)
 	ctx := context.Background()
+	ds.Connect(ctx)
 
 	// 创建包含循环依赖的表（应该失败）
 	tableInfo := &domain.TableInfo{

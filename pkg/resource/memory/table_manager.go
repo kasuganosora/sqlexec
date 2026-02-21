@@ -165,11 +165,22 @@ func (m *MVCCDataSource) DropTable(ctx context.Context, tableName string) error 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, ok := m.tables[tableName]; !ok {
+	tableVer, ok := m.tables[tableName]
+	if !ok {
 		return domain.NewErrTableNotFound(tableName)
 	}
 
+	// Release all PagedRows across all versions to free buffer pool memory
+	tableVer.mu.Lock()
+	for _, data := range tableVer.versions {
+		if data != nil && data.rows != nil {
+			data.rows.Release()
+		}
+	}
+	tableVer.mu.Unlock()
+
 	delete(m.tables, tableName)
+	delete(m.tempTables, tableName)
 	// Drop indexes
 	_ = m.indexManager.DropTableIndexes(tableName)
 	return nil
