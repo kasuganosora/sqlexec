@@ -1,6 +1,6 @@
 # Function System Overview
 
-SQLExec comes with a rich built-in function library covering 12 categories to meet the needs of data querying, transformation, analysis, and more.
+SQLExec comes with a rich built-in function library covering 13 categories to meet the needs of data querying, transformation, analysis, and more.
 
 ## Function Categories
 
@@ -17,6 +17,7 @@ SQLExec comes with a rich built-in function library covering 12 categories to me
 | Vector Functions | Vector distance and similarity calculation, supporting vector search | [Details](vector.md) |
 | Financial Functions | Net present value, annuity, interest rate, and other financial calculations | [Details](financial.md) |
 | Bitwise Functions | Bitwise AND, OR, XOR, shift operations, etc. | [Details](bitwise.md) |
+| Spatial Functions | Geometry construction, distance, area, containment, intersection | [Details](spatial.md) |
 | System Functions | Type detection, UUID generation, environment information queries | [Details](system.md) |
 
 ## Function Types

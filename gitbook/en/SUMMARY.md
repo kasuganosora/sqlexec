@@ -65,12 +65,14 @@
 * [Vector Functions](functions/vector.md)
 * [Financial Functions](functions/financial.md)
 * [Bitwise Functions](functions/bitwise.md)
+* [Spatial Functions](functions/spatial.md)
 * [System Functions](functions/system.md)
 
 ## Advanced Features
 
 * [Vector Search](advanced/vector-search.md)
 * [Full-Text Search](advanced/fulltext-search.md)
+* [Spatial Index](advanced/spatial-index.md)
 * [Index Management](advanced/indexes.md)
 * [MVCC & Transactions](advanced/mvcc.md)
 * [Query Optimizer](advanced/query-optimizer.md)
