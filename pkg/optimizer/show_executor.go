@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kasuganosora/sqlexec/pkg/information_schema"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
@@ -245,157 +246,14 @@ func (e *ShowExecutor) executeShowProcessList(ctx context.Context, full bool) (*
 
 // executeShowVariables executes SHOW VARIABLES
 func (e *ShowExecutor) executeShowVariables(ctx context.Context, showStmt *parser.ShowStatement) (*domain.QueryResult, error) {
-	// Get variables from session context if available
-	// Return MySQL/MariaDB compatible system variables
-	variables := []domain.Row{
-		// Version related
-		{"Variable_name": "version", "Value": "8.0.0-sqlexec"},
-		{"Variable_name": "version_comment", "Value": "sqlexec MySQL-compatible database"},
-		{"Variable_name": "version_compile_machine", "Value": "x86_64"},
-		{"Variable_name": "version_compile_os", "Value": "Linux"},
-		{"Variable_name": "version_ssl_library", "Value": ""}, // Empty means no SSL
-
-		// Network
-		{"Variable_name": "port", "Value": 3307},
-		{"Variable_name": "hostname", "Value": "localhost"},
-		{"Variable_name": "bind_address", "Value": "*"},
-		{"Variable_name": "socket", "Value": "/tmp/mysql.sock"},
-
-		// Paths
-		{"Variable_name": "datadir", "Value": "/var/lib/mysql/"},
-		{"Variable_name": "tmpdir", "Value": "/tmp"},
-		{"Variable_name": "slow_query_log_file", "Value": "/var/lib/mysql/slow.log"},
-		{"Variable_name": "general_log_file", "Value": "/var/lib/mysql/general.log"},
-		{"Variable_name": "log_error", "Value": "/var/lib/mysql/error.log"},
-
-		// Server IDs
-		{"Variable_name": "server_id", "Value": 1},
-		{"Variable_name": "uuid", "Value": "00000000-0000-0000-0000-000000000000"},
-
-		// Character set and collation
-		{"Variable_name": "character_set_server", "Value": "utf8mb4"},
-		{"Variable_name": "character_set_client", "Value": "utf8mb3"}, // MariaDB test expects utf8mb3
-		{"Variable_name": "character_set_connection", "Value": "utf8mb4"},
-		{"Variable_name": "character_set_database", "Value": "utf8mb4"},
-		{"Variable_name": "character_set_results", "Value": "utf8mb4"},
-		{"Variable_name": "character_set_system", "Value": "utf8mb3"},
-		{"Variable_name": "character_set_filesystem", "Value": "latin1"}, // MariaDB test expects latin1
-		{"Variable_name": "character_sets_dir", "Value": "MYSQL_TEST_DIR/ß/"}, // MariaDB test path
-		{"Variable_name": "collation_server", "Value": "utf8mb4_general_ci"},
-		{"Variable_name": "collation_database", "Value": "utf8mb4_general_ci"},
-		{"Variable_name": "collation_connection", "Value": "utf8mb4_general_ci"},
-
-		// Connections
-		{"Variable_name": "max_connections", "Value": 151},
-		{"Variable_name": "max_user_connections", "Value": 0},
-		{"Variable_name": "max_connect_errors", "Value": 100},
-		{"Variable_name": "connect_timeout", "Value": 10},
-		{"Variable_name": "wait_timeout", "Value": 28800},
-		{"Variable_name": "interactive_timeout", "Value": 28800},
-
-		// Transaction and binlog
-		{"Variable_name": "autocommit", "Value": "ON"},
-		{"Variable_name": "max_binlog_stmt_cache_size", "Value": "18446744073709547520"},
-		{"Variable_name": "max_binlog_cache_size", "Value": "18446744073709547520"},
-		{"Variable_name": "binlog_stmt_cache_size", "Value": "32768"},
-		{"Variable_name": "binlog_cache_size", "Value": "32768"},
-		{"Variable_name": "binlog_format", "Value": "STATEMENT"},
-		{"Variable_name": "sync_binlog", "Value": "0"},
-		{"Variable_name": "log_bin", "Value": "OFF"},
-		{"Variable_name": "gtid_mode", "Value": "OFF"},
-		{"Variable_name": "enforce_gtid_consistency", "Value": "OFF"},
-		{"Variable_name": "transaction_isolation", "Value": "REPEATABLE-READ"},
-		{"Variable_name": "tx_isolation", "Value": "REPEATABLE-READ"},
-		{"Variable_name": "tx_read_only", "Value": "OFF"},
-
-		// Query and SQL
-		{"Variable_name": "sql_mode", "Value": "STRICT_TRANS_TABLES"},
-		{"Variable_name": "sql_select_limit", "Value": "18446744073709547520"},
-		{"Variable_name": "max_execution_time", "Value": "0"},
-		{"Variable_name": "max_join_size", "Value": "18446744073709547520"},
-		{"Variable_name": "query_cache_type", "Value": "OFF"},
-		{"Variable_name": "query_cache_size", "Value": 0},
-		{"Variable_name": "slow_query_log", "Value": "OFF"},
-		{"Variable_name": "general_log", "Value": "OFF"},
-		{"Variable_name": "log_queries_not_using_indexes", "Value": "OFF"},
-		{"Variable_name": "long_query_time", "Value": 10},
-
-		// Memory and buffers
-		{"Variable_name": "key_buffer_size", "Value": 8388608},
-		{"Variable_name": "table_open_cache", "Value": 2000},
-		{"Variable_name": "table_definition_cache", "Value": 1400},
-		{"Variable_name": "thread_cache_size", "Value": 10},
-		{"Variable_name": "sort_buffer_size", "Value": 262144},
-		{"Variable_name": "join_buffer_size", "Value": 262144},
-		{"Variable_name": "read_buffer_size", "Value": 131072},
-		{"Variable_name": "read_rnd_buffer_size", "Value": 262144},
-		{"Variable_name": "myisam_sort_buffer_size", "Value": 8388608},
-		{"Variable_name": "bulk_insert_buffer_size", "Value": 8388608},
-		{"Variable_name": "innodb_buffer_pool_size", "Value": 134217728},
-
-		// InnoDB
-		{"Variable_name": "innodb_flush_log_at_trx_commit", "Value": 1},
-		{"Variable_name": "innodb_lock_wait_timeout", "Value": 50},
-		{"Variable_name": "innodb_autoinc_lock_mode", "Value": 1},
-		{"Variable_name": "innodb_file_per_table", "Value": "ON"},
-		{"Variable_name": "innodb_flush_method", "Value": "fsync"},
-		{"Variable_name": "innodb_log_file_size", "Value": 50331648},
-		{"Variable_name": "innodb_log_buffer_size", "Value": 16777216},
-		{"Variable_name": "innodb_thread_concurrency", "Value": 0},
-		{"Variable_name": "innodb_locks_unsafe_for_binlog", "Value": "OFF"},
-		{"Variable_name": "innodb_rollback_on_timeout", "Value": "OFF"},
-		{"Variable_name": "innodb_support_xa", "Value": "ON"},
-		{"Variable_name": "innodb_strict_mode", "Value": "OFF"},
-		{"Variable_name": "innodb_ft_min_token_size", "Value": 3},
-		{"Variable_name": "innodb_ft_max_token_size", "Value": 84},
-
-		// MyISAM
-		{"Variable_name": "myisam_recover_options", "Value": "OFF"},
-		{"Variable_name": "myisam_max_sort_file_size", "Value": 9223372036853727232},
-		{"Variable_name": "myisam_repair_threads", "Value": 1},
-		{"Variable_name": "concurrent_insert", "Value": "AUTO"},
-
-		// Security
-		{"Variable_name": "skip_name_resolve", "Value": "OFF"},
-		{"Variable_name": "skip_networking", "Value": "OFF"},
-		{"Variable_name": "skip_show_database", "Value": "OFF"},
-		{"Variable_name": "local_infile", "Value": "ON"},
-		{"Variable_name": "secure_file_priv", "Value": ""},
-		{"Variable_name": "have_ssl", "Value": "DISABLED"},
-		{"Variable_name": "have_openssl", "Value": "YES"},
-
-		// Performance schema
-		{"Variable_name": "performance_schema", "Value": "OFF"},
-		{"Variable_name": "performance_schema_instrument", "Value": ""},
-		{"Variable_name": "performance_schema_consumers_events_statements_history_long", "Value": "ON"},
-
-		// Other
-		{"Variable_name": "lower_case_table_names", "Value": 0},
-		{"Variable_name": "explicit_defaults_for_timestamp", "Value": "ON"},
-		{"Variable_name": "default_storage_engine", "Value": "InnoDB"},
-		{"Variable_name": "default_tmp_storage_engine", "Value": "InnoDB"},
-		{"Variable_name": "ft_min_word_len", "Value": 4},
-		{"Variable_name": "ft_max_word_len", "Value": 84},
-		{"Variable_name": "ft_query_expansion_limit", "Value": 20},
-		{"Variable_name": "lc_messages", "Value": "en_US"},
-		{"Variable_name": "lc_time_names", "Value": "en_US"},
-		{"Variable_name": "open_files_limit", "Value": 5000},
-		{"Variable_name": "pid_file", "Value": "/var/run/mysqld/mysqld.pid"},
-		{"Variable_name": "protocol_version", "Value": 10},
-		{"Variable_name": "read_only", "Value": "OFF"},
-		{"Variable_name": "super_read_only", "Value": "OFF"},
-		{"Variable_name": "storage_engine", "Value": "InnoDB"},
-		{"Variable_name": "system_time_zone", "Value": "UTC"},
-		{"Variable_name": "time_format", "Value": "%H:%i:%s"},
-		{"Variable_name": "time_zone", "Value": "SYSTEM"},
-		{"Variable_name": "updatable_views_with_limit", "Value": "YES"},
-		{"Variable_name": "userstat", "Value": "OFF"},
-		{"Variable_name": "net_buffer_length", "Value": 16384},
-		{"Variable_name": "max_allowed_packet", "Value": 16777216},
-		{"Variable_name": "div_precision_increment", "Value": 4},
-		{"Variable_name": "group_concat_max_len", "Value": 1024},
-		{"Variable_name": "tmp_table_size", "Value": 16777216},
-		{"Variable_name": "max_heap_table_size", "Value": 16777216},
+	// Build variables from shared definitions (single source of truth)
+	defs := information_schema.GetSystemVariableDefs()
+	variables := make([]domain.Row, 0, len(defs))
+	for _, v := range defs {
+		variables = append(variables, domain.Row{
+			"Variable_name": v.Name,
+			"Value":         v.Value,
+		})
 	}
 
 	// Apply LIKE filter if provided
@@ -406,7 +264,6 @@ func (e *ShowExecutor) executeShowVariables(ctx context.Context, showStmt *parse
 		if len(pattern) >= 2 && (pattern[0] == '\'' || pattern[0] == '"') {
 			pattern = pattern[1 : len(pattern)-1]
 		}
-		// Simple pattern matching (convert SQL LIKE to simple wildcard)
 		for _, row := range variables {
 			varName, _ := row["Variable_name"].(string)
 			if matchLike(varName, pattern) {
@@ -430,15 +287,15 @@ func (e *ShowExecutor) executeShowVariables(ctx context.Context, showStmt *parse
 
 // executeShowStatus executes SHOW STATUS
 func (e *ShowExecutor) executeShowStatus(ctx context.Context, showStmt *parser.ShowStatement) (*domain.QueryResult, error) {
-	// Return basic status variables
+	// Return basic status variables (all values must be strings per MySQL protocol)
 	status := []domain.Row{
-		{"Variable_name": "Threads_connected", "Value": 1},
-		{"Variable_name": "Threads_running", "Value": 1},
-		{"Variable_name": "Queries", "Value": 0},
-		{"Variable_name": "Uptime", "Value": 0},
-		{"Variable_name": "Connections", "Value": 1},
-		{"Variable_name": "Bytes_received", "Value": 0},
-		{"Variable_name": "Bytes_sent", "Value": 0},
+		{"Variable_name": "Threads_connected", "Value": "1"},
+		{"Variable_name": "Threads_running", "Value": "1"},
+		{"Variable_name": "Queries", "Value": "0"},
+		{"Variable_name": "Uptime", "Value": "0"},
+		{"Variable_name": "Connections", "Value": "1"},
+		{"Variable_name": "Bytes_received", "Value": "0"},
+		{"Variable_name": "Bytes_sent", "Value": "0"},
 	}
 
 	// Apply LIKE filter if provided

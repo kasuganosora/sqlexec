@@ -648,6 +648,27 @@ func (b *QueryBuilder) convertExpressionToFiltersInternal(expr *Expression, isIn
 
 	switch expr.Type {
 	case ExprTypeOperator:
+		// 处理 IS NULL / IS NOT NULL（一元运算符，只有 Left，没有 Right）
+		if expr.Left != nil && expr.Right == nil {
+			op := strings.ToUpper(expr.Operator)
+			if (op == "IS NULL" || op == "ISNULL") && expr.Left.Type == ExprTypeColumn {
+				filters = append(filters, domain.Filter{
+					Field:    expr.Left.Column,
+					Operator: "IS NULL",
+					Value:    nil,
+				})
+				return filters
+			}
+			if (op == "IS NOT NULL" || op == "ISNOTNULL") && expr.Left.Type == ExprTypeColumn {
+				filters = append(filters, domain.Filter{
+					Field:    expr.Left.Column,
+					Operator: "IS NOT NULL",
+					Value:    nil,
+				})
+				return filters
+			}
+		}
+
 		if expr.Left != nil && expr.Right != nil {
 			if expr.Operator == "and" || expr.Operator == "or" {
 				leftFilters := b.convertExpressionToFiltersInternal(expr.Left, expr.Operator == "or")

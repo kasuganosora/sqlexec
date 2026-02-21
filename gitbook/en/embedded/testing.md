@@ -31,15 +31,19 @@ func SetupTestDB(t *testing.T) *api.DB {
     // Use unique name to ensure complete isolation
     dsName := "test_" + uuid.New().String()[:8]
 
-    db := api.NewDB()
+    db, err := api.NewDB(nil) // nil uses default config
+    if err != nil {
+        t.Fatalf("failed to create DB: %v", err)
+    }
     memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
         Type:     domain.DataSourceTypeMemory,
         Name:     dsName,
         Writable: true,
     })
     memDS.Connect(context.Background())
-    db.RegisterDataSource(dsName, memDS)
-    db.SetDefaultDataSource(dsName)
+    if err := db.RegisterDataSource(dsName, memDS); err != nil {
+        t.Fatalf("failed to register datasource: %v", err)
+    }
 
     // Initialize schema
     initTestSchema(t, db)
@@ -167,15 +171,19 @@ func SetupSharedTestDB(t *testing.T) *api.Session {
 }
 
 func createSharedDB() *api.DB {
-    db := api.NewDB()
+    db, err := api.NewDB(nil)
+    if err != nil {
+        panic("failed to create DB: " + err.Error())
+    }
     memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
         Type:     domain.DataSourceTypeMemory,
         Name:     "shared_test",
         Writable: true,
     })
     memDS.Connect(context.Background())
-    db.RegisterDataSource("shared_test", memDS)
-    db.SetDefaultDataSource("shared_test")
+    if err := db.RegisterDataSource("shared_test", memDS); err != nil {
+        panic("failed to register datasource: " + err.Error())
+    }
 
     // Create all table schemas (executed once)
     session := db.Session()
@@ -239,7 +247,6 @@ package mypackage_test
 
 import (
     "context"
-    "fmt"
     "sync"
     "testing"
 
@@ -254,6 +261,35 @@ var (
     testCounter  int64
     counterMu    sync.Mutex
 )
+
+func createSharedDB() *api.DB {
+    db, err := api.NewDB(nil)
+    if err != nil {
+        panic("failed to create DB: " + err.Error())
+    }
+    memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
+        Type:     domain.DataSourceTypeMemory,
+        Name:     "shared_test",
+        Writable: true,
+    })
+    memDS.Connect(context.Background())
+    if err := db.RegisterDataSource("shared_test", memDS); err != nil {
+        panic("failed to register datasource: " + err.Error())
+    }
+
+    session := db.Session()
+    session.Execute(`
+        CREATE TABLE users (
+            id INT PRIMARY KEY,
+            name VARCHAR(100),
+            email VARCHAR(100),
+            test_id INT
+        )
+    `)
+    session.Close()
+
+    return db
+}
 
 func getUniqueID() int64 {
     counterMu.Lock()
@@ -397,15 +433,19 @@ import (
 func setupTestDB(t *testing.T) *api.DB {
     dsName := "test_" + uuid.New().String()[:8]
 
-    db := api.NewDB()
+    db, err := api.NewDB(nil)
+    if err != nil {
+        t.Fatalf("failed to create DB: %v", err)
+    }
     memDS := memory.NewMVCCDataSource(&domain.DataSourceConfig{
         Type:     domain.DataSourceTypeMemory,
         Name:     dsName,
         Writable: true,
     })
     memDS.Connect(context.Background())
-    db.RegisterDataSource(dsName, memDS)
-    db.SetDefaultDataSource(dsName)
+    if err := db.RegisterDataSource(dsName, memDS); err != nil {
+        t.Fatalf("failed to register datasource: %v", err)
+    }
 
     session := db.Session()
     session.Execute(`

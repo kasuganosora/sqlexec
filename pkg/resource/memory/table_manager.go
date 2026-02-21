@@ -188,14 +188,20 @@ func (m *MVCCDataSource) TruncateTable(ctx context.Context, tableName string) er
 	tableVer.mu.Lock()
 	defer tableVer.mu.Unlock()
 
+	// Get latest version data (defensive nil check)
+	latestData := tableVer.versions[tableVer.latest]
+	if latestData == nil {
+		return domain.NewErrTableNotFound(tableName)
+	}
+
 	// Create new version (empty data)
 	m.currentVer++
 
 	// Deep copy table attributes
 	var atts map[string]interface{}
-	if tableVer.versions[tableVer.latest].schema.Atts != nil {
-		atts = make(map[string]interface{}, len(tableVer.versions[tableVer.latest].schema.Atts))
-		for k, v := range tableVer.versions[tableVer.latest].schema.Atts {
+	if latestData.schema.Atts != nil {
+		atts = make(map[string]interface{}, len(latestData.schema.Atts))
+		for k, v := range latestData.schema.Atts {
 			atts[k] = v
 		}
 	}
@@ -204,9 +210,9 @@ func (m *MVCCDataSource) TruncateTable(ctx context.Context, tableName string) er
 		version:   m.currentVer,
 		createdAt: time.Now(),
 		schema: &domain.TableInfo{
-			Name:    tableVer.versions[tableVer.latest].schema.Name,
-			Schema:  tableVer.versions[tableVer.latest].schema.Schema,
-			Columns: tableVer.versions[tableVer.latest].schema.Columns,
+			Name:    latestData.schema.Name,
+			Schema:  latestData.schema.Schema,
+			Columns: latestData.schema.Columns,
 			Atts:    atts,
 		},
 		rows: NewEmptyPagedRows(m.bufferPool, 0),

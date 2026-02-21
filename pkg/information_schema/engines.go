@@ -87,7 +87,19 @@ func (t *EnginesTable) getEngines() []domain.Row {
 		dataSources := t.dsManager.GetAllDataSources()
 		defaultName := t.dsManager.GetDefaultName()
 
+		// First pass: determine the default engine type by name (avoids map iteration order issues)
+		defaultEngineType := ""
 		for name, ds := range dataSources {
+			if name == defaultName {
+				if config := ds.GetConfig(); config != nil {
+					defaultEngineType = string(config.Type)
+				}
+				break
+			}
+		}
+
+		// Second pass: build rows with deterministic DEFAULT marking
+		for _, ds := range dataSources {
 			config := ds.GetConfig()
 			if config == nil {
 				continue
@@ -118,7 +130,7 @@ func (t *EnginesTable) getEngines() []domain.Row {
 			}
 
 			support := "YES"
-			if name == defaultName {
+			if engineName == defaultEngineType {
 				support = "DEFAULT"
 			}
 

@@ -138,12 +138,7 @@ func (p *QueryPlanner) indexScan(tableData *TableData, plan *QueryPlan) (*domain
 	for _, filter := range plan.Filters[1:] {
 		newFiltered := make([]domain.Row, 0)
 		for _, row := range filteredRows {
-			matches := true
-			_, exists := row[filter.Field]
-			if !exists {
-				matches = false
-			}
-			if matches {
+			if util.MatchFilter(row, filter) {
 				newFiltered = append(newFiltered, row)
 			}
 		}

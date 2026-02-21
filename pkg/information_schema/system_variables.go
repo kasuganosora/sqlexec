@@ -76,18 +76,24 @@ func (t *SystemVariablesTable) Query(ctx context.Context, filters []domain.Filte
 	}, nil
 }
 
-// getSystemVariables returns all system variables
-func (t *SystemVariablesTable) getSystemVariables() []domain.Row {
-	// Define system variables with their properties
-	// Format: name, value, type, scope, source, readOnly
-	varDefs := []struct {
-		name     string
-		value    string
-		varType  string
-		scope    string
-		source   string
-		readOnly string
-	}{
+// SystemVariableDef defines a system variable
+type SystemVariableDef struct {
+	Name     string
+	Value    string
+	VarType  string
+	Scope    string
+	Source   string
+	ReadOnly string
+}
+
+// GetSystemVariableDefs returns the shared list of system variable definitions.
+// Used by both system_variables table and SHOW VARIABLES executor.
+func GetSystemVariableDefs() []SystemVariableDef {
+	return systemVariableDefs
+}
+
+// systemVariableDefs is the canonical list of system variables
+var systemVariableDefs = []SystemVariableDef{
 		// Version
 		{"version", "8.0.0-sqlexec", "STRING", "GLOBAL", "COMPILED", "YES"},
 		{"version_comment", "sqlexec MySQL-compatible database", "STRING", "GLOBAL", "COMPILED", "YES"},
@@ -114,11 +120,13 @@ func (t *SystemVariablesTable) getSystemVariables() []domain.Row {
 
 		// Character set and collation
 		{"character_set_server", "utf8mb4", "STRING", "GLOBAL", "CONFIG", "NO"},
-		{"character_set_client", "utf8mb4", "STRING", "SESSION", "DYNAMIC", "NO"},
+		{"character_set_client", "utf8mb3", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"character_set_connection", "utf8mb4", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"character_set_database", "utf8mb4", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"character_set_results", "utf8mb4", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"character_set_system", "utf8mb3", "STRING", "GLOBAL", "COMPILED", "YES"},
+		{"character_set_filesystem", "latin1", "STRING", "SESSION", "DYNAMIC", "NO"},
+		{"character_sets_dir", "MYSQL_TEST_DIR/ß/", "STRING", "GLOBAL", "COMPILED", "YES"},
 		{"collation_server", "utf8mb4_general_ci", "STRING", "GLOBAL", "CONFIG", "NO"},
 		{"collation_database", "utf8mb4_general_ci", "STRING", "SESSION", "DYNAMIC", "NO"},
 		{"collation_connection", "utf8mb4_general_ci", "STRING", "SESSION", "DYNAMIC", "NO"},
@@ -237,21 +245,24 @@ func (t *SystemVariablesTable) getSystemVariables() []domain.Row {
 
 		// Sanitizer detection (for MariaDB tests)
 		{"have_sanitizer", "", "STRING", "GLOBAL", "COMPILED", "YES"},
-	}
+}
 
-	rows := make([]domain.Row, 0, len(varDefs))
-	for _, v := range varDefs {
+// getSystemVariables returns all system variables
+func (t *SystemVariablesTable) getSystemVariables() []domain.Row {
+	defs := GetSystemVariableDefs()
+	rows := make([]domain.Row, 0, len(defs))
+	for _, v := range defs {
 		row := domain.Row{
-			"VARIABLE_NAME":          v.name,
-			"VARIABLE_VALUE":         v.value,
-			"VARIABLE_TYPE":          v.varType,
-			"VARIABLE_SCOPE":         v.scope,
-			"VARIABLE_SOURCE":        v.source,
-			"GLOBAL_VALUE":           v.value,
-			"GLOBAL_VALUE_ORIGIN":    v.source,
-			"SESSION_VALUE":          v.value,
-			"DEFAULT_VALUE":          v.value,
-			"READ_ONLY":              v.readOnly,
+			"VARIABLE_NAME":       v.Name,
+			"VARIABLE_VALUE":      v.Value,
+			"VARIABLE_TYPE":       v.VarType,
+			"VARIABLE_SCOPE":      v.Scope,
+			"VARIABLE_SOURCE":     v.Source,
+			"GLOBAL_VALUE":        v.Value,
+			"GLOBAL_VALUE_ORIGIN": v.Source,
+			"SESSION_VALUE":       v.Value,
+			"DEFAULT_VALUE":       v.Value,
+			"READ_ONLY":           v.ReadOnly,
 		}
 		rows = append(rows, row)
 	}

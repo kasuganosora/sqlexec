@@ -92,62 +92,63 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 	for tableName, cowSnapshot := range snapshot.tableSnapshots {
 		tableVer := m.tables[tableName]
 		if tableVer != nil && cowSnapshot.copied {
-			cowSnapshot.mu.Lock()
+			// Use closure to ensure locks are released via defer even on panic
+			func() {
+				cowSnapshot.mu.Lock()
+				defer cowSnapshot.mu.Unlock()
 
-			// Check if there are row-level modifications
-			if len(cowSnapshot.rowCopies) == 0 && len(cowSnapshot.deletedRows) == 0 {
-				// No rows modified, no need to create new version
-				cowSnapshot.mu.Unlock()
-				continue
-			}
-
-			// Row-level COW: merge base data and modified rows
-			tableVer.mu.Lock()
-			m.currentVer++
-
-			// Merge base data and row-level modifications
-			baseRows := cowSnapshot.baseData.Rows()
-			newRows := make([]domain.Row, 0, len(baseRows))
-			for i, row := range baseRows {
-				rowID := int64(i + 1)
-
-				// Skip deleted rows
-				if cowSnapshot.deletedRows[rowID] {
-					continue
+				// Check if there are row-level modifications
+				if len(cowSnapshot.rowCopies) == 0 && len(cowSnapshot.deletedRows) == 0 {
+					// No rows modified, no need to create new version
+					return
 				}
 
-				// Use modified row or deep copy original
-				if modifiedRow, ok := cowSnapshot.rowCopies[rowID]; ok {
-					newRows = append(newRows, modifiedRow)
-				} else {
-					newRows = append(newRows, deepCopyRow(row))
+				// Row-level COW: merge base data and modified rows
+				tableVer.mu.Lock()
+				defer tableVer.mu.Unlock()
+				m.currentVer++
+
+				// Merge base data and row-level modifications
+				baseRows := cowSnapshot.baseData.Rows()
+				newRows := make([]domain.Row, 0, len(baseRows))
+				for i, row := range baseRows {
+					rowID := int64(i + 1)
+
+					// Skip deleted rows
+					if cowSnapshot.deletedRows[rowID] {
+						continue
+					}
+
+					// Use modified row or deep copy original
+					if modifiedRow, ok := cowSnapshot.rowCopies[rowID]; ok {
+						newRows = append(newRows, modifiedRow)
+					} else {
+						newRows = append(newRows, deepCopyRow(row))
+					}
 				}
-			}
 
-			// Append newly inserted rows in order (rowID > base data row count)
-			baseRowsCount := int64(cowSnapshot.baseData.RowCount())
-			for rowID := baseRowsCount + 1; rowID <= baseRowsCount+cowSnapshot.insertedCount; rowID++ {
-				if cowSnapshot.deletedRows[rowID] {
-					continue
+				// Append newly inserted rows in order (rowID > base data row count)
+				baseRowsCount := int64(cowSnapshot.baseData.RowCount())
+				for rowID := baseRowsCount + 1; rowID <= baseRowsCount+cowSnapshot.insertedCount; rowID++ {
+					if cowSnapshot.deletedRows[rowID] {
+						continue
+					}
+					if row, ok := cowSnapshot.rowCopies[rowID]; ok {
+						newRows = append(newRows, row)
+					}
 				}
-				if row, ok := cowSnapshot.rowCopies[rowID]; ok {
-					newRows = append(newRows, row)
+
+				// Create new version
+				newVersionData := &TableData{
+					version:   m.currentVer,
+					createdAt: time.Now(),
+					schema:    deepCopySchema(cowSnapshot.modifiedData.schema),
+					rows:      NewPagedRows(m.bufferPool, newRows, 0, tableName, m.currentVer),
 				}
-			}
 
-			// Create new version
-			newVersionData := &TableData{
-				version:   m.currentVer,
-				createdAt: time.Now(),
-				schema:    deepCopySchema(cowSnapshot.modifiedData.schema),
-				rows:      NewPagedRows(m.bufferPool, newRows, 0, tableName, m.currentVer),
-			}
-
-			tableVer.versions[m.currentVer] = newVersionData
-			tableVer.latest = m.currentVer
-			tableVer.mu.Unlock()
-
-			cowSnapshot.mu.Unlock()
+				tableVer.versions[m.currentVer] = newVersionData
+				tableVer.latest = m.currentVer
+			}()
 		}
 	}
 

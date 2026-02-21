@@ -448,41 +448,51 @@ func tokenize(text string) []string {
 	return tokens
 }
 
+// toFloat64 converts numeric types to float64 for comparison.
+// Returns (value, ok). ok is false for non-numeric types.
+func toFloat64(v interface{}) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int32:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float32:
+		return float64(n), true
+	case float64:
+		return n, true
+	}
+	return 0, false
+}
+
 // compareKeys 比较两个键（用于范围查询）
 func compareKeys(a, b interface{}) int {
+	// Fast path: same type
 	switch va := a.(type) {
-	case int:
-		vb := b.(int)
-		if va < vb {
-			return -1
-		} else if va > vb {
-			return 1
-		}
-		return 0
-	case int64:
-		vb := b.(int64)
-		if va < vb {
-			return -1
-		} else if va > vb {
-			return 1
-		}
-		return 0
-	case float64:
-		vb := b.(float64)
-		if va < vb {
-			return -1
-		} else if va > vb {
-			return 1
-		}
-		return 0
 	case string:
-		vb := b.(string)
-		if va < vb {
+		if vb, ok := b.(string); ok {
+			if va < vb {
+				return -1
+			} else if va > vb {
+				return 1
+			}
+			return 0
+		}
+		return 0
+	}
+
+	// Numeric comparison: convert both to float64
+	fa, aOk := toFloat64(a)
+	fb, bOk := toFloat64(b)
+	if aOk && bOk {
+		if fa < fb {
 			return -1
-		} else if va > vb {
+		} else if fa > fb {
 			return 1
 		}
 		return 0
 	}
+
 	return 0
 }

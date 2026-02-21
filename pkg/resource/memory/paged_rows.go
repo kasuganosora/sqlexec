@@ -1,6 +1,8 @@
 package memory
 
 import (
+	"log"
+
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
@@ -155,7 +157,8 @@ func (pr *PagedRows) Materialize() []domain.Row {
 		if pr.pool != nil && !pr.pool.disabled {
 			rows, err := pr.pool.Pin(page)
 			if err != nil {
-				// On error, skip this page's rows
+				// Log the error — the returned slice will have fewer rows than expected
+				log.Printf("[WARN] Materialize: failed to load page %v: %v (skipping %d rows)", page.id, err, page.rowCount)
 				continue
 			}
 			result = append(result, rows...)

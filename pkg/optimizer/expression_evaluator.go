@@ -547,7 +547,7 @@ func ReplaceCorrelatedColumns(expr *parser.Expression, mapping map[string]string
 
 	// Replace function arguments
 	if len(expr.Args) > 0 {
-		newArgs := make([]parser.Expression, 0, len(expr.Args))
+		newArgs := make([]parser.Expression, len(expr.Args))
 		for i, arg := range expr.Args {
 			replacedArg := ReplaceCorrelatedColumns(&arg, mapping)
 			newArgs[i] = *replacedArg
