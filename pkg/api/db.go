@@ -30,6 +30,7 @@ type DBConfig struct {
 	DebugMode           bool
 	QueryTimeout        time.Duration // 全局查询超时, 0表示不限制
 	UseEnhancedOptimizer bool         // 是否使用增强优化器（默认true）
+	DatabaseDir          string       // 持久化存储根目录，默认 "./database"
 }
 
 // NewDB creates a new DB object with the given configuration
@@ -199,6 +200,11 @@ func (db *DB) SessionWithOptions(opts *SessionOptions) *Session {
 		queryTimeout = db.config.QueryTimeout
 	}
 	coreSession.SetQueryTimeout(queryTimeout)
+
+	// 设置持久化存储目录
+	if db.config != nil && db.config.DatabaseDir != "" {
+		coreSession.SetDatabaseDir(db.config.DatabaseDir)
+	}
 
 	apiSession := &Session{
 		db:           db,

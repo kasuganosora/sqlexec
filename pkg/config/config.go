@@ -52,6 +52,7 @@ type DatabaseConfig struct {
 	MaxConnections int      `json:"max_connections"`
 	IdleTimeout   int      `json:"idle_timeout"` // seconds
 	EnabledSources []string `json:"enabled_sources"` // 启用的数据源类型，核心版本可以只启用部分
+	DatabaseDir    string   `json:"database_dir"`    // 持久化存储根目录，默认 "./database"
 }
 
 // LogConfig 日志配置
@@ -162,6 +163,7 @@ func DefaultConfig() *Config {
 				"sqlite",
 				"parquet",
 			},
+			DatabaseDir: "./database",
 		},
 		Log: LogConfig{
 			Level:  "info",

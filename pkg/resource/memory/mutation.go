@@ -192,6 +192,60 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	return int64(len(rows)), nil
 }
 
+// BulkLoad creates a new version for the table and populates it incrementally.
+// The loadFn receives an addPage callback; each call to addPage creates one RowPage
+// and registers it with the buffer pool. This avoids holding all rows in memory at once,
+// allowing the buffer pool to evict cold pages during loading.
+// The caller transfers ownership of each rows slice passed to addPage.
+func (m *MVCCDataSource) BulkLoad(tableName string, loadFn func(addPage func(rows []domain.Row)) error) error {
+	m.mu.Lock()
+
+	tableVer, ok := m.tables[tableName]
+	if !ok {
+		m.mu.Unlock()
+		return domain.NewErrTableNotFound(tableName)
+	}
+
+	m.currentVer++
+	newVer := m.currentVer
+
+	tableVer.mu.Lock()
+	m.mu.Unlock()
+	defer tableVer.mu.Unlock()
+
+	latestData := tableVer.versions[tableVer.latest]
+	if latestData == nil {
+		return domain.NewErrTableNotFound(tableName)
+	}
+
+	pr := NewPagedRowsBuilder(m.bufferPool, 0, tableName, newVer)
+
+	if err := loadFn(pr.AppendPage); err != nil {
+		pr.Release()
+		return err
+	}
+
+	// Ensure at least one empty page for consistency with NewPagedRows behavior
+	if pr.Len() == 0 {
+		pr.AppendPage([]domain.Row{})
+	}
+
+	versionData := &TableData{
+		version:   newVer,
+		createdAt: time.Now(),
+		schema:    deepCopySchema(latestData.schema),
+		rows:      pr,
+	}
+	tableVer.versions[newVer] = versionData
+	tableVer.latest = newVer
+
+	if m.bufferPool != nil {
+		m.bufferPool.UpdateLatestVersion(tableName, newVer)
+	}
+
+	return nil
+}
+
 // convertRowTypesBasedOnSchema converts row values based on column types defined in schema
 func convertRowTypesBasedOnSchema(row domain.Row, schema *domain.TableInfo) {
 	utils.ConvertBoolColumnsBasedOnSchema(row, schema)

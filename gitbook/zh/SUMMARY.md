@@ -38,6 +38,7 @@
 * [Excel](datasources/excel.md)
 * [Parquet](datasources/parquet.md)
 * [HTTP](datasources/http.md)
+* [XML 持久化存储](datasources/xml-persistence.md)
 
 ## SQL 参考
 

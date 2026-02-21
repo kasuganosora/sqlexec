@@ -38,6 +38,7 @@
 * [Excel](datasources/excel.md)
 * [Parquet](datasources/parquet.md)
 * [HTTP](datasources/http.md)
+* [XML Persistence](datasources/xml-persistence.md)
 
 ## SQL Reference
 

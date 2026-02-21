@@ -15,6 +15,7 @@ SQLExec provides a unified `DataSource` interface that allows you to query multi
 | Excel | `excel` | Read-only | Load XLS/XLSX files |
 | Parquet | `parquet` | Read-only | Load Apache Parquet columnar files |
 | HTTP | `http` | Read-only | Query remote HTTP/REST APIs |
+| XML Persistence | `ENGINE=xml` | Read/Write | Per-table XML file persistence with automatic data recovery |
 
 ## Architecture
 

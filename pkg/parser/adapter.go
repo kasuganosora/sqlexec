@@ -713,13 +713,17 @@ func (a *SQLAdapter) convertCreateTableStmt(stmt *ast.CreateTableStmt) (*CreateS
 		createStmt.Columns = append(createStmt.Columns, colInfo)
 	}
 
-	// Parse table options for PERSISTENT storage
-	// Support: ENGINE=PERSISTENT syntax
+	// Parse table options (ENGINE, COMMENT, etc.)
 	for _, opt := range stmt.Options {
 		if opt.Tp == ast.TableOptionEngine {
-			if strings.ToUpper(opt.StrValue) == "PERSISTENT" {
+			engineName := strings.ToUpper(opt.StrValue)
+			createStmt.Options["engine"] = strings.ToLower(opt.StrValue)
+			if engineName == "PERSISTENT" {
 				createStmt.Persistent = true
 			}
+		}
+		if opt.Tp == ast.TableOptionComment {
+			createStmt.Options["comment"] = opt.StrValue
 		}
 	}
 
