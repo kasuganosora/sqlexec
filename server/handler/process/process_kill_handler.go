@@ -29,9 +29,6 @@ func (h *ProcessKillHandler) Handle(ctx *handler.HandlerContext, packet interfac
 	// 每个命令开始时重置序列号
 	ctx.ResetSequenceID()
 
-	// 从 session 获取序列号
-	seqID := ctx.GetNextSequenceID()
-
 	cmd, ok := packet.(*protocol.ComProcessKillPacket)
 	if !ok {
 		return ctx.SendError(fmt.Errorf("invalid packet type for COM_PROCESS_KILL"))
@@ -49,19 +46,7 @@ func (h *ProcessKillHandler) Handle(ctx *handler.HandlerContext, packet interfac
 	}
 
 	ctx.Log("成功 killed thread %d", threadID)
-	return h.sendOK(ctx, seqID)
-}
-
-// sendOK 发送 OK 包
-func (h *ProcessKillHandler) sendOK(ctx *handler.HandlerContext, seqID uint8) error {
-	okPacket := h.okBuilder.Build(seqID, 0, 0, 0)
-	data, err := okPacket.Marshal()
-	if err != nil {
-		return err
-	}
-
-	_, err = ctx.Connection.Write(data)
-	return err
+	return ctx.SendOK()
 }
 
 // Command 返回命令类型

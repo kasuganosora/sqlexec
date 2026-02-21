@@ -1,7 +1,6 @@
 package process
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/session"
@@ -84,34 +83,3 @@ func TestProcessKillHandler_Handle_NonexistentThread(t *testing.T) {
 	}
 }
 
-func TestProcessKillHandler_sendOK(t *testing.T) {
-	ctx, conn, _ := newTestCtx()
-	h := NewProcessKillHandler(nil)
-
-	err := h.sendOK(ctx, 3)
-	if err != nil {
-		t.Fatalf("sendOK error: %v", err)
-	}
-
-	written := conn.GetWrittenData()
-	if len(written) == 0 {
-		t.Fatal("expected OK packet to be written")
-	}
-	if written[0][4] != 0x00 {
-		t.Errorf("expected OK header 0x00, got 0x%02x", written[0][4])
-	}
-	if written[0][3] != 3 {
-		t.Errorf("sequence ID = %d, want 3", written[0][3])
-	}
-}
-
-func TestProcessKillHandler_sendOK_WriteError(t *testing.T) {
-	ctx, conn, _ := newTestCtx()
-	h := NewProcessKillHandler(nil)
-	conn.SetWriteError(fmt.Errorf("write failed"))
-
-	err := h.sendOK(ctx, 1)
-	if err == nil {
-		t.Fatal("expected write error")
-	}
-}

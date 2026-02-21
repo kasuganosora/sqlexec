@@ -54,6 +54,7 @@ type HandlerContext struct {
 	Logger       Logger
 	DB           DBAccessor
 	AuditLogger  AuditLogger
+	DebugEnabled bool // Debug logging switch (default true, configurable off)
 }
 
 // DBAccessor 数据库访问器接口（避免循环依赖）
@@ -98,13 +99,9 @@ func (ctx *HandlerContext) SendOKWithSequenceID(seqID uint8) error {
 
 // SendOK 发送 OK 包（自动生成序列号）
 func (ctx *HandlerContext) SendOK() error {
-	if ctx.Logger != nil {
-		ctx.Logger.Printf("[DEBUG] SendOK() calling GetNextSequenceID...")
-	}
+	ctx.DebugLog("SendOK() calling GetNextSequenceID...")
 	seqID := ctx.GetNextSequenceID()
-	if ctx.Logger != nil {
-		ctx.Logger.Printf("[DEBUG] SendOK() got seqID = %d, now calling SendOKWithSequenceID", seqID)
-	}
+	ctx.DebugLog("SendOK() got seqID = %d, now calling SendOKWithSequenceID", seqID)
 	return ctx.SendOKWithSequenceID(seqID)
 }
 
@@ -167,9 +164,7 @@ func (ctx *HandlerContext) SendError(err error) error {
 func (ctx *HandlerContext) ResetSequenceID() {
 	if ctx.Session != nil {
 		ctx.Session.ResetSequenceID()
-		if ctx.Logger != nil {
-			ctx.Logger.Printf("[DEBUG] ResetSequenceID called, new SequenceID = 0")
-		}
+		ctx.DebugLog("ResetSequenceID called, new SequenceID = 0")
 	}
 }
 
@@ -177,9 +172,7 @@ func (ctx *HandlerContext) ResetSequenceID() {
 func (ctx *HandlerContext) GetNextSequenceID() uint8 {
 	if ctx.Session != nil {
 		seqID := ctx.Session.GetNextSequenceID()
-		if ctx.Logger != nil {
-			ctx.Logger.Printf("[DEBUG] GetNextSequenceID returned: %d", seqID)
-		}
+		ctx.DebugLog("GetNextSequenceID returned: %d", seqID)
 		return seqID
 	}
 	return 0
@@ -189,6 +182,13 @@ func (ctx *HandlerContext) GetNextSequenceID() uint8 {
 func (ctx *HandlerContext) Log(format string, v ...interface{}) {
 	if ctx.Logger != nil {
 		ctx.Logger.Printf(format, v...)
+	}
+}
+
+// DebugLog 记录调试日志（仅当 DebugEnabled 为 true 时输出）
+func (ctx *HandlerContext) DebugLog(format string, v ...interface{}) {
+	if ctx.DebugEnabled && ctx.Logger != nil {
+		ctx.Logger.Printf("[DEBUG] "+format, v...)
 	}
 }
 

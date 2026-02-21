@@ -29,7 +29,7 @@ func (h *PingHandler) Handle(ctx *handler.HandlerContext, packet interface{}) er
 	ctx.ResetSequenceID()
 
 	// 简化实现，直接返回 OK
-	ctx.Log("[DEBUG] About to call SendOK()")
+	ctx.DebugLog("About to call SendOK()")
 	return ctx.SendOK()
 }
 

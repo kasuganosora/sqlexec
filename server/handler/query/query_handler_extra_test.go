@@ -575,12 +575,21 @@ func TestFieldListHandler_Handle_Valid(t *testing.T) {
 }
 
 func TestFieldListHandler_Handle_InvalidPacket(t *testing.T) {
-	ctx, _, _ := newTestCtx()
+	ctx, conn, _ := newTestCtx()
 	h := NewFieldListHandler(nil)
 
 	err := h.Handle(ctx, "not a field list packet")
-	if err == nil {
-		t.Fatal("expected error for invalid packet")
+	if err != nil {
+		t.Fatalf("Handle should return nil (sends error packet): %v", err)
+	}
+
+	// Should send a MySQL error packet (0xFF header) instead of returning raw error
+	written := conn.GetWrittenData()
+	if len(written) == 0 {
+		t.Fatal("expected error packet to be written")
+	}
+	if written[0][4] != 0xFF {
+		t.Errorf("expected error header 0xFF, got 0x%02x", written[0][4])
 	}
 }
 
@@ -662,17 +671,6 @@ func TestInitDBHandler_Handle_EmptyDBName_FallbackToSession(t *testing.T) {
 	}
 }
 
-func TestInitDBHandler_sendOK_WriteError(t *testing.T) {
-	ctx, conn, _ := newTestCtx()
-	h := NewInitDBHandler(nil)
-	conn.SetWriteError(fmt.Errorf("write failed"))
-
-	err := h.sendOK(ctx, 1)
-	if err == nil {
-		t.Fatal("expected write error")
-	}
-}
-
 func TestSendQueryResult_SingleColumn(t *testing.T) {
 	ctx, _, _ := newTestCtx()
 	h := NewQueryHandler()
@@ -704,23 +702,3 @@ func TestSendQueryResult_SingleColumn(t *testing.T) {
 	}
 }
 
-func TestInitDBHandler_sendOK(t *testing.T) {
-	ctx, conn, _ := newTestCtx()
-	h := NewInitDBHandler(nil)
-
-	err := h.sendOK(ctx, 5)
-	if err != nil {
-		t.Fatalf("sendOK error: %v", err)
-	}
-
-	written := conn.GetWrittenData()
-	if len(written) == 0 {
-		t.Fatal("expected OK packet to be written")
-	}
-	if written[0][4] != 0x00 {
-		t.Errorf("expected OK header 0x00, got 0x%02x", written[0][4])
-	}
-	if written[0][3] != 5 {
-		t.Errorf("sequence ID = %d, want 5", written[0][3])
-	}
-}

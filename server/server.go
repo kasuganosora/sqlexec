@@ -47,6 +47,7 @@ type Server struct {
 	auditLogger       handler.AuditLogger
 	configDir         string // 配置目录（用于 config 虚拟数据库）
 	vdbRegistry       *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
+	debugEnabled      bool // Debug logging switch (from config, default true)
 }
 
 type Logger interface {
@@ -180,6 +181,7 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 		logger:           &serverLogger{logger: log.New(os.Stdout, "[SERVER] ", log.LstdFlags)},
 		configDir:        configDir,
 		vdbRegistry:      vdbRegistry,
+		debugEnabled:     cfg.Server.IsDebugEnabled(),
 	}
 
 	// 注册所有处理器
@@ -374,6 +376,7 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 
 		// 使用注册中心处理命令
 		handlerCtx := handler.NewHandlerContext(sess, conn, commandType, s.logger, s.auditLogger)
+		handlerCtx.DebugEnabled = s.debugEnabled
 		err = s.handlerRegistry.Handle(handlerCtx, commandType, commandPack)
 		if err != nil {
 			s.logger.Printf("处理命令失败: %v", err)

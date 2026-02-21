@@ -44,6 +44,15 @@ type ServerConfig struct {
 	Port            int           `json:"port"`
 	ServerVersion   string        `json:"server_version"`
 	KeepAlivePeriod time.Duration `json:"keep_alive_period"`
+	Debug           *bool         `json:"debug"` // Debug logging switch (default true, set false to disable)
+}
+
+// IsDebugEnabled returns whether debug logging is enabled (default true)
+func (c *ServerConfig) IsDebugEnabled() bool {
+	if c.Debug == nil {
+		return true
+	}
+	return *c.Debug
 }
 
 // DatabaseConfig 数据库配置

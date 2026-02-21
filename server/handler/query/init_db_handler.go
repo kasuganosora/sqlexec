@@ -29,9 +29,6 @@ func (h *InitDBHandler) Handle(ctx *handler.HandlerContext, packet interface{}) 
 	// 每个命令开始时重置序列号
 	ctx.ResetSequenceID()
 
-	// 从 session 获取序列号
-	seqID := ctx.GetNextSequenceID()
-
 	cmd, ok := packet.(*protocol.ComInitDBPacket)
 	if !ok {
 		return ctx.SendError(fmt.Errorf("invalid packet type for COM_INIT_DB"))
@@ -60,7 +57,7 @@ func (h *InitDBHandler) Handle(ctx *handler.HandlerContext, packet interface{}) 
 	// 如果仍然为空，跳过处理
 	if dbName == "" {
 		ctx.Log("COM_INIT_DB 数据库名为空且无法从 session 获取，跳过处理")
-		return h.sendOK(ctx, seqID)
+		return ctx.SendOK()
 	}
 
 	// 设置数据库名
@@ -79,19 +76,7 @@ func (h *InitDBHandler) Handle(ctx *handler.HandlerContext, packet interface{}) 
 		ctx.Log("API Session 未初始化，无法更新当前数据库")
 	}
 
-	return h.sendOK(ctx, seqID)
-}
-
-// sendOK 发送 OK 包
-func (h *InitDBHandler) sendOK(ctx *handler.HandlerContext, seqID uint8) error {
-	okPacket := h.okBuilder.Build(seqID, 0, 0, 0)
-	data, err := okPacket.Marshal()
-	if err != nil {
-		return err
-	}
-
-	_, err = ctx.Connection.Write(data)
-	return err
+	return ctx.SendOK()
 }
 
 // Command 返回命令类型

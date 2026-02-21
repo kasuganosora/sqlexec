@@ -27,17 +27,15 @@ func (h *FieldListHandler) Handle(ctx *handler.HandlerContext, packet interface{
 	// 每个命令开始时重置序列号
 	ctx.ResetSequenceID()
 
-	// 从 session 获取序列号
-	seqID := ctx.GetNextSequenceID()
-
 	cmd, ok := packet.(*protocol.ComFieldListPacket)
 	if !ok {
-		return fmt.Errorf("invalid packet type for COM_FIELD_LIST")
+		return ctx.SendError(fmt.Errorf("invalid packet type for COM_FIELD_LIST"))
 	}
 
 	ctx.Log("处理 COM_FIELD_LIST: table=%s, wildcard=%s", cmd.Table, cmd.Wildcard)
 
 	// 发送 EOF 包（简化实现，不返回实际字段列表）
+	seqID := ctx.GetNextSequenceID()
 	eofPacket := h.eofBuilder.Build(seqID, 0, protocol.SERVER_STATUS_AUTOCOMMIT)
 	data, err := eofPacket.Marshal()
 	if err != nil {
