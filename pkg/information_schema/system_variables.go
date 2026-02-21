@@ -95,7 +95,7 @@ func GetSystemVariableDefs() []SystemVariableDef {
 // systemVariableDefs is the canonical list of system variables
 var systemVariableDefs = []SystemVariableDef{
 		// Version
-		{"version", "8.0.33-sqlexec", "STRING", "GLOBAL", "COMPILED", "YES"},
+		{"version", "8.0.34-sqlexec", "STRING", "GLOBAL", "COMPILED", "YES"},
 		{"version_comment", "sqlexec MySQL-compatible database", "STRING", "GLOBAL", "COMPILED", "YES"},
 		{"version_compile_machine", "x86_64", "STRING", "GLOBAL", "COMPILED", "YES"},
 		{"version_compile_os", "Linux", "STRING", "GLOBAL", "COMPILED", "YES"},
