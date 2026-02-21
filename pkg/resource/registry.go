@@ -9,6 +9,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/kasuganosora/sqlexec/pkg/resource/parquet"
 	"github.com/kasuganosora/sqlexec/pkg/resource/slice"
+	xmlds "github.com/kasuganosora/sqlexec/pkg/resource/xml"
 )
 
 // init 注册所有数据源工厂
@@ -24,6 +25,9 @@ func init() {
 	registry.Register(jsonl.NewJSONLFactory())
 	registry.Register(excel.NewExcelFactory())
 	registry.Register(parquet.NewParquetFactory())
+
+	// 注册目录数据源工厂
+	registry.Register(xmlds.NewXMLFactory())
 
 	// 注册内存数据适配器工厂
 	registry.Register(slice.NewFactory())

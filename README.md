@@ -10,7 +10,7 @@ SQLExec is a MySQL-compatible database engine written in Go. It can run as a **s
 
 - **MySQL 协议兼容 / MySQL Protocol Compatible** — 支持标准 MySQL 客户端连接 / Connect with any standard MySQL client
 - **多协议接入 / Multi-Protocol Access** — MySQL 协议、HTTP REST API、MCP（AI 工具集成） / MySQL protocol, HTTP REST API, and MCP (AI tool integration)
-- **多数据源 / Multi-Source Queries** — 统一 SQL 接口查询 Memory、MySQL、PostgreSQL、HTTP API、CSV、JSON、JSONL、Excel、Parquet
+- **多数据源 / Multi-Source Queries** — 统一 SQL 接口查询 Memory、MySQL、PostgreSQL、HTTP API、CSV、JSON、JSONL、Excel、Parquet，XML
 - **MVCC 存储引擎 / MVCC Storage Engine** — PostgreSQL 风格的多版本并发控制，支持 4 种事务隔离级别
 - **向量搜索 / Vector Search** — 10 种向量索引算法（HNSW、IVF 等），支持 cosine/L2/inner product
 - **全文搜索 / Full-Text Search** — BM25 评分的倒排索引，内置中文分词（Jieba）
@@ -145,6 +145,48 @@ USE mydb;
 SELECT * FROM orders WHERE created_at > '2025-01-01';
 ```
 
+### XML 持久化存储 / XML Persistent Storage
+
+通过 `ENGINE=xml` 将表数据持久化到 XML 文件，重启后自动恢复。
+
+Persist table data to XML files with `ENGINE=xml`. Data is automatically restored on restart.
+
+```sql
+USE mydb;
+
+-- 创建持久化表（默认 file_per_row 模式）/ Create persistent table (default: file_per_row)
+CREATE TABLE users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100),
+    email VARCHAR(200)
+) ENGINE=xml;
+
+-- 插入数据自动写回磁盘 / Inserts are automatically persisted to disk
+INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');
+
+-- 单文件模式：所有行存在一个 XML 中 / Single file mode: all rows in one XML
+CREATE TABLE logs (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    msg TEXT
+) ENGINE=xml COMMENT 'xml_mode=single_file';
+
+-- 索引也会被持久化 / Indexes are also persisted
+CREATE INDEX idx_name ON users (name);
+```
+
+磁盘文件结构 / Disk file structure:
+```
+./database/mydb/
+├── users/
+│   ├── __schema__.xml    -- 表结构 / Table schema
+│   ├── __meta__.xml      -- 索引元数据 / Index metadata
+│   ├── 1.xml             -- id=1 的行 / Row with id=1
+│   └── 2.xml             -- id=2 的行 / Row with id=2
+└── logs/
+    ├── __schema__.xml
+    └── data.xml           -- 所有行 / All rows in one file
+```
+
 ### 向量搜索 / Vector Search
 
 ```sql
@@ -200,6 +242,7 @@ go get github.com/kasuganosora/sqlexec
 | [独立服务器](gitbook/zh/standalone-server/overview.md) | [Standalone Server](gitbook/en/standalone-server/overview.md) |
 | [嵌入式使用](gitbook/zh/embedded/overview.md) | [Embedded Usage](gitbook/en/embedded/overview.md) |
 | [数据源](gitbook/zh/datasources/overview.md) | [Data Sources](gitbook/en/datasources/overview.md) |
+| [XML 持久化](gitbook/zh/datasources/xml-persistence.md) | [XML Persistence](gitbook/en/datasources/xml-persistence.md) |
 | [SQL 参考](gitbook/zh/sql-reference/overview.md) | [SQL Reference](gitbook/en/sql-reference/overview.md) |
 | [函数参考](gitbook/zh/functions/overview.md) | [Function Reference](gitbook/en/functions/overview.md) |
 | [向量搜索](gitbook/zh/advanced/vector-search.md) | [Vector Search](gitbook/en/advanced/vector-search.md) |

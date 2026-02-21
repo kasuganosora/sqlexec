@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
@@ -620,6 +621,268 @@ func TestCodec_LargeDataset(t *testing.T) {
 		if decoded[i]["id"] != int64(i) {
 			t.Fatalf("row %d id mismatch", i)
 		}
+	}
+}
+
+// ==================== AppendPage Tests ====================
+
+func TestNewPagedRowsBuilder_AppendPage(t *testing.T) {
+	pr := NewPagedRowsBuilder(nil, 10, "test", 1)
+
+	if pr.Len() != 0 {
+		t.Fatalf("expected 0 rows initially, got %d", pr.Len())
+	}
+
+	// Append first page
+	pr.AppendPage(makeTestRows(10))
+	if pr.Len() != 10 {
+		t.Fatalf("expected 10 rows after first append, got %d", pr.Len())
+	}
+
+	// Append second page
+	pr.AppendPage(makeTestRows(5))
+	if pr.Len() != 15 {
+		t.Fatalf("expected 15 rows after second append, got %d", pr.Len())
+	}
+
+	// Materialize and verify
+	mat := pr.Materialize()
+	if len(mat) != 15 {
+		t.Fatalf("expected 15 materialized rows, got %d", len(mat))
+	}
+}
+
+func TestNewPagedRowsBuilder_AppendPage_WithBufferPool(t *testing.T) {
+	dir := t.TempDir()
+	bp := NewBufferPool(&PagingConfig{
+		Enabled:       true,
+		MaxMemoryMB:   1,
+		PageSize:      100,
+		SpillDir:      dir,
+		EvictInterval: time.Hour,
+	})
+	defer bp.Close()
+
+	pr := NewPagedRowsBuilder(bp, 100, "test", 1)
+
+	// Append 50 pages of 100 rows = 5000 rows (exceeds 1MB, triggers eviction)
+	for i := 0; i < 50; i++ {
+		rows := make([]domain.Row, 100)
+		for j := 0; j < 100; j++ {
+			rows[j] = domain.Row{
+				"id":   int64(i*100 + j),
+				"name": "some_name_value_here",
+				"val":  float64(j) * 1.5,
+			}
+		}
+		pr.AppendPage(rows)
+	}
+
+	if pr.Len() != 5000 {
+		t.Fatalf("expected 5000 rows, got %d", pr.Len())
+	}
+
+	// Verify all data is accessible despite evictions
+	mat := pr.Materialize()
+	if len(mat) != 5000 {
+		t.Fatalf("expected 5000 materialized rows, got %d", len(mat))
+	}
+
+	// Verify data integrity
+	for i := 0; i < 5000; i++ {
+		if mat[i]["id"] != int64(i) {
+			t.Fatalf("data corruption at row %d: expected %d, got %v", i, i, mat[i]["id"])
+		}
+	}
+
+	pr.Release()
+}
+
+func TestNewPagedRowsBuilder_EmptyAppend(t *testing.T) {
+	pr := NewPagedRowsBuilder(nil, 10, "test", 1)
+	pr.AppendPage([]domain.Row{})
+
+	if pr.Len() != 0 {
+		t.Fatalf("expected 0 rows, got %d", pr.Len())
+	}
+
+	mat := pr.Materialize()
+	if len(mat) != 0 {
+		t.Fatalf("expected 0 materialized, got %d", len(mat))
+	}
+}
+
+func TestNewPagedRowsBuilder_Get(t *testing.T) {
+	pr := NewPagedRowsBuilder(nil, 3, "test", 1)
+
+	// Append two pages: [0,1,2] and [3,4]
+	page1 := make([]domain.Row, 3)
+	for i := 0; i < 3; i++ {
+		page1[i] = domain.Row{"id": int64(i)}
+	}
+	pr.AppendPage(page1)
+
+	page2 := make([]domain.Row, 2)
+	for i := 0; i < 2; i++ {
+		page2[i] = domain.Row{"id": int64(i + 3)}
+	}
+	pr.AppendPage(page2)
+
+	// Get from each page
+	for i := 0; i < 5; i++ {
+		row := pr.Get(i)
+		if row == nil {
+			t.Fatalf("Get(%d) returned nil", i)
+		}
+		if row["id"] != int64(i) {
+			t.Fatalf("Get(%d): expected id=%d, got %v", i, i, row["id"])
+		}
+	}
+
+	if pr.Get(5) != nil {
+		t.Fatal("Get(5) should return nil for out of bounds")
+	}
+}
+
+// ==================== BulkLoad Tests ====================
+
+func TestBulkLoad_Basic(t *testing.T) {
+	ctx := context.Background()
+	ds := NewMVCCDataSource(nil)
+	ds.Connect(ctx)
+
+	tableInfo := &domain.TableInfo{
+		Name: "t",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Primary: true},
+			{Name: "name", Type: "VARCHAR"},
+		},
+	}
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatal(err)
+	}
+
+	// BulkLoad with 3 pages
+	err := ds.BulkLoad("t", func(addPage func([]domain.Row)) error {
+		addPage([]domain.Row{{"id": int64(1), "name": "a"}, {"id": int64(2), "name": "b"}})
+		addPage([]domain.Row{{"id": int64(3), "name": "c"}})
+		addPage([]domain.Row{{"id": int64(4), "name": "d"}, {"id": int64(5), "name": "e"}})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify all rows accessible
+	result, err := ds.Query(ctx, "t", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != 5 {
+		t.Fatalf("expected 5 rows, got %d", result.Total)
+	}
+}
+
+func TestBulkLoad_EmptyTable(t *testing.T) {
+	ctx := context.Background()
+	ds := NewMVCCDataSource(nil)
+	ds.Connect(ctx)
+
+	tableInfo := &domain.TableInfo{
+		Name: "empty",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Primary: true},
+		},
+	}
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatal(err)
+	}
+
+	err := ds.BulkLoad("empty", func(addPage func([]domain.Row)) error {
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ds.Query(ctx, "empty", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != 0 {
+		t.Fatalf("expected 0 rows, got %d", result.Total)
+	}
+}
+
+func TestBulkLoad_NonexistentTable(t *testing.T) {
+	ctx := context.Background()
+	ds := NewMVCCDataSource(nil)
+	ds.Connect(ctx)
+
+	err := ds.BulkLoad("nonexistent", func(addPage func([]domain.Row)) error {
+		return nil
+	})
+	if err == nil {
+		t.Fatal("expected error for nonexistent table")
+	}
+}
+
+func TestBulkLoad_WithBufferPool(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	ds := NewMVCCDataSource(nil, &PagingConfig{
+		Enabled:       true,
+		MaxMemoryMB:   1,
+		PageSize:      100,
+		SpillDir:      dir,
+		EvictInterval: time.Hour,
+	})
+	ds.Connect(ctx)
+	defer ds.Close(ctx)
+
+	tableInfo := &domain.TableInfo{
+		Name: "large",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Primary: true},
+			{Name: "data", Type: "VARCHAR"},
+		},
+	}
+	if err := ds.CreateTable(ctx, tableInfo); err != nil {
+		t.Fatal(err)
+	}
+
+	totalRows := 5000
+	pageSize := 100
+
+	// BulkLoad large dataset through buffer pool
+	err := ds.BulkLoad("large", func(addPage func([]domain.Row)) error {
+		for start := 0; start < totalRows; start += pageSize {
+			end := start + pageSize
+			if end > totalRows {
+				end = totalRows
+			}
+			batch := make([]domain.Row, end-start)
+			for i := range batch {
+				batch[i] = domain.Row{
+					"id":   int64(start + i),
+					"data": "some_data_value_for_testing",
+				}
+			}
+			addPage(batch)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify all data accessible
+	result, err := ds.Query(ctx, "large", &domain.QueryOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Total != int64(totalRows) {
+		t.Fatalf("expected %d rows, got %d", totalRows, result.Total)
 	}
 }
 

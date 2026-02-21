@@ -15,6 +15,7 @@ SQLExec 提供统一的 `DataSource` 接口，允许你使用标准 SQL 查询�
 | Excel | `excel` | 只读 | 加载 XLS/XLSX 文件 |
 | Parquet | `parquet` | 只读 | 加载 Apache Parquet 列式文件 |
 | HTTP | `http` | 只读 | 查询远程 HTTP/REST API |
+| XML 持久化 | `ENGINE=xml` | 读写 | 按表持久化到 XML 文件，重启后自动恢复 |
 
 ## 架构
 

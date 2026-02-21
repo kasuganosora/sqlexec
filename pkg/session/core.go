@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
+	xmlpersist "github.com/kasuganosora/sqlexec/pkg/resource/xml"
 	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
@@ -37,17 +40,21 @@ type CoreSession struct {
 	queryMu        sync.Mutex       // 查询锁
 	vdbRegistry    *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
 	sessionVars    map[string]string // 会话级系统变量覆盖 (SET NAMES, SET @@var, etc.)
+	databaseDir    string                                                  // 持久化存储根目录
+	tablePersistence map[string]map[string]*xmlpersist.TablePersistConfig  // dbName -> tableName -> config
 }
 
 // NewCoreSession 创建核心会话（默认使用增强优化器）
 func NewCoreSession(dataSource domain.DataSource) *CoreSession {
 	return &CoreSession{
-		dataSource:  dataSource,
-		executor:    optimizer.NewOptimizedExecutor(dataSource, true), // 默认启用增强优化器
-		adapter:     parser.NewSQLAdapter(),
-		tempTables:  []string{},
-		closed:      false,
-		sessionVars: make(map[string]string),
+		dataSource:       dataSource,
+		executor:         optimizer.NewOptimizedExecutor(dataSource, true), // 默认启用增强优化器
+		adapter:          parser.NewSQLAdapter(),
+		tempTables:       []string{},
+		closed:           false,
+		sessionVars:      make(map[string]string),
+		databaseDir:      "./database",
+		tablePersistence: make(map[string]map[string]*xmlpersist.TablePersistConfig),
 	}
 }
 
@@ -59,19 +66,79 @@ func NewCoreSessionWithDSManager(dataSource domain.DataSource, dsManager *applic
 // NewCoreSessionWithDSManagerAndEnhanced 创建带有数据源管理器的核心会话（支持增强优化器选项）
 func NewCoreSessionWithDSManagerAndEnhanced(dataSource domain.DataSource, dsManager *application.DataSourceManager, useOptimizer, useEnhanced bool) *CoreSession {
 	return &CoreSession{
-		dataSource:   dataSource,
-		dsManager:    dsManager,
-		executor:     optimizer.NewOptimizedExecutorWithDSManager(dataSource, dsManager, useOptimizer),
-		adapter:      parser.NewSQLAdapter(),
-		currentDB:    "", // Default to no database selected
-		user:         "",
-		host:         "",
-		tempTables:   []string{},
-		closed:       false,
-		queryTimeout: 0, // 默认不限制
-		threadID:     0, // 后续设置
-		sessionVars:  make(map[string]string),
+		dataSource:       dataSource,
+		dsManager:        dsManager,
+		executor:         optimizer.NewOptimizedExecutorWithDSManager(dataSource, dsManager, useOptimizer),
+		adapter:          parser.NewSQLAdapter(),
+		currentDB:        "", // Default to no database selected
+		user:             "",
+		host:             "",
+		tempTables:       []string{},
+		closed:           false,
+		queryTimeout:     0, // 默认不限制
+		threadID:         0, // 后续设置
+		sessionVars:      make(map[string]string),
+		databaseDir:      "./database",
+		tablePersistence: make(map[string]map[string]*xmlpersist.TablePersistConfig),
 	}
+}
+
+// SetDatabaseDir sets the persistence base directory
+func (s *CoreSession) SetDatabaseDir(dir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.databaseDir = dir
+}
+
+// registerTablePersistence registers a table for persistence tracking
+func (s *CoreSession) registerTablePersistence(dbName, tableName string, cfg *xmlpersist.TablePersistConfig) {
+	if s.tablePersistence[dbName] == nil {
+		s.tablePersistence[dbName] = make(map[string]*xmlpersist.TablePersistConfig)
+	}
+	s.tablePersistence[dbName][tableName] = cfg
+}
+
+// getTablePersistence returns the persistence config for a table, or nil
+func (s *CoreSession) getTablePersistence(dbName, tableName string) *xmlpersist.TablePersistConfig {
+	if dbTables, ok := s.tablePersistence[dbName]; ok {
+		return dbTables[tableName]
+	}
+	return nil
+}
+
+// removeTablePersistence removes persistence tracking for a table
+func (s *CoreSession) removeTablePersistence(dbName, tableName string) {
+	if dbTables, ok := s.tablePersistence[dbName]; ok {
+		delete(dbTables, tableName)
+	}
+}
+
+// persistTableData writes current table data to XML files
+func (s *CoreSession) persistTableData(ctx context.Context, dbName string, cfg *xmlpersist.TablePersistConfig) error {
+	var ds domain.DataSource
+	if s.dsManager != nil {
+		var err error
+		ds, err = s.dsManager.Get(dbName)
+		if err != nil {
+			return fmt.Errorf("database '%s' not found: %w", dbName, err)
+		}
+	} else {
+		ds = s.dataSource
+	}
+
+	// Get table schema
+	tableInfo, err := ds.GetTableInfo(ctx, cfg.TableName)
+	if err != nil {
+		return fmt.Errorf("failed to get table info: %w", err)
+	}
+
+	// Query all rows
+	result, err := ds.Query(ctx, cfg.TableName, nil)
+	if err != nil {
+		return fmt.Errorf("failed to query table data: %w", err)
+	}
+
+	return xmlpersist.PersistTableData(cfg, tableInfo, result.Rows)
 }
 
 // SetQueryTimeout 设置查询超时时间
@@ -312,6 +379,15 @@ func (s *CoreSession) ExecuteInsert(ctx context.Context, sql string, rows []doma
 		return nil, fmt.Errorf("query execution cancelled")
 	}
 
+	// Persistence write-back for ENGINE=xml tables
+	if err == nil && parseResult.Statement.Insert != nil {
+		if cfg := s.getTablePersistence(s.currentDB, parseResult.Statement.Insert.Table); cfg != nil {
+			if pErr := s.persistTableData(queryCtx, s.currentDB, cfg); pErr != nil {
+				log.Printf("warning: persistence write-back failed for %s: %v", parseResult.Statement.Insert.Table, pErr)
+			}
+		}
+	}
+
 	// 返回结果，其中 Total 是影响的行数
 	return result, err
 }
@@ -367,6 +443,15 @@ func (s *CoreSession) ExecuteUpdate(ctx context.Context, sql string, _ []domain.
 		return nil, fmt.Errorf("query execution cancelled")
 	}
 
+	// Persistence write-back for ENGINE=xml tables
+	if err == nil && parseResult.Statement.Update != nil {
+		if cfg := s.getTablePersistence(s.currentDB, parseResult.Statement.Update.Table); cfg != nil {
+			if pErr := s.persistTableData(queryCtx, s.currentDB, cfg); pErr != nil {
+				log.Printf("warning: persistence write-back failed for %s: %v", parseResult.Statement.Update.Table, pErr)
+			}
+		}
+	}
+
 	// 返回结果，其中 Total 是影响的行数
 	return result, err
 }
@@ -420,6 +505,15 @@ func (s *CoreSession) ExecuteDelete(ctx context.Context, sql string, _ []domain.
 			return nil, fmt.Errorf("query was killed")
 		}
 		return nil, fmt.Errorf("query execution cancelled")
+	}
+
+	// Persistence write-back for ENGINE=xml tables
+	if err == nil && parseResult.Statement.Delete != nil {
+		if cfg := s.getTablePersistence(s.currentDB, parseResult.Statement.Delete.Table); cfg != nil {
+			if pErr := s.persistTableData(queryCtx, s.currentDB, cfg); pErr != nil {
+				log.Printf("warning: persistence write-back failed for %s: %v", parseResult.Statement.Delete.Table, pErr)
+			}
+		}
 	}
 
 	// 返回结果，其中 Total 是影响的行数
@@ -555,6 +649,10 @@ func (s *CoreSession) ExecuteCreateIndex(ctx context.Context, sql string) (*doma
 		return nil, fmt.Errorf("CREATE INDEX failed: %w", err)
 	}
 
+	// Persist index metadata for ENGINE=xml tables
+	tableName := parseResult.Statement.CreateIndex.TableName
+	s.persistIndexMetaIfNeeded(ctx, tableName)
+
 	return result, nil
 }
 
@@ -588,7 +686,56 @@ func (s *CoreSession) ExecuteDropIndex(ctx context.Context, sql string) (*domain
 		return nil, fmt.Errorf("DROP INDEX failed: %w", err)
 	}
 
+	// Persist index metadata for ENGINE=xml tables
+	tableName := parseResult.Statement.DropIndex.TableName
+	s.persistIndexMetaIfNeeded(ctx, tableName)
+
 	return result, nil
+}
+
+// persistIndexMetaIfNeeded saves index metadata to disk if the table has XML persistence
+func (s *CoreSession) persistIndexMetaIfNeeded(ctx context.Context, tableName string) {
+	cfg := s.getTablePersistence(s.currentDB, tableName)
+	if cfg == nil {
+		return
+	}
+
+	var ds domain.DataSource
+	if s.dsManager != nil {
+		var err error
+		ds, err = s.dsManager.Get(s.currentDB)
+		if err != nil {
+			return
+		}
+	} else {
+		ds = s.dataSource
+	}
+
+	mvccDS, ok := ds.(*memory.MVCCDataSource)
+	if !ok {
+		return
+	}
+
+	indexInfos, err := mvccDS.GetTableIndexes(tableName)
+	if err != nil {
+		return
+	}
+
+	// Convert to persistence format
+	indexes := make([]*xmlpersist.IndexMeta, 0, len(indexInfos))
+	for _, info := range indexInfos {
+		indexes = append(indexes, &xmlpersist.IndexMeta{
+			Name:    info.Name,
+			Table:   info.TableName,
+			Type:    string(info.Type),
+			Unique:  info.Unique,
+			Columns: info.Columns,
+		})
+	}
+
+	if err := xmlpersist.PersistIndexMeta(cfg, indexes); err != nil {
+		log.Printf("warning: failed to persist index metadata for %s: %v", tableName, err)
+	}
 }
 
 // BeginTx 开始事务（底层实现）
@@ -848,6 +995,23 @@ func (s *CoreSession) executeCreateStatement(ctx context.Context, createStmt *pa
 		return nil, fmt.Errorf("failed to create table '%s': %w", tableName, err)
 	}
 
+	// ENGINE=xml persistence setup
+	if engine, ok := createStmt.Options["engine"].(string); ok && engine == "xml" {
+		comment, _ := createStmt.Options["comment"].(string)
+		mode := xmlpersist.ParseStorageMode(comment)
+		cfg := &xmlpersist.TablePersistConfig{
+			BasePath:    filepath.Join(s.databaseDir, targetDB),
+			TableName:   tableName,
+			RootTag:     "Row",
+			StorageMode: mode,
+		}
+		if err := xmlpersist.PersistTableSchema(cfg, tableInfo); err != nil {
+			log.Printf("warning: failed to persist schema for %s: %v", tableName, err)
+		} else {
+			s.registerTablePersistence(targetDB, tableName, cfg)
+		}
+	}
+
 	// Return success result
 	return &domain.QueryResult{
 		Columns: []domain.ColumnInfo{},
@@ -901,12 +1065,103 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 	// 设置当前数据库
 	s.SetCurrentDB(dbName)
 
+	// Load persisted tables from disk (ENGINE=xml)
+	if !isVirtual && s.dsManager != nil {
+		s.loadPersistedTables(dbName)
+	}
+
 	// 返回成功结果
 	return &domain.QueryResult{
 		Columns: []domain.ColumnInfo{},
 		Rows:    []domain.Row{},
 		Total:   0,
 	}, nil
+}
+
+// loadPersistedTables loads XML-persisted tables from disk into the memory datasource
+func (s *CoreSession) loadPersistedTables(dbName string) {
+	basePath := filepath.Join(s.databaseDir, dbName)
+	configs, err := xmlpersist.LoadPersistedTables(basePath)
+	if err != nil || len(configs) == 0 {
+		return
+	}
+
+	ds, err := s.dsManager.Get(dbName)
+	if err != nil {
+		return
+	}
+
+	ctx := context.Background()
+	for _, cfg := range configs {
+		// Skip if already loaded (table already exists)
+		if _, err := ds.GetTableInfo(ctx, cfg.TableName); err == nil {
+			// Table exists, just register persistence config
+			s.registerTablePersistence(dbName, cfg.TableName, cfg)
+			continue
+		}
+
+		// Try batched loading through buffer pool for MVCC datasources.
+		// This loads rows in page-sized batches, allowing the buffer pool to evict
+		// cold pages and keep peak memory bounded regardless of table size.
+		if mvccDS, ok := ds.(*memory.MVCCDataSource); ok {
+			pageSize := mvccDS.GetBufferPool().PageSize()
+			tableInfo, indexes, err := xmlpersist.LoadTableFromDiskBatched(cfg, pageSize, nil)
+			if err != nil {
+				log.Printf("warning: failed to load persisted table %s: %v", cfg.TableName, err)
+				continue
+			}
+
+			// Create table in memory
+			if err := ds.CreateTable(ctx, tableInfo); err != nil {
+				log.Printf("warning: failed to create table %s from disk: %v", cfg.TableName, err)
+				continue
+			}
+
+			// BulkLoad data through buffer pool — pages are registered incrementally
+			var rowCount int
+			if err := mvccDS.BulkLoad(cfg.TableName, func(addPage func([]domain.Row)) error {
+				_, _, err := xmlpersist.LoadTableFromDiskBatched(cfg, pageSize, func(batch []domain.Row) {
+					rowCount += len(batch)
+					addPage(batch)
+				})
+				return err
+			}); err != nil {
+				log.Printf("warning: failed to bulk load data for table %s: %v", cfg.TableName, err)
+			}
+
+			// Rebuild indexes
+			for _, idx := range indexes {
+				if err := mvccDS.CreateIndexWithColumns(cfg.TableName, idx.Columns, idx.Type, idx.Unique); err != nil {
+					log.Printf("warning: failed to create index %s on %s: %v", idx.Name, cfg.TableName, err)
+				}
+			}
+
+			s.registerTablePersistence(dbName, cfg.TableName, cfg)
+			log.Printf("loaded persisted table: %s.%s (%d rows, %d indexes)", dbName, cfg.TableName, rowCount, len(indexes))
+			continue
+		}
+
+		// Fallback for non-MVCC datasources: use original full-load path
+		tableInfo, rows, indexes, err := xmlpersist.LoadTableFromDisk(cfg)
+		if err != nil {
+			log.Printf("warning: failed to load persisted table %s: %v", cfg.TableName, err)
+			continue
+		}
+
+		if err := ds.CreateTable(ctx, tableInfo); err != nil {
+			log.Printf("warning: failed to create table %s from disk: %v", cfg.TableName, err)
+			continue
+		}
+
+		if len(rows) > 0 {
+			if _, err := ds.Insert(ctx, cfg.TableName, rows, nil); err != nil {
+				log.Printf("warning: failed to insert data for table %s: %v", cfg.TableName, err)
+			}
+		}
+
+		s.registerTablePersistence(dbName, cfg.TableName, cfg)
+		log.Printf("loaded persisted table: %s.%s (%d rows, %d indexes)", dbName, cfg.TableName, len(rows), len(indexes))
+	}
 }
 
 // executeSetStatement executes SET statement (SET NAMES, SET CHARACTER SET, etc.)

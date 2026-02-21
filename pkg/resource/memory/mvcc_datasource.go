@@ -76,6 +76,11 @@ func NewMVCCDataSource(config *domain.DataSourceConfig, opts ...*PagingConfig) *
 	}
 }
 
+// GetBufferPool returns the buffer pool used by this data source.
+func (m *MVCCDataSource) GetBufferPool() *BufferPool {
+	return m.bufferPool
+}
+
 // gcOldVersions removes old table versions that are no longer referenced by
 // any active transaction. Must be called while holding m.mu.Lock().
 func (m *MVCCDataSource) gcOldVersions() {

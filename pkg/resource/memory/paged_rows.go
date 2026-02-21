@@ -14,6 +14,9 @@ type PagedRows struct {
 	pages     []*RowPage
 	totalRows int
 	pageSize  int
+	// table and version are stored for incremental AppendPage usage
+	table   string
+	version int64
 }
 
 // NewPagedRows creates a PagedRows by splitting the given rows into pages
@@ -77,6 +80,48 @@ func NewPagedRows(pool *BufferPool, rows []domain.Row, pageSize int, table strin
 		pages:     pages,
 		totalRows: totalRows,
 		pageSize:  pageSize,
+	}
+}
+
+// NewPagedRowsBuilder creates an empty PagedRows ready for incremental AppendPage calls.
+// Unlike NewPagedRows which takes all rows upfront, this allows streaming construction
+// where each page is registered with the buffer pool as it is added, enabling the pool
+// to evict earlier pages and keep peak memory bounded to O(pageSize).
+func NewPagedRowsBuilder(pool *BufferPool, pageSize int, table string, version int64) *PagedRows {
+	if pageSize <= 0 {
+		if pool != nil && pool.pageSize > 0 {
+			pageSize = pool.pageSize
+		} else {
+			pageSize = defaultPageSize
+		}
+	}
+	return &PagedRows{
+		pool:     pool,
+		pages:    make([]*RowPage, 0),
+		pageSize: pageSize,
+		table:    table,
+		version:  version,
+	}
+}
+
+// AppendPage adds a page of rows to the PagedRows. The caller transfers ownership
+// of the rows slice — it must not be modified after this call. The page is immediately
+// registered with the buffer pool, which may trigger eviction of cold pages.
+func (pr *PagedRows) AppendPage(rows []domain.Row) {
+	page := &RowPage{
+		id: PageID{
+			Table:   pr.table,
+			Version: pr.version,
+			Index:   len(pr.pages),
+		},
+		rows:      rows,
+		rowCount:  len(rows),
+		sizeBytes: estimatePageSize(rows),
+	}
+	pr.pages = append(pr.pages, page)
+	pr.totalRows += len(rows)
+	if pr.pool != nil {
+		pr.pool.Register(page)
 	}
 }
 

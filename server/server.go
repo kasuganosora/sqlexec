@@ -72,6 +72,7 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 		CacheSize:    1000,
 		CacheTTL:     300,
 		DebugMode:    false,
+		DatabaseDir:  cfg.Database.DatabaseDir,
 	})
 	if err != nil {
 		log.Fatalf("初始化 API DB 失败: %v", err)

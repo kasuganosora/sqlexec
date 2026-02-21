@@ -262,3 +262,8 @@ func (m *MVCCDataSource) DropIndex(tableName, indexName string) error {
 
 	return nil
 }
+
+// GetTableIndexes returns index metadata for all indexes on a table
+func (m *MVCCDataSource) GetTableIndexes(tableName string) ([]*IndexInfo, error) {
+	return m.indexManager.GetTableIndexes(tableName)
+}

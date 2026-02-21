@@ -29,6 +29,8 @@ const (
 	DataSourceTypeJSONL DataSourceType = "jsonl"
 	// DataSourceTypeHTTP HTTP远程数据源
 	DataSourceTypeHTTP DataSourceType = "http"
+	// DataSourceTypeXML XML目录数据源
+	DataSourceTypeXML DataSourceType = "xml"
 )
 
 // DataSourceConfig 数据源配置
