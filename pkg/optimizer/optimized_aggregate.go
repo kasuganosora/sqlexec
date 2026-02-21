@@ -155,13 +155,9 @@ func (p *OptimizedAggregate) executePerfectHashAggregate(input *domain.QueryResu
 		// 获取或创建聚合状态
 		if !valid[idx] {
 			groups[idx] = &aggregateState{
-				key:      intVal,
-				count:    0,
-				sum:      0.0,
-				avgSum:   0.0,
-				avgCount: 0,
-				minVal:   nil,
-				maxVal:   nil,
+				key:    intVal,
+				count:  0,
+				perAgg: make([]perAggState, len(p.AggFuncs)),
 			}
 			valid[idx] = true
 		}
@@ -183,8 +179,8 @@ func (p *OptimizedAggregate) executePerfectHashAggregate(input *domain.QueryResu
 		row[colName] = groups[idx].key
 
 		// 计算聚合函数
-		for _, agg := range p.AggFuncs {
-			result := p.calculateFinalAggregation(agg, groups[idx])
+		for aggIdx, agg := range p.AggFuncs {
+			result := p.calculateFinalAggregation(aggIdx, agg, groups[idx])
 			colName := agg.Alias
 			if colName == "" {
 				colName = fmt.Sprintf("%s(%v)", agg.Type, agg.Expr)
@@ -239,11 +235,7 @@ func (p *OptimizedAggregate) executeHashAggregate(input *domain.QueryResult) (*d
 			group = &aggregateState{
 				keyValues: make([]interface{}, len(p.GroupByCols)),
 				count:     0,
-				sum:       0.0,
-				avgSum:    0.0,
-				avgCount:  0,
-				minVal:    nil,
-				maxVal:    nil,
+				perAgg:    make([]perAggState, len(p.AggFuncs)),
 			}
 			// 保存分组键值
 			for i, colName := range p.GroupByCols {
@@ -269,8 +261,8 @@ func (p *OptimizedAggregate) executeHashAggregate(input *domain.QueryResult) (*d
 		}
 
 		// 计算聚合函数
-		for _, agg := range p.AggFuncs {
-			result := p.calculateFinalAggregation(agg, group)
+		for aggIdx, agg := range p.AggFuncs {
+			result := p.calculateFinalAggregation(aggIdx, agg, group)
 			colName := agg.Alias
 			if colName == "" {
 				colName = fmt.Sprintf("%s(%v)", agg.Type, agg.Expr)
@@ -383,22 +375,18 @@ func (p *OptimizedAggregate) compareValues(a, b interface{}) int {
 
 // updateAggregateState 更新聚合状态
 func (p *OptimizedAggregate) updateAggregateState(state *aggregateState, row domain.Row) {
-	// 更新每个聚合函数
-	hasCountFunc := false
-	for _, agg := range p.AggFuncs {
+	// 确保 perAgg 已初始化
+	if len(state.perAgg) == 0 {
+		state.perAgg = make([]perAggState, len(p.AggFuncs))
+	}
+
+	// 更新每个聚合函数（使用独立的 perAgg 状态）
+	for i, agg := range p.AggFuncs {
 		if agg.Type == Count {
-			hasCountFunc = true
-			break
+			state.count++
+			continue
 		}
-	}
 
-	// 只在有 COUNT 聚合函数时更新一次 count
-	if hasCountFunc {
-		state.count++
-	}
-
-	// 更新每个聚合函数
-	for _, agg := range p.AggFuncs {
 		colName := agg.Expr.Column
 		if colName == "" {
 			continue
@@ -412,41 +400,41 @@ func (p *OptimizedAggregate) updateAggregateState(state *aggregateState, row dom
 		switch agg.Type {
 		case Sum:
 			if numVal, ok := p.toFloat64(val); ok {
-				state.sum += numVal
+				state.perAgg[i].sum += numVal
 			}
 		case Avg:
 			if numVal, ok := p.toFloat64(val); ok {
-				state.avgSum += numVal
-				state.avgCount++
+				state.perAgg[i].avgSum += numVal
+				state.perAgg[i].avgCount++
 			}
 		case Min:
-			if state.minVal == nil || p.compareValues(val, state.minVal) < 0 {
-				state.minVal = val
+			if state.perAgg[i].minVal == nil || p.compareValues(val, state.perAgg[i].minVal) < 0 {
+				state.perAgg[i].minVal = val
 			}
 		case Max:
-			if state.maxVal == nil || p.compareValues(val, state.maxVal) > 0 {
-				state.maxVal = val
+			if state.perAgg[i].maxVal == nil || p.compareValues(val, state.perAgg[i].maxVal) > 0 {
+				state.perAgg[i].maxVal = val
 			}
 		}
 	}
 }
 
 // calculateFinalAggregation 计算最终的聚合值
-func (p *OptimizedAggregate) calculateFinalAggregation(agg *AggregationItem, state *aggregateState) interface{} {
+func (p *OptimizedAggregate) calculateFinalAggregation(aggIdx int, agg *AggregationItem, state *aggregateState) interface{} {
 	switch agg.Type {
 	case Count:
 		return state.count
 	case Sum:
-		return state.sum
+		return state.perAgg[aggIdx].sum
 	case Avg:
-		if state.avgCount > 0 {
-			return state.avgSum / float64(state.avgCount)
+		if state.perAgg[aggIdx].avgCount > 0 {
+			return state.perAgg[aggIdx].avgSum / float64(state.perAgg[aggIdx].avgCount)
 		}
 		return 0.0
 	case Min:
-		return state.minVal
+		return state.perAgg[aggIdx].minVal
 	case Max:
-		return state.maxVal
+		return state.perAgg[aggIdx].maxVal
 	default:
 		return nil
 	}
@@ -471,16 +459,21 @@ func (p *OptimizedAggregate) toFloat64(val interface{}) (float64, bool) {
 	return 0, false
 }
 
+// perAggState 单个聚合函数的状态
+type perAggState struct {
+	sum      float64
+	avgSum   float64
+	avgCount int64
+	minVal   interface{}
+	maxVal   interface{}
+}
+
 // aggregateState 聚合状态（不存储所有行）
 type aggregateState struct {
 	key       interface{}      // Perfect Hash 时的单列键
 	keyValues []interface{}    // 多列键值
 	count     int64            // COUNT
-	sum       float64          // SUM 总和
-	avgSum    float64          // AVG 的总和
-	avgCount  int64            // AVG 的计数
-	minVal    interface{}      // MIN
-	maxVal    interface{}      // MAX
+	perAgg    []perAggState    // 每个聚合函数独立的状态
 }
 
 // Explain 返回计划说明

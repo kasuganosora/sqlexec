@@ -222,30 +222,42 @@ func (e *SimpleCardinalityEstimator) estimateRangeSelectivity(operator string, v
 
 	switch operator {
 	case ">":
-		// value > min: (max - value) / (max - min)
-		if valFloat <= minFloat {
-			return 0.0
+		// col > value: fraction of rows where col > value
+		if valFloat >= maxFloat {
+			return 0.0 // value >= max => no rows satisfy col > value
+		}
+		if valFloat < minFloat {
+			return 1.0 // value < min => all rows satisfy col > value
 		}
 		return (maxFloat - valFloat) / rangeSize
 
 	case ">=":
-		// value >= min: (max - value) / (max - min)
-		if valFloat < minFloat {
+		// col >= value
+		if valFloat > maxFloat {
 			return 0.0
+		}
+		if valFloat <= minFloat {
+			return 1.0
 		}
 		return (maxFloat - valFloat + 0.0001) / rangeSize
 
 	case "<":
-		// value < max: (value - min) / (max - min)
-		if valFloat >= maxFloat {
-			return 0.0
+		// col < value: fraction of rows where col < value
+		if valFloat <= minFloat {
+			return 0.0 // value <= min => no rows satisfy col < value
+		}
+		if valFloat > maxFloat {
+			return 1.0 // value > max => all rows satisfy col < value
 		}
 		return (valFloat - minFloat) / rangeSize
 
 	case "<=":
-		// value <= max: (value - min) / (max - min)
-		if valFloat > maxFloat {
+		// col <= value
+		if valFloat < minFloat {
 			return 0.0
+		}
+		if valFloat >= maxFloat {
+			return 1.0
 		}
 		return (valFloat - minFloat + 0.0001) / rangeSize
 

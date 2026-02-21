@@ -28,8 +28,8 @@ func TestIsTruthy(t *testing.T) {
 		expected bool
 	}{
 		{"nil value", nil, false},
-		{"zero int", 0, true},
-		{"zero float64", 0.0, true},
+		{"zero int", 0, false},
+		{"zero float64", 0.0, false},
 		{"empty string", "", false},
 		{"false boolean", false, false},
 		{"non-zero int", 1, true},

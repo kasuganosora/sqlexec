@@ -261,27 +261,39 @@ func (e *EnhancedCardinalityEstimator) estimateRangeSelectivityUsingStats(operat
 
 	switch operator {
 	case ">":
-		// value > min: (max - value) / (max - min)
-		if valFloat <= minFloat {
-			return 0.0
+		// col > value: fraction of rows where col > value
+		if valFloat >= maxFloat {
+			return 0.0 // value >= max => no rows match
+		}
+		if valFloat < minFloat {
+			return 1.0 // value < min => all rows match
 		}
 		return (maxFloat - valFloat) / rangeSize
 	case ">=":
-		// value >= min: (max - value + epsilon) / (max - min)
-		if valFloat < minFloat {
+		// col >= value
+		if valFloat > maxFloat {
 			return 0.0
+		}
+		if valFloat <= minFloat {
+			return 1.0
 		}
 		return (maxFloat - valFloat + 0.0001) / rangeSize
 	case "<":
-		// value < max: (value - min) / (max - min)
-		if valFloat >= maxFloat {
-			return 0.0
+		// col < value: fraction of rows where col < value
+		if valFloat <= minFloat {
+			return 0.0 // value <= min => no rows match
+		}
+		if valFloat > maxFloat {
+			return 1.0 // value > max => all rows match
 		}
 		return (valFloat - minFloat) / rangeSize
 	case "<=":
-		// value <= max: (value - min + epsilon) / (max - min)
-		if valFloat > maxFloat {
+		// col <= value
+		if valFloat < minFloat {
 			return 0.0
+		}
+		if valFloat >= maxFloat {
+			return 1.0
 		}
 		return (valFloat - minFloat + 0.0001) / rangeSize
 	default:

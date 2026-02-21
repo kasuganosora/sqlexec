@@ -156,7 +156,7 @@ func NewBatchExecutor(batchSize int, flushInterval time.Duration, flushFunc func
 		flushInterval: flushInterval,
 		flushFunc:     flushFunc,
 	}
-	be.timer = time.AfterFunc(flushInterval, func() { be.flush() })
+	be.timer = time.AfterFunc(flushInterval, func() { be.Flush() })
 	return be
 }
 
@@ -168,17 +168,14 @@ func (be *BatchExecutor) Add(item interface{}) error {
 	be.batch = append(be.batch, item)
 
 	if len(be.batch) >= be.batchSize {
-		return be.flush()
+		return be.flushLocked()
 	}
 
 	return nil
 }
 
-// flush 刷新批次
-func (be *BatchExecutor) flush() error {
-	be.mu.Lock()
-	defer be.mu.Unlock()
-
+// flushLocked 刷新批次（调用者必须持有锁）
+func (be *BatchExecutor) flushLocked() error {
 	if len(be.batch) == 0 {
 		be.timer.Reset(be.flushInterval)
 		return nil
@@ -198,7 +195,9 @@ func (be *BatchExecutor) flush() error {
 
 // Flush 手动刷新
 func (be *BatchExecutor) Flush() error {
-	return be.flush()
+	be.mu.Lock()
+	defer be.mu.Unlock()
+	return be.flushLocked()
 }
 
 // Close 关闭批量执行器

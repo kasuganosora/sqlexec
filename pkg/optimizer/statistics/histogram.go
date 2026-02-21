@@ -380,7 +380,7 @@ func (h *Histogram) isValueInRange(value, lower, upper interface{}) bool {
 
 // totalCount 计算总行数（不包括NULL）
 func (h *Histogram) totalCount() int64 {
-	total := h.NullCount
+	var total int64
 	for _, bucket := range h.Buckets {
 		total += bucket.Count
 	}

@@ -122,25 +122,31 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownToDataSource(selection *Logic
 }
 
 // canPushDownToDataSource 检查条件是否可以下推到DataSource
+// ALL referenced columns must be present in the DataSource schema
 func (r *EnhancedPredicatePushdownRule) canPushDownToDataSource(cond *parser.Expression, dataSource *LogicalDataSource) bool {
-	// 简化：检查条件引用的列是否在DataSource中
 	schema := dataSource.Schema()
 	if len(schema) == 0 {
 		return false
 	}
 
-	// 检查所有引用的列
+	// 检查所有引用的列是否都在DataSource中
 	cols := r.extractColumnsFromExpression(cond)
+	if len(cols) == 0 {
+		return false
+	}
+
+	schemaSet := make(map[string]bool, len(schema))
+	for _, schemaCol := range schema {
+		schemaSet[schemaCol.Name] = true
+	}
+
 	for _, col := range cols {
-		// 检查列是否在DataSource的schema中
-		for _, schemaCol := range schema {
-			if col == schemaCol.Name {
-				return true
-			}
+		if !schemaSet[col] {
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
 // tryPushDownAcrossJoin 尝试跨JOIN下推谓词
