@@ -221,6 +221,8 @@ func TestSamplingCollector_CollectStatistics(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx := context.Background()
+	err = dataSource.Connect(ctx)
+	assert.NoError(t, err)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -284,6 +286,7 @@ func TestSamplingCollector_SampleRows(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx := context.Background()
+	dataSource.Connect(ctx)
 
 	// Create table and insert data
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -504,6 +507,7 @@ func TestSamplingCollector_CollectColumnStats(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx := context.Background()
+	dataSource.Connect(ctx)
 
 	// Create table and insert data
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{

@@ -29,6 +29,11 @@ func (m *MVCCDataSource) Filter(
 ) ([]domain.Row, int64, error) {
 	m.mu.RLock()
 
+	if !m.connected {
+		m.mu.RUnlock()
+		return nil, 0, domain.NewErrNotConnected("memory")
+	}
+
 	// Check if table exists
 	tableVer, ok := m.tables[tableName]
 	if !ok {
@@ -86,6 +91,11 @@ func (m *MVCCDataSource) Filter(
 // Query queries data
 func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) {
 	m.mu.RLock()
+
+	if !m.connected {
+		m.mu.RUnlock()
+		return nil, domain.NewErrNotConnected("memory")
+	}
 
 	tableVer, ok := m.tables[tableName]
 	if !ok {

@@ -22,6 +22,7 @@ func TestVectorSearchEndToEnd(t *testing.T) {
 		Name:     "test_memory",
 		Writable: true,
 	})
+	mvccDs.Connect(ctx)
 	das := dataaccess.NewDataService(mvccDs)
 	
 	// 创建测试表
@@ -201,6 +202,7 @@ func TestVectorSearchWithFilters(t *testing.T) {
 		Name:     "test_memory",
 		Writable: true,
 	})
+	mvccDs.Connect(ctx)
 	das := dataaccess.NewDataService(mvccDs)
 	tableInfo := &domain.TableInfo{
 		Name: "products",

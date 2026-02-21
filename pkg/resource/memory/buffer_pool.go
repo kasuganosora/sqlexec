@@ -202,27 +202,22 @@ func (bp *BufferPool) PageSize() int {
 // Pin loads a page into memory (if evicted) and increments its pin count.
 // The caller MUST call Unpin when done reading the rows.
 //
-// Fast path: if the page is already in memory (the common case during queries),
-// we only do an atomic increment — no mutex, no LRU manipulation.
+// All access to page.rows is protected by page.mu to avoid data races with
+// the evictor which sets page.rows = nil under the same lock.
 func (bp *BufferPool) Pin(page *RowPage) ([]domain.Row, error) {
 	page.Pin()
 
 	if bp.disabled {
-		return page.rows, nil
-	}
-
-	// Fast path: page in memory — avoid mutex entirely
-	// Safe because rows is only set to nil under page.mu.Lock,
-	// and once we observe non-nil + pinCount>0, the evictor will skip this page.
-	if rows := page.rows; rows != nil {
+		page.mu.Lock()
+		rows := page.rows
+		page.mu.Unlock()
 		return rows, nil
 	}
 
-	// Slow path: page might be on disk, take the lock
 	page.mu.Lock()
 	defer page.mu.Unlock()
 
-	// Re-check under lock
+	// Page already in memory
 	if page.rows != nil {
 		return page.rows, nil
 	}
@@ -250,6 +245,10 @@ func (bp *BufferPool) Pin(page *RowPage) ([]domain.Row, error) {
 // becomes an eviction candidate again. We only touch the LRU queue on
 // the transition from pinned → unpinned (pinCount goes to 0).
 func (bp *BufferPool) Unpin(page *RowPage) {
+	// Guard against going negative (e.g., double-unpin bugs)
+	if atomic.LoadInt32(&page.pinCount) <= 0 {
+		return
+	}
 	newCount := atomic.AddInt32(&page.pinCount, -1)
 
 	if bp.disabled {

@@ -35,14 +35,19 @@ func (m *MVCCDataSource) BeginTx(ctx context.Context, readOnly bool) (int64, err
 	txnID := m.nextTxID
 	m.nextTxID++
 
-	// Create COW snapshot structure without copying data
+	// Create COW snapshot structure without copying data.
+	// Pin each table's current latest version for snapshot isolation.
 	tableSnapshots := make(map[string]*COWTableSnapshot)
-	for tableName := range m.tables {
-		// Only create snapshot structure, reference base data
+	for tableName, tableVer := range m.tables {
+		tableVer.mu.RLock()
+		pinnedVer := tableVer.latest
+		tableVer.mu.RUnlock()
+
 		tableSnapshots[tableName] = &COWTableSnapshot{
-			tableName:    tableName,
-			copied:       false,
-			baseData:     nil, // Lazy load on access
+			tableName:   tableName,
+			snapshotVer: pinnedVer,
+			copied:      false,
+			baseData:    nil, // Lazy load on access
 			modifiedData: nil,
 		}
 	}
@@ -148,6 +153,9 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 
 				tableVer.versions[m.currentVer] = newVersionData
 				tableVer.latest = m.currentVer
+
+				// Maintain indexes: rebuild from the committed version's rows
+				_ = m.indexManager.RebuildIndex(tableName, newVersionData.schema, newRows)
 			}()
 		}
 	}
@@ -193,9 +201,9 @@ func (s *COWTableSnapshot) ensureCopied(tableVer *TableVersions) error {
 		return nil
 	}
 
-	// Get main version data
+	// Get the pinned snapshot version data (not the current latest)
 	tableVer.mu.RLock()
-	baseData := tableVer.versions[tableVer.latest]
+	baseData := tableVer.versions[s.snapshotVer]
 	tableVer.mu.RUnlock()
 
 	if baseData == nil {
@@ -229,9 +237,10 @@ func (s *COWTableSnapshot) getTableData(tableVer *TableVersions) *TableData {
 	s.mu.RUnlock()
 
 	if !copied {
-		// No copy created, read main version directly
+		// No copy created — read the pinned snapshot version (not the current latest)
+		// to guarantee snapshot isolation.
 		tableVer.mu.RLock()
-		data := tableVer.versions[tableVer.latest]
+		data := tableVer.versions[s.snapshotVer]
 		tableVer.mu.RUnlock()
 		return data
 	}

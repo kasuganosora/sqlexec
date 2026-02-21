@@ -91,10 +91,11 @@ type IndexInfo struct {
 
 // BTreeIndex B-Tree 索引
 type BTreeIndex struct {
-	info  *IndexInfo
-	root  *BTreeNode
+	info   *IndexInfo
+	root   *BTreeNode
 	height int
-	mu    sync.RWMutex
+	data   map[interface{}][]int64 // key -> rowIDs mapping for correct lookups
+	mu     sync.RWMutex
 	unique bool
 }
 
@@ -126,8 +127,9 @@ func NewBTreeIndex(tableName, columnName string, unique bool) *BTreeIndex {
 			Type:      IndexTypeBTree,
 			Unique:    unique,
 		},
-		root:  NewBTreeNode(true),
+		root:   NewBTreeNode(true),
 		height: 1,
+		data:   make(map[interface{}][]int64),
 		unique: unique,
 	}
 }
@@ -143,8 +145,9 @@ func NewBTreeIndexComposite(tableName string, columnNames []string, unique bool)
 			Type:      IndexTypeBTree,
 			Unique:    unique,
 		},
-		root:  NewBTreeNode(true),
+		root:   NewBTreeNode(true),
 		height: 1,
+		data:   make(map[interface{}][]int64),
 		unique: unique,
 	}
 }
@@ -154,8 +157,14 @@ func (idx *BTreeIndex) Insert(key interface{}, rowIDs []int64) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
-	// 简化实现：插入到root节点
-	// 实际应该实现B+ Tree的插入逻辑
+	if idx.unique {
+		if existing, exists := idx.data[key]; exists && len(existing) > 0 {
+			return fmt.Errorf("duplicate key violation for unique index")
+		}
+		idx.data[key] = rowIDs
+	} else {
+		idx.data[key] = append(idx.data[key], rowIDs...)
+	}
 	idx.root.keys = append(idx.root.keys, key)
 	return nil
 }
@@ -165,15 +174,15 @@ func (idx *BTreeIndex) Delete(key interface{}) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
-	// 简化实现：从root节点删除
-	// 实际应该实现B+ Tree的删除逻辑
+	delete(idx.data, key)
+
 	for i, k := range idx.root.keys {
 		if k == key {
 			idx.root.keys = append(idx.root.keys[:i], idx.root.keys[i+1:]...)
 			return nil
 		}
 	}
-	return fmt.Errorf("key not found: %v", key)
+	return nil
 }
 
 // Find 在B-Tree索引查找键值
@@ -181,15 +190,11 @@ func (idx *BTreeIndex) Find(key interface{}) ([]int64, bool) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	// 简化实现：在root节点查找
-	// 实际应该实现B+ Tree的查找逻辑
-	for _, k := range idx.root.keys {
-		if k == key {
-			// 简化返回
-			return []int64{1}, true
-		}
+	rowIDs, found := idx.data[key]
+	if !found || len(rowIDs) == 0 {
+		return nil, false
 	}
-	return nil, false
+	return rowIDs, true
 }
 
 // FindRange 在B-Tree索引范围查询
@@ -197,12 +202,10 @@ func (idx *BTreeIndex) FindRange(min, max interface{}) ([]int64, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
-	// 简化实现：在root节点范围查询
-	// 实际应该实现B+ Tree的范围查询逻辑
 	var results []int64
-	for _, k := range idx.root.keys {
+	for k, rowIDs := range idx.data {
 		if compareKeys(k, min) >= 0 && compareKeys(k, max) <= 0 {
-			results = append(results, 1)
+			results = append(results, rowIDs...)
 		}
 	}
 	return results, nil

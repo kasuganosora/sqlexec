@@ -24,7 +24,7 @@ func NewDefaultVariableManager() *DefaultVariableManager {
 // initDefaultVariables 初始化默认的系统变量
 func (vm *DefaultVariableManager) initDefaultVariables() {
 	// 系统变量
-	vm.variables["VERSION"] = "8.0.32-sqlexec"
+	vm.variables["VERSION"] = "8.0.33-sqlexec"
 	vm.variables["VERSION_COMMENT"] = "sqlexec MySQL-compatible database"
 	vm.variables["PORT"] = 3307
 	vm.variables["HOSTNAME"] = "localhost"

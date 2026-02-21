@@ -367,10 +367,7 @@ func (m *DataSourceManager) GetAllDataSources() map[string]domain.DataSource {
 
 // ==================== 全局数据源管理器 ====================
 
-var (
-	defaultManager = NewDataSourceManager()
-	managerOnce   sync.Once
-)
+var defaultManager = NewDataSourceManager()
 
 // GetDefaultManager 获取默认数据源管理器
 func GetDefaultManager() *DataSourceManager {

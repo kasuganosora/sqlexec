@@ -33,8 +33,11 @@ func (p *RowPage) Pin() {
 	atomic.AddInt32(&p.pinCount, 1)
 }
 
-// Unpin decrements the pin count.
+// Unpin decrements the pin count. Safe to call even if pinCount is already 0.
 func (p *RowPage) Unpin() {
+	if atomic.LoadInt32(&p.pinCount) <= 0 {
+		return
+	}
 	atomic.AddInt32(&p.pinCount, -1)
 }
 
