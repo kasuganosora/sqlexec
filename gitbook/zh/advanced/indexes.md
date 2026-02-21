@@ -1,6 +1,6 @@
 # 索引管理
 
-索引是数据库查询加速的核心机制。SQLExec 支持 4 种索引类型，覆盖从精确查找到语义搜索的各种场景。
+索引是数据库查询加速的核心机制。SQLExec 支持 5 种索引类型，覆盖从精确查找到地理空间查询的各种场景。
 
 > **注意**：目前仅 Memory 数据源支持索引功能。MySQL 和 PostgreSQL 数据源使用其原生索引机制。
 
@@ -12,6 +12,7 @@
 | Hash | 精确匹配 | `=` | 极快的点查询，不支持范围查询 |
 | Fulltext | 全文搜索 | `MATCH ... AGAINST` | 基于 BM25 的倒排索引 |
 | Vector | 近似最近邻搜索 | `vec_cosine_distance` 等 | 高维向量的 ANN 搜索 |
+| Spatial (R-Tree) | 地理空间查询 | `ST_Contains`、`ST_Intersects` 等 | 几何体边界框的 R-Tree 索引 |
 
 ## 创建索引
 
@@ -55,6 +56,14 @@ CREATE VECTOR INDEX idx_embedding ON documents(embedding)
     WITH (metric = 'cosine', m = 16, ef_construction = 200);
 ```
 
+### 空间索引（新功能）
+
+```sql
+CREATE SPATIAL INDEX idx_location ON cities(location);
+```
+
+空间索引使用 R-Tree 数据结构加速地理空间查询，如 `ST_Contains`、`ST_Within` 和 `ST_Intersects`。详见[空间索引](spatial-index.md)。
+
 ## 复合索引
 
 B-Tree 索引支持多列复合索引，遵循最左前缀匹配原则：
@@ -83,6 +92,7 @@ SQLExec 的查询优化器会自动为查询选择最优索引：
 - 对于范围条件（`<`, `>`, `BETWEEN`），选择 B-Tree 索引
 - 对于 `MATCH ... AGAINST`，选择 Fulltext 索引
 - 对于向量距离排序，选择 Vector 索引
+- 对于空间谓词（`ST_Contains`、`ST_Intersects`），选择 Spatial R-Tree 索引
 - 如果存在多个可用索引，优化器根据估算代价选择最优方案
 
 ## 使用建议
@@ -95,6 +105,7 @@ SQLExec 的查询优化器会自动为查询选择最优索引：
 | 文本关键词搜索 | Fulltext |
 | 向量相似度搜索 | Vector (HNSW) |
 | 唯一性约束 | UNIQUE (B-Tree) |
+| 地理空间查询 | Spatial (R-Tree) |
 
 ## 示例
 
@@ -126,6 +137,9 @@ CREATE FULLTEXT INDEX idx_desc ON products(description)
 CREATE VECTOR INDEX idx_feature ON products(feature_vector)
     USING HNSW
     WITH (metric = 'cosine', m = 16, ef_construction = 200);
+
+-- 为几何列创建空间索引
+CREATE SPATIAL INDEX idx_loc ON products(location);
 
 -- 查询时优化器自动选择索引
 SELECT * FROM products WHERE category = '电子产品';           -- 使用 Hash 索引

@@ -23,7 +23,13 @@ const (
 	IndexTypeVectorIVFRabitQ IndexType = "vector_ivf_rabitq"
 	IndexTypeVectorHNSWPRQ   IndexType = "vector_hnsw_prq"
 	IndexTypeVectorAISAQ     IndexType = "vector_aisaq"
+	IndexTypeSpatialRTree    IndexType = "spatial_rtree"
 )
+
+// IsSpatialIndex checks if the index type is a spatial index.
+func (t IndexType) IsSpatialIndex() bool {
+	return t == IndexTypeSpatialRTree
+}
 
 // IsVectorIndex 检查是否为向量索引
 func (t IndexType) IsVectorIndex() bool {

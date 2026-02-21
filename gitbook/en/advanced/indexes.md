@@ -1,6 +1,6 @@
 # Index Management
 
-Indexes are the core mechanism for accelerating database queries. SQLExec supports 4 index types, covering a range of scenarios from exact lookups to semantic search.
+Indexes are the core mechanism for accelerating database queries. SQLExec supports 5 index types, covering a range of scenarios from exact lookups to geospatial queries.
 
 > **Note**: Currently only the Memory data source supports indexing. MySQL and PostgreSQL data sources use their native indexing mechanisms.
 
@@ -14,6 +14,7 @@ Indexes are the core mechanism for accelerating database queries. SQLExec suppor
 | Hash | Exact match | `=` | Extremely fast point lookups, does not support range queries |
 | Fulltext | Full-text search | `MATCH ... AGAINST` | BM25-based inverted index |
 | Vector | Approximate nearest neighbor search | `vec_cosine_distance` etc. | ANN search for high-dimensional vectors |
+| Spatial (R-Tree) | Geospatial queries | `ST_Contains`, `ST_Intersects` etc. | R-Tree index for geometry bounding boxes |
 
 ## Creating Indexes
 
@@ -56,6 +57,14 @@ CREATE VECTOR INDEX idx_embedding ON documents(embedding)
     USING HNSW
     WITH (metric = 'cosine', m = 16, ef_construction = 200);
 ```
+
+### Spatial Index (NEW)
+
+```sql
+CREATE SPATIAL INDEX idx_location ON cities(location);
+```
+
+The spatial index uses an R-Tree data structure to accelerate geospatial queries such as `ST_Contains`, `ST_Within`, and `ST_Intersects`. See [Spatial Index](spatial-index.md) for details.
 
 ## Composite Indexes (NEW)
 
@@ -101,6 +110,7 @@ SQLExec's query optimizer automatically selects the optimal index for queries:
 - For range conditions (`<`, `>`, `BETWEEN`), the B-Tree index is selected
 - For `MATCH ... AGAINST`, the Fulltext index is selected
 - For vector distance ordering, the Vector index is selected
+- For spatial predicates (`ST_Contains`, `ST_Intersects`), the Spatial R-Tree index is selected
 - If multiple indexes are available, the optimizer selects the best plan based on estimated cost
 
 ## Usage Recommendations
@@ -115,6 +125,7 @@ SQLExec's query optimizer automatically selects the optimal index for queries:
 | Uniqueness constraint | UNIQUE (B-Tree) |
 | Multi-column filtering | Composite B-Tree |
 | Multi-column exact match | Composite Hash |
+| Geospatial queries | Spatial (R-Tree) |
 
 ## Example
 
@@ -146,6 +157,9 @@ CREATE FULLTEXT INDEX idx_desc ON products(description)
 CREATE VECTOR INDEX idx_feature ON products(feature_vector)
     USING HNSW
     WITH (metric = 'cosine', m = 16, ef_construction = 200);
+
+-- Create a spatial index on the geometry column
+CREATE SPATIAL INDEX idx_loc ON products(location);
 
 -- Create a composite index for multi-column queries
 CREATE INDEX idx_category_price ON products(category, price);

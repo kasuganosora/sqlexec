@@ -65,12 +65,14 @@
 * [向量函数](functions/vector.md)
 * [金融函数](functions/financial.md)
 * [位运算函数](functions/bitwise.md)
+* [空间函数](functions/spatial.md)
 * [系统函数](functions/system.md)
 
 ## 高级特性
 
 * [向量搜索](advanced/vector-search.md)
 * [全文搜索](advanced/fulltext-search.md)
+* [空间索引](advanced/spatial-index.md)
 * [索引管理](advanced/indexes.md)
 * [MVCC 与事务](advanced/mvcc.md)
 * [查询优化器](advanced/query-optimizer.md)

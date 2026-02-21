@@ -28,6 +28,7 @@ func GetAllCategories() []string {
 		"bitwise",
 		"similarity",
 		"icu",
+		"spatial",
 	}
 }
 

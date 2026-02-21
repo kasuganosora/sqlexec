@@ -88,6 +88,12 @@ func (m *IndexManager) CreateIndexWithColumns(tableName string, columnNames []st
 			return nil, fmt.Errorf("fulltext index does not support multiple columns")
 		}
 		idx = NewFullTextIndex(tableName, columnNames[0])
+	case IndexTypeSpatialRTree:
+		// Spatial index only supports single column
+		if len(columnNames) > 1 {
+			return nil, fmt.Errorf("spatial index does not support multiple columns")
+		}
+		idx = NewRTreeIndex(tableName, columnNames[0])
 	default:
 		return nil, fmt.Errorf("unsupported index type: %s", indexType)
 	}
@@ -331,6 +337,9 @@ func (m *IndexManager) RebuildIndex(tableName string, schema *domain.TableInfo, 
 			idx.mu.Lock()
 			idx.inverted = NewInvertedIndex()
 			idx.mu.Unlock()
+		case *RTreeIndex:
+			// 重置R-Tree空间索引
+			idx.Reset()
 		}
 	}
 

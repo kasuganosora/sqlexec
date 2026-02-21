@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kasuganosora/sqlexec/pkg/builtin"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
@@ -894,6 +895,10 @@ func convertXMLValue(value string, colType string) interface{} {
 		case "false", "0":
 			return false
 		}
+	case builtin.IsSpatialColumnType(colType):
+		if geom, err := builtin.ParseWKT(value); err == nil {
+			return geom
+		}
 	}
 	return value
 }
@@ -917,6 +922,8 @@ func formatValue(val interface{}) string {
 			return "true"
 		}
 		return "false"
+	case builtin.Geometry:
+		return v.WKT()
 	default:
 		return fmt.Sprintf("%v", v)
 	}
