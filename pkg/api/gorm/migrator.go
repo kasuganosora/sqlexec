@@ -17,7 +17,8 @@ type Migrator struct {
 	DB        *gorm.DB
 }
 
-// AutoMigrate creates tables for the given models if they don't exist.
+// AutoMigrate creates tables for the given models if they don't exist,
+// then creates any indexes (unique or otherwise) defined on the model.
 func (m *Migrator) AutoMigrate(dst ...interface{}) error {
 	for _, value := range dst {
 		namer := schema.NamingStrategy{}
@@ -34,6 +35,17 @@ func (m *Migrator) AutoMigrate(dst ...interface{}) error {
 		_, err = m.Dialector.Session.Execute(sql)
 		if err != nil {
 			return fmt.Errorf("failed to create table %s: %w", s.Table, err)
+		}
+
+		// Create only unique indexes for the new table so uniqueness constraints
+		// are enforced on insert. Regular (non-unique) indexes are performance
+		// hints that the current executor handles via full table scans.
+		for _, idx := range s.ParseIndexes() {
+			if idx.Class == "UNIQUE" {
+				if err := m.CreateIndex(value, idx.Name); err != nil {
+					return fmt.Errorf("failed to create index %s on %s: %w", idx.Name, s.Table, err)
+				}
+			}
 		}
 	}
 	return nil
@@ -229,12 +241,17 @@ func (m *Migrator) HasConstraint(value interface{}, name string) bool {
 }
 
 // CreateIndex creates an index. It extracts the column list from the model's
-// schema rather than hardcoding to (id).
+// schema rather than hardcoding to (id). Unique indexes are created with
+// CREATE UNIQUE INDEX so sqlexec can enforce uniqueness on insert.
 func (m *Migrator) CreateIndex(value interface{}, name string) error {
 	tableName := m.getTableName(value)
-	columns := m.resolveIndexColumns(value, name)
+	columns, isUnique := m.resolveIndexInfo(value, name)
 
-	sql := "CREATE INDEX " + quoteIdentifier(name) + " ON " + quoteIdentifier(tableName) + " (" + columns + ")"
+	keyword := "INDEX"
+	if isUnique {
+		keyword = "UNIQUE INDEX"
+	}
+	sql := "CREATE " + keyword + " " + quoteIdentifier(name) + " ON " + quoteIdentifier(tableName) + " (" + columns + ")"
 	_, err := m.Dialector.Session.Execute(sql)
 	return err
 }
@@ -408,10 +425,17 @@ func (m *Migrator) resolveColumnType(value interface{}, fieldName string) string
 // resolveIndexColumns looks up an index definition in the model's schema and
 // returns the comma-separated quoted column list. Falls back to "id".
 func (m *Migrator) resolveIndexColumns(value interface{}, indexName string) string {
+	cols, _ := m.resolveIndexInfo(value, indexName)
+	return cols
+}
+
+// resolveIndexInfo looks up an index definition in the model's schema and
+// returns the comma-separated quoted column list and whether it is unique.
+func (m *Migrator) resolveIndexInfo(value interface{}, indexName string) (columns string, unique bool) {
 	namer := schema.NamingStrategy{}
 	s, err := schema.Parse(value, &sync.Map{}, namer)
 	if err != nil {
-		return quoteIdentifier("id")
+		return quoteIdentifier("id"), false
 	}
 	for _, idx := range s.ParseIndexes() {
 		if idx.Name == indexName {
@@ -420,11 +444,11 @@ func (m *Migrator) resolveIndexColumns(value interface{}, indexName string) stri
 				cols = append(cols, quoteIdentifier(f.Field.DBName))
 			}
 			if len(cols) > 0 {
-				return strings.Join(cols, ", ")
+				return strings.Join(cols, ", "), idx.Class == "UNIQUE"
 			}
 		}
 	}
-	return quoteIdentifier("id")
+	return quoteIdentifier("id"), false
 }
 
 // generateCreateTableSQL generates a simple CREATE TABLE statement (fallback).

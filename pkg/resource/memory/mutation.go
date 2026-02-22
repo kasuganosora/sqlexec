@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -172,6 +173,12 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 
 	// Non-transaction insert, create new version
 	existingRows := latestData.Rows()
+
+	// Check unique constraints before committing the new version.
+	if err := m.checkUniqueConstraints(tableName, schema, existingRows, rows); err != nil {
+		return 0, err
+	}
+
 	newRows := make([]domain.Row, len(existingRows), len(existingRows)+len(rows))
 	copy(newRows, existingRows)
 	// Deep copy inserted rows to prevent external mutation
@@ -606,6 +613,75 @@ func (m *MVCCDataSource) removeVirtualColumns(row domain.Row, schema *domain.Tab
 // This is called after each non-transaction mutation to keep indexes in sync.
 func (m *MVCCDataSource) rebuildTableIndexes(tableName string, schema *domain.TableInfo, rows []domain.Row) {
 	_ = m.indexManager.RebuildIndex(tableName, schema, rows)
+}
+
+// checkUniqueConstraints verifies that no row in newRows would violate a unique
+// or primary-key constraint when combined with existingRows.
+// Checks both column-level Unique/Primary flags and unique indexes in the
+// index manager (covers gorm:"uniqueIndex" which doesn't set col.Unique).
+// Returns a "Duplicate entry" error compatible with isUniqueViolation detectors.
+func (m *MVCCDataSource) checkUniqueConstraints(tableName string, schema *domain.TableInfo, existingRows []domain.Row, newRows []domain.Row) error {
+	// 1. Column-level unique/primary constraints
+	for _, col := range schema.Columns {
+		if !col.Unique && !col.Primary {
+			continue
+		}
+		seen := make(map[string]bool, len(existingRows))
+		for _, row := range existingRows {
+			val, ok := row[col.Name]
+			if !ok || val == nil {
+				continue
+			}
+			seen[fmt.Sprintf("%v", val)] = true
+		}
+		for _, row := range newRows {
+			val, ok := row[col.Name]
+			if !ok || val == nil {
+				continue
+			}
+			key := fmt.Sprintf("%v", val)
+			if seen[key] {
+				return fmt.Errorf("Duplicate entry '%v' for key '%s'", val, col.Name)
+			}
+			seen[key] = true
+		}
+	}
+
+	// 2. Unique indexes registered in the index manager (e.g. CREATE UNIQUE INDEX).
+	// The index holds the state of the previous version (existingRows), so Find()
+	// tells us whether the value already exists in the table.
+	tableIndexes, err := m.indexManager.GetTableIndexes(tableName)
+	if err != nil || len(tableIndexes) == 0 {
+		return nil
+	}
+	for _, idxInfo := range tableIndexes {
+		if !idxInfo.Unique || len(idxInfo.Columns) != 1 {
+			continue // skip non-unique or composite indexes
+		}
+		colName := idxInfo.Columns[0]
+		idx, err := m.indexManager.GetIndex(tableName, colName)
+		if err != nil {
+			continue
+		}
+		newSeen := make(map[string]bool, len(newRows))
+		for _, row := range newRows {
+			val, ok := row[colName]
+			if !ok || val == nil {
+				continue
+			}
+			// Check against existing index data (previous version)
+			if _, exists := idx.Find(val); exists {
+				return fmt.Errorf("Duplicate entry '%v' for key '%s'", val, colName)
+			}
+			// Check within the batch itself
+			key := fmt.Sprintf("%v", val)
+			if newSeen[key] {
+				return fmt.Errorf("Duplicate entry '%v' for key '%s'", val, colName)
+			}
+			newSeen[key] = true
+		}
+	}
+	return nil
 }
 
 // getColumnInfo gets column information
