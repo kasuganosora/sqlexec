@@ -51,6 +51,10 @@ func PruneRows(rows []domain.Row, columns []string) []domain.Row {
 
 // ApplyQueryOperations 应用查询操作（过滤器、排序、分页）
 func ApplyQueryOperations(rows []domain.Row, options *domain.QueryOptions, columns *[]domain.ColumnInfo) []domain.Row {
+	if options == nil {
+		return rows
+	}
+
 	// 应用过滤器
 	filteredRows := ApplyFilters(rows, options)
 
@@ -61,7 +65,7 @@ func ApplyQueryOperations(rows []domain.Row, options *domain.QueryOptions, colum
 	pagedRows := ApplyPagination(sortedRows, options.Offset, options.Limit)
 
 	// 如果需要列裁剪
-	if options != nil && len(options.SelectColumns) > 0 && columns != nil {
+	if len(options.SelectColumns) > 0 && columns != nil {
 		pagedRows = PruneRows(pagedRows, options.SelectColumns)
 	}
 
