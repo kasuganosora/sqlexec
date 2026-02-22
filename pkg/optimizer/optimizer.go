@@ -163,9 +163,10 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 		logicalPlan = NewLogicalSelection(conditions, logicalPlan)
 	}
 
-	// 3. 应用 GROUP BY（Aggregate）
-	if len(stmt.GroupBy) > 0 {
-		aggFuncs := o.extractAggFuncs(stmt.Columns)
+	// 3. 应用 GROUP BY 或独立聚合函数（Aggregate）
+	// 没有 GROUP BY 但存在聚合函数（如 SELECT count(*) FROM t）时也需要 AggregateOperator
+	aggFuncs := o.extractAggFuncs(stmt.Columns)
+	if len(stmt.GroupBy) > 0 || len(aggFuncs) > 0 {
 		logicalPlan = NewLogicalAggregate(aggFuncs, stmt.GroupBy, logicalPlan)
 	}
 
@@ -200,11 +201,13 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 	}
 
 	// 6. 应用 SELECT 列（Projection）
+	// 当存在聚合函数时跳过 Projection：AggregateOperator 已经产生了正确的输出列。
+	// 额外的 Projection 会尝试投影不存在的列名（如 "COUNT_*"），导致空结果。
 	debugf("  [DEBUG] convertSelect: SELECT列数量: %d, IsWildcard=%v\n", len(stmt.Columns), isWildcard(stmt.Columns))
 	if len(stmt.Columns) > 0 {
 		debugf("  [DEBUG] convertSelect: cols[0].Name='%s'\n", stmt.Columns[0].Name)
 	}
-	if len(stmt.Columns) > 0 && !isWildcard(stmt.Columns) {
+	if len(aggFuncs) == 0 && len(stmt.Columns) > 0 && !isWildcard(stmt.Columns) {
 		debugln("  [DEBUG] convertSelect: 创建Projection")
 		exprs := make([]*parser.Expression, len(stmt.Columns))
 		aliases := make([]string, len(stmt.Columns))

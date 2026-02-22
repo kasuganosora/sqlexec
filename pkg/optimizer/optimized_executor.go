@@ -324,13 +324,20 @@ func (e *OptimizedExecutor) executeWithOptimizer(ctx context.Context, stmt *pars
 	debugln("  [DEBUG] 计划执行完成")
 
 	// 4. 设置列信息
-	tableInfo, err := e.dataSource.GetTableInfo(ctx, stmt.From)
-	if err == nil {
-		// 根据选择的列过滤
-		if !isWildcard(stmt.Columns) {
-			result.Columns = filterColumns(tableInfo.Columns, stmt.Columns)
-		} else {
-			result.Columns = tableInfo.Columns
+	// When the plan executor has already populated result.Columns (e.g. from an
+	// AggregateOperator), trust those columns and skip the table-schema override.
+	// Aggregate queries produce their own output schema (e.g. "COUNT_*") that does
+	// not match any column in the underlying table, so filterColumns would return
+	// an empty list and erase the correct aggregate column information.
+	if len(result.Columns) == 0 {
+		tableInfo, err := e.dataSource.GetTableInfo(ctx, stmt.From)
+		if err == nil {
+			// 根据选择的列过滤
+			if !isWildcard(stmt.Columns) {
+				result.Columns = filterColumns(tableInfo.Columns, stmt.Columns)
+			} else {
+				result.Columns = tableInfo.Columns
+			}
 		}
 	}
 

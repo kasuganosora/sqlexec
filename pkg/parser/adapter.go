@@ -888,6 +888,21 @@ func (a *SQLAdapter) convertExpression(node ast.ExprNode) (*Expression, error) {
 		}
 		expr.Args = args
 
+	case *ast.AggregateFuncExpr:
+		// Aggregate functions such as COUNT(*), SUM(col), AVG(col), etc.
+		expr.Type = ExprTypeFunction
+		expr.Function = strings.ToUpper(n.F)
+		// Store the function name in Value so that parseAggregationFunction can read it.
+		expr.Value = n.F
+		args := make([]Expression, 0, len(n.Args))
+		for _, arg := range n.Args {
+			converted, _ := a.convertExpression(arg)
+			if converted != nil {
+				args = append(args, *converted)
+			}
+		}
+		expr.Args = args
+
 	case *ast.PatternLikeOrIlikeExpr:
 		// 处理 LIKE 表达式
 		expr.Type = ExprTypeOperator
