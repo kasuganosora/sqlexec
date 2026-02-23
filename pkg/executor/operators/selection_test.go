@@ -336,31 +336,32 @@ func TestCompareValues(t *testing.T) {
 	}
 }
 
-// TestToInt tests the toInt helper function
-func TestToInt(t *testing.T) {
+// TestToInt64 tests the toInt64 helper function
+func TestToInt64(t *testing.T) {
 	tests := []struct {
 		name     string
 		value    interface{}
-		expected int
+		expected int64
 		expectOk bool
 	}{
 		{"int", int(42), 42, true},
 		{"int64", int64(100), 100, true},
-		{"float64", float64(99.5), 99, true},
+		{"int64 large", int64(1771853268153), 1771853268153, true},
 		{"string number", "123", 123, true},
 		{"string non-number", "hello", 0, false},
+		{"float64", float64(99.5), 0, false},
 		{"bool", true, 0, false},
 		{"nil", nil, 0, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, ok := toInt(tt.value)
+			result, ok := toInt64(tt.value)
 			if ok != tt.expectOk {
-				t.Errorf("toInt(%v) ok = %v, expected %v", tt.value, ok, tt.expectOk)
+				t.Errorf("toInt64(%v) ok = %v, expected %v", tt.value, ok, tt.expectOk)
 			}
 			if ok && result != tt.expected {
-				t.Errorf("toInt(%v) = %d, expected %d", tt.value, result, tt.expected)
+				t.Errorf("toInt64(%v) = %d, expected %d", tt.value, result, tt.expected)
 			}
 		})
 	}

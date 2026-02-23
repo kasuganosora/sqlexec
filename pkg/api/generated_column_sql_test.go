@@ -140,16 +140,16 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 
 		// 验证第一行数据
 		row1 := rows[0]
-		assert.Equal(t, float64(1), row1["id"])
+		assert.Equal(t, int64(1), row1["id"])
 		assert.Equal(t, 10.50, row1["price"])
-		assert.Equal(t, float64(5), row1["quantity"])
+		assert.Equal(t, int64(5), row1["quantity"])
 		assert.Equal(t, 52.50, row1["total"])
 
 		// 验证第二行数据
 		row2 := rows[1]
-		assert.Equal(t, float64(2), row2["id"])
+		assert.Equal(t, int64(2), row2["id"])
 		assert.Equal(t, 20.00, row2["price"])
-		assert.Equal(t, float64(3), row2["quantity"])
+		assert.Equal(t, int64(3), row2["quantity"])
 		assert.Equal(t, 60.00, row2["total"])
 	})
 
@@ -372,9 +372,9 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		}
 
 		assert.Equal(t, 2, len(rows))
-		assert.Equal(t, float64(1), rows[0]["id"])
+		assert.Equal(t, int64(1), rows[0]["id"])
 		assert.Equal(t, int64(20), rows[0]["doubled"])
-		assert.Equal(t, float64(3), rows[1]["id"])
+		assert.Equal(t, int64(3), rows[1]["id"])
 		assert.Equal(t, int64(60), rows[1]["doubled"])
 	})
 }

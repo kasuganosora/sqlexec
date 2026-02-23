@@ -29,7 +29,7 @@ func TestSimplifyTypeName(t *testing.T) {
 
 // TestConvertTiDBValue 测试TiDB值转换
 func TestConvertTiDBValue(t *testing.T) {
-	t.Run("integer types should convert to float64", func(t *testing.T) {
+	t.Run("integer types should convert to int64", func(t *testing.T) {
 		vals := []interface{}{
 			int(42),
 			int8(8),
@@ -41,19 +41,18 @@ func TestConvertTiDBValue(t *testing.T) {
 		for _, v := range vals {
 			converted, err := convertTiDBValue(v)
 			assert.NoError(t, err)
-			// 使用类型断言而不是类型转换
-			var expected float64
+			var expected int64
 			switch val := v.(type) {
 			case int:
-				expected = float64(val)
+				expected = int64(val)
 			case int8:
-				expected = float64(val)
+				expected = int64(val)
 			case int16:
-				expected = float64(val)
+				expected = int64(val)
 			case int32:
-				expected = float64(val)
+				expected = int64(val)
 			case int64:
-				expected = float64(val)
+				expected = val
 			}
 			assert.Equal(t, expected, converted)
 		}
@@ -71,19 +70,18 @@ func TestConvertTiDBValue(t *testing.T) {
 		for _, v := range vals {
 			converted, err := convertTiDBValue(v)
 			assert.NoError(t, err)
-			// 使用类型断言而不是类型转换
-			var expected float64
+			var expected int64
 			switch val := v.(type) {
 			case uint:
-				expected = float64(val)
+				expected = int64(val)
 			case uint8:
-				expected = float64(val)
+				expected = int64(val)
 			case uint16:
-				expected = float64(val)
+				expected = int64(val)
 			case uint32:
-				expected = float64(val)
+				expected = int64(val)
 			case uint64:
-				expected = float64(val)
+				expected = int64(val)
 			}
 			assert.Equal(t, expected, converted)
 		}

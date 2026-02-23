@@ -5,6 +5,35 @@ import (
 	"strings"
 )
 
+// asInt64 extracts an int64 from native integer types only (not float).
+// This preserves precision for large int64 values like Unix timestamps.
+func asInt64(v interface{}) (int64, bool) {
+	switch val := v.(type) {
+	case int:
+		return int64(val), true
+	case int8:
+		return int64(val), true
+	case int16:
+		return int64(val), true
+	case int32:
+		return int64(val), true
+	case int64:
+		return val, true
+	case uint:
+		return int64(val), true
+	case uint8:
+		return int64(val), true
+	case uint16:
+		return int64(val), true
+	case uint32:
+		return int64(val), true
+	case uint64:
+		return int64(val), true
+	default:
+		return 0, false
+	}
+}
+
 // CompareValues compares two values with given operator
 // Returns true if comparison matches, false otherwise
 func CompareValues(a, b interface{}, operator string) (bool, error) {
@@ -46,7 +75,30 @@ func CompareValues(a, b interface{}, operator string) (bool, error) {
 		}
 	}
 
-	// Try numeric comparison
+	// Try int64 comparison first (preserves precision for large integers)
+	aInt, aIsInt := asInt64(a)
+	bInt, bIsInt := asInt64(b)
+
+	if aIsInt && bIsInt {
+		switch op {
+		case "=", "EQ":
+			return aInt == bInt, nil
+		case "!=", "NEQ":
+			return aInt != bInt, nil
+		case ">", "GT":
+			return aInt > bInt, nil
+		case "<", "LT":
+			return aInt < bInt, nil
+		case ">=", "GE":
+			return aInt >= bInt, nil
+		case "<=", "LE":
+			return aInt <= bInt, nil
+		default:
+			return false, fmt.Errorf("unsupported operator: %s", operator)
+		}
+	}
+
+	// Fall back to float64 comparison for non-integer numerics
 	aNum, aErr := ToFloat64(a)
 	bNum, bErr := ToFloat64(b)
 
@@ -108,7 +160,20 @@ func CompareValuesForSort(a, b interface{}) int {
 		return 1
 	}
 
-	// Try numeric comparison
+	// Try int64 comparison first (preserves precision for large integers)
+	aInt, aIsInt := asInt64(a)
+	bInt, bIsInt := asInt64(b)
+
+	if aIsInt && bIsInt {
+		if aInt < bInt {
+			return -1
+		} else if aInt > bInt {
+			return 1
+		}
+		return 0
+	}
+
+	// Fall back to float64 comparison
 	aNum, aErr := ToFloat64(a)
 	bNum, bErr := ToFloat64(b)
 
@@ -235,6 +300,11 @@ func CompareValuesWithCollation(a, b interface{}, operator, collation string) (b
 	}
 
 	// Numeric comparison is collation-independent
+	_, aIsInt := asInt64(a)
+	_, bIsInt := asInt64(b)
+	if aIsInt && bIsInt {
+		return CompareValues(a, b, operator)
+	}
 	_, aErr := ToFloat64(a)
 	_, bErr := ToFloat64(b)
 	if aErr == nil && bErr == nil {
@@ -289,6 +359,18 @@ func CompareValuesForSortWithCollation(a, b interface{}, collation string) int {
 	}
 
 	// Numeric comparison is collation-independent
+	// Try int64 first for precision
+	aInt, aIsInt := asInt64(a)
+	bInt, bIsInt := asInt64(b)
+	if aIsInt && bIsInt {
+		if aInt < bInt {
+			return -1
+		} else if aInt > bInt {
+			return 1
+		}
+		return 0
+	}
+
 	aNum, aErr := ToFloat64(a)
 	bNum, bErr := ToFloat64(b)
 	if aErr == nil && bErr == nil {

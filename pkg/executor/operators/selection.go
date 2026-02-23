@@ -188,9 +188,9 @@ func (op *SelectionOperator) compareValues(a, b interface{}) int {
 		return 0
 	}
 
-	// 尝试转换为int比较
-	aInt, aOk := toInt(a)
-	bInt, bOk := toInt(b)
+	// 尝试转换为int64比较（保持大整数精度）
+	aInt, aOk := toInt64(a)
+	bInt, bOk := toInt64(b)
 	if aOk && bOk {
 		if aInt < bInt {
 			return -1
@@ -227,17 +227,23 @@ func (op *SelectionOperator) compareValues(a, b interface{}) int {
 	return 0
 }
 
-// toInt 尝试转换为int
-func toInt(v interface{}) (int, bool) {
+// toInt64 尝试转换为int64（仅限整数类型，不转换float64以避免精度丢失）
+func toInt64(v interface{}) (int64, bool) {
 	switch val := v.(type) {
 	case int:
-		return val, true
+		return int64(val), true
 	case int64:
-		return int(val), true
-	case float64:
-		return int(val), true
+		return val, true
+	case int32:
+		return int64(val), true
+	case uint:
+		return int64(val), true
+	case uint32:
+		return int64(val), true
+	case uint64:
+		return int64(val), true
 	case string:
-		if i, err := strconv.Atoi(val); err == nil {
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
 			return i, true
 		}
 	}

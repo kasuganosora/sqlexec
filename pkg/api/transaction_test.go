@@ -203,7 +203,7 @@ func TestTransaction_Execute_Insert(t *testing.T) {
 	assert.Equal(t, 1, len(rtx.insertCalls))
 	assert.Equal(t, "users", rtx.insertCalls[0].tableName)
 	assert.Equal(t, 1, len(rtx.insertCalls[0].rows))
-	assert.Equal(t, float64(1), rtx.insertCalls[0].rows[0]["id"])
+	assert.Equal(t, int64(1), rtx.insertCalls[0].rows[0]["id"])
 	assert.Equal(t, "Alice", rtx.insertCalls[0].rows[0]["name"])
 }
 
@@ -870,7 +870,7 @@ func TestTransaction_Execute_InsertWithColumns(t *testing.T) {
 	assert.Equal(t, 1, len(rtx.insertCalls[0].rows))
 
 	row := rtx.insertCalls[0].rows[0]
-	assert.Equal(t, float64(100), row["emp_id"])
+	assert.Equal(t, int64(100), row["emp_id"])
 	assert.Equal(t, "John", row["first_name"])
 	assert.Equal(t, "Doe", row["last_name"])
 }

@@ -323,7 +323,7 @@ func TestDDL_CreateTableAndInsert(t *testing.T) {
 	}
 
 	assert.Equal(t, 3, len(rows))
-	assert.Equal(t, float64(1), rows[0]["id"])
+	assert.Equal(t, int64(1), rows[0]["id"])
 	assert.Equal(t, "Alice", rows[0]["name"])
 	assert.Equal(t, "Bob", rows[1]["name"])
 	assert.Equal(t, "Charlie", rows[2]["name"])
@@ -385,9 +385,9 @@ func TestDDL_DropAndRecreate(t *testing.T) {
 
 	assert.True(t, query.Next())
 	row := query.Row()
-	assert.Equal(t, float64(1), row["id"])
+	assert.Equal(t, int64(1), row["id"])
 	assert.Equal(t, "NewUser", row["username"])
-	assert.Equal(t, float64(25), row["age"])
+	assert.Equal(t, int64(25), row["age"])
 }
 
 // TestDDL_MultipleTables 测试创建多个表

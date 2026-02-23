@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -1043,25 +1044,28 @@ func convertTiDBValue(val interface{}) (interface{}, error) {
 	case float64:
 		return v, nil
 	case int:
-		return float64(v), nil
+		return int64(v), nil
 	case int8:
-		return float64(v), nil
+		return int64(v), nil
 	case int16:
-		return float64(v), nil
+		return int64(v), nil
 	case int32:
-		return float64(v), nil
+		return int64(v), nil
 	case int64:
-		return float64(v), nil
+		return v, nil
 	case uint:
-		return float64(v), nil
+		return int64(v), nil
 	case uint8:
-		return float64(v), nil
+		return int64(v), nil
 	case uint16:
-		return float64(v), nil
+		return int64(v), nil
 	case uint32:
-		return float64(v), nil
+		return int64(v), nil
 	case uint64:
-		return float64(v), nil
+		if v <= uint64(math.MaxInt64) {
+			return int64(v), nil
+		}
+		return v, nil
 	case string:
 		// 尝试解析为float64（针对DECIMAL字符串）
 		if f, err := parseDecimalString(v); err == nil {
