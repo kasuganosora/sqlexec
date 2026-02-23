@@ -85,14 +85,25 @@ func (p *LogicalJoin) SetChildren(children ...LogicalPlan) {
 	p.children = children
 }
 
-// Schema 返回输出列
+// Schema 返回输出列（处理列名冲突，右表重名列加 "right_" 前缀）
 func (p *LogicalJoin) Schema() []ColumnInfo {
 	columns := []ColumnInfo{}
 	if len(p.children) > 0 {
 		columns = append(columns, p.children[0].Schema()...)
 	}
 	if len(p.children) > 1 {
-		columns = append(columns, p.children[1].Schema()...)
+		// Build a set of existing column names from left side
+		existing := make(map[string]bool, len(columns))
+		for _, col := range columns {
+			existing[col.Name] = true
+		}
+		// Add right side columns, prefixing duplicates
+		for _, col := range p.children[1].Schema() {
+			if existing[col.Name] {
+				col.Name = "right_" + col.Name
+			}
+			columns = append(columns, col)
+		}
 	}
 	return columns
 }

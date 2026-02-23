@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sort"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
@@ -71,24 +72,14 @@ func (p *PhysicalMergeJoin) Execute(ctx context.Context) (*domain.QueryResult, e
 	return nil, fmt.Errorf("PhysicalMergeJoin.Execute is deprecated. Please use pkg/executor instead")
 }
 
-// sortByColumn 按指定列排序行数据
+// sortByColumn 按指定列排序行数据 (O(n log n) stable sort)
 func (p *PhysicalMergeJoin) sortByColumn(rows []domain.Row, column string) []domain.Row {
-	// 使用稳定的排序算法
 	sorted := make([]domain.Row, len(rows))
 	copy(sorted, rows)
 
-	// 简单冒泡排序（实际应该用更高效的算法）
-	for i := 0; i < len(sorted); i++ {
-		for j := 0; j < len(sorted)-i-1; j++ {
-			leftVal := sorted[j][column]
-			rightVal := sorted[j+1][column]
-
-			if compareValuesForSort(leftVal, rightVal) > 0 {
-				// 交换
-				sorted[j], sorted[j+1] = sorted[j+1], sorted[j]
-			}
-		}
-	}
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return compareValuesForSort(sorted[i][column], sorted[j][column]) < 0
+	})
 
 	return sorted
 }
@@ -138,14 +129,19 @@ func (p *PhysicalMergeJoin) mergeRows(
 		for i < leftCount {
 			leftVal := leftRows[i][leftCol]
 
-			// 推进右指针到 >= leftVal
-			for j < rightCount && compareValuesForSort(rightRows[j][rightCol], leftVal) < 0 {
-				j++
+			// Find the start of the matching right group using a local scan pointer.
+			// We must NOT advance j permanently because if the next left row has the
+			// same value, it needs to see the same right group.
+			matchStart := j
+			// Advance matchStart to the first right row >= leftVal
+			for matchStart < rightCount && compareValuesForSort(rightRows[matchStart][rightCol], leftVal) < 0 {
+				matchStart++
 			}
+			// Update j to skip rows we'll never need again (right rows < leftVal)
+			j = matchStart
 
-			// 检查是否有匹配
 			matchFound := false
-			for k := j; k < rightCount && compareValuesForSort(rightRows[k][rightCol], leftVal) == 0; k++ {
+			for k := matchStart; k < rightCount && compareValuesForSort(rightRows[k][rightCol], leftVal) == 0; k++ {
 				output = append(output, p.mergeRow(leftRows[i], rightRows[k]))
 				matchFound = true
 			}
@@ -162,14 +158,14 @@ func (p *PhysicalMergeJoin) mergeRows(
 		for j < rightCount {
 			rightVal := rightRows[j][rightCol]
 
-			// 推进左指针到 >= rightVal
-			for i < leftCount && compareValuesForSort(leftRows[i][leftCol], rightVal) < 0 {
-				i++
+			matchStart := i
+			for matchStart < leftCount && compareValuesForSort(leftRows[matchStart][leftCol], rightVal) < 0 {
+				matchStart++
 			}
+			i = matchStart
 
-			// 检查是否有匹配
 			matchFound := false
-			for k := i; k < leftCount && compareValuesForSort(leftRows[k][leftCol], rightVal) == 0; k++ {
+			for k := matchStart; k < leftCount && compareValuesForSort(leftRows[k][leftCol], rightVal) == 0; k++ {
 				output = append(output, p.mergeRow(leftRows[k], rightRows[j]))
 				matchFound = true
 			}
@@ -243,7 +239,6 @@ func getJoinColumns(conditions []*JoinCondition) (string, string) {
 		return "", ""
 	}
 
-	// 简化：取第一个条件的字符串表示
 	if conditions[0].Left != nil {
 		leftStr := fmt.Sprintf("%v", conditions[0].Left)
 		if conditions[0].Right != nil {

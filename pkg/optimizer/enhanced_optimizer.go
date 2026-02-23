@@ -601,16 +601,34 @@ func (eo *EnhancedOptimizer) convertJoinEnhanced(ctx context.Context, p *Logical
 	outputSchema = append(outputSchema, left.OutputSchema...)
 	outputSchema = append(outputSchema, right.OutputSchema...)
 
+	// Build join conditions safely: handle empty conditions (CROSS JOIN)
+	// and correctly separate left/right condition references.
+	conditions := p.GetJoinConditions()
+	var leftCond, rightCond *types.JoinCondition
+	var leftConds, rightConds []*types.JoinCondition
+
+	if len(conditions) > 0 {
+		leftCond = convertToTypesJoinConditionLeft(conditions[0])
+		rightCond = convertToTypesJoinConditionRight(conditions[0])
+
+		for _, cond := range conditions {
+			leftConds = append(leftConds, convertToTypesJoinConditionLeft(cond))
+			rightConds = append(rightConds, convertToTypesJoinConditionRight(cond))
+		}
+	}
+
 	return &plan.Plan{
-		ID:           fmt.Sprintf("join_%d", len(p.GetJoinConditions())),
+		ID:           fmt.Sprintf("join_%d", len(conditions)),
 		Type:         plan.TypeHashJoin,
 		OutputSchema: outputSchema,
 		Children:     []*plan.Plan{left, right},
 		Config: &plan.HashJoinConfig{
-			JoinType:  types.JoinType(p.GetJoinType()),
-			LeftCond:  convertToTypesJoinCondition(p.GetJoinConditions()[0]),
-			RightCond: convertToTypesJoinCondition(p.GetJoinConditions()[0]),
-			BuildSide: "left",
+			JoinType:   types.JoinType(p.GetJoinType()),
+			LeftCond:   leftCond,
+			RightCond:  rightCond,
+			LeftConds:  leftConds,
+			RightConds: rightConds,
+			BuildSide:  "right",
 		},
 	}, nil
 }
@@ -633,7 +651,7 @@ func convertJoinConditionsToExpressions(conditions []*JoinCondition) []*parser.E
 	return result
 }
 
-// convertToTypesJoinCondition 转换JoinCondition为types.JoinCondition
+// convertToTypesJoinCondition 转换JoinCondition为types.JoinCondition (legacy)
 func convertToTypesJoinCondition(cond *JoinCondition) *types.JoinCondition {
 	if cond == nil {
 		return nil
@@ -641,6 +659,30 @@ func convertToTypesJoinCondition(cond *JoinCondition) *types.JoinCondition {
 	return &types.JoinCondition{
 		Left:     convertToTypesExpr(cond.Left),
 		Right:    convertToTypesExpr(cond.Right),
+		Operator: cond.Operator,
+	}
+}
+
+// convertToTypesJoinConditionLeft extracts the left-table side of a join condition.
+// For "t1.id = t2.user_id", this returns a condition referencing t1.id.
+func convertToTypesJoinConditionLeft(cond *JoinCondition) *types.JoinCondition {
+	if cond == nil {
+		return nil
+	}
+	return &types.JoinCondition{
+		Left:     convertToTypesExpr(cond.Left),
+		Operator: cond.Operator,
+	}
+}
+
+// convertToTypesJoinConditionRight extracts the right-table side of a join condition.
+// For "t1.id = t2.user_id", this returns a condition referencing t2.user_id.
+func convertToTypesJoinConditionRight(cond *JoinCondition) *types.JoinCondition {
+	if cond == nil {
+		return nil
+	}
+	return &types.JoinCondition{
+		Left:     convertToTypesExpr(cond.Right),
 		Operator: cond.Operator,
 	}
 }

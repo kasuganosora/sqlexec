@@ -2,6 +2,7 @@ package join
 
 import (
 	"fmt"
+	"sort"
 )
 
 // JoinGraph JOIN关系图
@@ -198,14 +199,10 @@ func (jg *JoinGraph) FindMinSpanningTree() []*JoinEdge {
 	sortedEdges := make([]*JoinEdge, len(jg.edges))
 	copy(sortedEdges, jg.edges)
 
-	// 简化的冒泡排序（实际应该使用更高效的算法）
-	for i := 0; i < len(sortedEdges)-1; i++ {
-		for j := i + 1; j < len(sortedEdges); j++ {
-			if sortedEdges[i].Cardinality > sortedEdges[j].Cardinality {
-				sortedEdges[i], sortedEdges[j] = sortedEdges[j], sortedEdges[i]
-			}
-		}
-	}
+	// O(n log n) sort by cardinality
+	sort.Slice(sortedEdges, func(i, j int) bool {
+		return sortedEdges[i].Cardinality < sortedEdges[j].Cardinality
+	})
 
 	// Kruskal算法
 	parent := make(map[string]string)

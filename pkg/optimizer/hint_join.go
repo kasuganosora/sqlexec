@@ -52,50 +52,50 @@ func (r *HintAwareJoinReorderRule) ApplyWithHints(ctx context.Context, plan Logi
 
 	// Priority 1: LEADING hint - force specific join order
 	if len(hints.LeadingOrder) > 0 {
-		fmt.Printf("  [HINT JOIN] Applying LEADING hint: %v\n", hints.LeadingOrder)
+		debugf("  [HINT JOIN] Applying LEADING hint: %v\n", hints.LeadingOrder)
 		return r.applyLeadingOrder(join, hints.LeadingOrder)
 	}
 
 	// Priority 2: STRAIGHT_JOIN hint - preserve left-deep join order
 	if hints.StraightJoin {
-		fmt.Println("  [HINT JOIN] Applying STRAIGHT_JOIN hint")
+		debugln("  [HINT JOIN] Applying STRAIGHT_JOIN hint")
 		return r.applyStraightJoin(join)
 	}
 
 	// Priority 3: Specific join algorithm hints
 	if len(hints.HashJoinTables) > 0 {
-		fmt.Printf("  [HINT JOIN] Applying HASH_JOIN hint for tables: %v\n", hints.HashJoinTables)
+		debugf("  [HINT JOIN] Applying HASH_JOIN hint for tables: %v\n", hints.HashJoinTables)
 		return r.setJoinAlgorithm(join, HashJoin, hints.HashJoinTables)
 	}
 
 	if len(hints.MergeJoinTables) > 0 {
-		fmt.Printf("  [HINT JOIN] Applying MERGE_JOIN hint for tables: %v\n", hints.MergeJoinTables)
+		debugf("  [HINT JOIN] Applying MERGE_JOIN hint for tables: %v\n", hints.MergeJoinTables)
 		return r.setJoinAlgorithm(join, InnerJoin, hints.MergeJoinTables) // MergeJoin uses InnerJoin type
 	}
 
 	if len(hints.INLJoinTables) > 0 {
-		fmt.Printf("  [HINT JOIN] Applying INL_JOIN hint for tables: %v\n", hints.INLJoinTables)
+		debugf("  [HINT JOIN] Applying INL_JOIN hint for tables: %v\n", hints.INLJoinTables)
 		return r.setJoinAlgorithm(join, InnerJoin, hints.INLJoinTables) // INL uses InnerJoin
 	}
 
 	if len(hints.INLHashJoinTables) > 0 {
-		fmt.Printf("  [HINT JOIN] Applying INL_HASH_JOIN hint for tables: %v\n", hints.INLHashJoinTables)
+		debugf("  [HINT JOIN] Applying INL_HASH_JOIN hint for tables: %v\n", hints.INLHashJoinTables)
 		return r.setJoinAlgorithm(join, InnerJoin, hints.INLHashJoinTables)
 	}
 
 	if len(hints.INLMergeJoinTables) > 0 {
-		fmt.Printf("  [HINT JOIN] Applying INL_MERGE_JOIN hint for tables: %v\n", hints.INLMergeJoinTables)
+		debugf("  [HINT JOIN] Applying INL_MERGE_JOIN hint for tables: %v\n", hints.INLMergeJoinTables)
 		return r.setJoinAlgorithm(join, InnerJoin, hints.INLMergeJoinTables)
 	}
 
 	// Priority 4: Negative join algorithm hints
 	if len(hints.NoHashJoinTables) > 0 || len(hints.NoMergeJoinTables) > 0 || len(hints.NoIndexJoinTables) > 0 {
-		fmt.Println("  [HINT JOIN] Applying negative join algorithm hints")
+		debugln("  [HINT JOIN] Applying negative join algorithm hints")
 		return r.applyNegativeHints(join, hints)
 	}
 
 	// No relevant hints, fall back to cost-based optimization
-	fmt.Println("  [HINT JOIN] No relevant join hints, using cost-based optimization")
+	debugln("  [HINT JOIN] No relevant join hints, using cost-based optimization")
 	return r.baseRule.Apply(ctx, plan, optCtx)
 }
 
@@ -119,19 +119,19 @@ func (r *HintAwareJoinReorderRule) applyLeadingOrder(join *LogicalJoin, leadingO
 	allSpecified := true
 	for _, t := range leadingOrder {
 		if !tableMap[t] {
-			fmt.Printf("  [WARN] LEADING hint specifies table %s not in join\n", t)
+			debugf("  [WARN] LEADING hint specifies table %s not in join\n", t)
 			allSpecified = false
 		}
 	}
 
 	if !allSpecified {
-		fmt.Println("  [WARN] LEADING hint incomplete, falling back to cost-based optimization")
+		debugln("  [WARN] LEADING hint incomplete, falling back to cost-based optimization")
 		return join, fmt.Errorf("LEADING hint specifies tables not in join")
 	}
 
 	// 创建新的连接顺序
 	// 注意：这里简化实现，实际需要递归重新组织树结构
-	fmt.Printf("  [LEADING] Reordering join to follow: %v\n", leadingOrder)
+	debugf("  [LEADING] Reordering join to follow: %v\n", leadingOrder)
 
 	// 标记已应用 LEADING hint
 	join.SetHintApplied("LEADING")
@@ -143,7 +143,7 @@ func (r *HintAwareJoinReorderRule) applyStraightJoin(join *LogicalJoin) (Logical
 	// STRAIGHT_JOIN 保持左深树结构，不进行连接顺序优化
 	// 这实际上意味着禁用 JOIN Reorder 规则
 
-	fmt.Println("  [STRAIGHT_JOIN] Preserving left-deep join order")
+	debugln("  [STRAIGHT_JOIN] Preserving left-deep join order")
 
 	// 标记已应用 STRAIGHT_JOIN hint
 	join.SetHintApplied("STRAIGHT_JOIN")
@@ -170,13 +170,13 @@ func (r *HintAwareJoinReorderRule) setJoinAlgorithm(join *LogicalJoin, joinType 
 	}
 
 	if !hasMatch {
-		fmt.Printf("  [WARN] Join hint specifies tables %v, but join contains %v\n", tables, joinTables)
+		debugf("  [WARN] Join hint specifies tables %v, but join contains %v\n", tables, joinTables)
 		return join, nil
 	}
 
 	// 设置连接类型
 	join.joinType = joinType
-	fmt.Printf("  [JOIN ALGORITHM] Set join type to %s\n", joinType.String())
+	debugf("  [JOIN ALGORITHM] Set join type to %s\n", joinType.String())
 
 	return join, nil
 }
@@ -189,7 +189,7 @@ func (r *HintAwareJoinReorderRule) applyNegativeHints(join *LogicalJoin, hints *
 	for _, table := range joinTables {
 		for _, noHashTable := range hints.NoHashJoinTables {
 			if table == noHashTable || r.isTableAlias(table, noHashTable) {
-				fmt.Printf("  [NO_HASH_JOIN] Table %s cannot use hash join\n", table)
+				debugf("  [NO_HASH_JOIN] Table %s cannot use hash join\n", table)
 				// 可以在这里设置为 MergeJoin 或其他算法
 				return join, nil
 			}
@@ -197,14 +197,14 @@ func (r *HintAwareJoinReorderRule) applyNegativeHints(join *LogicalJoin, hints *
 
 		for _, noMergeTable := range hints.NoMergeJoinTables {
 			if table == noMergeTable || r.isTableAlias(table, noMergeTable) {
-				fmt.Printf("  [NO_MERGE_JOIN] Table %s cannot use merge join\n", table)
+				debugf("  [NO_MERGE_JOIN] Table %s cannot use merge join\n", table)
 				return join, nil
 			}
 		}
 
 		for _, noIndexTable := range hints.NoIndexJoinTables {
 			if table == noIndexTable || r.isTableAlias(table, noIndexTable) {
-				fmt.Printf("  [NO_INDEX_JOIN] Table %s cannot use index nested-loop join\n", table)
+				debugf("  [NO_INDEX_JOIN] Table %s cannot use index nested-loop join\n", table)
 				return join, nil
 			}
 		}
@@ -322,7 +322,7 @@ func (r *HintAwareJoinTypeHintRule) Apply(ctx context.Context, plan LogicalPlan,
 	}
 
 	if applied {
-		fmt.Printf("  [JOIN TYPE] Applied join type hint\n")
+		debugln("  [JOIN TYPE] Applied join type hint")
 	}
 
 	return join, nil

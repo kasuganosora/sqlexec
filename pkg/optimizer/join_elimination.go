@@ -100,11 +100,9 @@ func isEqualityCondition(cond *JoinCondition) bool {
 	return cond.Left != nil && cond.Right != nil && cond.Operator == "="
 }
 
-// isForeignKeyPrimaryKeyJoin 检查是否为外键-主键JOIN（简化版）
+// isForeignKeyPrimaryKeyJoin 检查是否为外键-主键JOIN
+// Uses naming conventions to detect FK-PK relationships.
 func (r *JoinEliminationRule) isForeignKeyPrimaryKeyJoin(join *LogicalJoin) bool {
-	// 简化实现：假设表名包含外键信息
-	// 实际应该从schema中读取外键定义
-
 	leftTables := extractTableNames(join.Children()[0])
 	rightTables := extractTableNames(join.Children()[1])
 
@@ -112,18 +110,27 @@ func (r *JoinEliminationRule) isForeignKeyPrimaryKeyJoin(join *LogicalJoin) bool
 		return false
 	}
 
-	// 简化判断：如果表名包含_id或以_id结尾，可能是主键
 	leftTable := leftTables[0]
 	rightTable := rightTables[0]
 
-	// 检查连接条件
 	conditions := join.GetJoinConditions()
 	for _, cond := range conditions {
-		// 如果连接条件是 id = other_id，可能是外键主键关系
+		if cond.Operator != "=" {
+			continue
+		}
 		leftExpr := expressionToString(cond.Left)
 		rightExpr := expressionToString(cond.Right)
-		if (leftExpr == "id" || leftExpr == "id_"+leftTable) &&
-			(rightExpr == rightTable+"_id" || rightExpr == "id") {
+
+		// Pattern: left.id = right.<left_table>_id  (right has FK referencing left PK)
+		if leftExpr == "id" && rightExpr == leftTable+"_id" {
+			return true
+		}
+		// Pattern: left.<right_table>_id = right.id  (left has FK referencing right PK)
+		if leftExpr == rightTable+"_id" && rightExpr == "id" {
+			return true
+		}
+		// Pattern: left.id = right.id  (same PK, 1:1 relationship)
+		if leftExpr == "id" && rightExpr == "id" {
 			return true
 		}
 	}

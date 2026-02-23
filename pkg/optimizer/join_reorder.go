@@ -3,8 +3,6 @@ package optimizer
 import (
 	"context"
 	"math"
-
-	"github.com/kasuganosora/sqlexec/pkg/parser"
 )
 
 // JoinReorderRule JOIN重排序规则
@@ -179,20 +177,18 @@ func (r *JoinReorderRule) rebuildJoinTree(
 		return rootJoin, nil
 	}
 
-	// 简化实现：从左到右构建线性JOIN树
-	// 实际应该考虑连接条件，构建最优树
+	// Build a lookup of join conditions between table pairs from the
+	// original join nodes so we can preserve them in the reordered tree.
+	conditionMap := buildJoinConditionMap(allJoins)
 
-	// 找到第一个表
 	firstTable := order[0]
-
-	// 查找对应的数据源节点
 	firstDataSource := findDataSource(rootJoin, firstTable)
 	if firstDataSource == nil {
 		return rootJoin, nil
 	}
 
-	// 逐步添加其他表
 	currentPlan := LogicalPlan(firstDataSource)
+	leftTables := []string{firstTable}
 
 	for i := 1; i < len(order); i++ {
 		nextTable := order[i]
@@ -201,24 +197,61 @@ func (r *JoinReorderRule) rebuildJoinTree(
 			return rootJoin, nil
 		}
 
-		// 创建新的JOIN节点
+		// Find the original join conditions between leftTables and nextTable
+		conditions := findConditionsForPair(conditionMap, leftTables, nextTable)
+		if len(conditions) == 0 {
+			// Fallback: use the root join's conditions if available
+			conditions = rootJoin.GetJoinConditions()
+		}
+
 		newJoin := NewLogicalJoin(
 			rootJoin.GetJoinType(),
 			currentPlan,
 			nextDataSource,
-			[]*JoinCondition{
-				{
-					Left:     &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"},
-					Right:    &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"},
-					Operator: "=",
-				}, // 简化：假设id连接
-			},
+			conditions,
 		)
 
 		currentPlan = newJoin
+		leftTables = append(leftTables, nextTable)
 	}
 
 	return currentPlan, nil
+}
+
+// conditionMapKey generates a canonical key for a table pair.
+func conditionMapKey(t1, t2 string) string {
+	if t1 < t2 {
+		return t1 + "|" + t2
+	}
+	return t2 + "|" + t1
+}
+
+// buildJoinConditionMap builds a map of (table1, table2) -> conditions
+// from all join nodes, preserving the original join conditions.
+func buildJoinConditionMap(joins []*LogicalJoin) map[string][]*JoinCondition {
+	m := make(map[string][]*JoinCondition)
+	for _, join := range joins {
+		lt := join.LeftTable
+		rt := join.RightTable
+		if lt == "" || rt == "" {
+			continue
+		}
+		key := conditionMapKey(lt, rt)
+		m[key] = append(m[key], join.GetJoinConditions()...)
+	}
+	return m
+}
+
+// findConditionsForPair searches for join conditions between any of the
+// left tables and the right table.
+func findConditionsForPair(m map[string][]*JoinCondition, leftTables []string, rightTable string) []*JoinCondition {
+	for _, lt := range leftTables {
+		key := conditionMapKey(lt, rightTable)
+		if conds, ok := m[key]; ok && len(conds) > 0 {
+			return conds
+		}
+	}
+	return nil
 }
 
 // collectJoins 收集所有JOIN节点

@@ -7,5 +7,8 @@ type HashJoinConfig struct {
 	JoinType  types.JoinType
 	LeftCond  *types.JoinCondition
 	RightCond *types.JoinCondition
-	BuildSide string
+	// LeftConds/RightConds support multi-column JOIN conditions
+	LeftConds  []*types.JoinCondition
+	RightConds []*types.JoinCondition
+	BuildSide  string
 }

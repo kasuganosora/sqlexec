@@ -268,12 +268,12 @@ func TestDPJoinReorder_GenerateCacheKey(t *testing.T) {
 		{
 			name:     "single table",
 			tables:   []string{"table1"},
-			expected: "table1|",
+			expected: "table1",
 		},
 		{
 			name:     "multiple tables",
 			tables:   []string{"table1", "table2", "table3"},
-			expected: "table1|table2|table3|",
+			expected: "table1|table2|table3",
 		},
 		{
 			name:     "empty tables",

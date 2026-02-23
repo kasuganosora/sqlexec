@@ -142,6 +142,9 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 		}
 		currentRows := prefixedRows
 
+		// Cache join table results to avoid duplicate queries
+		joinResultCache := make(map[string]*domain.QueryResult)
+
 		for _, join := range stmt.Joins {
 			joinTableName := join.Table
 			joinAlias := join.Alias
@@ -154,6 +157,7 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 			if err != nil {
 				return nil, fmt.Errorf("join query on table '%s' failed: %w", joinTableName, err)
 			}
+			joinResultCache[joinTableName] = joinResult
 
 			// Prefix join table rows with table name and alias
 			joinRows := make([]domain.Row, 0, len(joinResult.Rows))
@@ -175,20 +179,18 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 		result.Rows = currentRows
 		result.Total = int64(len(currentRows))
 
-		// Update column info to include joined table columns with table prefix
+		// Update column info to include joined table columns with table prefix.
+		// Re-use cached results instead of re-querying the data source.
 		joinedColumns := make([]domain.ColumnInfo, 0)
-		// Add main table columns with prefix
 		for _, col := range result.Columns {
 			joinedColumns = append(joinedColumns, domain.ColumnInfo{
 				Name: mainTableName + "." + col.Name, Type: col.Type, Nullable: col.Nullable, Primary: col.Primary,
 			})
 		}
-		// Add joined table columns with prefix
 		for _, join := range stmt.Joins {
 			joinTableName := join.Table
-			joinResult, err := b.dataSource.Query(ctx, joinTableName, &domain.QueryOptions{SelectAll: true})
-			if err == nil {
-				for _, col := range joinResult.Columns {
+			if cached, ok := joinResultCache[joinTableName]; ok {
+				for _, col := range cached.Columns {
 					joinedColumns = append(joinedColumns, domain.ColumnInfo{
 						Name: joinTableName + "." + col.Name, Type: col.Type, Nullable: col.Nullable,
 					})
@@ -415,6 +417,11 @@ func (b *QueryBuilder) performCrossJoin(leftRows, rightRows []domain.Row) []doma
 
 // performInnerJoin returns rows where the join condition matches
 func (b *QueryBuilder) performInnerJoin(leftRows, rightRows []domain.Row, condition *Expression) []domain.Row {
+	// Try hash join for simple equality conditions (O(n+m) vs O(n*m))
+	if leftCol, rightCol, ok := b.extractEqualityColumns(condition); ok {
+		return b.hashInnerJoin(leftRows, rightRows, leftCol, rightCol)
+	}
+	// Fallback to nested loop for complex conditions
 	result := make([]domain.Row, 0)
 	for _, left := range leftRows {
 		for _, right := range rightRows {
@@ -425,6 +432,48 @@ func (b *QueryBuilder) performInnerJoin(leftRows, rightRows []domain.Row, condit
 		}
 	}
 	return result
+}
+
+// hashInnerJoin performs an inner join using a hash map on the right side
+func (b *QueryBuilder) hashInnerJoin(leftRows, rightRows []domain.Row, leftCol, rightCol string) []domain.Row {
+	// Build hash table on right rows (typically smaller or equal)
+	hashTable := make(map[string][]domain.Row)
+	for _, right := range rightRows {
+		key := fmt.Sprintf("%v", right[rightCol])
+		hashTable[key] = append(hashTable[key], right)
+	}
+
+	result := make([]domain.Row, 0, len(leftRows))
+	for _, left := range leftRows {
+		key := fmt.Sprintf("%v", left[leftCol])
+		if matches, ok := hashTable[key]; ok {
+			for _, right := range matches {
+				result = append(result, b.mergeRows(left, right))
+			}
+		}
+	}
+	return result
+}
+
+// extractEqualityColumns extracts left and right column names from a simple equality condition.
+// Returns ("", "", false) for non-simple-equality conditions.
+func (b *QueryBuilder) extractEqualityColumns(condition *Expression) (string, string, bool) {
+	if condition == nil {
+		return "", "", false
+	}
+	if condition.Type != ExprTypeOperator {
+		return "", "", false
+	}
+	if strings.ToLower(condition.Operator) != "=" {
+		return "", "", false
+	}
+	if condition.Left == nil || condition.Right == nil {
+		return "", "", false
+	}
+	if condition.Left.Type != ExprTypeColumn || condition.Right.Type != ExprTypeColumn {
+		return "", "", false
+	}
+	return condition.Left.Column, condition.Right.Column, true
 }
 
 // performLeftJoin returns all left rows with matching right rows; unmatched left rows get null right columns
@@ -450,6 +499,13 @@ func (b *QueryBuilder) performLeftJoin(leftRows, rightRows []domain.Row, conditi
 // performRightJoin returns all right rows with matching left rows; unmatched right rows get null left columns
 func (b *QueryBuilder) performRightJoin(leftRows, rightRows []domain.Row, condition *Expression, joinTableName, joinAlias string, rightColumns []domain.ColumnInfo) []domain.Row {
 	result := make([]domain.Row, 0, len(rightRows))
+	// Collect left table column keys from first left row to build NULL row
+	var leftColKeys []string
+	if len(leftRows) > 0 {
+		for k := range leftRows[0] {
+			leftColKeys = append(leftColKeys, k)
+		}
+	}
 	for _, right := range rightRows {
 		matched := false
 		for _, left := range leftRows {
@@ -460,14 +516,30 @@ func (b *QueryBuilder) performRightJoin(leftRows, rightRows []domain.Row, condit
 			}
 		}
 		if !matched {
-			result = append(result, right)
+			// Build a merged row with NULL for all left columns
+			nullRow := make(domain.Row, len(right)+len(leftColKeys))
+			for _, k := range leftColKeys {
+				nullRow[k] = nil
+			}
+			for k, v := range right {
+				nullRow[k] = v
+			}
+			result = append(result, nullRow)
 		}
 	}
 	return result
 }
 
-// getUnmatchedRightRows returns right rows that don't match any left row (for FULL JOIN)
+// getUnmatchedRightRows returns right rows that don't match any left row (for FULL JOIN).
+// Unmatched right rows are returned with NULL for all left-side columns.
 func (b *QueryBuilder) getUnmatchedRightRows(leftRows, rightRows []domain.Row, condition *Expression) []domain.Row {
+	// Collect left table column keys from first left row to build NULL row
+	var leftColKeys []string
+	if len(leftRows) > 0 {
+		for k := range leftRows[0] {
+			leftColKeys = append(leftColKeys, k)
+		}
+	}
 	result := make([]domain.Row, 0)
 	for _, right := range rightRows {
 		matched := false
@@ -479,7 +551,14 @@ func (b *QueryBuilder) getUnmatchedRightRows(leftRows, rightRows []domain.Row, c
 			}
 		}
 		if !matched {
-			result = append(result, right)
+			nullRow := make(domain.Row, len(right)+len(leftColKeys))
+			for _, k := range leftColKeys {
+				nullRow[k] = nil
+			}
+			for k, v := range right {
+				nullRow[k] = v
+			}
+			result = append(result, nullRow)
 		}
 	}
 	return result

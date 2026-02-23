@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
@@ -411,17 +413,16 @@ func (dpr *DPJoinReorder) buildDataSource(tableName string) LogicalPlan {
 	}
 }
 
-// generateCacheKey 生成缓存键
+// generateCacheKey 生成缓存键（排序后拼接，保证相同集合生成相同键）
 func (dpr *DPJoinReorder) generateCacheKey(tables []string) string {
 	if len(tables) == 0 {
 		return ""
 	}
 
-	key := ""
-	for _, table := range tables {
-		key += table + "|"
-	}
-	return key
+	sorted := make([]string, len(tables))
+	copy(sorted, tables)
+	sort.Strings(sorted)
+	return strings.Join(sorted, "|")
 }
 
 // DPState DP状态
