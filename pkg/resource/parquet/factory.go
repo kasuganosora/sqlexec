@@ -4,31 +4,30 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
-// ParquetFactory Parquet 数据源工厂
+// ParquetFactory creates Parquet datasource instances.
 type ParquetFactory struct{}
 
-// NewParquetFactory 创建 Parquet 数据源工厂
+// NewParquetFactory creates a Parquet datasource factory.
 func NewParquetFactory() *ParquetFactory {
 	return &ParquetFactory{}
 }
 
-// GetType 实现DataSourceFactory接口
+// GetType implements DataSourceFactory interface.
 func (f *ParquetFactory) GetType() domain.DataSourceType {
 	return domain.DataSourceTypeParquet
 }
 
-// GetMetadata 实现DataSourceFactory接口
+// GetMetadata implements DataSourceFactory interface.
 func (f *ParquetFactory) GetMetadata() domain.DriverMetadata {
 	return domain.DriverMetadata{
-		Comment:      "Parquet storage engine with MVCC transaction support",
+		Comment:      "Parquet columnar storage engine with MVCC, WAL persistence, and full index support",
 		Transactions: "YES",
 		XA:           "NO",
 		Savepoints:   "NO",
 	}
 }
 
-// Create 实现DataSourceFactory接口
+// Create implements DataSourceFactory interface.
 func (f *ParquetFactory) Create(config *domain.DataSourceConfig) (domain.DataSource, error) {
-	// 使用ParquetAdapter（继承MVCCDataSource）
-	return NewParquetAdapter(config, config.Name), nil
+	return NewParquetAdapter(config), nil
 }

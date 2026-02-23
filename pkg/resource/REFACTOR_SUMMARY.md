@@ -55,7 +55,10 @@ pkg/resource/
 │   └── factory.go            # ExcelFactory
 │
 ├── parquet/                   # Parquet 模块
-│   ├── datasource.go         # ParquetSource 实现（占位符，待实现）
+│   ├── adapter.go            # ParquetAdapter（全功能持久化列式存储引擎）
+│   ├── schema.go             # Parquet ↔ domain schema 双向转换
+│   ├── io.go                 # 原生 Parquet 文件读写
+│   ├── wal.go                # Write-Ahead Log 实现
 │   └── factory.go            # ParquetFactory
 │
 ├── infrastructure/            # 基础设施层

@@ -13,7 +13,7 @@ SQLExec provides a unified `DataSource` interface that allows you to query multi
 | JSON | `json` | Configurable | Load JSON array files |
 | JSONL | `jsonl` | Configurable | Load JSON Lines files |
 | Excel | `excel` | Read-only | Load XLS/XLSX files |
-| Parquet | `parquet` | Read-only | Load Apache Parquet columnar files |
+| Parquet | `parquet` | Configurable | Persistent columnar storage with WAL, multi-table, and full index support |
 | HTTP | `http` | Read-only | Query remote HTTP/REST APIs |
 | XML Persistence | `ENGINE=xml` | Read/Write | Per-table XML file persistence with automatic data recovery |
 | Badger | `badger` | Read/Write | Embedded persistent storage based on Badger KV |
@@ -256,4 +256,4 @@ All data sources implement the unified `DataSource` interface:
 | `IsConnected()` | Check if the current connection is valid |
 | `IsWritable()` | Check if the data source supports write operations |
 
-Different data source types have varying levels of support for interface methods. Calling write methods on a read-only data source (e.g., Parquet) will return an error.
+Different data source types have varying levels of support for interface methods. Calling write methods on a read-only data source (e.g., Excel) will return an error.

@@ -575,12 +575,17 @@ DataSource 接口
 ### 8.5 Parquet 数据源
 
 - **工厂：** `ParquetFactory`。
-- **状态：** 当前为简化实现（占位符），返回固定的测试数据。完整实现需集成 Apache Arrow/Parquet 库。
-- **配置选项：** `table_name`（内存表名，默认 `"parquet_data"`）、`writable`（默认 `false`）。
+- **架构：** 基于 `parquet-go/parquet-go` 库的全功能持久化列式存储引擎。嵌入 `MVCCDataSource`，继承所有内存引擎特性。
+- **目录模式：** 一个目录 = 一个数据库，每张表存储为独立的 `.parquet` 文件。
+- **配置选项：** `writable`（默认 `false`）、`compression`（压缩算法，默认 `"snappy"`）、`flush_interval`（刷盘间隔，默认 `"30s"`）。
+- **WAL 持久化：** 所有写操作先写 WAL（`.wal` 文件，gob 编码 + fsync），定期刷盘后检查点截断。崩溃恢复时回放 WAL。
+- **DDL 支持：** 完整支持 `CreateTable`、`DropTable`、`TruncateTable`。
+- **索引持久化：** 通过 `.sqlexec_meta` sidecar 文件保存索引元数据，重连时自动重建。
+- **继承特性：** MVCC 事务、B-Tree/Hash/全文/向量/空间索引、Buffer Pool、查询优化器。
 
 ### 8.6 文件数据源的限制
 
-所有文件数据源不支持 DDL 操作（`CreateTable`、`DropTable`）和原始 SQL 执行（`Execute`），调用时返回 `ErrReadOnly` 或 `ErrUnsupportedOperation`。
+CSV、JSON、JSONL、Excel 等文件数据源不支持 DDL 操作（`CreateTable`、`DropTable`）和原始 SQL 执行（`Execute`），调用时返回 `ErrReadOnly` 或 `ErrUnsupportedOperation`。Parquet 数据源在 `writable: true` 时支持完整的 DDL 和 DML。
 
 ---
 

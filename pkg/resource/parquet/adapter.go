@@ -2,344 +2,554 @@ package parquet
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/filemeta"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 )
 
-// parquetMagic is the Parquet file format magic bytes ("PAR1").
-var parquetMagic = []byte("PAR1")
+// Default flush interval for periodic persistence.
+const defaultFlushInterval = 30 * time.Second
 
-// parquetSerializedData is the JSON-serialized interchange format used by this
-// adapter to persist and reload table data without requiring an external Parquet
-// library.  Real Parquet files (detected via the PAR1 magic bytes) are not
-// supported and will produce a descriptive error.
-type parquetSerializedData struct {
-	TableName string              `json:"table_name"`
-	Columns   []domain.ColumnInfo `json:"columns"`
-	Rows      []domain.Row        `json:"rows"`
-}
-
-// ParquetAdapter Parquet文件数据源适配器
-// 继承 MVCCDataSource，只负责Parquet格式的加载和写回
-// 注意: 这是一个简化实现，实际使用时应该使用 Apache Arrow/Parquet 库
+// ParquetAdapter is a Parquet datasource adapter with full write, persistence,
+// multi-table, WAL, and index support. It embeds MVCCDataSource for all
+// in-memory features (MVCC, transactions, indexing, query planning, buffer pool).
 type ParquetAdapter struct {
 	*memory.MVCCDataSource
-	filePath  string
-	tableName string
-	writable  bool
+
+	dataDir     string
+	compression string
+
+	// WAL
+	wal *WAL
+
+	// Dirty table tracking for flush
+	dirtyTables map[string]bool
+	dirtyMu     sync.Mutex
+
+	// Periodic flush
+	flushInterval time.Duration
+	flushTicker   *time.Ticker
+	stopCh        chan struct{}
+
+	// General config
+	writable bool
 }
 
-// NewParquetAdapter 创建Parquet数据源适配器
-func NewParquetAdapter(config *domain.DataSourceConfig, filePath string) *ParquetAdapter {
-	tableName := "parquet_data"
+// NewParquetAdapter creates a Parquet datasource adapter.
+// config.Name is used as the data directory path (one directory = one database,
+// one .parquet file per table).
+func NewParquetAdapter(config *domain.DataSourceConfig) *ParquetAdapter {
 	writable := config.Writable
+	compression := "snappy"
+	flushInterval := defaultFlushInterval
 
-	// 从配置中读取选项
 	if config.Options != nil {
-		if t, ok := config.Options["table_name"]; ok {
-			if str, ok := t.(string); ok && str != "" {
-				tableName = str
-			}
-		}
 		if w, ok := config.Options["writable"]; ok {
 			if b, ok := w.(bool); ok {
 				writable = b
 			}
 		}
+		if c, ok := config.Options["compression"]; ok {
+			if s, ok := c.(string); ok && s != "" {
+				compression = s
+			}
+		}
+		if fi, ok := config.Options["flush_interval"]; ok {
+			if s, ok := fi.(string); ok {
+				if d, err := time.ParseDuration(s); err == nil {
+					flushInterval = d
+				}
+			}
+		}
 	}
 
-	// Create an internal config copy to ensure Writable is synchronised with
-	// the resolved writable flag (matching the pattern used by JSONAdapter).
 	internalConfig := *config
 	internalConfig.Writable = writable
 
 	return &ParquetAdapter{
 		MVCCDataSource: memory.NewMVCCDataSource(&internalConfig),
-		filePath:       filePath,
-		tableName:      tableName,
+		dataDir:        config.Name,
+		compression:    compression,
+		flushInterval:  flushInterval,
+		dirtyTables:    make(map[string]bool),
 		writable:       writable,
 	}
 }
 
-// Connect 连接数据源 - 加载Parquet文件到内存
+// Connect loads data from Parquet files, replays WAL, rebuilds indexes, and starts flusher.
 func (a *ParquetAdapter) Connect(ctx context.Context) error {
-	// 检查文件是否存在
-	if _, err := os.Stat(a.filePath); err != nil {
-		return domain.NewErrNotConnected("parquet")
+	// Create directory if it doesn't exist
+	if err := os.MkdirAll(a.dataDir, 0755); err != nil {
+		return fmt.Errorf("failed to create data directory %q: %w", a.dataDir, err)
 	}
 
-	// Read file contents
-	data, err := os.ReadFile(a.filePath)
+	// Scan for .parquet files
+	entries, err := os.ReadDir(a.dataDir)
 	if err != nil {
-		return fmt.Errorf("failed to read file %q: %w", a.filePath, err)
+		return fmt.Errorf("failed to read data directory %q: %w", a.dataDir, err)
 	}
 
-	var columns []domain.ColumnInfo
-	var rows []domain.Row
-
-	// Detect real Parquet files by checking the PAR1 magic bytes.
-	if len(data) >= 4 && string(data[:4]) == string(parquetMagic) {
-		return fmt.Errorf("native Parquet format detected (PAR1 magic bytes); " +
-			"reading raw Parquet files requires a dedicated library such as parquet-go; " +
-			"please convert the file to JSON interchange format or use a different adapter")
-	}
-
-	if len(data) == 0 {
-		// Empty file -- use default schema so the adapter is still usable in
-		// writable mode.
-		columns = []domain.ColumnInfo{
-			{Name: "id", Type: "int64", Nullable: false, Primary: true},
-			{Name: "value", Type: "string", Nullable: true},
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".parquet") {
+			continue
 		}
-		rows = []domain.Row{}
-	} else {
-		// Attempt to deserialize from JSON interchange format.
-		columns, rows, err = a.readFromJSON(data)
+
+		filePath := filepath.Join(a.dataDir, entry.Name())
+		tableInfo, rows, err := readParquetFile(filePath)
 		if err != nil {
-			// If JSON parsing fails, the file is in an unrecognised format.
-			// Fall back to a default empty schema so the adapter can still
-			// connect (useful for writable mode where data will be written
-			// later).
-			columns = []domain.ColumnInfo{
-				{Name: "id", Type: "int64", Nullable: false, Primary: true},
-				{Name: "value", Type: "string", Nullable: true},
-			}
-			rows = []domain.Row{}
+			log.Printf("warning: failed to read parquet file %q: %v", filePath, err)
+			continue
+		}
+
+		if err := a.LoadTable(tableInfo.Name, tableInfo, rows); err != nil {
+			log.Printf("warning: failed to load table %q: %v", tableInfo.Name, err)
+			continue
 		}
 	}
 
-	// 创建表信息
-	tableInfo := &domain.TableInfo{
-		Name:    a.tableName,
-		Schema:  "default",
-		Columns: columns,
+	// Load sidecar metadata for indexes
+	a.loadIndexMeta()
+
+	// Initialize WAL
+	if a.writable {
+		wal, err := newWAL(a.dataDir)
+		if err != nil {
+			return fmt.Errorf("failed to initialize WAL: %w", err)
+		}
+		a.wal = wal
+
+		// Replay WAL entries
+		if err := a.replayWAL(ctx); err != nil {
+			return fmt.Errorf("failed to replay WAL: %w", err)
+		}
+
+		// Start periodic flusher
+		a.startFlusher()
 	}
 
-	// 加载到MVCC内存源
-	if err := a.LoadTable(a.tableName, tableInfo, rows); err != nil {
-		return fmt.Errorf("failed to load Parquet data: %w", err)
-	}
-
-	// 连接MVCC数据源
 	return a.MVCCDataSource.Connect(ctx)
 }
 
-// readFromJSON attempts to parse the file content as the JSON interchange
-// format used by this adapter.  It supports two layouts:
-//   - A JSON object with "columns" and "rows" fields (parquetSerializedData).
-//   - A plain JSON array of objects -- columns are inferred from the first row.
-func (a *ParquetAdapter) readFromJSON(data []byte) ([]domain.ColumnInfo, []domain.Row, error) {
-	// First try the structured format.
-	var structured parquetSerializedData
-	if err := json.Unmarshal(data, &structured); err == nil && len(structured.Columns) > 0 {
-		// Normalise row value types (JSON numbers decode as float64).
-		rows := normaliseRows(structured.Rows, structured.Columns)
-		return structured.Columns, rows, nil
-	}
-
-	// Fall back to a plain JSON array of objects.
-	var rawRows []map[string]interface{}
-	if err := json.Unmarshal(data, &rawRows); err != nil {
-		return nil, nil, fmt.Errorf("file is not valid JSON: %w", err)
-	}
-
-	if len(rawRows) == 0 {
-		return nil, nil, fmt.Errorf("JSON array is empty")
-	}
-
-	// Infer columns from the first row.
-	columns := a.inferColumns(rawRows[0])
-
-	// Convert to domain.Row slice.
-	rows := make([]domain.Row, 0, len(rawRows))
-	for _, raw := range rawRows {
-		rows = append(rows, domain.Row(raw))
-	}
-	rows = normaliseRows(rows, columns)
-	return columns, rows, nil
-}
-
-// inferColumns builds a column list from a sample row, detecting types with
-// detectType.
-func (a *ParquetAdapter) inferColumns(sample map[string]interface{}) []domain.ColumnInfo {
-	columns := make([]domain.ColumnInfo, 0, len(sample))
-	for key, val := range sample {
-		col := domain.ColumnInfo{
-			Name:     key,
-			Type:     a.detectType(val),
-			Nullable: true,
-		}
-		columns = append(columns, col)
-	}
-	return columns
-}
-
-// normaliseRows converts JSON-decoded float64 values back to int64 where the
-// column schema says "int64".
-func normaliseRows(rows []domain.Row, columns []domain.ColumnInfo) []domain.Row {
-	int64Cols := make(map[string]bool)
-	for _, col := range columns {
-		if col.Type == "int64" {
-			int64Cols[col.Name] = true
-		}
-	}
-	for i, row := range rows {
-		for k, v := range row {
-			if int64Cols[k] {
-				switch fv := v.(type) {
-				case float64:
-					rows[i][k] = int64(fv)
-				}
-			}
-		}
-	}
-	return rows
-}
-
-// Close 关闭连接 - 可选写回Parquet文件
-func (a *ParquetAdapter) Close(ctx context.Context) error {
-	// 如果是可写模式，需要写回Parquet文件
-	if a.writable {
-		if err := a.writeBack(); err != nil {
-			return fmt.Errorf("failed to write back Parquet file: %w", err)
-		}
-	}
-
-	// 关闭MVCC数据源
-	return a.MVCCDataSource.Close(ctx)
-}
-
-// GetConfig 获取数据源配置
-func (a *ParquetAdapter) GetConfig() *domain.DataSourceConfig {
-	return a.MVCCDataSource.GetConfig()
-}
-
-// GetTables 获取所有表（MVCCDataSource提供）
-func (a *ParquetAdapter) GetTables(ctx context.Context) ([]string, error) {
-	return a.MVCCDataSource.GetTables(ctx)
-}
-
-// GetTableInfo 获取表信息（MVCCDataSource提供）
-func (a *ParquetAdapter) GetTableInfo(ctx context.Context, tableName string) (*domain.TableInfo, error) {
-	return a.MVCCDataSource.GetTableInfo(ctx, tableName)
-}
-
-// Query 查询数据（MVCCDataSource提供）
-func (a *ParquetAdapter) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) {
-	return a.MVCCDataSource.Query(ctx, tableName, options)
-}
-
-// Insert 插入数据（MVCCDataSource提供）
-func (a *ParquetAdapter) Insert(ctx context.Context, tableName string, rows []domain.Row, options *domain.InsertOptions) (int64, error) {
-	if !a.writable {
-		return 0, domain.NewErrReadOnly("parquet", "insert")
-	}
-	return a.MVCCDataSource.Insert(ctx, tableName, rows, options)
-}
-
-// Update 更新数据（MVCCDataSource提供）
-func (a *ParquetAdapter) Update(ctx context.Context, tableName string, filters []domain.Filter, updates domain.Row, options *domain.UpdateOptions) (int64, error) {
-	if !a.writable {
-		return 0, domain.NewErrReadOnly("parquet", "update")
-	}
-	return a.MVCCDataSource.Update(ctx, tableName, filters, updates, options)
-}
-
-// Delete 删除数据（MVCCDataSource提供）
-func (a *ParquetAdapter) Delete(ctx context.Context, tableName string, filters []domain.Filter, options *domain.DeleteOptions) (int64, error) {
-	if !a.writable {
-		return 0, domain.NewErrReadOnly("parquet", "delete")
-	}
-	return a.MVCCDataSource.Delete(ctx, tableName, filters, options)
-}
-
-// CreateTable 创建表（Parquet不支持）
-func (a *ParquetAdapter) CreateTable(ctx context.Context, tableInfo *domain.TableInfo) error {
-	return domain.NewErrReadOnly("parquet", "create table")
-}
-
-// DropTable 删除表（Parquet不支持）
-func (a *ParquetAdapter) DropTable(ctx context.Context, tableName string) error {
-	return domain.NewErrReadOnly("parquet", "drop table")
-}
-
-// TruncateTable 清空表（Parquet不支持）
-func (a *ParquetAdapter) TruncateTable(ctx context.Context, tableName string) error {
-	return domain.NewErrReadOnly("parquet", "truncate table")
-}
-
-// Execute 执行SQL（Parquet不支持）
-func (a *ParquetAdapter) Execute(ctx context.Context, sql string) (*domain.QueryResult, error) {
-	return nil, domain.NewErrUnsupportedOperation("parquet", "execute SQL")
-}
-
-// ==================== 私有方法 ====================
-
-// writeBack 写回Parquet文件
-// Data is serialised using the JSON interchange format.  To produce real
-// Parquet files, a dedicated library such as parquet-go would be needed.
-func (a *ParquetAdapter) writeBack() error {
-	// 获取最新数据
-	schema, rows, err := a.GetLatestTableData(a.tableName)
+// replayWAL replays WAL entries to reconstruct unflushed state.
+func (a *ParquetAdapter) replayWAL(ctx context.Context) error {
+	entries, err := ReadAll(a.dataDir)
 	if err != nil {
 		return err
 	}
 
-	serialized := parquetSerializedData{
-		TableName: a.tableName,
-		Columns:   schema.Columns,
-		Rows:      rows,
-	}
-
-	data, err := json.MarshalIndent(serialized, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialise data: %w", err)
-	}
-
-	if err := os.WriteFile(a.filePath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write file %q: %w", a.filePath, err)
+	for _, entry := range entries {
+		switch entry.Type {
+		case WALInsert:
+			if _, err := a.MVCCDataSource.Insert(ctx, entry.TableName, entry.Rows, nil); err != nil {
+				log.Printf("WAL replay: insert into %s failed: %v", entry.TableName, err)
+			}
+		case WALUpdate:
+			if _, err := a.MVCCDataSource.Update(ctx, entry.TableName, entry.Filters, entry.Updates, nil); err != nil {
+				log.Printf("WAL replay: update %s failed: %v", entry.TableName, err)
+			}
+		case WALDelete:
+			if _, err := a.MVCCDataSource.Delete(ctx, entry.TableName, entry.Filters, nil); err != nil {
+				log.Printf("WAL replay: delete from %s failed: %v", entry.TableName, err)
+			}
+		case WALCreateTable:
+			if err := a.MVCCDataSource.CreateTable(ctx, entry.Schema); err != nil {
+				log.Printf("WAL replay: create table %s failed: %v", entry.TableName, err)
+			}
+		case WALDropTable:
+			if err := a.MVCCDataSource.DropTable(ctx, entry.TableName); err != nil {
+				log.Printf("WAL replay: drop table %s failed: %v", entry.TableName, err)
+			}
+		case WALTruncateTable:
+			if err := a.MVCCDataSource.TruncateTable(ctx, entry.TableName); err != nil {
+				log.Printf("WAL replay: truncate table %s failed: %v", entry.TableName, err)
+			}
+		}
 	}
 
 	return nil
 }
 
-// IsConnected 检查是否已连接（MVCCDataSource提供）
+// loadIndexMeta loads index metadata from sidecar file.
+func (a *ParquetAdapter) loadIndexMeta() {
+	metaPath := filepath.Join(a.dataDir, ".sqlexec_meta")
+	meta, err := filemeta.Load(metaPath)
+	if err != nil || meta == nil {
+		return
+	}
+
+	for _, idx := range meta.Indexes {
+		if err := a.MVCCDataSource.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
+			log.Printf("warning: failed to rebuild index %s on %s: %v", idx.Name, idx.Table, err)
+		}
+	}
+}
+
+// ==================== CRUD Operations (WAL-integrated) ====================
+
+// Insert inserts rows with WAL logging.
+func (a *ParquetAdapter) Insert(ctx context.Context, tableName string, rows []domain.Row, options *domain.InsertOptions) (int64, error) {
+	if !a.writable {
+		return 0, domain.NewErrReadOnly("parquet", "insert")
+	}
+
+	// Write WAL before memory operation
+	if a.wal != nil {
+		if err := a.wal.Append(&WALEntry{
+			Type:      WALInsert,
+			TableName: tableName,
+			Rows:      rows,
+		}); err != nil {
+			return 0, fmt.Errorf("WAL write failed: %w", err)
+		}
+	}
+
+	result, err := a.MVCCDataSource.Insert(ctx, tableName, rows, options)
+	if err != nil {
+		return 0, err
+	}
+
+	a.markDirty(tableName)
+	return result, nil
+}
+
+// Update updates rows with WAL logging.
+func (a *ParquetAdapter) Update(ctx context.Context, tableName string, filters []domain.Filter, updates domain.Row, options *domain.UpdateOptions) (int64, error) {
+	if !a.writable {
+		return 0, domain.NewErrReadOnly("parquet", "update")
+	}
+
+	if a.wal != nil {
+		if err := a.wal.Append(&WALEntry{
+			Type:      WALUpdate,
+			TableName: tableName,
+			Filters:   filters,
+			Updates:   updates,
+		}); err != nil {
+			return 0, fmt.Errorf("WAL write failed: %w", err)
+		}
+	}
+
+	result, err := a.MVCCDataSource.Update(ctx, tableName, filters, updates, options)
+	if err != nil {
+		return 0, err
+	}
+
+	a.markDirty(tableName)
+	return result, nil
+}
+
+// Delete deletes rows with WAL logging.
+func (a *ParquetAdapter) Delete(ctx context.Context, tableName string, filters []domain.Filter, options *domain.DeleteOptions) (int64, error) {
+	if !a.writable {
+		return 0, domain.NewErrReadOnly("parquet", "delete")
+	}
+
+	if a.wal != nil {
+		if err := a.wal.Append(&WALEntry{
+			Type:      WALDelete,
+			TableName: tableName,
+			Filters:   filters,
+		}); err != nil {
+			return 0, fmt.Errorf("WAL write failed: %w", err)
+		}
+	}
+
+	result, err := a.MVCCDataSource.Delete(ctx, tableName, filters, options)
+	if err != nil {
+		return 0, err
+	}
+
+	a.markDirty(tableName)
+	return result, nil
+}
+
+// ==================== DDL Operations ====================
+
+// CreateTable creates a table and writes an empty Parquet file.
+func (a *ParquetAdapter) CreateTable(ctx context.Context, tableInfo *domain.TableInfo) error {
+	if !a.writable {
+		return domain.NewErrReadOnly("parquet", "create table")
+	}
+
+	if a.wal != nil {
+		if err := a.wal.Append(&WALEntry{
+			Type:      WALCreateTable,
+			TableName: tableInfo.Name,
+			Schema:    tableInfo,
+		}); err != nil {
+			return fmt.Errorf("WAL write failed: %w", err)
+		}
+	}
+
+	if err := a.MVCCDataSource.CreateTable(ctx, tableInfo); err != nil {
+		return err
+	}
+
+	// Write empty Parquet file
+	filePath := filepath.Join(a.dataDir, tableInfo.Name+".parquet")
+	if err := writeParquetFile(filePath, tableInfo, nil, a.compression); err != nil {
+		log.Printf("warning: failed to write initial parquet file for %s: %v", tableInfo.Name, err)
+	}
+
+	return nil
+}
+
+// DropTable drops a table and removes its Parquet file.
+func (a *ParquetAdapter) DropTable(ctx context.Context, tableName string) error {
+	if !a.writable {
+		return domain.NewErrReadOnly("parquet", "drop table")
+	}
+
+	if a.wal != nil {
+		if err := a.wal.Append(&WALEntry{
+			Type:      WALDropTable,
+			TableName: tableName,
+		}); err != nil {
+			return fmt.Errorf("WAL write failed: %w", err)
+		}
+	}
+
+	if err := a.MVCCDataSource.DropTable(ctx, tableName); err != nil {
+		return err
+	}
+
+	// Remove Parquet file
+	filePath := filepath.Join(a.dataDir, tableName+".parquet")
+	os.Remove(filePath)
+
+	a.removeDirty(tableName)
+	return nil
+}
+
+// TruncateTable truncates a table.
+func (a *ParquetAdapter) TruncateTable(ctx context.Context, tableName string) error {
+	if !a.writable {
+		return domain.NewErrReadOnly("parquet", "truncate table")
+	}
+
+	if a.wal != nil {
+		if err := a.wal.Append(&WALEntry{
+			Type:      WALTruncateTable,
+			TableName: tableName,
+		}); err != nil {
+			return fmt.Errorf("WAL write failed: %w", err)
+		}
+	}
+
+	if err := a.MVCCDataSource.TruncateTable(ctx, tableName); err != nil {
+		return err
+	}
+
+	a.markDirty(tableName)
+	return nil
+}
+
+// Execute is not supported for Parquet datasource.
+func (a *ParquetAdapter) Execute(ctx context.Context, sql string) (*domain.QueryResult, error) {
+	return nil, domain.NewErrUnsupportedOperation("parquet", "execute SQL")
+}
+
+// ==================== Flush Mechanism ====================
+
+// startFlusher starts the periodic flush goroutine.
+func (a *ParquetAdapter) startFlusher() {
+	a.flushTicker = time.NewTicker(a.flushInterval)
+	a.stopCh = make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-a.flushTicker.C:
+				a.flushDirtyTables()
+			case <-a.stopCh:
+				return
+			}
+		}
+	}()
+}
+
+// flushDirtyTables writes all dirty tables to Parquet files and checkpoints WAL.
+func (a *ParquetAdapter) flushDirtyTables() {
+	a.dirtyMu.Lock()
+	tables := make(map[string]bool, len(a.dirtyTables))
+	for k, v := range a.dirtyTables {
+		tables[k] = v
+	}
+	a.dirtyMu.Unlock()
+
+	if len(tables) == 0 {
+		return
+	}
+
+	allFlushed := true
+	for tableName := range tables {
+		if err := a.flushTable(tableName); err != nil {
+			log.Printf("flush %s failed: %v", tableName, err)
+			allFlushed = false
+			continue
+		}
+		a.removeDirty(tableName)
+	}
+
+	// If all tables flushed successfully, checkpoint and truncate WAL
+	if allFlushed && a.wal != nil {
+		if err := a.wal.Append(&WALEntry{Type: WALCheckpoint}); err != nil {
+			log.Printf("WAL checkpoint failed: %v", err)
+			return
+		}
+		if err := a.wal.Truncate(); err != nil {
+			log.Printf("WAL truncate failed: %v", err)
+		}
+	}
+}
+
+// flushTable writes a single table to a Parquet file.
+func (a *ParquetAdapter) flushTable(tableName string) error {
+	schema, rows, err := a.GetLatestTableData(tableName)
+	if err != nil {
+		return err
+	}
+
+	filePath := filepath.Join(a.dataDir, tableName+".parquet")
+	return writeParquetFile(filePath, schema, rows, a.compression)
+}
+
+// markDirty marks a table as needing flush.
+func (a *ParquetAdapter) markDirty(tableName string) {
+	a.dirtyMu.Lock()
+	defer a.dirtyMu.Unlock()
+	a.dirtyTables[tableName] = true
+}
+
+// removeDirty removes a table from the dirty list.
+func (a *ParquetAdapter) removeDirty(tableName string) {
+	a.dirtyMu.Lock()
+	defer a.dirtyMu.Unlock()
+	delete(a.dirtyTables, tableName)
+}
+
+// ==================== Close ====================
+
+// Close stops the flusher, flushes all dirty tables, persists metadata, and closes WAL.
+func (a *ParquetAdapter) Close(ctx context.Context) error {
+	// Stop flusher
+	if a.stopCh != nil {
+		close(a.stopCh)
+	}
+	if a.flushTicker != nil {
+		a.flushTicker.Stop()
+	}
+
+	// Final flush
+	if a.writable {
+		a.flushDirtyTables()
+		a.persistAllIndexMeta()
+	}
+
+	// Close WAL
+	if a.wal != nil {
+		a.wal.Close()
+	}
+
+	return a.MVCCDataSource.Close(ctx)
+}
+
+// ==================== Index Persistence ====================
+
+// PersistIndexMeta saves index metadata to a sidecar file.
+// Implements domain.IndexPersister interface.
+func (a *ParquetAdapter) PersistIndexMeta(indexes []domain.IndexMetaInfo) error {
+	metaPath := filepath.Join(a.dataDir, ".sqlexec_meta")
+
+	fm := &filemeta.FileMeta{
+		Indexes: make([]filemeta.IndexMeta, len(indexes)),
+	}
+
+	for i, idx := range indexes {
+		fm.Indexes[i] = filemeta.IndexMeta{
+			Name:    idx.Name,
+			Table:   idx.Table,
+			Type:    idx.Type,
+			Unique:  idx.Unique,
+			Columns: idx.Columns,
+		}
+	}
+
+	return filemeta.Save(metaPath, fm)
+}
+
+// persistAllIndexMeta collects and persists all index metadata.
+func (a *ParquetAdapter) persistAllIndexMeta() {
+	ctx := context.Background()
+	tables, err := a.GetTables(ctx)
+	if err != nil {
+		return
+	}
+
+	var allIndexes []domain.IndexMetaInfo
+	for _, table := range tables {
+		indexes, err := a.GetTableIndexes(table)
+		if err != nil {
+			continue
+		}
+		for _, idx := range indexes {
+			allIndexes = append(allIndexes, domain.IndexMetaInfo{
+				Name:    idx.Name,
+				Table:   table,
+				Type:    string(idx.Type),
+				Unique:  idx.Unique,
+				Columns: idx.Columns,
+			})
+		}
+	}
+
+	if len(allIndexes) > 0 {
+		if err := a.PersistIndexMeta(allIndexes); err != nil {
+			log.Printf("warning: failed to persist index metadata: %v", err)
+		}
+	}
+}
+
+// ==================== Delegated Methods ====================
+
+// GetConfig returns the datasource configuration.
+func (a *ParquetAdapter) GetConfig() *domain.DataSourceConfig {
+	return a.MVCCDataSource.GetConfig()
+}
+
+// GetTables returns all tables.
+func (a *ParquetAdapter) GetTables(ctx context.Context) ([]string, error) {
+	return a.MVCCDataSource.GetTables(ctx)
+}
+
+// GetTableInfo returns table information.
+func (a *ParquetAdapter) GetTableInfo(ctx context.Context, tableName string) (*domain.TableInfo, error) {
+	return a.MVCCDataSource.GetTableInfo(ctx, tableName)
+}
+
+// Query queries table data.
+func (a *ParquetAdapter) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) {
+	return a.MVCCDataSource.Query(ctx, tableName, options)
+}
+
+// IsConnected checks if the datasource is connected.
 func (a *ParquetAdapter) IsConnected() bool {
 	return a.MVCCDataSource.IsConnected()
 }
 
-// IsWritable 检查是否可写
+// IsWritable checks if the datasource is writable.
 func (a *ParquetAdapter) IsWritable() bool {
 	return a.writable
 }
 
-// SupportsWrite 实现IsWritableSource接口
+// SupportsWrite implements IsWritableSource interface.
 func (a *ParquetAdapter) SupportsWrite() bool {
 	return a.writable
-}
-
-// detectType 检测值的类型（私有方法，供测试使用）
-func (a *ParquetAdapter) detectType(value interface{}) string {
-	switch v := value.(type) {
-	case bool:
-		return "bool"
-	case float64:
-		// 检查是否是整数
-		if v == float64(int64(v)) {
-			return "int64"
-		}
-		return "float64"
-	case string:
-		return "string"
-	case nil:
-		return "string"
-	case []interface{}, map[string]interface{}:
-		return "string"
-	default:
-		return "string"
-	}
 }

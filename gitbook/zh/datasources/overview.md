@@ -13,7 +13,7 @@ SQLExec 提供统一的 `DataSource` 接口，允许你使用标准 SQL 查询�
 | JSON | `json` | 可配置 | 加载 JSON 数组文件 |
 | JSONL | `jsonl` | 可配置 | 加载 JSON Lines 文件 |
 | Excel | `excel` | 只读 | 加载 XLS/XLSX 文件 |
-| Parquet | `parquet` | 只读 | 加载 Apache Parquet 列式文件 |
+| Parquet | `parquet` | 可配置 | 持久化列式存储，支持 WAL、多表管理和全索引 |
 | HTTP | `http` | 只读 | 查询远程 HTTP/REST API |
 | XML 持久化 | `ENGINE=xml` | 读写 | 按表持久化到 XML 文件，重启后自动恢复 |
 | Badger | `badger` | 读写 | 基于 Badger KV 的嵌入式持久化存储 |
@@ -256,4 +256,4 @@ USE default;
 | `IsConnected()` | 检查当前连接是否有效 |
 | `IsWritable()` | 检查数据源是否支持写入操作 |
 
-不同类型的数据源对接口方法的支持程度不同。只读数据源（如 Parquet）调用写入方法时会返回错误。
+不同类型的数据源对接口方法的支持程度不同。只读数据源（如 Excel）调用写入方法时会返回错误。
