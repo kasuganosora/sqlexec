@@ -42,6 +42,12 @@ func setupTestDeps(t *testing.T) *ToolDeps {
 	}
 }
 
+// authedCtx returns a context with a valid test client for MCP auth enforcement.
+func authedCtx() context.Context {
+	client := &config_schema.APIClient{Name: "test_client", APIKey: "test-key", Enabled: true}
+	return context.WithValue(context.Background(), ctxKeyMCPClient, client)
+}
+
 func makeCallToolRequest(args map[string]interface{}) mcp.CallToolRequest {
 	var arguments interface{}
 	if args != nil {
@@ -67,7 +73,7 @@ func TestHandleQuery_Select(t *testing.T) {
 	require.NoError(t, err)
 	session.Close()
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"sql": "SELECT * FROM users",
 	})
@@ -96,7 +102,7 @@ func TestHandleQuery_Insert(t *testing.T) {
 	require.NoError(t, err)
 	session.Close()
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"sql": "INSERT INTO insert_test (id, value) VALUES (1, 'hello')",
 	})
@@ -114,7 +120,7 @@ func TestHandleQuery_Insert(t *testing.T) {
 func TestHandleQuery_EmptySQL(t *testing.T) {
 	deps := setupTestDeps(t)
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"sql": "",
 	})
@@ -128,7 +134,7 @@ func TestHandleQuery_EmptySQL(t *testing.T) {
 func TestHandleListDatabases(t *testing.T) {
 	deps := setupTestDeps(t)
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(nil)
 
 	result, err := deps.HandleListDatabases(ctx, req)
@@ -152,7 +158,7 @@ func TestHandleListTables(t *testing.T) {
 	require.NoError(t, err)
 	session.Close()
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"database": "default",
 	})
@@ -171,7 +177,7 @@ func TestHandleListTables(t *testing.T) {
 func TestHandleListTables_MissingDB(t *testing.T) {
 	deps := setupTestDeps(t)
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{})
 
 	result, err := deps.HandleListTables(ctx, req)
@@ -188,7 +194,7 @@ func TestHandleDescribeTable(t *testing.T) {
 	require.NoError(t, err)
 	session.Close()
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"database": "default",
 		"table":    "desc_test",
@@ -206,7 +212,7 @@ func TestHandleDescribeTable(t *testing.T) {
 
 func TestHandleDescribeTable_MissingParams(t *testing.T) {
 	deps := setupTestDeps(t)
-	ctx := context.Background()
+	ctx := authedCtx()
 
 	t.Run("missing database", func(t *testing.T) {
 		req := makeCallToolRequest(map[string]interface{}{
@@ -235,7 +241,7 @@ func TestAuditLogging_MCP(t *testing.T) {
 	require.NoError(t, err)
 	session.Close()
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"sql": "SELECT * FROM audit_mcp",
 	})
@@ -257,7 +263,7 @@ func TestHandleQuery_Update(t *testing.T) {
 	require.NoError(t, err)
 	session.Close()
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"sql": "UPDATE update_test SET val = 'new' WHERE id = 1",
 	})
@@ -282,7 +288,7 @@ func TestHandleQuery_Delete(t *testing.T) {
 	require.NoError(t, err)
 	session.Close()
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"sql": "DELETE FROM delete_test WHERE id = 1",
 	})
@@ -300,7 +306,7 @@ func TestHandleQuery_Delete(t *testing.T) {
 func TestHandleQuery_SelectError(t *testing.T) {
 	deps := setupTestDeps(t)
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"sql": "SELECT * FROM nonexistent_table_xyz",
 	})
@@ -318,7 +324,7 @@ func TestHandleQuery_SelectError(t *testing.T) {
 func TestHandleQuery_ExecuteError(t *testing.T) {
 	deps := setupTestDeps(t)
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"sql": "INSERT INTO nonexistent_table_xyz (id) VALUES (1)",
 	})
@@ -341,7 +347,7 @@ func TestHandleQuery_WithDatabase(t *testing.T) {
 	require.NoError(t, err)
 	session.Close()
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"sql":      "SELECT * FROM dbparam_test",
 		"database": "default",
@@ -383,7 +389,7 @@ func TestHandleQuery_WithAuthClient(t *testing.T) {
 func TestHandleDescribeTable_NonexistentTable(t *testing.T) {
 	deps := setupTestDeps(t)
 
-	ctx := context.Background()
+	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
 		"database": "default",
 		"table":    "nonexistent_table_xyz",
@@ -537,4 +543,203 @@ func TestContextWithClient(t *testing.T) {
 	// No client in context
 	got = getClient(context.Background())
 	assert.Nil(t, got)
+}
+
+// ==========================================================================
+// Tests for bugfixes: auth enforcement, clientIP extraction, SQL injection
+// ==========================================================================
+
+func TestRequireAuth_Unauthenticated(t *testing.T) {
+	deps := setupTestDeps(t)
+
+	// All tool handlers should reject unauthenticated requests
+	ctx := context.Background() // no client
+
+	t.Run("HandleQuery", func(t *testing.T) {
+		req := makeCallToolRequest(map[string]interface{}{"sql": "SELECT 1"})
+		result, err := deps.HandleQuery(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "unauthorized")
+	})
+
+	t.Run("HandleListDatabases", func(t *testing.T) {
+		req := makeCallToolRequest(nil)
+		result, err := deps.HandleListDatabases(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "unauthorized")
+	})
+
+	t.Run("HandleListTables", func(t *testing.T) {
+		req := makeCallToolRequest(map[string]interface{}{"database": "default"})
+		result, err := deps.HandleListTables(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "unauthorized")
+	})
+
+	t.Run("HandleDescribeTable", func(t *testing.T) {
+		req := makeCallToolRequest(map[string]interface{}{"database": "default", "table": "test"})
+		result, err := deps.HandleDescribeTable(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "unauthorized")
+	})
+}
+
+func TestGetClientIP_FromContext(t *testing.T) {
+	t.Run("no request in context", func(t *testing.T) {
+		ip := getClientIP(context.Background())
+		assert.Equal(t, "", ip)
+	})
+
+	t.Run("X-Forwarded-For", func(t *testing.T) {
+		r, _ := http.NewRequest("GET", "/", nil)
+		r.Header.Set("X-Forwarded-For", "10.1.2.3, 10.4.5.6")
+		ctx := context.WithValue(context.Background(), ctxKeyMCPRequest, r)
+		assert.Equal(t, "10.1.2.3", getClientIP(ctx))
+	})
+
+	t.Run("X-Real-IP", func(t *testing.T) {
+		r, _ := http.NewRequest("GET", "/", nil)
+		r.Header.Set("X-Real-IP", "172.16.0.1")
+		ctx := context.WithValue(context.Background(), ctxKeyMCPRequest, r)
+		assert.Equal(t, "172.16.0.1", getClientIP(ctx))
+	})
+
+	t.Run("RemoteAddr with port", func(t *testing.T) {
+		r, _ := http.NewRequest("GET", "/", nil)
+		r.RemoteAddr = "192.168.1.100:54321"
+		ctx := context.WithValue(context.Background(), ctxKeyMCPRequest, r)
+		assert.Equal(t, "192.168.1.100", getClientIP(ctx))
+	})
+}
+
+func TestAuthContextFunc_StoresHTTPRequest(t *testing.T) {
+	db, err := api.NewDB(&api.DBConfig{CacheEnabled: false, DebugMode: false})
+	require.NoError(t, err)
+	s := NewServer(db, t.TempDir(), nil, nil)
+
+	authFn := s.authContextFunc(func(dir string) ([]config_schema.APIClient, error) {
+		return []config_schema.APIClient{
+			{Name: "ip_test_client", APIKey: "ip-key", Enabled: true},
+		}, nil
+	})
+
+	r, _ := http.NewRequest("POST", "/mcp", nil)
+	r.Header.Set("Authorization", "Bearer ip-key")
+	r.Header.Set("X-Forwarded-For", "203.0.113.50")
+	ctx := authFn(context.Background(), r)
+
+	// Client should be authenticated
+	client := getClient(ctx)
+	require.NotNil(t, client)
+	assert.Equal(t, "ip_test_client", client.Name)
+
+	// HTTP request should be stored in context for IP extraction
+	ip := getClientIP(ctx)
+	assert.Equal(t, "203.0.113.50", ip)
+}
+
+func TestAuthContextFunc_StoresRequestEvenWithoutAuth(t *testing.T) {
+	db, err := api.NewDB(&api.DBConfig{CacheEnabled: false, DebugMode: false})
+	require.NoError(t, err)
+	s := NewServer(db, t.TempDir(), nil, nil)
+
+	authFn := s.authContextFunc(func(dir string) ([]config_schema.APIClient, error) {
+		return nil, nil
+	})
+
+	r, _ := http.NewRequest("POST", "/mcp", nil)
+	r.RemoteAddr = "10.0.0.1:9999"
+	ctx := authFn(context.Background(), r)
+
+	// No client since no auth header
+	assert.Nil(t, getClient(ctx))
+	// But HTTP request should still be stored for IP extraction
+	assert.Equal(t, "10.0.0.1", getClientIP(ctx))
+}
+
+func TestIsValidIdentifier(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{"valid simple", "users", true},
+		{"valid with underscore", "my_table", true},
+		{"valid with digits", "table123", true},
+		{"valid mixed case", "MyTable", true},
+		{"empty", "", false},
+		{"with space", "my table", false},
+		{"with dash", "my-table", false},
+		{"with dot", "db.table", false},
+		{"with semicolon", "table;DROP", false},
+		{"with backtick", "`table`", false},
+		{"with single quote", "table'", false},
+		{"with parenthesis", "table()", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isValidIdentifier(tt.input))
+		})
+	}
+}
+
+func TestHandleListTables_InvalidDBName(t *testing.T) {
+	deps := setupTestDeps(t)
+
+	ctx := authedCtx()
+	req := makeCallToolRequest(map[string]interface{}{
+		"database": "my-db; DROP TABLE users",
+	})
+
+	result, err := deps.HandleListTables(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, result.IsError)
+
+	textContent, ok := result.Content[0].(mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "invalid database name")
+}
+
+func TestHandleDescribeTable_InvalidNames(t *testing.T) {
+	deps := setupTestDeps(t)
+	ctx := authedCtx()
+
+	t.Run("invalid database name", func(t *testing.T) {
+		req := makeCallToolRequest(map[string]interface{}{
+			"database": "db; DROP TABLE x",
+			"table":    "users",
+		})
+		result, err := deps.HandleDescribeTable(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "invalid database name")
+	})
+
+	t.Run("invalid table name", func(t *testing.T) {
+		req := makeCallToolRequest(map[string]interface{}{
+			"database": "default",
+			"table":    "users; DROP TABLE x",
+		})
+		result, err := deps.HandleDescribeTable(ctx, req)
+		require.NoError(t, err)
+		assert.True(t, result.IsError)
+		textContent, ok := result.Content[0].(mcp.TextContent)
+		require.True(t, ok)
+		assert.Contains(t, textContent.Text, "invalid table name")
+	})
 }

@@ -36,6 +36,14 @@ Authentication is performed via Bearer Token:
 Authorization: Bearer <your-token>
 ```
 
+> **Note:** Authentication is mandatory. All tool calls without a valid Bearer token will be rejected with an "unauthorized" error.
+
+## Security
+
+- **SQL injection protection**: The `database` and `table` parameters in `list_tables` and `describe_table` are validated to only allow safe identifier characters (letters, digits, underscores). Invalid names are rejected before query execution.
+- **Result size limit**: Read queries (SELECT, SHOW, etc.) are limited to a maximum of **10,000 rows** to prevent out-of-memory conditions. If the result exceeds this limit, it will be truncated with a note in the response.
+- **Audit logging**: All tool calls are logged with the client name, client IP address, tool name, parameters, duration, and success/failure status.
+
 ## Available Tools
 
 The MCP Server exposes the following 4 tools. AI clients can use them through standard MCP tool calls.

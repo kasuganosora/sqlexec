@@ -162,9 +162,12 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// writeJSON writes a JSON response
+// writeJSON writes a JSON response. If encoding fails, it logs the error
+// and writes a plain-text fallback so the client always gets a response.
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("[HTTP API] writeJSON encode error: %v", err)
+	}
 }

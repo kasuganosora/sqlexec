@@ -11,9 +11,10 @@ type QueryRequest struct {
 
 // QueryResponse represents a successful query response
 type QueryResponse struct {
-	Columns []domain.ColumnInfo `json:"columns,omitempty"`
-	Rows    []domain.Row        `json:"rows"`
-	Total   int64               `json:"total"`
+	Columns   []domain.ColumnInfo `json:"columns,omitempty"`
+	Rows      []domain.Row        `json:"rows"`
+	Total     int64               `json:"total"`
+	Truncated bool                `json:"truncated,omitempty"`
 }
 
 // ExecResponse represents a successful execute (DML/DDL) response

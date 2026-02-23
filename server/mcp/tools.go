@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -15,7 +16,13 @@ import (
 
 type contextKey string
 
-const ctxKeyMCPClient contextKey = "mcp_client"
+const (
+	ctxKeyMCPClient contextKey = "mcp_client"
+	ctxKeyMCPRequest contextKey = "mcp_http_request"
+
+	// maxResultRows limits the number of rows returned by read queries to prevent OOM.
+	maxResultRows = 10000
+)
 
 // ToolDeps holds shared dependencies for MCP tool handlers
 type ToolDeps struct {
@@ -25,8 +32,21 @@ type ToolDeps struct {
 	AuditLogger *security.AuditLogger
 }
 
+// requireAuth checks that the MCP request is authenticated and returns the client.
+// Returns a tool error result if not authenticated.
+func requireAuth(ctx context.Context) (*mcp.CallToolResult, bool) {
+	if getClient(ctx) == nil {
+		return mcp.NewToolResultError("unauthorized: valid Bearer token required"), false
+	}
+	return nil, true
+}
+
 // HandleQuery executes an arbitrary SQL query
 func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if errResult, ok := requireAuth(ctx); !ok {
+		return errResult, nil
+	}
+
 	sql := request.GetString("sql", "")
 	database := request.GetString("database", "")
 	traceID := request.GetString("trace_id", "")
@@ -41,7 +61,7 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 
 	client := getClient(ctx)
 	clientName := ""
-	clientIP := ""
+	clientIP := getClientIP(ctx)
 	if client != nil {
 		clientName = client.Name
 	}
@@ -89,8 +109,13 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 		sb.WriteString("\n")
 
 		rowCount := 0
+		truncated := false
 		vals := make([]string, len(colNames))
 		for query.Next() {
+			if rowCount >= maxResultRows {
+				truncated = true
+				break
+			}
 			row := query.Row()
 			for i, col := range colNames {
 				vals[i] = fmt.Sprintf("%v", row[col])
@@ -99,7 +124,11 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 			sb.WriteString("\n")
 			rowCount++
 		}
-		sb.WriteString(fmt.Sprintf("\n(%d rows)", rowCount))
+		if truncated {
+			sb.WriteString(fmt.Sprintf("\n(%d rows, truncated at %d)", rowCount, maxResultRows))
+		} else {
+			sb.WriteString(fmt.Sprintf("\n(%d rows)", rowCount))
+		}
 		resultText = sb.String()
 	} else {
 		result, err := session.Execute(sql)
@@ -116,8 +145,13 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 
 // HandleListDatabases lists all available databases
 func (d *ToolDeps) HandleListDatabases(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if errResult, ok := requireAuth(ctx); !ok {
+		return errResult, nil
+	}
+
 	client := getClient(ctx)
 	clientName := ""
+	clientIP := getClientIP(ctx)
 	if client != nil {
 		clientName = client.Name
 	}
@@ -135,7 +169,7 @@ func (d *ToolDeps) HandleListDatabases(ctx context.Context, request mcp.CallTool
 
 	query, err := session.Query("SHOW DATABASES")
 	if err != nil {
-		d.logToolCall(traceID, clientName, "", "list_databases", nil, time.Since(start).Milliseconds(), false)
+		d.logToolCall(traceID, clientName, clientIP, "list_databases", nil, time.Since(start).Milliseconds(), false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list databases: %v", err)), nil
 	}
 	defer query.Close()
@@ -149,19 +183,28 @@ func (d *ToolDeps) HandleListDatabases(ctx context.Context, request mcp.CallTool
 		}
 	}
 
-	d.logToolCall(traceID, clientName, "", "list_databases", nil, time.Since(start).Milliseconds(), true)
+	d.logToolCall(traceID, clientName, clientIP, "list_databases", nil, time.Since(start).Milliseconds(), true)
 	return mcp.NewToolResultText(sb.String()), nil
 }
 
 // HandleListTables lists tables in a given database
 func (d *ToolDeps) HandleListTables(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if errResult, ok := requireAuth(ctx); !ok {
+		return errResult, nil
+	}
+
 	database := request.GetString("database", "")
 	if database == "" {
 		return mcp.NewToolResultError("database parameter is required"), nil
 	}
 
+	if !isValidIdentifier(database) {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid database name: %s", database)), nil
+	}
+
 	client := getClient(ctx)
 	clientName := ""
+	clientIP := getClientIP(ctx)
 	if client != nil {
 		clientName = client.Name
 	}
@@ -180,7 +223,7 @@ func (d *ToolDeps) HandleListTables(ctx context.Context, request mcp.CallToolReq
 
 	query, err := session.Query("SHOW TABLES")
 	if err != nil {
-		d.logToolCall(traceID, clientName, "", "list_tables", map[string]interface{}{"database": database}, time.Since(start).Milliseconds(), false)
+		d.logToolCall(traceID, clientName, clientIP, "list_tables", map[string]interface{}{"database": database}, time.Since(start).Milliseconds(), false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list tables: %v", err)), nil
 	}
 	defer query.Close()
@@ -194,12 +237,16 @@ func (d *ToolDeps) HandleListTables(ctx context.Context, request mcp.CallToolReq
 		}
 	}
 
-	d.logToolCall(traceID, clientName, "", "list_tables", map[string]interface{}{"database": database}, time.Since(start).Milliseconds(), true)
+	d.logToolCall(traceID, clientName, clientIP, "list_tables", map[string]interface{}{"database": database}, time.Since(start).Milliseconds(), true)
 	return mcp.NewToolResultText(sb.String()), nil
 }
 
 // HandleDescribeTable returns the schema of a table
 func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	if errResult, ok := requireAuth(ctx); !ok {
+		return errResult, nil
+	}
+
 	database := request.GetString("database", "")
 	table := request.GetString("table", "")
 
@@ -210,8 +257,17 @@ func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallTool
 		return mcp.NewToolResultError("table parameter is required"), nil
 	}
 
+	// Validate identifiers to prevent SQL injection
+	if !isValidIdentifier(database) {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid database name: %s", database)), nil
+	}
+	if !isValidIdentifier(table) {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid table name: %s", table)), nil
+	}
+
 	client := getClient(ctx)
 	clientName := ""
+	clientIP := getClientIP(ctx)
 	if client != nil {
 		clientName = client.Name
 	}
@@ -228,9 +284,9 @@ func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallTool
 	}
 	session.SetCurrentDB(database)
 
-	query, err := session.Query(fmt.Sprintf("SHOW COLUMNS FROM %s", table))
+	query, err := session.Query(fmt.Sprintf("SHOW COLUMNS FROM `%s`", table))
 	if err != nil {
-		d.logToolCall(traceID, clientName, "", "describe_table", map[string]interface{}{"database": database, "table": table}, time.Since(start).Milliseconds(), false)
+		d.logToolCall(traceID, clientName, clientIP, "describe_table", map[string]interface{}{"database": database, "table": table}, time.Since(start).Milliseconds(), false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to describe table: %v", err)), nil
 	}
 	defer query.Close()
@@ -256,7 +312,7 @@ func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallTool
 		sb.WriteString("\n")
 	}
 
-	d.logToolCall(traceID, clientName, "", "describe_table", map[string]interface{}{"database": database, "table": table}, time.Since(start).Milliseconds(), true)
+	d.logToolCall(traceID, clientName, clientIP, "describe_table", map[string]interface{}{"database": database, "table": table}, time.Since(start).Milliseconds(), true)
 	return mcp.NewToolResultText(sb.String()), nil
 }
 
@@ -269,4 +325,38 @@ func (d *ToolDeps) logToolCall(traceID, clientName, ip, toolName string, args ma
 func getClient(ctx context.Context) *config_schema.APIClient {
 	client, _ := ctx.Value(ctxKeyMCPClient).(*config_schema.APIClient)
 	return client
+}
+
+// getClientIP extracts the client IP from the HTTP request stored in context.
+func getClientIP(ctx context.Context) string {
+	r, _ := ctx.Value(ctxKeyMCPRequest).(*http.Request)
+	if r == nil {
+		return ""
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.SplitN(xff, ",", 2)
+		return strings.TrimSpace(parts[0])
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+	addr := r.RemoteAddr
+	if idx := strings.LastIndex(addr, ":"); idx != -1 {
+		return addr[:idx]
+	}
+	return addr
+}
+
+// isValidIdentifier checks that a SQL identifier contains only safe characters
+// (letters, digits, underscore). This prevents SQL injection in interpolated identifiers.
+func isValidIdentifier(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, ch := range name {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+			return false
+		}
+	}
+	return true
 }

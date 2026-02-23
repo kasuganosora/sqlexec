@@ -847,3 +847,121 @@ func TestQueryEndpoint_ShowDatabases(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&queryResp))
 	fmt.Printf("SHOW DATABASES result: %+v\n", queryResp)
 }
+
+// ==========================================================================
+// Tests for bugfixes: error sanitization, duration timing, result truncation
+// ==========================================================================
+
+func TestQueryEndpoint_ErrorMessageSanitized(t *testing.T) {
+	env := setupTestEnv(t)
+
+	queryHandler := NewQueryHandler(env.db, env.configDir, env.auditLogger)
+	clientStore := NewClientStore(env.configDir)
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/v1/query", AuthMiddleware(clientStore)(queryHandler))
+	handler := RecoveryMiddleware(mux)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	t.Run("SELECT error does not expose internal details", func(t *testing.T) {
+		body := `{"sql":"SELECT * FROM nonexistent_table_for_sanitize_test"}`
+		path := "/api/v1/query"
+		ts, nonce, sig := signRequest("POST", path, body, env.client.APISecret)
+
+		req, err := http.NewRequest("POST", server.URL+path, strings.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("X-API-Key", env.client.APIKey)
+		req.Header.Set("X-Timestamp", ts)
+		req.Header.Set("X-Nonce", nonce)
+		req.Header.Set("X-Signature", sig)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		var errResp ErrorResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
+		// Error message should be generic, not containing internal error details
+		assert.Equal(t, "query failed", errResp.Error)
+	})
+
+	t.Run("INSERT error does not expose internal details", func(t *testing.T) {
+		body := `{"sql":"INSERT INTO nonexistent_table_for_sanitize_test (id) VALUES (1)"}`
+		path := "/api/v1/query"
+		ts, nonce, sig := signRequest("POST", path, body, env.client.APISecret)
+
+		req, err := http.NewRequest("POST", server.URL+path, strings.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("X-API-Key", env.client.APIKey)
+		req.Header.Set("X-Timestamp", ts)
+		req.Header.Set("X-Nonce", nonce)
+		req.Header.Set("X-Signature", sig)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		var errResp ErrorResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
+		assert.Equal(t, "execute failed", errResp.Error)
+	})
+}
+
+func TestQueryResponse_TruncatedField(t *testing.T) {
+	// Test that QueryResponse has Truncated field and it's false for small results
+	env := setupTestEnv(t)
+
+	session := env.db.Session()
+	_, err := session.Execute("CREATE TABLE truncate_test (id INT)")
+	require.NoError(t, err)
+	_, err = session.Execute("INSERT INTO truncate_test (id) VALUES (1)")
+	require.NoError(t, err)
+	session.Close()
+
+	queryHandler := NewQueryHandler(env.db, env.configDir, env.auditLogger)
+	clientStore := NewClientStore(env.configDir)
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/v1/query", AuthMiddleware(clientStore)(queryHandler))
+	handler := RecoveryMiddleware(mux)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	body := `{"sql":"SELECT * FROM truncate_test"}`
+	path := "/api/v1/query"
+	ts, nonce, sig := signRequest("POST", path, body, env.client.APISecret)
+
+	req, err := http.NewRequest("POST", server.URL+path, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("X-API-Key", env.client.APIKey)
+	req.Header.Set("X-Timestamp", ts)
+	req.Header.Set("X-Nonce", nonce)
+	req.Header.Set("X-Signature", sig)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var queryResp QueryResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&queryResp))
+	assert.Equal(t, int64(1), queryResp.Total)
+	assert.False(t, queryResp.Truncated, "small result set should not be truncated")
+}
+
+func TestMaxResultRows_Constant(t *testing.T) {
+	// Verify the constant is set to a reasonable value
+	assert.Equal(t, 10000, maxResultRows)
+}
+
+func TestWriteJSON_ErrorHandling(t *testing.T) {
+	// writeJSON should not panic even with unusual input
+	w := httptest.NewRecorder()
+	writeJSON(w, http.StatusOK, ErrorResponse{Error: "test", Code: 200})
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+}

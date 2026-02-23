@@ -13,6 +13,9 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
+// maxResultRows limits the number of rows returned by read queries to prevent OOM.
+const maxResultRows = 10000
+
 // QueryHandler handles SQL query execution via HTTP
 type QueryHandler struct {
 	db          *api.DB
@@ -105,15 +108,13 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		strings.HasPrefix(sqlUpper, "DESC ") ||
 		strings.HasPrefix(sqlUpper, "EXPLAIN")
 
-	duration := time.Since(start).Milliseconds()
-
 	if isRead {
 		query, err := session.Query(req.SQL)
-		duration = time.Since(start).Milliseconds()
 		if err != nil {
+			duration := time.Since(start).Milliseconds()
 			h.logRequest(traceID, client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, false)
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{
-				Error: err.Error(),
+				Error: "query failed",
 				Code:  http.StatusBadRequest,
 			})
 			return
@@ -121,29 +122,37 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer query.Close()
 
 		rows := make([]domain.Row, 0, 64)
+		truncated := false
 		for query.Next() {
+			if len(rows) >= maxResultRows {
+				truncated = true
+				break
+			}
 			rows = append(rows, query.Row())
 		}
 
+		duration := time.Since(start).Milliseconds()
 		h.logRequest(traceID, client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, true)
 
 		writeJSON(w, http.StatusOK, QueryResponse{
-			Columns: query.Columns(),
-			Rows:    rows,
-			Total:   int64(len(rows)),
+			Columns:   query.Columns(),
+			Rows:      rows,
+			Total:     int64(len(rows)),
+			Truncated: truncated,
 		})
 	} else {
 		result, err := session.Execute(req.SQL)
-		duration = time.Since(start).Milliseconds()
 		if err != nil {
+			duration := time.Since(start).Milliseconds()
 			h.logRequest(traceID, client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, false)
 			writeJSON(w, http.StatusBadRequest, ErrorResponse{
-				Error: err.Error(),
+				Error: "execute failed",
 				Code:  http.StatusBadRequest,
 			})
 			return
 		}
 
+		duration := time.Since(start).Milliseconds()
 		h.logRequest(traceID, client.Name, clientIP, r.Method, r.URL.Path, req.SQL, req.Database, duration, true)
 
 		writeJSON(w, http.StatusOK, ExecResponse{

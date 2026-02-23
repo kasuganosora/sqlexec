@@ -100,8 +100,12 @@ func (s *Server) Start() error {
 }
 
 // authContextFunc returns an HTTP context function that validates Bearer token auth
+// and stores the HTTP request in context for IP extraction.
 func (s *Server) authContextFunc(loadClients func(string) ([]config_schema.APIClient, error)) mcpserver.HTTPContextFunc {
 	return func(ctx context.Context, r *http.Request) context.Context {
+		// Always store the HTTP request so tool handlers can extract client IP.
+		ctx = context.WithValue(ctx, ctxKeyMCPRequest, r)
+
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			return ctx
@@ -124,7 +128,8 @@ func (s *Server) authContextFunc(loadClients func(string) ([]config_schema.APICl
 		for _, c := range clients {
 			if c.APIKey == apiKey && c.Enabled {
 				clientCopy := c
-				return context.WithValue(ctx, ctxKeyMCPClient, &clientCopy)
+				ctx = context.WithValue(ctx, ctxKeyMCPClient, &clientCopy)
+				return ctx
 			}
 		}
 
