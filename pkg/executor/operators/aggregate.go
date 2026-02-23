@@ -9,6 +9,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/plan"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/types"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // toFloat64 safely converts a numeric value to float64
@@ -137,6 +138,28 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 						}
 					}
 				}
+			case types.Min:
+				if agg.Expr != nil && agg.Expr.Column != "" {
+					if val, ok := row[agg.Expr.Column]; ok && val != nil {
+						cur, exists := groups[groupKey][alias]
+						if !exists || cur == nil {
+							groups[groupKey][alias] = val
+						} else if utils.CompareValuesForSort(val, cur) < 0 {
+							groups[groupKey][alias] = val
+						}
+					}
+				}
+			case types.Max:
+				if agg.Expr != nil && agg.Expr.Column != "" {
+					if val, ok := row[agg.Expr.Column]; ok && val != nil {
+						cur, exists := groups[groupKey][alias]
+						if !exists || cur == nil {
+							groups[groupKey][alias] = val
+						} else if utils.CompareValuesForSort(val, cur) > 0 {
+							groups[groupKey][alias] = val
+						}
+					}
+				}
 			}
 		}
 	}
@@ -179,9 +202,27 @@ func (op *AggregateOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 		if alias == "" {
 			alias = fmt.Sprintf("agg_%d", aggIdx)
 		}
+		colType := "INTEGER"
+		switch agg.Type {
+		case types.Sum, types.Avg:
+			colType = "DOUBLE"
+		case types.Min, types.Max:
+			// Preserve input column type if available
+			if agg.Expr != nil && agg.Expr.Column != "" {
+				colType = "TEXT" // default; overridden below if child provides type
+				if childResult != nil {
+					for _, ci := range childResult.Columns {
+						if ci.Name == agg.Expr.Column {
+							colType = ci.Type
+							break
+						}
+					}
+				}
+			}
+		}
 		outputColumns = append(outputColumns, domain.ColumnInfo{
 			Name: alias,
-			Type: "INTEGER",
+			Type: colType,
 		})
 	}
 

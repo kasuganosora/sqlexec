@@ -655,30 +655,69 @@ func (m *MVCCDataSource) checkUniqueConstraints(tableName string, schema *domain
 		return nil
 	}
 	for _, idxInfo := range tableIndexes {
-		if !idxInfo.Unique || len(idxInfo.Columns) != 1 {
-			continue // skip non-unique or composite indexes
-		}
-		colName := idxInfo.Columns[0]
-		idx, err := m.indexManager.GetIndex(tableName, colName)
-		if err != nil {
+		if !idxInfo.Unique {
 			continue
 		}
-		newSeen := make(map[string]bool, len(newRows))
-		for _, row := range newRows {
-			val, ok := row[colName]
-			if !ok || val == nil {
+		if len(idxInfo.Columns) == 1 {
+			// Single-column unique index: use index lookup for efficiency
+			colName := idxInfo.Columns[0]
+			idx, err := m.indexManager.GetIndex(tableName, colName)
+			if err != nil {
 				continue
 			}
-			// Check against existing index data (previous version)
-			if _, exists := idx.Find(val); exists {
-				return fmt.Errorf("Duplicate entry '%v' for key '%s'", val, colName)
+			newSeen := make(map[string]bool, len(newRows))
+			for _, row := range newRows {
+				val, ok := row[colName]
+				if !ok || val == nil {
+					continue
+				}
+				if _, exists := idx.Find(val); exists {
+					return fmt.Errorf("Duplicate entry '%v' for key '%s'", val, colName)
+				}
+				key := fmt.Sprintf("%v", val)
+				if newSeen[key] {
+					return fmt.Errorf("Duplicate entry '%v' for key '%s'", val, colName)
+				}
+				newSeen[key] = true
 			}
-			// Check within the batch itself
-			key := fmt.Sprintf("%v", val)
-			if newSeen[key] {
-				return fmt.Errorf("Duplicate entry '%v' for key '%s'", val, colName)
+		} else {
+			// Composite unique index: check all columns together
+			existingSeen := make(map[string]bool, len(existingRows))
+			for _, row := range existingRows {
+				keyParts := make([]string, 0, len(idxInfo.Columns))
+				allPresent := true
+				for _, colName := range idxInfo.Columns {
+					val, ok := row[colName]
+					if !ok || val == nil {
+						allPresent = false
+						break
+					}
+					keyParts = append(keyParts, fmt.Sprintf("%v", val))
+				}
+				if allPresent {
+					existingSeen[fmt.Sprintf("%v", keyParts)] = true
+				}
 			}
-			newSeen[key] = true
+			for _, row := range newRows {
+				keyParts := make([]string, 0, len(idxInfo.Columns))
+				allPresent := true
+				for _, colName := range idxInfo.Columns {
+					val, ok := row[colName]
+					if !ok || val == nil {
+						allPresent = false
+						break
+					}
+					keyParts = append(keyParts, fmt.Sprintf("%v", val))
+				}
+				if !allPresent {
+					continue
+				}
+				compositeKey := fmt.Sprintf("%v", keyParts)
+				if existingSeen[compositeKey] {
+					return fmt.Errorf("Duplicate entry for key '%s'", idxInfo.Name)
+				}
+				existingSeen[compositeKey] = true
+			}
 		}
 	}
 	return nil

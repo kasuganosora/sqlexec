@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -287,7 +288,18 @@ func toDriverValue(v interface{}) driver.Value {
 		return int64(val)
 	case float32:
 		return float64(val)
+	case map[string]interface{}, []interface{}:
+		// Marshal JSON objects/arrays to []byte so GORM can properly
+		// deserialize nested structures back to map[string]interface{}.
+		if b, err := json.Marshal(val); err == nil {
+			return string(b)
+		}
+		return fmt.Sprintf("%v", val)
 	default:
+		// Try JSON marshaling for any other complex type (e.g. json.RawMessage)
+		if b, err := json.Marshal(val); err == nil {
+			return string(b)
+		}
 		return fmt.Sprintf("%v", val)
 	}
 }

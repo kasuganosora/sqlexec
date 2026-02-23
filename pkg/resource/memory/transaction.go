@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -94,6 +95,7 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 	}
 
 	// Write transaction: commit only modified tables
+	var commitErr error
 	for tableName, cowSnapshot := range snapshot.tableSnapshots {
 		tableVer := m.tables[tableName]
 		if tableVer != nil && cowSnapshot.copied {
@@ -143,11 +145,19 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 					}
 				}
 
+				// Check unique constraints on the final merged rows before committing
+				schema := cowSnapshot.modifiedData.schema
+				if uerr := m.checkUniqueConstraintsFinal(tableName, schema, newRows); uerr != nil {
+					m.currentVer--
+					commitErr = uerr
+					return
+				}
+
 				// Create new version
 				newVersionData := &TableData{
 					version:   m.currentVer,
 					createdAt: time.Now(),
-					schema:    deepCopySchema(cowSnapshot.modifiedData.schema),
+					schema:    deepCopySchema(schema),
 					rows:      NewPagedRows(m.bufferPool, newRows, 0, tableName, m.currentVer),
 				}
 
@@ -157,6 +167,12 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 				// Maintain indexes: rebuild from the committed version's rows
 				_ = m.indexManager.RebuildIndex(tableName, newVersionData.schema, newRows)
 			}()
+			if commitErr != nil {
+				// Unique constraint violation; clean up and return error
+				delete(m.activeTxns, txnID)
+				delete(m.snapshots, txnID)
+				return commitErr
+			}
 		}
 	}
 
@@ -185,6 +201,67 @@ func (m *MVCCDataSource) RollbackTx(ctx context.Context, txnID int64) error {
 	// Garbage collect old versions no longer needed by any transaction
 	m.gcOldVersions()
 
+	return nil
+}
+
+// checkUniqueConstraintsFinal validates that the complete set of rows
+// (after merging base + modified + inserted - deleted) has no duplicate
+// values for any unique or primary-key column.
+func (m *MVCCDataSource) checkUniqueConstraintsFinal(tableName string, schema *domain.TableInfo, rows []domain.Row) error {
+	if schema == nil {
+		return nil
+	}
+	// 1. Column-level unique/primary constraints
+	for _, col := range schema.Columns {
+		if !col.Unique && !col.Primary {
+			continue
+		}
+		seen := make(map[string]bool, len(rows))
+		for _, row := range rows {
+			val, ok := row[col.Name]
+			if !ok || val == nil {
+				continue
+			}
+			key := fmt.Sprintf("%v", val)
+			if seen[key] {
+				return fmt.Errorf("Duplicate entry '%v' for key '%s'", val, col.Name)
+			}
+			seen[key] = true
+		}
+	}
+
+	// 2. Unique indexes (covers gorm:"uniqueIndex")
+	tableIndexes, err := m.indexManager.GetTableIndexes(tableName)
+	if err != nil || len(tableIndexes) == 0 {
+		return nil
+	}
+	for _, idxInfo := range tableIndexes {
+		if !idxInfo.Unique {
+			continue
+		}
+		seen := make(map[string]bool, len(rows))
+		for _, row := range rows {
+			// Build composite key from all index columns
+			keyParts := make([]string, 0, len(idxInfo.Columns))
+			allPresent := true
+			for _, colName := range idxInfo.Columns {
+				val, ok := row[colName]
+				if !ok || val == nil {
+					allPresent = false
+					break
+				}
+				keyParts = append(keyParts, fmt.Sprintf("%v", val))
+			}
+			if !allPresent {
+				continue
+			}
+			compositeKey := fmt.Sprintf("%v", keyParts)
+			if seen[compositeKey] {
+				return fmt.Errorf("Duplicate entry for key '%s'", idxInfo.Name)
+			}
+			seen[compositeKey] = true
+		}
+	}
 	return nil
 }
 
