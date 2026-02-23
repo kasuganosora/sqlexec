@@ -39,6 +39,9 @@
 * [Parquet](datasources/parquet.md)
 * [HTTP](datasources/http.md)
 * [XML Persistence](datasources/xml-persistence.md)
+* [Badger KV Storage](datasources/badger.md)
+* [Hybrid Storage](datasources/hybrid.md)
+* [Slice](datasources/slice.md)
 
 ## SQL Reference
 

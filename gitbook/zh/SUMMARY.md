@@ -39,6 +39,9 @@
 * [Parquet](datasources/parquet.md)
 * [HTTP](datasources/http.md)
 * [XML 持久化存储](datasources/xml-persistence.md)
+* [Badger KV 存储](datasources/badger.md)
+* [Hybrid 混合存储](datasources/hybrid.md)
+* [Slice 切片](datasources/slice.md)
 
 ## SQL 参考
 
