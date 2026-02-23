@@ -264,17 +264,17 @@ func BenchmarkMatchesLike_Batch(b *testing.B) {
 // --- Baseline collection ---
 
 type LikeBenchmarkResult struct {
-	NsPerOp       float64 `json:"ns_per_op"`
-	AllocsPerOp   int64   `json:"allocs_per_op"`
-	BytesPerOp    int64   `json:"bytes_per_op"`
-	Iterations    int     `json:"iterations"`
+	NsPerOp     float64 `json:"ns_per_op"`
+	AllocsPerOp int64   `json:"allocs_per_op"`
+	BytesPerOp  int64   `json:"bytes_per_op"`
+	Iterations  int     `json:"iterations"`
 }
 
 type LikeBaseline struct {
-	Timestamp  string                          `json:"timestamp"`
-	GoVersion  string                          `json:"go_version"`
-	SystemInfo map[string]interface{}           `json:"system_info"`
-	Benchmarks map[string]LikeBenchmarkResult  `json:"benchmarks"`
+	Timestamp  string                         `json:"timestamp"`
+	GoVersion  string                         `json:"go_version"`
+	SystemInfo map[string]interface{}         `json:"system_info"`
+	Benchmarks map[string]LikeBenchmarkResult `json:"benchmarks"`
 }
 
 func TestSaveLikeBaseline(t *testing.T) {
@@ -283,25 +283,172 @@ func TestSaveLikeBaseline(t *testing.T) {
 	}
 
 	benchmarks := map[string]func(*testing.B){
-		"Prefix_Short10":         func(b *testing.B) { v := generateString(10, 0); p := v[:3] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Prefix_Medium100":       func(b *testing.B) { v := generateString(100, 0); p := v[:3] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Prefix_Long1000":        func(b *testing.B) { v := generateString(1000, 0); p := v[:3] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Suffix_Short10":         func(b *testing.B) { v := generateString(10, 0); p := "%" + v[7:]; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Suffix_Medium100":       func(b *testing.B) { v := generateString(100, 0); p := "%" + v[97:]; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Suffix_Long1000":        func(b *testing.B) { v := generateString(1000, 0); p := "%" + v[997:]; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Contains_Short10":       func(b *testing.B) { v := generateString(10, 0); p := "%" + v[3:6] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Contains_Medium100":     func(b *testing.B) { v := generateString(100, 0); p := "%" + v[48:52] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Contains_Long1000":      func(b *testing.B) { v := generateString(1000, 0); p := "%" + v[498:502] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Exact_Short10":          func(b *testing.B) { v := generateString(10, 0); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, v) } },
-		"Exact_Long1000":         func(b *testing.B) { v := generateString(1000, 0); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, v) } },
-		"Complex_Short10":        func(b *testing.B) { v := generateString(10, 0); p := "%" + string(v[1]) + "%" + string(v[5]) + "%" + string(v[8]) + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Complex_Long1000":       func(b *testing.B) { v := generateString(1000, 0); p := "%" + string(v[1]) + "%" + string(v[500]) + "%" + string(v[998]) + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"SinglePercent":          func(b *testing.B) { v := generateString(100, 0); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, "%") } },
-		"CompareLike_String":     func(b *testing.B) { b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { CompareValues("hello world", "hello%", "LIKE") } },
-		"CompareLike_Int":        func(b *testing.B) { b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { CompareValues(12345, "%234%", "LIKE") } },
-		"StdlibContains_1000":    func(b *testing.B) { s := generateString(1000, 0); sub := s[498:502]; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { strings.Contains(s, sub) } },
-		"Batch1K_Prefix":         func(b *testing.B) { rows := generateRows(1000, 50); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { for _, r := range rows { MatchesLike(r, "abc%") } } },
-		"Batch1K_Contains":       func(b *testing.B) { rows := generateRows(1000, 50); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { for _, r := range rows { MatchesLike(r, "%mno%") } } },
+		"Prefix_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			p := v[:3] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Prefix_Medium100": func(b *testing.B) {
+			v := generateString(100, 0)
+			p := v[:3] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Prefix_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			p := v[:3] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Suffix_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			p := "%" + v[7:]
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Suffix_Medium100": func(b *testing.B) {
+			v := generateString(100, 0)
+			p := "%" + v[97:]
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Suffix_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			p := "%" + v[997:]
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Contains_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			p := "%" + v[3:6] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Contains_Medium100": func(b *testing.B) {
+			v := generateString(100, 0)
+			p := "%" + v[48:52] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Contains_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			p := "%" + v[498:502] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Exact_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, v)
+			}
+		},
+		"Exact_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, v)
+			}
+		},
+		"Complex_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			p := "%" + string(v[1]) + "%" + string(v[5]) + "%" + string(v[8]) + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Complex_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			p := "%" + string(v[1]) + "%" + string(v[500]) + "%" + string(v[998]) + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"SinglePercent": func(b *testing.B) {
+			v := generateString(100, 0)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, "%")
+			}
+		},
+		"CompareLike_String": func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				CompareValues("hello world", "hello%", "LIKE")
+			}
+		},
+		"CompareLike_Int": func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				CompareValues(12345, "%234%", "LIKE")
+			}
+		},
+		"StdlibContains_1000": func(b *testing.B) {
+			s := generateString(1000, 0)
+			sub := s[498:502]
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				strings.Contains(s, sub)
+			}
+		},
+		"Batch1K_Prefix": func(b *testing.B) {
+			rows := generateRows(1000, 50)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				for _, r := range rows {
+					MatchesLike(r, "abc%")
+				}
+			}
+		},
+		"Batch1K_Contains": func(b *testing.B) {
+			rows := generateRows(1000, 50)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				for _, r := range rows {
+					MatchesLike(r, "%mno%")
+				}
+			}
+		},
 	}
 
 	baseline := LikeBaseline{
@@ -357,24 +504,163 @@ func TestCompareLikeBaseline(t *testing.T) {
 
 	// Re-run benchmarks with same definitions (minus removed CustomContains)
 	benchmarks := map[string]func(*testing.B){
-		"Prefix_Short10":         func(b *testing.B) { v := generateString(10, 0); p := v[:3] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Prefix_Medium100":       func(b *testing.B) { v := generateString(100, 0); p := v[:3] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Prefix_Long1000":        func(b *testing.B) { v := generateString(1000, 0); p := v[:3] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Suffix_Short10":         func(b *testing.B) { v := generateString(10, 0); p := "%" + v[7:]; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Suffix_Medium100":       func(b *testing.B) { v := generateString(100, 0); p := "%" + v[97:]; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Suffix_Long1000":        func(b *testing.B) { v := generateString(1000, 0); p := "%" + v[997:]; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Contains_Short10":       func(b *testing.B) { v := generateString(10, 0); p := "%" + v[3:6] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Contains_Medium100":     func(b *testing.B) { v := generateString(100, 0); p := "%" + v[48:52] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Contains_Long1000":      func(b *testing.B) { v := generateString(1000, 0); p := "%" + v[498:502] + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Exact_Short10":          func(b *testing.B) { v := generateString(10, 0); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, v) } },
-		"Exact_Long1000":         func(b *testing.B) { v := generateString(1000, 0); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, v) } },
-		"Complex_Short10":        func(b *testing.B) { v := generateString(10, 0); p := "%" + string(v[1]) + "%" + string(v[5]) + "%" + string(v[8]) + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"Complex_Long1000":       func(b *testing.B) { v := generateString(1000, 0); p := "%" + string(v[1]) + "%" + string(v[500]) + "%" + string(v[998]) + "%"; b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, p) } },
-		"SinglePercent":          func(b *testing.B) { v := generateString(100, 0); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { MatchesLike(v, "%") } },
-		"CompareLike_String":     func(b *testing.B) { b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { CompareValues("hello world", "hello%", "LIKE") } },
-		"CompareLike_Int":        func(b *testing.B) { b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { CompareValues(12345, "%234%", "LIKE") } },
-		"Batch1K_Prefix":         func(b *testing.B) { rows := generateRows(1000, 50); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { for _, r := range rows { MatchesLike(r, "abc%") } } },
-		"Batch1K_Contains":       func(b *testing.B) { rows := generateRows(1000, 50); b.ReportAllocs(); b.ResetTimer(); for i := 0; i < b.N; i++ { for _, r := range rows { MatchesLike(r, "%mno%") } } },
+		"Prefix_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			p := v[:3] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Prefix_Medium100": func(b *testing.B) {
+			v := generateString(100, 0)
+			p := v[:3] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Prefix_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			p := v[:3] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Suffix_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			p := "%" + v[7:]
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Suffix_Medium100": func(b *testing.B) {
+			v := generateString(100, 0)
+			p := "%" + v[97:]
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Suffix_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			p := "%" + v[997:]
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Contains_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			p := "%" + v[3:6] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Contains_Medium100": func(b *testing.B) {
+			v := generateString(100, 0)
+			p := "%" + v[48:52] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Contains_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			p := "%" + v[498:502] + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Exact_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, v)
+			}
+		},
+		"Exact_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, v)
+			}
+		},
+		"Complex_Short10": func(b *testing.B) {
+			v := generateString(10, 0)
+			p := "%" + string(v[1]) + "%" + string(v[5]) + "%" + string(v[8]) + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"Complex_Long1000": func(b *testing.B) {
+			v := generateString(1000, 0)
+			p := "%" + string(v[1]) + "%" + string(v[500]) + "%" + string(v[998]) + "%"
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, p)
+			}
+		},
+		"SinglePercent": func(b *testing.B) {
+			v := generateString(100, 0)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				MatchesLike(v, "%")
+			}
+		},
+		"CompareLike_String": func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				CompareValues("hello world", "hello%", "LIKE")
+			}
+		},
+		"CompareLike_Int": func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				CompareValues(12345, "%234%", "LIKE")
+			}
+		},
+		"Batch1K_Prefix": func(b *testing.B) {
+			rows := generateRows(1000, 50)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				for _, r := range rows {
+					MatchesLike(r, "abc%")
+				}
+			}
+		},
+		"Batch1K_Contains": func(b *testing.B) {
+			rows := generateRows(1000, 50)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				for _, r := range rows {
+					MatchesLike(r, "%mno%")
+				}
+			}
+		},
 	}
 
 	fmt.Println("\n=== LIKE Optimization Comparison ===")

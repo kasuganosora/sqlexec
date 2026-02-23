@@ -13,17 +13,17 @@ type HistogramType int
 
 const (
 	EquiWidthHistogram HistogramType = iota // 等宽直方图
-	EquiDepthHistogram                     // 等深直方图
-	FrequencyHistogram                    // 频率直方图
+	EquiDepthHistogram                      // 等深直方图
+	FrequencyHistogram                      // 频率直方图
 )
 
 // HistogramBucket 直方图桶
 type HistogramBucket struct {
-	LowerBound   interface{}
-	UpperBound   interface{}
-	Count        int64
-	Distinct     int64
-	NDV          int64 // 唯一值数
+	LowerBound interface{}
+	UpperBound interface{}
+	Count      int64
+	Distinct   int64
+	NDV        int64 // 唯一值数
 }
 
 // Histogram 直方图
@@ -32,16 +32,16 @@ type Histogram struct {
 	Buckets     []*HistogramBucket
 	MinValue    interface{}
 	MaxValue    interface{}
-	BucketCount  int
-	NDV          int64 // 总唯一值数
-	NullCount    int64
+	BucketCount int
+	NDV         int64 // 总唯一值数
+	NullCount   int64
 }
 
 // BuildEquiWidthHistogram 构建等宽直方图
 func BuildEquiWidthHistogram(values []interface{}, bucketCount int) *Histogram {
 	if len(values) == 0 {
 		return &Histogram{
-			Type:       EquiWidthHistogram,
+			Type:        EquiWidthHistogram,
 			Buckets:     []*HistogramBucket{},
 			BucketCount: bucketCount,
 		}
@@ -57,7 +57,7 @@ func BuildEquiWidthHistogram(values []interface{}, bucketCount int) *Histogram {
 
 	if len(nonNullValues) == 0 {
 		return &Histogram{
-			Type:       EquiWidthHistogram,
+			Type:        EquiWidthHistogram,
 			Buckets:     []*HistogramBucket{},
 			BucketCount: bucketCount,
 			NullCount:   int64(len(values)),
@@ -73,9 +73,9 @@ func BuildEquiWidthHistogram(values []interface{}, bucketCount int) *Histogram {
 
 	// 计算Min/Max
 	hist := &Histogram{
-		Type:       EquiWidthHistogram,
-		MinValue:   sortedValues[0],
-		MaxValue:   sortedValues[len(sortedValues)-1],
+		Type:        EquiWidthHistogram,
+		MinValue:    sortedValues[0],
+		MaxValue:    sortedValues[len(sortedValues)-1],
 		BucketCount: bucketCount,
 		NullCount:   int64(len(values) - len(nonNullValues)),
 	}
@@ -135,7 +135,7 @@ func BuildEquiWidthHistogram(values []interface{}, bucketCount int) *Histogram {
 func BuildFrequencyHistogram(values []interface{}, bucketCount int) *Histogram {
 	if len(values) == 0 {
 		return &Histogram{
-			Type:       FrequencyHistogram,
+			Type:        FrequencyHistogram,
 			Buckets:     []*HistogramBucket{},
 			BucketCount: bucketCount,
 		}
@@ -152,10 +152,10 @@ func BuildFrequencyHistogram(values []interface{}, bucketCount int) *Histogram {
 	}
 
 	hist := &Histogram{
-		Type:       FrequencyHistogram,
+		Type:        FrequencyHistogram,
 		BucketCount: bucketCount,
 		NullCount:   int64(len(values)) - nonNullCount,
-		NDV:          int64(len(freq)),
+		NDV:         int64(len(freq)),
 	}
 
 	if len(freq) == 0 {
@@ -278,7 +278,7 @@ func (h *Histogram) estimateRangeSelectivity(operator string, value interface{})
 	inRangeBuckets := 0
 	totalRange := maxNum - minNum
 
-		for _, bucket := range h.Buckets {
+	for _, bucket := range h.Buckets {
 		lowerNum, lowerOk := toFloat64(bucket.LowerBound)
 		upperNum, upperOk := toFloat64(bucket.UpperBound)
 
@@ -446,4 +446,3 @@ func compareHistogramValues(a, b interface{}) int {
 	}
 	return 0
 }
-

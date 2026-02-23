@@ -100,7 +100,7 @@ func (m *MockDataSource) Execute(ctx context.Context, sql string) (*domain.Query
 func TestNewDataService(t *testing.T) {
 	mockDataSource := &MockDataSource{}
 	service := NewDataService(mockDataSource)
-	
+
 	assert.NotNil(t, service)
 	assert.NotNil(t, service.(*DataService).dataSource)
 }
@@ -108,12 +108,12 @@ func TestNewDataService(t *testing.T) {
 func TestDataService_Query(t *testing.T) {
 	mockDataSource := &MockDataSource{}
 	service := NewDataService(mockDataSource)
-	
+
 	ctx := context.Background()
 	options := &QueryOptions{
 		SelectColumns: []string{"id", "name"},
 	}
-	
+
 	result, err := service.Query(ctx, "test_table", options)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -123,13 +123,13 @@ func TestDataService_Query(t *testing.T) {
 func TestDataService_Insert(t *testing.T) {
 	mockDataSource := &MockDataSource{}
 	service := NewDataService(mockDataSource)
-	
+
 	ctx := context.Background()
 	data := map[string]interface{}{
 		"id":   1,
 		"name": "Alice",
 	}
-	
+
 	_, err := service.Insert(ctx, "test_table", data)
 	require.NoError(t, err)
 	assert.True(t, mockDataSource.insertCalled)
@@ -138,7 +138,7 @@ func TestDataService_Insert(t *testing.T) {
 func TestDataService_Update(t *testing.T) {
 	mockDataSource := &MockDataSource{}
 	service := NewDataService(mockDataSource)
-	
+
 	ctx := context.Background()
 	data := map[string]interface{}{
 		"name": "Bob",
@@ -150,7 +150,7 @@ func TestDataService_Update(t *testing.T) {
 			Value:    1,
 		},
 	}
-	
+
 	err := service.Update(ctx, "test_table", data, &where[0])
 	require.NoError(t, err)
 }
@@ -158,7 +158,7 @@ func TestDataService_Update(t *testing.T) {
 func TestDataService_Delete(t *testing.T) {
 	mockDataSource := &MockDataSource{}
 	service := NewDataService(mockDataSource)
-	
+
 	ctx := context.Background()
 	where := []domain.Filter{
 		{
@@ -167,7 +167,7 @@ func TestDataService_Delete(t *testing.T) {
 			Value:    1,
 		},
 	}
-	
+
 	err := service.Delete(ctx, "test_table", &where[0])
 	require.NoError(t, err)
 }
@@ -175,9 +175,9 @@ func TestDataService_Delete(t *testing.T) {
 func TestDataService_GetTableInfo(t *testing.T) {
 	mockDataSource := &MockDataSource{}
 	service := NewDataService(mockDataSource)
-	
+
 	ctx := context.Background()
-	
+
 	info, err := service.GetTableInfo(ctx, "test_table")
 	require.NoError(t, err)
 	assert.NotNil(t, info)
@@ -187,14 +187,14 @@ func TestDataService_GetTableInfo(t *testing.T) {
 func TestDataService_Filter(t *testing.T) {
 	mockDataSource := &MockDataSource{}
 	service := NewDataService(mockDataSource)
-	
+
 	ctx := context.Background()
 	filter := domain.Filter{
 		Field:    "id",
 		Operator: ">",
 		Value:    0,
 	}
-	
+
 	rows, total, err := service.Filter(ctx, "test_table", filter, 0, 10)
 	require.NoError(t, err)
 	assert.NotNil(t, rows)

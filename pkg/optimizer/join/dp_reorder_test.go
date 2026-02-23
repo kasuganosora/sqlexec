@@ -492,7 +492,7 @@ func (m *mockCardinalityEstimator) EstimateTableScan(tableName string) int64 {
 
 type testMockLogicalPlan struct {
 	tableName string
-	children []LogicalPlan
+	children  []LogicalPlan
 }
 
 func (m *testMockLogicalPlan) Children() []LogicalPlan {

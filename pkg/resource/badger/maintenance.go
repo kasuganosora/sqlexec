@@ -49,10 +49,10 @@ type MaintenanceConfig struct {
 func DefaultMaintenanceConfig() *MaintenanceConfig {
 	return &MaintenanceConfig{
 		EnableAutoGC:         true,
-		GCInterval:          300,  // 5 minutes
-		GCDiscardRatio:      0.5,
+		GCInterval:           300, // 5 minutes
+		GCDiscardRatio:       0.5,
 		EnableAutoCompaction: true,
-		CompactionInterval:  3600, // 1 hour
+		CompactionInterval:   3600, // 1 hour
 	}
 }
 

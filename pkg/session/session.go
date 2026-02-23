@@ -217,18 +217,18 @@ func (m *SessionMgr) GC() (err error) {
 }
 
 type Session struct {
-	driver       SessionDriver
-	ID           string    `json:"id"`
-	ThreadID     uint32    `json:"thread_id"`
-	TraceID      string    `json:"trace_id"`
-	User         string    `json:"user"`
-	Created      time.Time `json:"created"`
-	LastUsed     time.Time `json:"last_used"`
-	RemoteIP     string    `json:"remote_ip"`
-	RemotePort   string    `json:"remote_port"`
-	SequenceID   uint8     `json:"sequence_id"`    // Sequence number
-	sequenceMu   sync.Mutex                       // Mutex for SequenceID
-	APISession   interface{} `json:"api_session"`  // API layer session (avoid circular import)
+	driver     SessionDriver
+	ID         string      `json:"id"`
+	ThreadID   uint32      `json:"thread_id"`
+	TraceID    string      `json:"trace_id"`
+	User       string      `json:"user"`
+	Created    time.Time   `json:"created"`
+	LastUsed   time.Time   `json:"last_used"`
+	RemoteIP   string      `json:"remote_ip"`
+	RemotePort string      `json:"remote_port"`
+	SequenceID uint8       `json:"sequence_id"` // Sequence number
+	sequenceMu sync.Mutex  // Mutex for SequenceID
+	APISession interface{} `json:"api_session"` // API layer session (avoid circular import)
 }
 
 // Get 获取会话值
@@ -302,13 +302,13 @@ func (s *Session) DeleteVariable(name string) error {
 // GetAllVariables 获取所有会话变量
 func (s *Session) GetAllVariables() (map[string]interface{}, error) {
 	vars := make(map[string]interface{})
-	
+
 	// 获取所有键
 	keys, err := s.driver.GetAllKeys(context.Background(), s.ID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 过滤出以 "var:" 开头的键
 	for _, key := range keys {
 		if strings.HasPrefix(key, "var:") {
@@ -320,7 +320,7 @@ func (s *Session) GetAllVariables() (map[string]interface{}, error) {
 			}
 		}
 	}
-	
+
 	return vars, nil
 }
 

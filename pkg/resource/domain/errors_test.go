@@ -326,10 +326,10 @@ func TestErrorInterfaces(t *testing.T) {
 			t.Errorf("Error %d returned empty message", i)
 		}
 
-	// 测试error不为nil
-	if err == nil {
-		t.Errorf("Error %d should not be nil", i)
-	}
+		// 测试error不为nil
+		if err == nil {
+			t.Errorf("Error %d should not be nil", i)
+		}
 	}
 }
 
@@ -341,23 +341,23 @@ func TestErrorMessageFormats(t *testing.T) {
 		contains []string
 	}{
 		{
-			name: "ErrNotConnected",
-			err: &ErrNotConnected{DataSourceType: "mysql"},
+			name:     "ErrNotConnected",
+			err:      &ErrNotConnected{DataSourceType: "mysql"},
 			contains: []string{"data source", "mysql", "not connected"},
 		},
 		{
-			name: "ErrReadOnly",
-			err: &ErrReadOnly{DataSourceType: "csv", Operation: "insert"},
+			name:     "ErrReadOnly",
+			err:      &ErrReadOnly{DataSourceType: "csv", Operation: "insert"},
 			contains: []string{"data source", "csv", "read-only", "insert"},
 		},
 		{
-			name: "ErrTableNotFound",
-			err: &ErrTableNotFound{TableName: "users"},
+			name:     "ErrTableNotFound",
+			err:      &ErrTableNotFound{TableName: "users"},
 			contains: []string{"table", "users", "not found"},
 		},
 		{
-			name: "ErrColumnNotFound",
-			err: &ErrColumnNotFound{ColumnName: "id", TableName: "products"},
+			name:     "ErrColumnNotFound",
+			err:      &ErrColumnNotFound{ColumnName: "id", TableName: "products"},
 			contains: []string{"column", "id", "table", "products", "not found"},
 		},
 	}

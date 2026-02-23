@@ -40,14 +40,14 @@ type HNSWPQIndex struct {
 	efConstruction int // 构建时的探索宽度
 	ef             int // 搜索时的探索宽度
 
-	mu   sync.RWMutex
-	rng  *rand.Rand
+	mu  sync.RWMutex
+	rng *rand.Rand
 }
 
 // hnswNodePQ HNSW-PQ 节点
 type hnswNodePQ struct {
 	id        int64
-	code      []int8   // PQ 编码
+	code      []int8    // PQ 编码
 	neighbors [][]int64 // 每一层的邻居
 }
 
@@ -116,20 +116,20 @@ func NewHNSWPQIndex(columnName string, config *VectorIndexConfig) (*HNSWPQIndex,
 	nsubq := m
 
 	return &HNSWPQIndex{
-		columnName:        columnName,
-		config:            config,
-		distFunc:          distFunc,
-		vectors:           make(map[int64][]float32),
-		codes:             make(map[int64][]int8),
-		codebooks:         make([][][]float32, nsubq),
-		layers:            make([]map[int64]*hnswNodePQ, maxLevel),
-		nsubq:             nsubq,
-		ksubq:             ksubq,
-		maxLevel:          maxLevel,
-		ml:                ml,
-		efConstruction:     efConstruction,
-		ef:                ef,
-		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
+		columnName:     columnName,
+		config:         config,
+		distFunc:       distFunc,
+		vectors:        make(map[int64][]float32),
+		codes:          make(map[int64][]int8),
+		codebooks:      make([][][]float32, nsubq),
+		layers:         make([]map[int64]*hnswNodePQ, maxLevel),
+		nsubq:          nsubq,
+		ksubq:          ksubq,
+		maxLevel:       maxLevel,
+		ml:             ml,
+		efConstruction: efConstruction,
+		ef:             ef,
+		rng:            rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -347,9 +347,9 @@ type heapNodePQ struct {
 // minHeap 最小堆实现
 type minHeapPQ []*heapNodePQ
 
-func (h minHeapPQ) Len() int           { return len(h) }
-func (h minHeapPQ) Less(i, j int) bool { return h[i].distance < h[j].distance }
-func (h minHeapPQ) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h minHeapPQ) Len() int            { return len(h) }
+func (h minHeapPQ) Less(i, j int) bool  { return h[i].distance < h[j].distance }
+func (h minHeapPQ) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
 func (h *minHeapPQ) Push(x interface{}) { *h = append(*h, x.(*heapNodePQ)) }
 func (h *minHeapPQ) Pop() interface{} {
 	old := *h

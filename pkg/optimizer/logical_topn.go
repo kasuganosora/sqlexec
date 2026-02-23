@@ -20,8 +20,8 @@ func NewLogicalTopN(items []*parser.OrderItem, limit, offset int64, child Logica
 	return &LogicalTopN{
 		sortItems: items,
 		limit:     limit,
-		offset:     offset,
-		children:    []LogicalPlan{child},
+		offset:    offset,
+		children:  []LogicalPlan{child},
 	}
 }
 
@@ -72,4 +72,3 @@ func (p *LogicalTopN) SetOffset(offset int64) {
 func (p *LogicalTopN) Explain() string {
 	return "TopN(Limit=" + fmt.Sprintf("%d", p.limit) + ", Offset=" + fmt.Sprintf("%d", p.offset) + ")"
 }
-

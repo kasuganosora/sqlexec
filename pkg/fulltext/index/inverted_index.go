@@ -139,14 +139,14 @@ func (idx *InvertedIndex) RemoveDocument(docID int64) bool {
 func (idx *InvertedIndex) Search(queryVector *bm25.SparseVector) []SearchResult {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	if queryVector.IsEmpty() {
 		return nil
 	}
-	
+
 	// 收集候选文档分数
 	scores := make(map[int64]float64)
-	
+
 	for termID, queryWeight := range queryVector.Terms {
 		if postingsList, exists := idx.postings[termID]; exists {
 			for _, posting := range postingsList.Postings {
@@ -154,7 +154,7 @@ func (idx *InvertedIndex) Search(queryVector *bm25.SparseVector) []SearchResult 
 			}
 		}
 	}
-	
+
 	// 转换为结果列表
 	results := make([]SearchResult, 0, len(scores))
 	for docID, score := range scores {
@@ -164,12 +164,12 @@ func (idx *InvertedIndex) Search(queryVector *bm25.SparseVector) []SearchResult 
 			Doc:   idx.docStore[docID],
 		})
 	}
-	
+
 	// 按分数降序排序
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
-	
+
 	return results
 }
 
@@ -249,20 +249,20 @@ func (idx *InvertedIndex) SearchTopK(queryVector *bm25.SparseVector, topK int) [
 func (idx *InvertedIndex) SearchPhrase(phraseTokens []analyzer.Token, slop int) []SearchResult {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	if len(phraseTokens) == 0 {
 		return nil
 	}
-	
+
 	// 获取第一个词的倒排列表
 	firstTermID := hashString(phraseTokens[0].Text)
 	firstList, exists := idx.postings[firstTermID]
 	if !exists {
 		return nil
 	}
-	
+
 	var results []SearchResult
-	
+
 	// 对每个候选文档检查短语匹配
 	for _, posting := range firstList.Postings {
 		if idx.matchPhrase(posting.DocID, phraseTokens, slop) {
@@ -273,7 +273,7 @@ func (idx *InvertedIndex) SearchPhrase(phraseTokens []analyzer.Token, slop int) 
 			})
 		}
 	}
-	
+
 	return results
 }
 
@@ -282,7 +282,7 @@ func (idx *InvertedIndex) matchPhrase(docID int64, tokens []analyzer.Token, slop
 	if len(tokens) == 0 {
 		return false
 	}
-	
+
 	// 获取所有词的倒排列表
 	var positions [][]int
 	for _, token := range tokens {
@@ -291,15 +291,15 @@ func (idx *InvertedIndex) matchPhrase(docID int64, tokens []analyzer.Token, slop
 		if !exists {
 			return false
 		}
-		
+
 		posting := postingsList.FindPosting(docID)
 		if posting == nil {
 			return false
 		}
-		
+
 		positions = append(positions, posting.Positions)
 	}
-	
+
 	// 检查位置匹配（考虑slop）
 	return checkPositionsWithSlop(positions, slop)
 }
@@ -309,14 +309,14 @@ func checkPositionsWithSlop(positions [][]int, slop int) bool {
 	if len(positions) < 2 {
 		return true
 	}
-	
+
 	// 简化实现：检查第一个词的每个位置
 	for _, pos1 := range positions[0] {
 		if matchRemainingPositions(positions, 1, pos1, slop) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -325,7 +325,7 @@ func matchRemainingPositions(positions [][]int, idx int, lastPos int, slop int) 
 	if idx >= len(positions) {
 		return true
 	}
-	
+
 	expectedPos := lastPos + 1
 	for _, pos := range positions[idx] {
 		if utils.AbsInt(pos-expectedPos) <= slop {
@@ -334,7 +334,7 @@ func matchRemainingPositions(positions [][]int, idx int, lastPos int, slop int) 
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -356,12 +356,12 @@ func (idx *InvertedIndex) GetStats() *bm25.CollectionStats {
 func (idx *InvertedIndex) GetAllDocIDs() []int64 {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	docIDs := make([]int64, 0, len(idx.docStore))
 	for docID := range idx.docStore {
 		docIDs = append(docIDs, docID)
 	}
-	
+
 	return docIDs
 }
 
@@ -369,7 +369,7 @@ func (idx *InvertedIndex) GetAllDocIDs() []int64 {
 func (idx *InvertedIndex) GetDocVector(docID int64) *bm25.SparseVector {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	return idx.docVectors[docID]
 }
 
@@ -384,7 +384,7 @@ func (idx *InvertedIndex) GetDocStore() map[int64]*Document {
 func (idx *InvertedIndex) UpdateDocFreq(termID int64) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	idx.stats.IncrementDocFreq(termID)
 }
 
@@ -448,12 +448,12 @@ func (h *minHeap) toResults(idx *InvertedIndex) []SearchResult {
 			Doc:   idx.docStore[item.docID],
 		}
 	}
-	
+
 	// 按分数降序排序
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Score > results[j].Score
 	})
-	
+
 	return results
 }
 
@@ -474,18 +474,18 @@ func (h *minHeap) down(i int) {
 		minIdx := i
 		left := 2*i + 1
 		right := 2*i + 2
-		
+
 		if left < n && h.items[left].score < h.items[minIdx].score {
 			minIdx = left
 		}
 		if right < n && h.items[right].score < h.items[minIdx].score {
 			minIdx = right
 		}
-		
+
 		if minIdx == i {
 			break
 		}
-		
+
 		h.items[i], h.items[minIdx] = h.items[minIdx], h.items[i]
 		i = minIdx
 	}

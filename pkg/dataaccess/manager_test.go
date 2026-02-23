@@ -92,7 +92,7 @@ func (t *TestDataSource) Execute(ctx context.Context, sql string) (*domain.Query
 func TestNewManager(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	assert.NotNil(t, manager)
 	assert.NotNil(t, manager.dataSources)
 	assert.NotNil(t, manager.connections)
@@ -101,11 +101,11 @@ func TestNewManager(t *testing.T) {
 func TestManager_RegisterDataSource(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	newDs := &TestDataSource{}
 	err := manager.RegisterDataSource("new_source", newDs)
 	require.NoError(t, err)
-	
+
 	retrievedDs, err := manager.GetDataSource("new_source")
 	require.NoError(t, err)
 	assert.Equal(t, newDs, retrievedDs)
@@ -114,7 +114,7 @@ func TestManager_RegisterDataSource(t *testing.T) {
 func TestManager_RegisterDataSource_Duplicate(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	err := manager.RegisterDataSource("default", &TestDataSource{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already registered")
@@ -123,7 +123,7 @@ func TestManager_RegisterDataSource_Duplicate(t *testing.T) {
 func TestManager_GetDataSource_NotFound(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	_, err := manager.GetDataSource("nonexistent")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -132,10 +132,10 @@ func TestManager_GetDataSource_NotFound(t *testing.T) {
 func TestManager_AcquireConnection(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	err := manager.AcquireConnection("conn1")
 	require.NoError(t, err)
-	
+
 	err = manager.AcquireConnection("conn1")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already acquired")
@@ -144,10 +144,10 @@ func TestManager_AcquireConnection(t *testing.T) {
 func TestManager_ReleaseConnection(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	manager.AcquireConnection("conn1")
 	manager.ReleaseConnection("conn1")
-	
+
 	err := manager.AcquireConnection("conn1")
 	assert.NoError(t, err)
 }
@@ -155,7 +155,7 @@ func TestManager_ReleaseConnection(t *testing.T) {
 func TestManager_GetStats(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	stats := manager.GetStats()
 	assert.NotNil(t, stats)
 	assert.Equal(t, 1, stats["data_sources"])
@@ -165,10 +165,10 @@ func TestManager_GetStats(t *testing.T) {
 func TestManager_HealthCheck(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	ctx := context.Background()
 	health := manager.HealthCheck(ctx)
-	
+
 	assert.NotNil(t, health)
 	assert.Contains(t, health, "default")
 }
@@ -176,19 +176,19 @@ func TestManager_HealthCheck(t *testing.T) {
 func TestManager_RegisterDataSource_Multiple(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	ds1 := &TestDataSource{}
 	ds2 := &TestDataSource{}
 	ds3 := &TestDataSource{}
-	
+
 	err1 := manager.RegisterDataSource("source1", ds1)
 	err2 := manager.RegisterDataSource("source2", ds2)
 	err3 := manager.RegisterDataSource("source3", ds3)
-	
+
 	require.NoError(t, err1)
 	require.NoError(t, err2)
 	require.NoError(t, err3)
-	
+
 	stats := manager.GetStats()
 	assert.Equal(t, 4, stats["data_sources"]) // default + 3 new
 }
@@ -196,20 +196,20 @@ func TestManager_RegisterDataSource_Multiple(t *testing.T) {
 func TestManager_AcquireRelease_Multiple(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
-	
+
 	// Acquire multiple connections
 	_ = manager.AcquireConnection("conn1")
 	_ = manager.AcquireConnection("conn2")
 	_ = manager.AcquireConnection("conn3")
-	
+
 	stats := manager.GetStats()
 	assert.Equal(t, 3, stats["connections"])
-	
+
 	// Release all
 	manager.ReleaseConnection("conn1")
 	manager.ReleaseConnection("conn2")
 	manager.ReleaseConnection("conn3")
-	
+
 	stats = manager.GetStats()
 	assert.Equal(t, 0, stats["connections"])
 }

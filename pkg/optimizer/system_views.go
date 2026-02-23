@@ -22,24 +22,24 @@ type IndexAdvisorResult struct {
 
 // UnusedIndex 未使用的索引
 type UnusedIndex struct {
-	Database       string
-	TableName      string
-	IndexName      string
-	IndexColumns   []string
-	LastUsedAt     time.Time
-	IndexSize      int64
-	Reason         string
+	Database     string
+	TableName    string
+	IndexName    string
+	IndexColumns []string
+	LastUsedAt   time.Time
+	IndexSize    int64
+	Reason       string
 }
 
 // HypotheticalIndexDisplay 虚拟索引显示信息
 type HypotheticalIndexDisplay struct {
-	ID             string
-	TableName      string
-	IndexColumns   []string
-	IsUnique       bool
-	Selectivity    float64
-	EstimatedSize  int64
-	CreatedAt      time.Time
+	ID            string
+	TableName     string
+	IndexColumns  []string
+	IsUnique      bool
+	Selectivity   float64
+	EstimatedSize int64
+	CreatedAt     time.Time
 }
 
 // SystemViews 系统视图管理器
@@ -239,8 +239,8 @@ func (sv *SystemViews) GetStatistics() map[string]int {
 
 	return map[string]int{
 		"index_advisor_results": len(sv.indexAdvisorResults),
-		"unused_indexes":       len(sv.unusedIndexes),
-		"hypothetical_indexes": len(sv.hypotheticalIndexes),
+		"unused_indexes":        len(sv.unusedIndexes),
+		"hypothetical_indexes":  len(sv.hypotheticalIndexes),
 	}
 }
 

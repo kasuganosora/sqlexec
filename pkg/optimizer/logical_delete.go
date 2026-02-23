@@ -10,10 +10,10 @@ import (
 // LogicalDelete 逻辑删除计划
 type LogicalDelete struct {
 	TableName string
-	Where     *parser.Expression // WHERE 条件
+	Where     *parser.Expression  // WHERE 条件
 	OrderBy   []*parser.OrderItem // ORDER BY
 	Limit     *int64              // LIMIT
-	children  []LogicalPlan        // 子节点（目前无子节点）
+	children  []LogicalPlan       // 子节点（目前无子节点）
 }
 
 // NewLogicalDelete 创建逻辑删除计划

@@ -12,24 +12,24 @@ import (
 
 // IndexAdvisor 索引推荐器
 type IndexAdvisor struct {
-	store              *HypotheticalIndexStore
-	statsGen           *HypotheticalStatsGenerator
-	statsIntegrator    *StatisticsIntegrator
-	merger             *IndexMerger
-	extractor          *IndexCandidateExtractor
-	geneticAlgo        *GeneticAlgorithm
+	store           *HypotheticalIndexStore
+	statsGen        *HypotheticalStatsGenerator
+	statsIntegrator *StatisticsIntegrator
+	merger          *IndexMerger
+	extractor       *IndexCandidateExtractor
+	geneticAlgo     *GeneticAlgorithm
 
 	// 配置参数
-	MaxNumIndexes      int
-	MaxIndexColumns    int
-	MaxNumQuery        int
-	Timeout            time.Duration
+	MaxNumIndexes   int
+	MaxIndexColumns int
+	MaxNumQuery     int
+	Timeout         time.Duration
 
 	// 遗传算法参数
-	PopulationSize     int
-	MaxGenerations     int
-	MutationRate       float64
-	CrossoverRate      float64
+	PopulationSize int
+	MaxGenerations int
+	MutationRate   float64
+	CrossoverRate  float64
 }
 
 // NewIndexAdvisor 创建索引推荐器
@@ -104,21 +104,11 @@ func (ia *IndexAdvisor) RecommendForSingleQuery(
 	ctx, cancel := context.WithTimeout(ctx, ia.Timeout)
 	defer cancel()
 
-	// 1. 解析查询
-	p := parser.NewParser()
-	_, err := p.ParseOneStmt(query)
+	// 1. 解析查询并完整转换 AST 到 SQLStatement
+	stmt, err := ia.parseQueryToStatement(query)
 	if err != nil {
 		return nil, fmt.Errorf("parse query failed: %w", err)
 	}
-
-	// 将 AST 转换为 SQLStatement（简化实现）
-	stmt := &parser.SQLStatement{
-		RawSQL: query,
-	}
-
-	// 尝试提取 WHERE, JOIN, GROUP BY 等信息
-	// 这里简化处理，实际应该完整遍历 AST
-	// TODO: 完善转换逻辑
 
 	// 2. 提取索引候选
 	candidates, err := ia.extractor.ExtractFromSQL(stmt, tableInfo)
@@ -147,10 +137,28 @@ func (ia *IndexAdvisor) RecommendForSingleQuery(
 	return recommendations, nil
 }
 
+// parseQueryToStatement parses a SQL query string and converts the resulting
+// AST into a fully-populated parser.SQLStatement using parser.SQLAdapter.  This
+// populates the Select.Where, Select.Joins, Select.GroupBy, Select.OrderBy,
+// Select.Limit fields (among others) so that downstream components such as the
+// IndexCandidateExtractor and cost estimator receive rich query information
+// instead of just the raw SQL text.
+func (ia *IndexAdvisor) parseQueryToStatement(query string) (*parser.SQLStatement, error) {
+	adapter := parser.NewSQLAdapter()
+	result, err := adapter.Parse(query)
+	if err != nil {
+		return nil, err
+	}
+	if !result.Success || result.Statement == nil {
+		return nil, fmt.Errorf("failed to parse query: %s", result.Error)
+	}
+	return result.Statement, nil
+}
+
 // createCandidatesFromQuery 从查询文本创建候选（简化版）
 func (ia *IndexAdvisor) createCandidatesFromQuery(query string) []*IndexCandidate {
 	var candidates []*IndexCandidate
-	
+
 	// 简化：假设查询中有 WHERE a = 1, ORDER BY b 等模式
 	// 实际应该完整解析 AST
 	if strings.Contains(query, "WHERE") {
@@ -161,7 +169,7 @@ func (ia *IndexAdvisor) createCandidatesFromQuery(query string) []*IndexCandidat
 			Source:    "WHERE",
 		})
 	}
-	
+
 	if strings.Contains(query, "ORDER BY") {
 		candidates = append(candidates, &IndexCandidate{
 			TableName: "t1",
@@ -170,7 +178,7 @@ func (ia *IndexAdvisor) createCandidatesFromQuery(query string) []*IndexCandidat
 			Source:    "ORDER",
 		})
 	}
-	
+
 	if strings.Contains(query, "GROUP BY") {
 		candidates = append(candidates, &IndexCandidate{
 			TableName: "t1",
@@ -179,7 +187,7 @@ func (ia *IndexAdvisor) createCandidatesFromQuery(query string) []*IndexCandidat
 			Source:    "GROUP",
 		})
 	}
-	
+
 	return candidates
 }
 
@@ -205,12 +213,18 @@ func (ia *IndexAdvisor) RecommendForWorkload(
 		default:
 		}
 
-		// 简化：直接从查询创建候选
-		candidates := ia.createCandidatesFromQuery(query)
-		
-		// 创建临时 SQLStatement
-		stmt := &parser.SQLStatement{
-			RawSQL: query,
+		// Parse query into a fully-populated SQLStatement
+		stmt, parseErr := ia.parseQueryToStatement(query)
+		if parseErr != nil {
+			// Skip queries that cannot be parsed
+			continue
+		}
+
+		// Extract candidates from the parsed statement
+		candidates, extractErr := ia.extractor.ExtractFromSQL(stmt, tableInfo)
+		if extractErr != nil || len(candidates) == 0 {
+			// Fall back to text-based candidate extraction
+			candidates = ia.createCandidatesFromQuery(query)
 		}
 
 		// 评估收益

@@ -10,18 +10,18 @@ import (
 
 // Config 应用程序配置
 type Config struct {
-	Server        ServerConfig        `json:"server"`
-	Database      DatabaseConfig      `json:"database"`
-	Log           LogConfig           `json:"log"`
-	Pool          PoolConfig          `json:"pool"`
-	Cache         CacheConfig         `json:"cache"`
-	Monitor       MonitorConfig       `json:"monitor"`
-	Connection    ConnectionConfig    `json:"connection"`
-	Session       SessionConfig       `json:"session"`
-	Optimizer     OptimizerConfig     `json:"optimizer"`
-	HTTPAPI       HTTPAPIConfig       `json:"http_api"`
-	MCP           MCPConfig           `json:"mcp"`
-	Paging        PagingConfig        `json:"paging"`
+	Server     ServerConfig     `json:"server"`
+	Database   DatabaseConfig   `json:"database"`
+	Log        LogConfig        `json:"log"`
+	Pool       PoolConfig       `json:"pool"`
+	Cache      CacheConfig      `json:"cache"`
+	Monitor    MonitorConfig    `json:"monitor"`
+	Connection ConnectionConfig `json:"connection"`
+	Session    SessionConfig    `json:"session"`
+	Optimizer  OptimizerConfig  `json:"optimizer"`
+	HTTPAPI    HTTPAPIConfig    `json:"http_api"`
+	MCP        MCPConfig        `json:"mcp"`
+	Paging     PagingConfig     `json:"paging"`
 }
 
 // HTTPAPIConfig HTTP REST API 配置
@@ -58,7 +58,7 @@ func (c *ServerConfig) IsDebugEnabled() bool {
 // DatabaseConfig 数据库配置
 type DatabaseConfig struct {
 	MaxConnections int      `json:"max_connections"`
-	IdleTimeout   int      `json:"idle_timeout"` // seconds
+	IdleTimeout    int      `json:"idle_timeout"`    // seconds
 	EnabledSources []string `json:"enabled_sources"` // 启用的数据源类型，核心版本可以只启用部分
 	DatabaseDir    string   `json:"database_dir"`    // 持久化存储根目录，默认 "./database"
 }
@@ -122,8 +122,8 @@ type ConnectionConfig struct {
 
 // SessionConfig 会话配置
 type SessionConfig struct {
-	MaxAge       time.Duration `json:"max_age"`
-	GCInterval   time.Duration `json:"gc_interval"`
+	MaxAge     time.Duration `json:"max_age"`
+	GCInterval time.Duration `json:"gc_interval"`
 }
 
 // OptimizerConfig 优化器配置
@@ -133,11 +133,11 @@ type OptimizerConfig struct {
 
 // PagingConfig 内存分页配置（虚拟内存机制）
 type PagingConfig struct {
-	Enabled       bool          `json:"enabled"`         // 是否启用内存分页
-	MaxMemoryMB   int           `json:"max_memory_mb"`   // 最大内存(MB)，0=自动检测(系统内存的70%)
-	PageSize      int           `json:"page_size"`       // 每页行数，默认4096
-	SpillDir      string        `json:"spill_dir"`       // 溢出文件目录，默认临时目录
-	EvictInterval time.Duration `json:"evict_interval"`  // 后台驱逐检查间隔，默认5秒
+	Enabled       bool          `json:"enabled"`        // 是否启用内存分页
+	MaxMemoryMB   int           `json:"max_memory_mb"`  // 最大内存(MB)，0=自动检测(系统内存的70%)
+	PageSize      int           `json:"page_size"`      // 每页行数，默认4096
+	SpillDir      string        `json:"spill_dir"`      // 溢出文件目录，默认临时目录
+	EvictInterval time.Duration `json:"evict_interval"` // 后台驱逐检查间隔，默认5秒
 }
 
 // DefaultConfig 返回默认配置

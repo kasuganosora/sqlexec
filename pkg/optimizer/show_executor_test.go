@@ -179,21 +179,21 @@ func TestShowProcessListWithData(t *testing.T) {
 	ctx := context.Background()
 
 	tests := []struct {
-		name           string
-		full           bool
-		expectedRows   int
+		name            string
+		full            bool
+		expectedRows    int
 		checkTruncation bool
 	}{
 		{
-			name:           "not full - check truncation",
-			full:           false,
-			expectedRows:   2,
+			name:            "not full - check truncation",
+			full:            false,
+			expectedRows:    2,
 			checkTruncation: true,
 		},
 		{
-			name:           "full - no truncation",
-			full:           true,
-			expectedRows:   2,
+			name:            "full - no truncation",
+			full:            true,
+			expectedRows:    2,
 			checkTruncation: false,
 		},
 	}

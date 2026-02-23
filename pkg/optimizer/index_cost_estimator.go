@@ -17,8 +17,8 @@ type IndexCostEstimator struct {
 // NewIndexCostEstimator 创建索引成本估算器
 func NewIndexCostEstimator() *IndexCostEstimator {
 	return &IndexCostEstimator{
-		ioCostFactor:     0.1,  // 默认IO成本因子
-		cpuCostFactor:    0.01, // 默认CPU成本因子
+		ioCostFactor:     0.1,   // 默认IO成本因子
+		cpuCostFactor:    0.01,  // 默认CPU成本因子
 		memoryCostFactor: 0.001, // 默认内存成本因子
 	}
 }

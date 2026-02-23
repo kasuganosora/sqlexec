@@ -141,13 +141,13 @@ func TestIndexSelector_SelectBestIndex_WithIndices(t *testing.T) {
 
 	// Add indices
 	index1 := &Index{
-		Name:       "idx_id",
-		TableName:  "test_table",
-		Columns:    []string{"id"},
-		Unique:     true,
-		Primary:    false,
+		Name:        "idx_id",
+		TableName:   "test_table",
+		Columns:     []string{"id"},
+		Unique:      true,
+		Primary:     false,
 		Cardinality: 1000,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 	selector.indexManager.AddIndex(index1)
 
@@ -170,13 +170,13 @@ func TestIndexSelector_SelectBestIndex_CoveringIndex(t *testing.T) {
 
 	// Add covering index
 	index := &Index{
-		Name:       "idx_covering",
-		TableName:  "test_table",
-		Columns:    []string{"id", "name", "age"},
-		Unique:     false,
-		Primary:    false,
+		Name:        "idx_covering",
+		TableName:   "test_table",
+		Columns:     []string{"id", "name", "age"},
+		Unique:      false,
+		Primary:     false,
 		Cardinality: 1000,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 	selector.indexManager.AddIndex(index)
 
@@ -197,18 +197,18 @@ func TestIndexSelector_SelectBestIndex_MultipleIndices(t *testing.T) {
 
 	// Add multiple indices
 	index1 := &Index{
-		Name:       "idx_id",
-		TableName:  "test_table",
-		Columns:    []string{"id"},
+		Name:        "idx_id",
+		TableName:   "test_table",
+		Columns:     []string{"id"},
 		Cardinality: 1000,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 	index2 := &Index{
-		Name:       "idx_name",
-		TableName:  "test_table",
-		Columns:    []string{"name"},
+		Name:        "idx_name",
+		TableName:   "test_table",
+		Columns:     []string{"name"},
 		Cardinality: 500,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 	selector.indexManager.AddIndex(index1)
 	selector.indexManager.AddIndex(index2)
@@ -231,18 +231,18 @@ func TestIndexSelector_EvaluateIndexes(t *testing.T) {
 
 	// Add indices
 	index1 := &Index{
-		Name:       "idx_id",
-		TableName:  "test_table",
-		Columns:    []string{"id"},
+		Name:        "idx_id",
+		TableName:   "test_table",
+		Columns:     []string{"id"},
 		Cardinality: 1000,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 	index2 := &Index{
-		Name:       "idx_name",
-		TableName:  "test_table",
-		Columns:    []string{"name"},
+		Name:        "idx_name",
+		TableName:   "test_table",
+		Columns:     []string{"name"},
 		Cardinality: 500,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 	indices := []*Index{index1, index2}
 
@@ -263,11 +263,11 @@ func TestIndexSelector_EvaluateIndex_Unusable(t *testing.T) {
 
 	// Add index that doesn't match filters
 	index := &Index{
-		Name:       "idx_name",
-		TableName:  "test_table",
-		Columns:    []string{"name"},
+		Name:        "idx_name",
+		TableName:   "test_table",
+		Columns:     []string{"name"},
 		Cardinality: 500,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 
 	filters := []domain.Filter{
@@ -313,7 +313,7 @@ func TestIndexSelector_IsIndexUsable(t *testing.T) {
 			expected: false, // no filter matches index column
 		},
 		{
-			name: "empty filters",
+			name:    "empty filters",
 			filters: []domain.Filter{},
 			index: &Index{
 				Columns: []string{"id"},
@@ -387,10 +387,10 @@ func TestIndexSelector_EstimateIndexScanCost(t *testing.T) {
 	selector := NewIndexSelector(estimator)
 
 	index := &Index{
-		Name:       "idx_id",
-		Columns:    []string{"id"},
+		Name:        "idx_id",
+		Columns:     []string{"id"},
 		Cardinality: 1000,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 
 	filters := []domain.Filter{
@@ -406,10 +406,10 @@ func TestIndexSelector_EstimateIndexRows(t *testing.T) {
 	selector := NewIndexSelector(estimator)
 
 	index := &Index{
-		Name:       "idx_id",
-		Columns:    []string{"id"},
+		Name:        "idx_id",
+		Columns:     []string{"id"},
 		Cardinality: 1000,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 
 	filters := []domain.Filter{
@@ -513,11 +513,11 @@ func TestIndexSelector_Explain(t *testing.T) {
 
 	// Add an index
 	index := &Index{
-		Name:       "idx_id",
-		TableName:  "test_table",
-		Columns:    []string{"id"},
+		Name:        "idx_id",
+		TableName:   "test_table",
+		Columns:     []string{"id"},
 		Cardinality: 1000,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 	selector.indexManager.AddIndex(index)
 
@@ -535,29 +535,29 @@ func TestIndexSelector_Explain(t *testing.T) {
 
 func TestIndexSelection_String(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		selection *IndexSelection
-		contains []string
+		contains  []string
 	}{
 		{
 			name: "with selected index",
 			selection: &IndexSelection{
-				SelectedIndex:  &Index{Name: "idx_id"},
+				SelectedIndex: &Index{Name: "idx_id"},
 				IsCovering:    false,
 				EstimatedRows: 100.0,
-				Cost:           10.5,
-				Reason:         "Selected index 'idx_id' with estimated cost 10.50",
+				Cost:          10.5,
+				Reason:        "Selected index 'idx_id' with estimated cost 10.50",
 			},
 			contains: []string{"IndexSelected", "idx_id", "cost="},
 		},
 		{
 			name: "without selected index",
 			selection: &IndexSelection{
-				SelectedIndex:  nil,
+				SelectedIndex: nil,
 				IsCovering:    false,
 				EstimatedRows: 0,
-				Cost:           1.7976931348623157e+308, // MaxFloat64
-				Reason:         "No available index",
+				Cost:          1.7976931348623157e+308, // MaxFloat64
+				Reason:        "No available index",
 			},
 			contains: []string{"NoIndexSelected", "reason="},
 		},
@@ -586,8 +586,8 @@ func (m *mockCardinalityEstimator) EstimateFilter(tableName string, filters []do
 
 func (m *mockCardinalityEstimator) GetStatistics(tableName string) (*statistics.TableStatistics, error) {
 	return &statistics.TableStatistics{
-		Name:       tableName,
-		RowCount:   10000,
+		Name:     tableName,
+		RowCount: 10000,
 		ColumnStats: map[string]*statistics.ColumnStatistics{
 			"id": {DistinctCount: 10000},
 		},
@@ -602,19 +602,19 @@ type mockTableStatistics struct {
 // NewMockTableStatistics creates a mock TableStatistics for testing
 func NewMockTableStatistics() *statistics.TableStatistics {
 	return &statistics.TableStatistics{
-		Name:            "mock_table",
-		RowCount:        1000,
-		SampleCount:     100,
-		SampleRatio:     0.1,
-		ColumnStats:     make(map[string]*statistics.ColumnStatistics),
-		Histograms:      make(map[string]*statistics.Histogram),
+		Name:             "mock_table",
+		RowCount:         1000,
+		SampleCount:      100,
+		SampleRatio:      0.1,
+		ColumnStats:      make(map[string]*statistics.ColumnStatistics),
+		Histograms:       make(map[string]*statistics.Histogram),
 		CollectTimestamp: time.Now(),
 	}
 }
 
 func TestIndexType_String(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		indexType IndexType
 	}{
 		{"BTree", BTreeIndex},
@@ -633,13 +633,13 @@ func TestIndexType_String(t *testing.T) {
 
 func TestIndex_Completeness(t *testing.T) {
 	index := &Index{
-		Name:       "idx_test",
-		TableName:  "test_table",
-		Columns:    []string{"id", "name"},
-		Unique:     false,
-		Primary:    false,
+		Name:        "idx_test",
+		TableName:   "test_table",
+		Columns:     []string{"id", "name"},
+		Unique:      false,
+		Primary:     false,
 		Cardinality: 1000,
-		IndexType:  BTreeIndex,
+		IndexType:   BTreeIndex,
 	}
 
 	assert.Equal(t, "idx_test", index.Name)
@@ -668,11 +668,11 @@ func BenchmarkIndexSelector_SelectBestIndex(b *testing.B) {
 	// Add indices
 	for i := 0; i < 10; i++ {
 		index := &Index{
-			Name:       "idx_" + string(rune('0'+i)),
-			TableName:  "test_table",
-			Columns:    []string{"col" + string(rune('0'+i))},
+			Name:        "idx_" + string(rune('0'+i)),
+			TableName:   "test_table",
+			Columns:     []string{"col" + string(rune('0'+i))},
 			Cardinality: int64(1000 * (i + 1)),
-			IndexType:  BTreeIndex,
+			IndexType:   BTreeIndex,
 		}
 		selector.indexManager.AddIndex(index)
 	}
@@ -694,11 +694,11 @@ func BenchmarkIndexManager_GetIndices(b *testing.B) {
 	// Add many indices
 	for i := 0; i < 100; i++ {
 		index := &Index{
-			Name:       "idx_" + string(rune('0'+i%10)),
-			TableName:  "table_" + string(rune('0'+i/10)),
-			Columns:    []string{"col"},
+			Name:        "idx_" + string(rune('0'+i%10)),
+			TableName:   "table_" + string(rune('0'+i/10)),
+			Columns:     []string{"col"},
 			Cardinality: int64(1000),
-			IndexType:  BTreeIndex,
+			IndexType:   BTreeIndex,
 		}
 		manager.AddIndex(index)
 	}

@@ -53,7 +53,7 @@ func (sp *DefaultShowProcessor) SetProcessListProvider(provider ProcessListProvi
 func (sp *DefaultShowProcessor) ProcessShowTables(ctx context.Context) (executor.ResultSet, error) {
 	// SHOW TABLES -> SELECT table_name FROM information_schema.tables WHERE table_schema = ?
 	sql := fmt.Sprintf("SELECT table_name FROM information_schema.tables WHERE table_schema = '%s'", sp.currentDB)
-	
+
 	adapter := parser.NewSQLAdapter()
 	parseResult, err := adapter.Parse(sql)
 	if err != nil {
@@ -78,7 +78,7 @@ func (sp *DefaultShowProcessor) ProcessShowTables(ctx context.Context) (executor
 func (sp *DefaultShowProcessor) ProcessShowDatabases(ctx context.Context) (executor.ResultSet, error) {
 	// SHOW DATABASES -> SELECT schema_name FROM information_schema.schemata
 	sql := "SELECT schema_name FROM information_schema.schemata"
-	
+
 	adapter := parser.NewSQLAdapter()
 	parseResult, err := adapter.Parse(sql)
 	if err != nil {
@@ -110,7 +110,7 @@ func (sp *DefaultShowProcessor) ProcessShowColumns(ctx context.Context, tableNam
 		schemaFilter = fmt.Sprintf(" AND table_schema = '%s'", sp.currentDB)
 	}
 	sql := fmt.Sprintf("SELECT * FROM information_schema.columns WHERE table_name = '%s'%s", tableName, schemaFilter)
-	
+
 	adapter := parser.NewSQLAdapter()
 	parseResult, err := adapter.Parse(sql)
 	if err != nil {

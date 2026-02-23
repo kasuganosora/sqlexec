@@ -21,13 +21,13 @@ const (
 type AuditEventType string
 
 const (
-	EventTypeLogin      AuditEventType = "login"
-	EventTypeLogout     AuditEventType = "logout"
-	EventTypeQuery      AuditEventType = "query"
-	EventTypeInsert     AuditEventType = "insert"
-	EventTypeUpdate     AuditEventType = "update"
-	EventTypeDelete     AuditEventType = "delete"
-	EventTypeDDL        AuditEventType = "ddl"
+	EventTypeLogin       AuditEventType = "login"
+	EventTypeLogout      AuditEventType = "logout"
+	EventTypeQuery       AuditEventType = "query"
+	EventTypeInsert      AuditEventType = "insert"
+	EventTypeUpdate      AuditEventType = "update"
+	EventTypeDelete      AuditEventType = "delete"
+	EventTypeDDL         AuditEventType = "ddl"
 	EventTypePermission  AuditEventType = "permission"
 	EventTypeInjection   AuditEventType = "injection"
 	EventTypeError       AuditEventType = "error"
@@ -339,7 +339,7 @@ func (al *AuditLogger) GetEvents(offset, limit int) []*AuditEvent {
 	events := make([]*AuditEvent, 0, limit)
 
 	// 计算起始位置（正确处理环形缓冲区回绕）
-	start := ((al.index - offset - limit) % al.size + al.size) % al.size
+	start := ((al.index-offset-limit)%al.size + al.size) % al.size
 
 	for i := 0; i < limit; i++ {
 		pos := (start + i) % al.size

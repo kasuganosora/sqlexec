@@ -25,12 +25,12 @@ func TestGrantDatabasePermission(t *testing.T) {
 	pm := NewPermissionManager()
 
 	tests := []struct {
-		name         string
-		host         string
-		user         string
-		db           string
-		permissions  []PermissionType
-		wantErr      bool
+		name        string
+		host        string
+		user        string
+		db          string
+		permissions []PermissionType
+		wantErr     bool
 	}{
 		{
 			name:        "Grant SELECT permission",
@@ -311,14 +311,14 @@ func TestPermissionManagerCheckPermission(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		host    string
-		user    string
-		priv    PermissionType
-		db      string
-		table   string
-		column  string
-		want    bool
+		name   string
+		host   string
+		user   string
+		priv   PermissionType
+		db     string
+		table  string
+		column string
+		want   bool
 	}{
 		{
 			name:   "Check granted database-level SELECT",
@@ -455,11 +455,11 @@ func TestPermissionManagerHasGrantOption(t *testing.T) {
 	pm := NewPermissionManager()
 
 	tests := []struct {
-		name        string
-		setupGrant  bool
-		host        string
-		user        string
-		want        bool
+		name       string
+		setupGrant bool
+		host       string
+		user       string
+		want       bool
 	}{
 		{
 			name:       "Has GRANT OPTION",

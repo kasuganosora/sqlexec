@@ -8,11 +8,11 @@ import (
 
 func TestSortConfig(t *testing.T) {
 	tests := []struct {
-		name       string
+		name         string
 		orderByItems []*parser.OrderItem
 	}{
 		{
-			name:       "Empty sort",
+			name:         "Empty sort",
 			orderByItems: []*parser.OrderItem{},
 		},
 		{
@@ -151,8 +151,8 @@ func TestSortConfigSingleItem(t *testing.T) {
 func TestSortConfigComplexOrdering(t *testing.T) {
 	// Test complex real-world ordering scenarios
 	tests := []struct {
-		name string
-		items []*parser.OrderItem
+		name      string
+		items     []*parser.OrderItem
 		descCount int
 		ascCount  int
 	}{
@@ -186,14 +186,14 @@ func TestSortConfigComplexOrdering(t *testing.T) {
 
 			descFound := 0
 			ascFound := 0
-			
-for _, item := range config.OrderByItems {
-			if item.Direction == "DESC" {
-				descFound++
-			} else {
-				ascFound++
+
+			for _, item := range config.OrderByItems {
+				if item.Direction == "DESC" {
+					descFound++
+				} else {
+					ascFound++
+				}
 			}
-		}
 
 			if descFound != tt.descCount {
 				t.Errorf("DESC count = %v, want %v", descFound, tt.descCount)

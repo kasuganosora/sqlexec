@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // MaxMinEliminationRule eliminates MAX/MIN aggregations by converting them to TopN operations
@@ -145,7 +146,7 @@ func (r *MaxMinEliminationRule) eliminateSingleMaxMin(agg *LogicalAggregate, opt
 	// Add sort - need to use OrderByItem
 	sortItem := &parser.OrderItem{
 		Expr: parser.Expression{
-			Type: parser.ExprTypeColumn,
+			Type:   parser.ExprTypeColumn,
 			Column: column,
 		},
 		Direction: orderDirection,
@@ -267,20 +268,35 @@ func (r *MaxMinEliminationRule) getTableName(plan LogicalPlan) string {
 	return ""
 }
 
-// checkColumnHasIndex checks if a column has an index
+// checkColumnHasIndex checks if a column has an index by inspecting the
+// table's column definitions (primary/unique) and any explicit indexes
+// stored in the TableInfo.Atts map under the "__indexes__" key.
 func (r *MaxMinEliminationRule) checkColumnHasIndex(tableName, column string, optCtx *OptimizationContext) bool {
-	// For simplicity, assume column has index if table exists
-	// In production, this should use IndexSelector to check
 	tableInfo, ok := optCtx.TableInfo[tableName]
-	if !ok {
+	if !ok || tableInfo == nil {
 		return false
 	}
 
-	// Check if table has any columns
-	if tableInfo != nil && len(tableInfo.Columns) > 0 {
-		// TODO: Use IndexSelector to check if column has index
-		// For now, return true to enable optimization
-		return true
+	// 1. Check column-level implicit indexes (primary key, unique constraint)
+	for _, col := range tableInfo.Columns {
+		if col.Name == column && (col.Primary || col.Unique) {
+			return true
+		}
+	}
+
+	// 2. Check explicit indexes stored in Atts["__indexes__"]
+	if tableInfo.Atts != nil {
+		if idxList, ok := tableInfo.Atts["__indexes__"]; ok {
+			if indexes, ok := idxList.([]*domain.Index); ok {
+				for _, idx := range indexes {
+					for _, idxCol := range idx.Columns {
+						if idxCol == column {
+							return true
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return false

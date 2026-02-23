@@ -11,28 +11,28 @@ import (
 
 // Index 索引定义
 type Index struct {
-	Name       string
-	TableName  string
-	Columns    []string
-	Unique     bool
-	Primary    bool
+	Name        string
+	TableName   string
+	Columns     []string
+	Unique      bool
+	Primary     bool
 	Cardinality int64 // 基数（唯一值数量）
 }
 
 // IndexManager 索引管理器
 type IndexManager struct {
 	mu      sync.RWMutex
-	indices map[string][]*Index // table_name -> indices
+	indices map[string][]*Index    // table_name -> indices
 	stats   map[string]*IndexStats // index_name -> stats
 }
 
 // IndexStats 索引统计信息
 type IndexStats struct {
-	Name         string
-	HitCount     int64
-	MissCount    int64
+	Name          string
+	HitCount      int64
+	MissCount     int64
 	AvgAccessTime time.Duration
-	LastAccessed time.Time
+	LastAccessed  time.Time
 }
 
 // NewIndexManager 创建索引管理器
@@ -129,11 +129,11 @@ func (im *IndexManager) GetIndexStats(indexName string) *IndexStats {
 	if stats, ok := im.stats[indexName]; ok {
 		// 返回副本
 		return &IndexStats{
-			Name:         stats.Name,
-			HitCount:     stats.HitCount,
-			MissCount:    stats.MissCount,
+			Name:          stats.Name,
+			HitCount:      stats.HitCount,
+			MissCount:     stats.MissCount,
 			AvgAccessTime: stats.AvgAccessTime,
-			LastAccessed: stats.LastAccessed,
+			LastAccessed:  stats.LastAccessed,
 		}
 	}
 	return nil
@@ -146,7 +146,7 @@ type BatchExecutor struct {
 	batch         []interface{}
 	timer         *time.Timer
 	mu            sync.Mutex
-	flushFunc      func([]interface{}) error
+	flushFunc     func([]interface{}) error
 }
 
 // NewBatchExecutor 创建批量执行器

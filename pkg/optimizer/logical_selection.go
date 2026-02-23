@@ -16,7 +16,7 @@ type LogicalSelection struct {
 func NewLogicalSelection(conditions []*parser.Expression, child LogicalPlan) *LogicalSelection {
 	return &LogicalSelection{
 		filterConditions: conditions,
-		children:       []LogicalPlan{child},
+		children:         []LogicalPlan{child},
 	}
 }
 

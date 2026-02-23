@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,10 +17,10 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/optimizer"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/pool"
-	"github.com/kasuganosora/sqlexec/server/protocol"
-	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/session"
+	"github.com/kasuganosora/sqlexec/server/protocol"
 )
 
 // 定义 context key
@@ -1319,18 +1320,42 @@ func (s *Server) getColumnFlags(col domain.ColumnInfo) uint16 {
 }
 
 // formatValue 格式化值
+// 对常见类型使用 strconv 避免 fmt.Sprintf 的反射开销。
 func (s *Server) formatValue(val interface{}) string {
 	if val == nil {
 		return "NULL"
 	}
-	return fmt.Sprintf("%v", val)
+	switch v := val.(type) {
+	case string:
+		return v
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case float32:
+		return strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case bool:
+		if v {
+			return "1"
+		}
+		return "0"
+	case []byte:
+		return string(v)
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 // countParams 统计SQL中的参数数量
+// 使用字节遍历而非 rune 遍历，因为 '?' 是 ASCII 字符，无需 UTF-8 解码。
 func countParams(query string) uint16 {
 	count := uint16(0)
-	for _, ch := range query {
-		if ch == '?' {
+	for i := 0; i < len(query); i++ {
+		if query[i] == '?' {
 			count++
 		}
 	}
@@ -1463,6 +1488,12 @@ func (s *Server) Start(ctx context.Context, listener net.Listener) error {
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				if opErr, ok := err.(*net.OpError); ok && !opErr.Temporary() {
+					return
+				}
 				log.Printf("接受连接失败: %v", err)
 				continue
 			}

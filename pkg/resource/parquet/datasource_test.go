@@ -102,10 +102,11 @@ func TestParquetSource_GetConfig(t *testing.T) {
 
 	ps := NewParquetAdapter(config, "/tmp/test.parquet")
 
-	if got := ps.GetConfig(); got == nil {
+	got := ps.GetConfig()
+	if got == nil {
 		t.Errorf("GetConfig() returned nil")
-	} else if got != config {
-		t.Errorf("GetConfig() = %v, want %v", got, config)
+	} else if got.Type != config.Type || got.Name != config.Name {
+		t.Errorf("GetConfig() type/name = %v/%v, want %v/%v", got.Type, got.Name, config.Type, config.Name)
 	}
 }
 
@@ -242,9 +243,9 @@ func TestParquetSource_Query(t *testing.T) {
 		t.Fatal("Query() returned nil")
 	}
 
-	// 验证返回的是固定测试数据
-	if len(result.Rows) != 3 {
-		t.Errorf("Expected 3 rows (simplified implementation), got %d", len(result.Rows))
+	// An empty temp file yields 0 rows (no hardcoded data).
+	if len(result.Rows) != 0 {
+		t.Errorf("Expected 0 rows from empty temp file, got %d", len(result.Rows))
 	}
 }
 

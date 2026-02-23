@@ -430,10 +430,10 @@ func TestPagedRows_WithBufferPool(t *testing.T) {
 func TestPagedRows_WithEviction(t *testing.T) {
 	dir := t.TempDir()
 	bp := NewBufferPool(&PagingConfig{
-		Enabled:     true,
-		MaxMemoryMB: 1, // Very small to force eviction
-		PageSize:    100,
-		SpillDir:    dir,
+		Enabled:       true,
+		MaxMemoryMB:   1, // Very small to force eviction
+		PageSize:      100,
+		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
 	defer bp.Close()

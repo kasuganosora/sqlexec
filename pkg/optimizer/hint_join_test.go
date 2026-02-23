@@ -142,28 +142,28 @@ func TestHintAwareJoinTypeHintRule_ShouldApplyHint(t *testing.T) {
 	join := NewLogicalJoin(InnerJoin, leftDS, rightDS, []*JoinCondition{})
 
 	tests := []struct {
-		name       string
-		hintTables []string
+		name        string
+		hintTables  []string
 		shouldApply bool
 	}{
 		{
-			name:       "Table in hint list",
-			hintTables: []string{"t1", "t2"},
+			name:        "Table in hint list",
+			hintTables:  []string{"t1", "t2"},
 			shouldApply: true,
 		},
 		{
-			name:       "Partial match",
-			hintTables: []string{"t1"},
+			name:        "Partial match",
+			hintTables:  []string{"t1"},
 			shouldApply: true,
 		},
 		{
-			name:       "No match",
-			hintTables: []string{"t3", "t4"},
+			name:        "No match",
+			hintTables:  []string{"t3", "t4"},
 			shouldApply: false,
 		},
 		{
-			name:       "Empty hint",
-			hintTables: []string{},
+			name:        "Empty hint",
+			hintTables:  []string{},
 			shouldApply: false,
 		},
 	}
@@ -330,35 +330,35 @@ func TestHintAwareJoinTypeHintRule_ApplyWithHints(t *testing.T) {
 	optCtx := &OptimizationContext{}
 
 	tests := []struct {
-		name     string
-		hints    *OptimizerHints
+		name  string
+		hints *OptimizerHints
 	}{
 		{
-			name:  "HASH_JOIN hint",
+			name: "HASH_JOIN hint",
 			hints: &OptimizerHints{
 				HashJoinTables: []string{"t1", "t2"},
 			},
 		},
 		{
-			name:  "MERGE_JOIN hint",
+			name: "MERGE_JOIN hint",
 			hints: &OptimizerHints{
 				MergeJoinTables: []string{"t1", "t2"},
 			},
 		},
 		{
-			name:  "INL_JOIN hint",
+			name: "INL_JOIN hint",
 			hints: &OptimizerHints{
 				INLJoinTables: []string{"t1", "t2"},
 			},
 		},
 		{
-			name:  "INL_HASH_JOIN hint",
+			name: "INL_HASH_JOIN hint",
 			hints: &OptimizerHints{
 				INLHashJoinTables: []string{"t1", "t2"},
 			},
 		},
 		{
-			name:  "INL_MERGE_JOIN hint",
+			name: "INL_MERGE_JOIN hint",
 			hints: &OptimizerHints{
 				INLMergeJoinTables: []string{"t1", "t2"},
 			},
@@ -387,8 +387,8 @@ func TestHintAwareJoinReorderRule_ApplyNegativeHints(t *testing.T) {
 	join := NewLogicalJoin(InnerJoin, leftDS, rightDS, []*JoinCondition{})
 
 	tests := []struct {
-		name    string
-		hints   *OptimizerHints
+		name  string
+		hints *OptimizerHints
 	}{
 		{
 			name: "NO_HASH_JOIN hint",

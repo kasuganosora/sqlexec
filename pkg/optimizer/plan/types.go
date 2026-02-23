@@ -26,11 +26,11 @@ const (
 
 // Plan 可序列化的执行计划（不含数据源引用）
 type Plan struct {
-	ID           string
-	Type         PlanType
-	OutputSchema []types.ColumnInfo
-	Children     []*Plan
-	Config       interface{}
+	ID            string
+	Type          PlanType
+	OutputSchema  []types.ColumnInfo
+	Children      []*Plan
+	Config        interface{}
 	EstimatedCost float64
 }
 
@@ -43,5 +43,3 @@ func (p *Plan) Explain() string {
 func (p *Plan) Cost() float64 {
 	return p.EstimatedCost
 }
-
-

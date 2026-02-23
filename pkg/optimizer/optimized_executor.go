@@ -32,14 +32,14 @@ type OptimizedExecutor struct {
 	dataSource    domain.DataSource
 	dsManager     *application.DataSourceManager
 	optimizer     *EnhancedOptimizer // 统一使用增强优化器
-	planExecutor  executor.Executor // 新的执行器
+	planExecutor  executor.Executor  // 新的执行器
 	useOptimizer  bool
 	currentDB     string
-	currentUser   string // 当前用户（用于权限检查）
+	currentUser   string                           // 当前用户（用于权限检查）
 	vdbRegistry   *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
-	functionAPI   *builtin.FunctionAPI // 函数API
-	exprEvaluator *ExpressionEvaluator // 表达式求值器
-	sessionVars   map[string]string // 会话级系统变量覆盖
+	functionAPI   *builtin.FunctionAPI             // 函数API
+	exprEvaluator *ExpressionEvaluator             // 表达式求值器
+	sessionVars   map[string]string                // 会话级系统变量覆盖
 }
 
 // contextKey 是context中的key类型
@@ -369,7 +369,7 @@ func (e *OptimizedExecutor) executePlan(ctx context.Context, executionPlan *plan
 	if e.planExecutor == nil {
 		return nil, fmt.Errorf("plan executor not initialized")
 	}
-	
+
 	return e.planExecutor.Execute(ctx, executionPlan)
 }
 
@@ -483,8 +483,8 @@ func (e *OptimizedExecutor) ExecuteDrop(ctx context.Context, stmt *parser.DropSt
 	}
 	builder := parser.NewQueryBuilder(ds)
 	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
-		Type:  parser.SQLTypeDrop,
-		Drop:  stmt,
+		Type: parser.SQLTypeDrop,
+		Drop: stmt,
 	})
 }
 
@@ -515,7 +515,7 @@ func (e *OptimizedExecutor) ExecuteCreateIndex(ctx context.Context, stmt *parser
 	}
 	builder := parser.NewQueryBuilder(ds)
 	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
-		Type:       parser.SQLTypeCreate,
+		Type:        parser.SQLTypeCreate,
 		CreateIndex: stmt,
 	})
 }
@@ -531,7 +531,7 @@ func (e *OptimizedExecutor) ExecuteDropIndex(ctx context.Context, stmt *parser.D
 	}
 	builder := parser.NewQueryBuilder(ds)
 	return builder.ExecuteStatement(ctx, &parser.SQLStatement{
-		Type:     parser.SQLTypeDrop,
+		Type:      parser.SQLTypeDrop,
 		DropIndex: stmt,
 	})
 }
@@ -544,4 +544,3 @@ func convertToDomainRows(rows []map[string]interface{}) []domain.Row {
 	}
 	return result
 }
-

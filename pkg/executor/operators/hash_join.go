@@ -23,7 +23,7 @@ func NewHashJoinOperator(p *plan.Plan, das dataaccess.Service) (*HashJoinOperato
 	}
 
 	base := NewBaseOperator(p, das)
-	
+
 	// 构建子算子
 	buildFn := func(childPlan *plan.Plan) (Operator, error) {
 		return buildOperator(childPlan, das)

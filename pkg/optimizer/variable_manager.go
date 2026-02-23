@@ -156,9 +156,9 @@ func (vm *DefaultVariableManager) EvaluateSystemVariable(varName string) (interf
 
 // SessionVariableManager 是会话变量管理器
 type SessionVariableManager struct {
-	global   *DefaultVariableManager
-	session  map[string]interface{}
-	mu       sync.RWMutex
+	global  *DefaultVariableManager
+	session map[string]interface{}
+	mu      sync.RWMutex
 }
 
 // NewSessionVariableManager 创建会话变量管理器
@@ -174,12 +174,12 @@ func (svm *SessionVariableManager) GetVariable(name string) (interface{}, bool) 
 	// 标准化变量名
 	varName := normalizeVariableName(name)
 	varName = strings.TrimPrefix(varName, "@@")
-	
+
 	// 检查是否是 GLOBAL. 前缀
 	if strings.HasPrefix(name, "@@GLOBAL.") {
 		return svm.global.GetVariable(varName)
 	}
-	
+
 	varName = strings.TrimPrefix(varName, "SESSION.")
 	varName = strings.TrimPrefix(varName, "LOCAL.")
 
@@ -199,12 +199,12 @@ func (svm *SessionVariableManager) GetVariable(name string) (interface{}, bool) 
 func (svm *SessionVariableManager) SetVariable(name string, value interface{}) error {
 	// 标准化变量名
 	varName := normalizeVariableName(name)
-	
+
 	// 检查是否是 GLOBAL. 前缀
 	if strings.HasPrefix(varName, "@@GLOBAL.") || strings.HasPrefix(name, "GLOBAL.") {
 		return svm.global.SetVariable(varName, value)
 	}
-	
+
 	varName = strings.TrimPrefix(varName, "@@")
 	varName = strings.TrimPrefix(varName, "SESSION.")
 	varName = strings.TrimPrefix(varName, "LOCAL.")
@@ -236,7 +236,7 @@ func (svm *SessionVariableManager) ListVariables() map[string]interface{} {
 func (svm *SessionVariableManager) GetVariableNames() []string {
 	// 合并全局和会话变量名
 	globalNames := svm.global.GetVariableNames()
-	
+
 	svm.mu.RLock()
 	defer svm.mu.RUnlock()
 

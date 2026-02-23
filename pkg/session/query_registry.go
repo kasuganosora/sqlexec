@@ -49,7 +49,7 @@ func GetGlobalQueryRegistry() *QueryRegistry {
 type QueryRegistry struct {
 	mu        sync.RWMutex
 	queries   map[string]*QueryContext // QueryID -> QueryContext
-	threadMap map[uint32]*QueryContext  // ThreadID -> 当前查询
+	threadMap map[uint32]*QueryContext // ThreadID -> 当前查询
 }
 
 // NewQueryRegistry 创建查询注册表

@@ -16,7 +16,7 @@ type PhysicalHashJoin struct {
 
 // NewPhysicalHashJoin 创建物理哈希连接算子
 func NewPhysicalHashJoin(joinType optimizer.JoinType, left, right PhysicalOperator, conditions []*optimizer.JoinCondition) *PhysicalHashJoin {
-	leftRows := int64(1000) // 假设
+	leftRows := int64(1000)  // 假设
 	rightRows := int64(1000) // 假设
 
 	// Hash Join 成本 = 构建哈希表 + 探测

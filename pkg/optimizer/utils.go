@@ -15,4 +15,3 @@ func compareValues(a, b interface{}) int {
 func compareValuesEqual(v1, v2 interface{}) bool {
 	return utils.CompareValuesForSort(v1, v2) == 0
 }
-

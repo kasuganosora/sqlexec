@@ -2,6 +2,8 @@ package builtin
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	jsonpkg "github.com/kasuganosora/sqlexec/pkg/json"
 )
@@ -632,11 +634,188 @@ func jsonSearch(args []interface{}) (interface{}, error) {
 		}
 	}
 
-	_ = bj // TODO: Implement full search functionality
+	// If the JSON document is null, return null
+	if bj.IsNull() {
+		return nil, nil
+	}
 
-	// Note: Simplified implementation - returns null for now
-	// Full implementation would need to search through all paths
-	return nil, nil
+	// Parse one_or_all argument
+	oneOrAll := strings.ToLower(ToString(args[1]))
+	if oneOrAll != "one" && oneOrAll != "all" {
+		return nil, fmt.Errorf("JSON_SEARCH requires 'one' or 'all' as second argument, got '%s'", oneOrAll)
+	}
+
+	// Parse search string
+	searchStr := ToString(args[2])
+
+	// Parse optional escape character (default is backslash)
+	escapeChar := '\\'
+	if len(args) >= 4 {
+		escStr := ToString(args[3])
+		if len(escStr) > 0 {
+			escapeChar = rune(escStr[0])
+		}
+	}
+
+	// Collect all matching paths
+	var matches []string
+	jsonSearchRecursive(bj.GetInterface(), "$", searchStr, escapeChar, oneOrAll == "one", &matches)
+
+	if len(matches) == 0 {
+		return nil, nil
+	}
+
+	// Sort matches for deterministic output
+	sort.Strings(matches)
+
+	if oneOrAll == "one" {
+		// Return the first match as a quoted JSON string
+		result, err := jsonpkg.NewBinaryJSON(matches[0])
+		if err != nil {
+			return nil, err
+		}
+		data, err := result.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		return string(data), nil
+	}
+
+	// "all" mode
+	if len(matches) == 1 {
+		// Single match: return as a quoted JSON string (MySQL behavior)
+		result, err := jsonpkg.NewBinaryJSON(matches[0])
+		if err != nil {
+			return nil, err
+		}
+		data, err := result.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		return string(data), nil
+	}
+
+	// Multiple matches: return as a JSON array of path strings
+	pathArray := make([]interface{}, len(matches))
+	for i, m := range matches {
+		pathArray[i] = m
+	}
+	result, err := jsonpkg.NewBinaryJSON(pathArray)
+	if err != nil {
+		return nil, err
+	}
+	data, err := result.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	return string(data), nil
+}
+
+// jsonSearchRecursive traverses the JSON structure and collects paths where
+// string values match the search pattern.
+func jsonSearchRecursive(value interface{}, currentPath string, searchStr string, escapeChar rune, stopAtFirst bool, matches *[]string) {
+	if stopAtFirst && len(*matches) > 0 {
+		return
+	}
+
+	switch v := value.(type) {
+	case string:
+		if likeMatch(v, searchStr, escapeChar) {
+			*matches = append(*matches, currentPath)
+		}
+	case map[string]interface{}:
+		// Iterate over keys in sorted order for deterministic results
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			childPath := currentPath + "." + k
+			jsonSearchRecursive(v[k], childPath, searchStr, escapeChar, stopAtFirst, matches)
+			if stopAtFirst && len(*matches) > 0 {
+				return
+			}
+		}
+	case []interface{}:
+		for i, elem := range v {
+			childPath := fmt.Sprintf("%s[%d]", currentPath, i)
+			jsonSearchRecursive(elem, childPath, searchStr, escapeChar, stopAtFirst, matches)
+			if stopAtFirst && len(*matches) > 0 {
+				return
+			}
+		}
+	}
+	// Non-string primitives (numbers, booleans, null) are skipped
+}
+
+// likeMatch implements SQL LIKE-style pattern matching.
+// '%' matches any sequence of characters, '_' matches any single character.
+// The escapeChar can be used to escape '%' and '_' as literal characters.
+func likeMatch(s, pattern string, escapeChar rune) bool {
+	return likeMatchDP(s, pattern, escapeChar)
+}
+
+// likeMatchDP uses dynamic programming for LIKE pattern matching.
+func likeMatchDP(s, pattern string, escapeChar rune) bool {
+	sRunes := []rune(s)
+	pRunes := []rune(pattern)
+
+	sLen := len(sRunes)
+	pLen := len(pRunes)
+
+	// dp[i][j] = true means s[:i] matches pattern[:j]
+	dp := make([][]bool, sLen+1)
+	for i := range dp {
+		dp[i] = make([]bool, pLen+1)
+	}
+	dp[0][0] = true
+
+	// Handle leading '%' patterns matching empty string
+	for j := 0; j < pLen; j++ {
+		if pRunes[j] == '%' {
+			dp[0][j+1] = dp[0][j]
+		} else {
+			break
+		}
+	}
+
+	for i := 1; i <= sLen; i++ {
+		for j := 1; j <= pLen; j++ {
+			pChar := pRunes[j-1]
+
+			// Check if this character is escaped
+			if j >= 2 && pRunes[j-2] == rune(escapeChar) {
+				// This character was preceded by escape char; handled below
+				continue
+			}
+
+			if pChar == rune(escapeChar) && j < pLen {
+				// This is an escape character; skip it, next iteration handles the literal
+				// Mark dp[i][j] based on whether the escaped literal matches
+				nextChar := pRunes[j]
+				if sRunes[i-1] == nextChar {
+					dp[i][j+1] = dp[i-1][j-1]
+				}
+				continue
+			}
+
+			if pChar == '%' {
+				// '%' matches zero or more characters
+				dp[i][j] = dp[i][j-1] || dp[i-1][j]
+			} else if pChar == '_' {
+				// '_' matches exactly one character
+				dp[i][j] = dp[i-1][j-1]
+			} else {
+				// Literal character match
+				if sRunes[i-1] == pChar {
+					dp[i][j] = dp[i-1][j-1]
+				}
+			}
+		}
+	}
+
+	return dp[sLen][pLen]
 }
 
 func jsonSet(args []interface{}) (interface{}, error) {
@@ -1068,4 +1247,3 @@ func jsonOverlaps(args []interface{}) (interface{}, error) {
 	}
 	return int64(0), nil
 }
-

@@ -21,16 +21,16 @@ type IVFFlatIndex struct {
 	vectors map[int64][]float32
 
 	// IVF 结构
-	centroids        [][]float32           // 聚类中心
-	vectorsByCluster map[int][]VectorRecord  // 每个聚类的向量
+	centroids        [][]float32            // 聚类中心
+	vectorsByCluster map[int][]VectorRecord // 每个聚类的向量
 	assignments      map[int64]int          // 向量ID -> 聚类ID
 	clusterCounts    []int                  // 每个聚类的向量数量
 
 	// 参数
 	nlist int // 聚类数量
 
-	mu   sync.RWMutex
-	rng  *rand.Rand
+	mu  sync.RWMutex
+	rng *rand.Rand
 }
 
 // IVFFlatParams IVF-Flat 参数
@@ -58,16 +58,16 @@ func NewIVFFlatIndex(columnName string, config *VectorIndexConfig) (*IVFFlatInde
 	}
 
 	return &IVFFlatIndex{
-		columnName:        columnName,
-		config:            config,
-		distFunc:          distFunc,
-		vectors:           make(map[int64][]float32),
-		centroids:         make([][]float32, nlist),
+		columnName:       columnName,
+		config:           config,
+		distFunc:         distFunc,
+		vectors:          make(map[int64][]float32),
+		centroids:        make([][]float32, nlist),
 		vectorsByCluster: make(map[int][]VectorRecord, nlist),
-		assignments:       make(map[int64]int),
-		clusterCounts:     make([]int, nlist),
-		nlist:             nlist,
-		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
+		assignments:      make(map[int64]int),
+		clusterCounts:    make([]int, nlist),
+		nlist:            nlist,
+		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -406,4 +406,3 @@ func (i *IVFFlatIndex) Close() error {
 
 	return nil
 }
-

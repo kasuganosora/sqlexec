@@ -61,20 +61,20 @@ func TestDeriveTopNFromWindowRule_Apply(t *testing.T) {
 	optCtx := &OptimizationContext{}
 
 	tests := []struct {
-		name     string
-		plan     LogicalPlan
+		name string
+		plan LogicalPlan
 	}{
 		{
-			name:     "Apply on nil plan",
-			plan:     nil,
+			name: "Apply on nil plan",
+			plan: nil,
 		},
 		{
-			name:     "Apply on simple datasource",
-			plan:     NewLogicalDataSource("test_table", createMockTableInfo("test_table", []string{"id", "name"})),
+			name: "Apply on simple datasource",
+			plan: NewLogicalDataSource("test_table", createMockTableInfo("test_table", []string{"id", "name"})),
 		},
 		{
-			name:     "Apply on limit plan",
-			plan:     NewLogicalLimit(10, 0, NewLogicalDataSource("test", createMockTableInfo("test", []string{"id"}))),
+			name: "Apply on limit plan",
+			plan: NewLogicalLimit(10, 0, NewLogicalDataSource("test", createMockTableInfo("test", []string{"id"}))),
 		},
 	}
 
@@ -96,14 +96,14 @@ func TestDeriveTopNFromWindowRule_extractSortItems(t *testing.T) {
 	rule := NewDeriveTopNFromWindowRule()
 
 	tests := []struct {
-		name           string
-		windowFuncs    []*WindowFunctionItem
-		expectedCount  int
+		name          string
+		windowFuncs   []*WindowFunctionItem
+		expectedCount int
 	}{
 		{
-			name:           "Empty window funcs",
-			windowFuncs:    []*WindowFunctionItem{},
-			expectedCount:  0,
+			name:          "Empty window funcs",
+			windowFuncs:   []*WindowFunctionItem{},
+			expectedCount: 0,
 		},
 		{
 			name: "ROW_NUMBER with ORDER BY",
@@ -184,8 +184,8 @@ func createSimpleWindowPlan(funcName string, hasOrderBy bool) LogicalPlan {
 // Helper function to create a mock table info
 func createMockTableInfo(tableName string, columnNames []string) *domain.TableInfo {
 	tableInfo := &domain.TableInfo{
-		Name:     tableName,
-		Columns:  make([]domain.ColumnInfo, 0, len(columnNames)),
+		Name:    tableName,
+		Columns: make([]domain.ColumnInfo, 0, len(columnNames)),
 	}
 	for _, colName := range columnNames {
 		tableInfo.Columns = append(tableInfo.Columns, domain.ColumnInfo{
@@ -204,7 +204,7 @@ func TestDeriveTopNFromWindowRule_Apply_WindowToTopN(t *testing.T) {
 	optCtx := &OptimizationContext{}
 
 	// Test: Limit -> Window with ROW_NUMBER and ORDER BY
-	windowPlan := NewLogicalLimit(10, 0, 
+	windowPlan := NewLogicalLimit(10, 0,
 		createSimpleWindowPlan("row_number", true))
 	plan, err := rule.Apply(ctx, windowPlan, optCtx)
 	if err != nil {
@@ -245,7 +245,7 @@ func TestDeriveTopNFromWindowRule_Apply_ProjectionToTopN(t *testing.T) {
 		windowPlan,
 	)
 	limitPlan := NewLogicalLimit(10, 0, projection)
-	
+
 	plan, err := rule.Apply(ctx, limitPlan, optCtx)
 	if err != nil {
 		t.Errorf("Apply() returned error: %v", err)
@@ -268,7 +268,7 @@ func TestDeriveTopNFromWindowRule_Apply_NoMatch(t *testing.T) {
 		[]*parser.Expression{{Type: parser.ExprTypeColumn, Column: "id"}},
 		NewLogicalDataSource("test", createMockTableInfo("test", []string{"id"})),
 	)
-	
+
 	plan, err := rule.Apply(ctx, selection, optCtx)
 	if err != nil {
 		t.Errorf("Apply() returned error: %v", err)
@@ -292,7 +292,7 @@ func TestConvertWindowToTopN_NoChildren(t *testing.T) {
 			},
 		},
 	}, nil)
-	
+
 	// Get ORDER BY items should handle empty window
 	sortItems := rule.extractSortItems(window)
 	if sortItems == nil {
@@ -305,11 +305,10 @@ func TestConvertWindowToTopN_EmptyWindowFuncs(t *testing.T) {
 
 	// Test with empty window funcs
 	window := NewLogicalWindow([]*WindowFunctionItem{}, nil)
-	
+
 	// Should not panic when extracting from empty window funcs
 	sortItems := rule.extractSortItems(window)
 	if sortItems != nil && len(sortItems) != 0 {
 		t.Errorf("Expected empty or non-empty sortItems, got %v", sortItems)
 	}
 }
-

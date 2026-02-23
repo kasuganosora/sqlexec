@@ -12,13 +12,13 @@ type SQLConfig struct {
 	// Connection pool
 	MaxOpenConns    int `json:"max_open_conns,omitempty"`
 	MaxIdleConns    int `json:"max_idle_conns,omitempty"`
-	ConnMaxLifetime int `json:"conn_max_lifetime,omitempty"` // seconds
+	ConnMaxLifetime int `json:"conn_max_lifetime,omitempty"`  // seconds
 	ConnMaxIdleTime int `json:"conn_max_idle_time,omitempty"` // seconds
 
 	// TLS/SSL
-	SSLMode    string `json:"ssl_mode,omitempty"`
-	SSLCert    string `json:"ssl_cert,omitempty"`
-	SSLKey     string `json:"ssl_key,omitempty"`
+	SSLMode     string `json:"ssl_mode,omitempty"`
+	SSLCert     string `json:"ssl_cert,omitempty"`
+	SSLKey      string `json:"ssl_key,omitempty"`
 	SSLRootCert string `json:"ssl_root_cert,omitempty"`
 
 	// MySQL-specific

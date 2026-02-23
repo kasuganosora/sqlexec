@@ -42,41 +42,41 @@ type DataSourceConfig struct {
 	Username string                 `json:"username,omitempty"`
 	Password string                 `json:"password,omitempty"`
 	Database string                 `json:"database,omitempty"`
-	Writable  bool                   `json:"writable,omitempty"` // 是否可写，默认true
+	Writable bool                   `json:"writable,omitempty"` // 是否可写，默认true
 	Options  map[string]interface{} `json:"options,omitempty"`
 }
 
 // TableInfo 表信息
 type TableInfo struct {
-	Name       string                 `json:"name"`
-	Schema     string                 `json:"schema,omitempty"`
-	Columns    []ColumnInfo            `json:"columns"`
-	Temporary  bool                   `json:"temporary,omitempty"` // 是否是临时表
-	Atts       map[string]interface{} `json:"atts,omitempty"`       // 表属性
-	Charset    string                 `json:"charset,omitempty"`    // 表字符集
-	Collation  string                 `json:"collation,omitempty"`  // 表排序规则
+	Name      string                 `json:"name"`
+	Schema    string                 `json:"schema,omitempty"`
+	Columns   []ColumnInfo           `json:"columns"`
+	Temporary bool                   `json:"temporary,omitempty"` // 是否是临时表
+	Atts      map[string]interface{} `json:"atts,omitempty"`      // 表属性
+	Charset   string                 `json:"charset,omitempty"`   // 表字符集
+	Collation string                 `json:"collation,omitempty"` // 表排序规则
 }
 
 // ColumnInfo 列信息
 type ColumnInfo struct {
-	Name         string           `json:"name"`
-	Type         string           `json:"type"`
-	Nullable     bool             `json:"nullable"`
-	Primary      bool             `json:"primary"`
-	Default      string           `json:"default,omitempty"`
-	Unique       bool             `json:"unique,omitempty"`          // 唯一约束
+	Name          string          `json:"name"`
+	Type          string          `json:"type"`
+	Nullable      bool            `json:"nullable"`
+	Primary       bool            `json:"primary"`
+	Default       string          `json:"default,omitempty"`
+	Unique        bool            `json:"unique,omitempty"`         // 唯一约束
 	AutoIncrement bool            `json:"auto_increment,omitempty"` // 自动递增
-	ForeignKey   *ForeignKeyInfo  `json:"foreign_key,omitempty"`   // 外键约束
-	
+	ForeignKey    *ForeignKeyInfo `json:"foreign_key,omitempty"`    // 外键约束
+
 	// Generated Columns 支持
-	IsGenerated      bool     `json:"is_generated,omitempty"`    // 是否为生成列
+	IsGenerated      bool     `json:"is_generated,omitempty"`      // 是否为生成列
 	GeneratedType    string   `json:"generated_type,omitempty"`    // "STORED" (第一阶段) 或 "VIRTUAL" (第二阶段)
-	GeneratedExpr    string   `json:"generated_expr,omitempty"`     // 表达式字符串
+	GeneratedExpr    string   `json:"generated_expr,omitempty"`    // 表达式字符串
 	GeneratedDepends []string `json:"generated_depends,omitempty"` // 依赖的列名
 
 	// Vector Columns 支持
-	VectorDim  int    `json:"vector_dim,omitempty"`   // 向量维度
-	VectorType string `json:"vector_type,omitempty"`  // 向量类型（如 "float32"）
+	VectorDim  int    `json:"vector_dim,omitempty"`  // 向量维度
+	VectorType string `json:"vector_type,omitempty"` // 向量类型（如 "float32"）
 
 	// ICU/Collation 支持
 	Charset   string `json:"charset,omitempty"`
@@ -90,10 +90,10 @@ func (c ColumnInfo) IsVectorType() bool {
 
 // ForeignKeyInfo 外键信息
 type ForeignKeyInfo struct {
-	Table    string `json:"table"`              // 引用的表
-	Column   string `json:"column"`             // 引用的列
-	OnDelete string `json:"on_delete,omitempty"`  // 删除策略：CASCADE, SET NULL, NO ACTION
-	OnUpdate string `json:"on_update,omitempty"`  // 更新策略
+	Table    string `json:"table"`               // 引用的表
+	Column   string `json:"column"`              // 引用的列
+	OnDelete string `json:"on_delete,omitempty"` // 删除策略：CASCADE, SET NULL, NO ACTION
+	OnUpdate string `json:"on_update,omitempty"` // 更新策略
 }
 
 // Row 行数据
@@ -125,23 +125,23 @@ type QueryResult struct {
 // Filter 查询过滤器（支持嵌套逻辑）
 type Filter struct {
 	Logic      string      `json:"logic,omitempty"`       // AND, OR（嵌套逻辑）
-	Field      string      `json:"field,omitempty"`        // 字段名（简单过滤时使用）
+	Field      string      `json:"field,omitempty"`       // 字段名（简单过滤时使用）
 	Operator   string      `json:"operator,omitempty"`    // =, !=, >, <, >=, <=, LIKE, IN, BETWEEN
-	Value      interface{} `json:"value,omitempty"`        // 过滤值，如果是嵌套过滤则是 []Filter
-	LogicOp    string      `json:"logic_op,omitempty"`     // AND, OR（保留向后兼容）
+	Value      interface{} `json:"value,omitempty"`       // 过滤值，如果是嵌套过滤则是 []Filter
+	LogicOp    string      `json:"logic_op,omitempty"`    // AND, OR（保留向后兼容）
 	SubFilters []Filter    `json:"sub_filters,omitempty"` // 子过滤器（保留向后兼容）
 }
 
 // QueryOptions 查询选项
 type QueryOptions struct {
-	Filters      []Filter `json:"filters,omitempty"`
-	OrderBy      string   `json:"order_by,omitempty"`
-	Order        string   `json:"order,omitempty"` // ASC, DESC
-	Limit        int      `json:"limit,omitempty"`
-	Offset       int      `json:"offset,omitempty"`
-	SelectAll    bool     `json:"select_all,omitempty"`     // 是否是 select *
+	Filters       []Filter `json:"filters,omitempty"`
+	OrderBy       string   `json:"order_by,omitempty"`
+	Order         string   `json:"order,omitempty"` // ASC, DESC
+	Limit         int      `json:"limit,omitempty"`
+	Offset        int      `json:"offset,omitempty"`
+	SelectAll     bool     `json:"select_all,omitempty"`     // 是否是 select *
 	SelectColumns []string `json:"select_columns,omitempty"` // 指定要查询的列（列裁剪）
-	User         string   `json:"user,omitempty"`         // 当前用户名（用于权限检查）
+	User          string   `json:"user,omitempty"`           // 当前用户名（用于权限检查）
 }
 
 // InsertOptions 插入选项
@@ -162,7 +162,7 @@ type DeleteOptions struct {
 // TransactionOptions 事务选项
 type TransactionOptions struct {
 	IsolationLevel string `json:"isolation_level,omitempty"` // READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE
-	ReadOnly       bool   `json:"read_only,omitempty"`        // 只读事务
+	ReadOnly       bool   `json:"read_only,omitempty"`       // 只读事务
 }
 
 // ConstraintType 约束类型
@@ -172,7 +172,7 @@ const (
 	ConstraintTypeUnique     ConstraintType = "unique"
 	ConstraintTypeForeignKey ConstraintType = "foreign_key"
 	ConstraintTypeCheck      ConstraintType = "check"
-	ConstraintTypePrimaryKey  ConstraintType = "primary_key"
+	ConstraintTypePrimaryKey ConstraintType = "primary_key"
 )
 
 // IndexType 索引类型
@@ -192,13 +192,13 @@ type ForeignKeyReference struct {
 
 // Constraint 约束信息
 type Constraint struct {
-	Name       string                `json:"name"`
-	Type       ConstraintType         `json:"type"`
-	Columns    []string              `json:"columns"`
-	Table      string                `json:"table"`
-	References *ForeignKeyReference  `json:"references,omitempty"`
-	CheckExpr  string                `json:"check_expr,omitempty"`
-	Enabled    bool                  `json:"enabled"`
+	Name       string               `json:"name"`
+	Type       ConstraintType       `json:"type"`
+	Columns    []string             `json:"columns"`
+	Table      string               `json:"table"`
+	References *ForeignKeyReference `json:"references,omitempty"`
+	CheckExpr  string               `json:"check_expr,omitempty"`
+	Enabled    bool                 `json:"enabled"`
 }
 
 // VectorIndexConfig 向量索引配置
@@ -222,9 +222,9 @@ type Index struct {
 
 // Schema 模式信息
 type Schema struct {
-	Name        string       `json:"name"`
-	Tables      []*TableInfo `json:"tables"`
-	Indexes     []*Index     `json:"indexes"`
+	Name        string        `json:"name"`
+	Tables      []*TableInfo  `json:"tables"`
+	Indexes     []*Index      `json:"indexes"`
 	Constraints []*Constraint `json:"constraints"`
 }
 
@@ -248,7 +248,7 @@ type ViewAlgorithm string
 
 const (
 	ViewAlgorithmUndefined ViewAlgorithm = "UNDEFINED"
-	ViewAlgorithmMerge    ViewAlgorithm = "MERGE"
+	ViewAlgorithmMerge     ViewAlgorithm = "MERGE"
 	ViewAlgorithmTempTable ViewAlgorithm = "TEMPTABLE"
 )
 
@@ -256,7 +256,7 @@ const (
 type ViewSecurity string
 
 const (
-	ViewSecurityDefiner  ViewSecurity = "DEFINER"
+	ViewSecurityDefiner ViewSecurity = "DEFINER"
 	ViewSecurityInvoker ViewSecurity = "INVOKER"
 )
 
@@ -264,22 +264,22 @@ const (
 type ViewCheckOption string
 
 const (
-	ViewCheckOptionNone      ViewCheckOption = "NONE"
-	ViewCheckOptionCascaded  ViewCheckOption = "CASCADED"
-	ViewCheckOptionLocal     ViewCheckOption = "LOCAL"
+	ViewCheckOptionNone     ViewCheckOption = "NONE"
+	ViewCheckOptionCascaded ViewCheckOption = "CASCADED"
+	ViewCheckOptionLocal    ViewCheckOption = "LOCAL"
 )
 
 // ViewInfo 视图元数据
 type ViewInfo struct {
-	Algorithm   ViewAlgorithm   `json:"algorithm"`    // MERGE, TEMPTABLE, UNDEFINED
-	Definer     string          `json:"definer"`      // 'user'@'host'
-	Security    ViewSecurity    `json:"security"`     // DEFINER, INVOKER
-	SelectStmt  string          `json:"select_stmt"`  // 视图定义的 SELECT 语句
-	CheckOption ViewCheckOption `json:"check_option"` // NONE, CASCADED, LOCAL
-	Cols        []string        `json:"cols"`         // 视图列名列表
-	Updatable   bool            `json:"updatable"`    // 是否可更新
-	Charset     string          `json:"charset,omitempty"`     // 客户端字符集
-	Collate     string          `json:"collate,omitempty"`     // 连接排序规则
+	Algorithm   ViewAlgorithm   `json:"algorithm"`         // MERGE, TEMPTABLE, UNDEFINED
+	Definer     string          `json:"definer"`           // 'user'@'host'
+	Security    ViewSecurity    `json:"security"`          // DEFINER, INVOKER
+	SelectStmt  string          `json:"select_stmt"`       // 视图定义的 SELECT 语句
+	CheckOption ViewCheckOption `json:"check_option"`      // NONE, CASCADED, LOCAL
+	Cols        []string        `json:"cols"`              // 视图列名列表
+	Updatable   bool            `json:"updatable"`         // 是否可更新
+	Charset     string          `json:"charset,omitempty"` // 客户端字符集
+	Collate     string          `json:"collate,omitempty"` // 连接排序规则
 }
 
 // 视图相关常量

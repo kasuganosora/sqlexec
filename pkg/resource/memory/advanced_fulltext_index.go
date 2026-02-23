@@ -11,11 +11,11 @@ import (
 // AdvancedFullTextIndex 高级全文索引
 // 与现有IndexManager集成的完整全文索引实现
 type AdvancedFullTextIndex struct {
-	info       *IndexInfo
-	engine     *fulltext.Engine
-	tokenizer  analyzer.Tokenizer
-	config     *fulltext.Config
-	mu         sync.RWMutex
+	info      *IndexInfo
+	engine    *fulltext.Engine
+	tokenizer analyzer.Tokenizer
+	config    *fulltext.Config
+	mu        sync.RWMutex
 }
 
 // AdvancedFullTextIndexConfig 高级全文索引配置
@@ -40,14 +40,14 @@ func NewAdvancedFullTextIndex(
 	if config == nil {
 		config = DefaultAdvancedFullTextIndexConfig
 	}
-	
+
 	// 创建分词器
 	var tokenizerOptions map[string]interface{}
 	tokenizer, err := analyzer.TokenizerFactory(config.TokenizerType, tokenizerOptions)
 	if err != nil {
 		return nil, fmt.Errorf("create tokenizer failed: %w", err)
 	}
-	
+
 	// 创建全文引擎
 	ftConfig := &fulltext.Config{
 		BM25Params: config.BM25Params,
@@ -55,7 +55,7 @@ func NewAdvancedFullTextIndex(
 	}
 	engine := fulltext.NewEngine(ftConfig)
 	engine.SetTokenizer(tokenizer)
-	
+
 	return &AdvancedFullTextIndex{
 		info: &IndexInfo{
 			Name:      fmt.Sprintf("idx_ft_%s_%s", tableName, columnName),
@@ -76,21 +76,21 @@ func (idx *AdvancedFullTextIndex) Insert(key interface{}, rowIDs []int64) error 
 	if !ok {
 		return fmt.Errorf("full-text index requires string key, got %T", key)
 	}
-	
+
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	for _, rowID := range rowIDs {
 		doc := &fulltext.Document{
 			ID:      rowID,
 			Content: text,
 		}
-		
+
 		if err := idx.engine.IndexDocument(doc); err != nil {
 			return fmt.Errorf("index document %d failed: %w", rowID, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -107,17 +107,17 @@ func (idx *AdvancedFullTextIndex) Find(key interface{}) ([]int64, bool) {
 	if !ok {
 		return nil, false
 	}
-	
+
 	results, err := idx.Search(query, 1000)
 	if err != nil || len(results) == 0 {
 		return nil, false
 	}
-	
+
 	rowIDs := make([]int64, len(results))
 	for i, r := range results {
 		rowIDs[i] = r.DocID
 	}
-	
+
 	return rowIDs, true
 }
 
@@ -135,7 +135,7 @@ func (idx *AdvancedFullTextIndex) GetIndexInfo() *IndexInfo {
 func (idx *AdvancedFullTextIndex) Search(query string, topK int) ([]fulltext.SearchResult, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	return idx.engine.Search(query, topK)
 }
 
@@ -143,7 +143,7 @@ func (idx *AdvancedFullTextIndex) Search(query string, topK int) ([]fulltext.Sea
 func (idx *AdvancedFullTextIndex) SearchBM25(query string, topK int) ([]fulltext.SearchResult, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	return idx.engine.SearchBM25(query, topK)
 }
 
@@ -151,7 +151,7 @@ func (idx *AdvancedFullTextIndex) SearchBM25(query string, topK int) ([]fulltext
 func (idx *AdvancedFullTextIndex) SearchPhrase(phrase string, slop int, topK int) ([]fulltext.SearchResult, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	return idx.engine.SearchPhrase(phrase, slop, topK)
 }
 
@@ -163,7 +163,7 @@ func (idx *AdvancedFullTextIndex) SearchWithHighlight(
 ) ([]fulltext.SearchResultWithHighlight, error) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	return idx.engine.SearchWithHighlight(query, topK, preTag, postTag)
 }
 
@@ -171,7 +171,7 @@ func (idx *AdvancedFullTextIndex) SearchWithHighlight(
 func (idx *AdvancedFullTextIndex) GetDocument(docID int64) *fulltext.Document {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	return idx.engine.GetDocument(docID)
 }
 
@@ -179,7 +179,7 @@ func (idx *AdvancedFullTextIndex) GetDocument(docID int64) *fulltext.Document {
 func (idx *AdvancedFullTextIndex) GetStats() map[string]interface{} {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	stats := idx.engine.GetStats()
 	return map[string]interface{}{
 		"total_docs":       stats.TotalDocs,
@@ -192,7 +192,7 @@ func (idx *AdvancedFullTextIndex) GetStats() map[string]interface{} {
 func (idx *AdvancedFullTextIndex) Clear() {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	idx.engine.Clear()
 }
 
@@ -200,7 +200,7 @@ func (idx *AdvancedFullTextIndex) Clear() {
 func (idx *AdvancedFullTextIndex) DocumentCount() int64 {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	return idx.engine.DocumentCount()
 }
 
@@ -208,22 +208,22 @@ func (idx *AdvancedFullTextIndex) DocumentCount() int64 {
 func (idx *AdvancedFullTextIndex) Rebuild(documents map[int64]string) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	// 清空现有索引
 	idx.engine.Clear()
-	
+
 	// 重新索引所有文档
 	for docID, content := range documents {
 		doc := &fulltext.Document{
 			ID:      docID,
 			Content: content,
 		}
-		
+
 		if err := idx.engine.IndexDocument(doc); err != nil {
 			return fmt.Errorf("index document %d failed: %w", docID, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -231,15 +231,15 @@ func (idx *AdvancedFullTextIndex) Rebuild(documents map[int64]string) error {
 func (idx *AdvancedFullTextIndex) SetTokenizer(tokenizerType fulltext.TokenizerType, options map[string]interface{}) error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	tokenizer, err := analyzer.TokenizerFactory(tokenizerType, options)
 	if err != nil {
 		return err
 	}
-	
+
 	idx.tokenizer = tokenizer
 	idx.engine.SetTokenizer(tokenizer)
-	
+
 	return nil
 }
 
@@ -268,6 +268,6 @@ func AdvancedFullTextIndexFactory(
 			B:  bm25B,
 		},
 	}
-	
+
 	return NewAdvancedFullTextIndex(tableName, columnName, config)
 }

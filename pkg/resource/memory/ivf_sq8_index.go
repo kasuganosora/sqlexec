@@ -24,20 +24,20 @@ type IVFSQ8Index struct {
 	quantizedVectors map[int64][]int8
 
 	// 量化器参数（每个维度的缩放和偏移）
-	scale  []float32 // scale = 127.0 / (max - min)
-	shift  []float32 // shift = (max + min) / 2
+	scale []float32 // scale = 127.0 / (max - min)
+	shift []float32 // shift = (max + min) / 2
 
 	// IVF 结构
-	centroids        [][]float32           // 聚类中心（float32，非量化）
-	vectorsByCluster map[int][]VectorRecord  // 每个聚类的向量
+	centroids        [][]float32            // 聚类中心（float32，非量化）
+	vectorsByCluster map[int][]VectorRecord // 每个聚类的向量
 	assignments      map[int64]int          // 向量ID -> 聚类ID
 	clusterCounts    []int                  // 每个聚类的向量数量
 
 	// 参数
 	nlist int // 聚类数量
 
-	mu   sync.RWMutex
-	rng  *rand.Rand
+	mu  sync.RWMutex
+	rng *rand.Rand
 }
 
 // IVFSQ8Params IVF-SQ8 参数
@@ -65,19 +65,19 @@ func NewIVFSQ8Index(columnName string, config *VectorIndexConfig) (*IVFSQ8Index,
 	}
 
 	return &IVFSQ8Index{
-		columnName:        columnName,
-		config:            config,
-		distFunc:          distFunc,
-		vectors:           make(map[int64][]float32),
-		quantizedVectors:  make(map[int64][]int8),
-		scale:             make([]float32, config.Dimension),
-		shift:             make([]float32, config.Dimension),
-		centroids:         make([][]float32, nlist),
-		vectorsByCluster:  make(map[int][]VectorRecord, nlist),
-		assignments:       make(map[int64]int),
-		clusterCounts:     make([]int, nlist),
-		nlist:             nlist,
-		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
+		columnName:       columnName,
+		config:           config,
+		distFunc:         distFunc,
+		vectors:          make(map[int64][]float32),
+		quantizedVectors: make(map[int64][]int8),
+		scale:            make([]float32, config.Dimension),
+		shift:            make([]float32, config.Dimension),
+		centroids:        make([][]float32, nlist),
+		vectorsByCluster: make(map[int][]VectorRecord, nlist),
+		assignments:      make(map[int64]int),
+		clusterCounts:    make([]int, nlist),
+		nlist:            nlist,
+		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 

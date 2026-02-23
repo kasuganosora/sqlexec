@@ -13,8 +13,8 @@ import (
 // VectorScanOperator 向量扫描算子
 type VectorScanOperator struct {
 	*BaseOperator
-	config  *plan.VectorScanConfig
-	idxMgr  *memory.IndexManager
+	config *plan.VectorScanConfig
+	idxMgr *memory.IndexManager
 }
 
 // NewVectorScanOperator 创建向量扫描算子
@@ -85,7 +85,7 @@ func (v *VectorScanOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 // fetchRowsByIDs 根据ID列表获取行数据
 func (v *VectorScanOperator) fetchRowsByIDs(ctx context.Context, ids []int64) ([]domain.Row, error) {
 	rows := make([]domain.Row, 0, len(ids))
-	
+
 	for _, id := range ids {
 		// 使用Filter接口获取行数据
 		filter := domain.Filter{
@@ -93,14 +93,14 @@ func (v *VectorScanOperator) fetchRowsByIDs(ctx context.Context, ids []int64) ([
 			Operator: "=",
 			Value:    id,
 		}
-		
+
 		result, _, err := v.dataAccessService.Filter(ctx, v.config.TableName, filter, 0, 1)
 		if err != nil || len(result) == 0 {
 			continue
 		}
-		
+
 		rows = append(rows, result[0])
 	}
-	
+
 	return rows, nil
 }

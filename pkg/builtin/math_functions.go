@@ -531,7 +531,7 @@ func mathRound(args []interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	decimals := int64(0)
 	if len(args) == 2 {
 		decimalsVal, err := toFloat64(args[1])
@@ -540,7 +540,7 @@ func mathRound(args []interface{}) (interface{}, error) {
 		}
 		decimals = int64(decimalsVal)
 	}
-	
+
 	multiplier := math.Pow(10, float64(decimals))
 	return math.Round(val*multiplier) / multiplier, nil
 }
@@ -596,7 +596,7 @@ func mathLog(args []interface{}) (interface{}, error) {
 	if len(args) == 1 {
 		return math.Log(val), nil
 	}
-	
+
 	base, err := toFloat64(args[1])
 	if err != nil {
 		return nil, err
@@ -774,7 +774,7 @@ func mathTruncate(args []interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	decimals := int64(0)
 	if len(args) == 2 {
 		decimalsVal, err := toFloat64(args[1])
@@ -783,7 +783,7 @@ func mathTruncate(args []interface{}) (interface{}, error) {
 		}
 		decimals = int64(decimalsVal)
 	}
-	
+
 	multiplier := math.Pow(10, float64(decimals))
 	return float64(int64(val*multiplier)) / multiplier, nil
 }

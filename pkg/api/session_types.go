@@ -34,24 +34,24 @@ func (l IsolationLevel) String() string {
 
 // SessionOptions contains configuration options for creating a session
 type SessionOptions struct {
-	DataSourceName         string
+	DataSourceName       string
 	Isolation            IsolationLevel
 	ReadOnly             bool
 	CacheEnabled         bool
 	QueryTimeout         time.Duration // 会话级查询超时, 覆盖DB配置
-	UseEnhancedOptimizer *bool        // 是否使用增强优化器（nil表示使用DB配置）
+	UseEnhancedOptimizer *bool         // 是否使用增强优化器（nil表示使用DB配置）
 }
 
 // Session represents a database session (like a MySQL connection)
 // It is concurrent safe and can be used across multiple goroutines
 type Session struct {
-	db          *DB
-	coreSession *session.CoreSession
-	options     *SessionOptions
+	db           *DB
+	coreSession  *session.CoreSession
+	options      *SessionOptions
 	cacheEnabled bool
-	logger      Logger
-	mu          sync.RWMutex
-	err         error // Error state if session creation failed
+	logger       Logger
+	mu           sync.RWMutex
+	err          error         // Error state if session creation failed
 	queryTimeout time.Duration // 实际生效的超时时间
 	threadID     uint32        // 关联的线程ID (用于KILL)
 }
@@ -110,5 +110,3 @@ func (s *Session) GetUser() string {
 	}
 	return ""
 }
-
-

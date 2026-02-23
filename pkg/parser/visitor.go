@@ -5,25 +5,25 @@ import (
 )
 
 const (
-	SetNames  = "SET NAMES"
+	SetNames   = "SET NAMES"
 	SetCharset = "SET CHARSET"
 )
 
 // SQLInfo 提取的 SQL 信息
 type SQLInfo struct {
-	Tables     []string // 涉及的表名
-	Columns    []string // 涉及的列名
-	Databases  []string // 涉及的数据库名
-	WhereExpr  ast.ExprNode // WHERE 条件表达式
-	LimitExpr  *ast.Limit   // LIMIT 表达式
+	Tables       []string      // 涉及的表名
+	Columns      []string      // 涉及的列名
+	Databases    []string      // 涉及的数据库名
+	WhereExpr    ast.ExprNode  // WHERE 条件表达式
+	LimitExpr    *ast.Limit    // LIMIT 表达式
 	OrderByItems []*ast.ByItem // ORDER BY 子句
-	GroupByItems []*ast.ByItem    // GROUP BY 子句
-	Having     ast.ExprNode      // HAVING 子句
-	IsSelect   bool
-	IsInsert   bool
-	IsUpdate   bool
-	IsDelete   bool
-	IsDDL      bool
+	GroupByItems []*ast.ByItem // GROUP BY 子句
+	Having       ast.ExprNode  // HAVING 子句
+	IsSelect     bool
+	IsInsert     bool
+	IsUpdate     bool
+	IsDelete     bool
+	IsDDL        bool
 }
 
 // SQLVisitor AST 访问器，用于提取 SQL 信息
@@ -81,7 +81,7 @@ func (v *SQLVisitor) Leave(n ast.Node) (ast.Node, bool) {
 func ExtractSQLInfo(stmt ast.StmtNode) *SQLInfo {
 	visitor := NewSQLVisitor()
 	stmt.Accept(visitor)
-	
+
 	// 提取更多详细信息
 	if selectStmt, ok := stmt.(*ast.SelectStmt); ok {
 		visitor.info.WhereExpr = selectStmt.Where
@@ -94,7 +94,7 @@ func ExtractSQLInfo(stmt ast.StmtNode) *SQLInfo {
 		}
 		visitor.info.Having = nil // Having 需要特殊处理
 	}
-	
+
 	return visitor.GetInfo()
 }
 

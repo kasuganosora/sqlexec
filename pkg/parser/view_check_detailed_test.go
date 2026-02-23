@@ -1,8 +1,8 @@
 package parser
 
 import (
-	"testing"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"testing"
 )
 
 func TestCheckOptionValidatorDetailed(t *testing.T) {
@@ -52,7 +52,7 @@ func TestCheckOptionValidatorDetailed(t *testing.T) {
 	t.Log("\n=== Testing ValidateUpdate ===")
 	// Test ValidateUpdate
 	oldRow := domain.Row{"id": 1, "name": "Alice", "active": 1}
-	
+
 	// Valid update - only name changes, active stays 1
 	updates1 := domain.Row{"name": "Alice Updated"}
 	t.Log("Test 1: Valid UPDATE (name changed, active stays 1)")

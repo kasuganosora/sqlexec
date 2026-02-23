@@ -28,7 +28,7 @@ func NewSelectionOperator(p *plan.Plan, das dataaccess.Service) (*SelectionOpera
 	}
 
 	base := NewBaseOperator(p, das)
-	
+
 	// 构建子算子
 	buildFn := func(childPlan *plan.Plan) (Operator, error) {
 		return buildOperator(childPlan, das)

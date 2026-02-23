@@ -12,8 +12,8 @@ type LogicalUpdate struct {
 	TableName string
 	Set       map[string]parser.Expression // 列名 -> 表达式
 	Where     *parser.Expression           // WHERE 条件
-	OrderBy   []*parser.OrderItem         // ORDER BY
-	Limit     *int64                      // LIMIT
+	OrderBy   []*parser.OrderItem          // ORDER BY
+	Limit     *int64                       // LIMIT
 	children  []LogicalPlan                // 子节点（目前无子节点）
 }
 

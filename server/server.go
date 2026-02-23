@@ -12,42 +12,42 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/config"
 	"github.com/kasuganosora/sqlexec/pkg/config_schema"
+	isacl "github.com/kasuganosora/sqlexec/pkg/information_schema"
 	"github.com/kasuganosora/sqlexec/pkg/optimizer"
 	"github.com/kasuganosora/sqlexec/pkg/plugin"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
+	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
+	"github.com/kasuganosora/sqlexec/pkg/virtual"
+	"github.com/kasuganosora/sqlexec/server/acl"
 	httpds "github.com/kasuganosora/sqlexec/server/datasource/http"
 	mysqlds "github.com/kasuganosora/sqlexec/server/datasource/mysql"
 	pgds "github.com/kasuganosora/sqlexec/server/datasource/postgresql"
-	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
-	"github.com/kasuganosora/sqlexec/pkg/utils"
-	"github.com/kasuganosora/sqlexec/server/acl"
 	"github.com/kasuganosora/sqlexec/server/handler"
-	simpleHandlers "github.com/kasuganosora/sqlexec/server/handler/simple"
-	queryHandlers "github.com/kasuganosora/sqlexec/server/handler/query"
-	processHandlers "github.com/kasuganosora/sqlexec/server/handler/process"
 	handshakeHandler "github.com/kasuganosora/sqlexec/server/handler/handshake"
 	parsers "github.com/kasuganosora/sqlexec/server/handler/packet_parsers"
+	processHandlers "github.com/kasuganosora/sqlexec/server/handler/process"
+	queryHandlers "github.com/kasuganosora/sqlexec/server/handler/query"
+	simpleHandlers "github.com/kasuganosora/sqlexec/server/handler/simple"
 	"github.com/kasuganosora/sqlexec/server/protocol"
-	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
-	isacl "github.com/kasuganosora/sqlexec/pkg/information_schema"
-	"github.com/kasuganosora/sqlexec/pkg/virtual"
 )
 
 type Server struct {
-	ctx               context.Context
-	listener          net.Listener
-	sessionMgr        *pkg_session.SessionMgr
-	config            *config.Config
-	db                *api.DB
-	aclManager        *acl.ACLManager
-	handlerRegistry   *handler.HandlerRegistry
-	parserRegistry    *handler.PacketParserRegistry
-	handshakeHandler  handler.HandshakeHandler
-	logger            Logger
-	auditLogger       handler.AuditLogger
-	configDir         string // 配置目录（用于 config 虚拟数据库）
-	vdbRegistry       *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
-	debugEnabled      bool // Debug logging switch (from config, default true)
+	ctx              context.Context
+	listener         net.Listener
+	sessionMgr       *pkg_session.SessionMgr
+	config           *config.Config
+	db               *api.DB
+	aclManager       *acl.ACLManager
+	handlerRegistry  *handler.HandlerRegistry
+	parserRegistry   *handler.PacketParserRegistry
+	handshakeHandler handler.HandshakeHandler
+	logger           Logger
+	auditLogger      handler.AuditLogger
+	configDir        string                           // 配置目录（用于 config 虚拟数据库）
+	vdbRegistry      *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
+	debugEnabled     bool                             // Debug logging switch (from config, default true)
 }
 
 type Logger interface {
@@ -339,9 +339,9 @@ func (s *Server) handleConnection(conn net.Conn) (err error) {
 	// 创建 API Session 并关联到协议 Session
 	if s.db != nil && sess.GetAPISession() == nil {
 		apiSess := s.db.Session()
-		apiSess.SetThreadID(sess.ThreadID) // 设置 threadID 用于 KILL 查询
-		apiSess.SetTraceID(sess.TraceID)   // 传播 trace-id 用于请求追踪
-		apiSess.SetVirtualDBRegistry(s.vdbRegistry)  // 设置虚拟数据库注册表
+		apiSess.SetThreadID(sess.ThreadID)          // 设置 threadID 用于 KILL 查询
+		apiSess.SetTraceID(sess.TraceID)            // 传播 trace-id 用于请求追踪
+		apiSess.SetVirtualDBRegistry(s.vdbRegistry) // 设置虚拟数据库注册表
 		sess.SetAPISession(apiSess)
 		s.logger.Printf("已为连接创建 API Session, ThreadID=%d", sess.ThreadID)
 	}

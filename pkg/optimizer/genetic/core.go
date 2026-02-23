@@ -54,8 +54,6 @@ func NewGeneticAlgorithm(config *GeneticAlgorithmConfig) *GeneticAlgorithm {
 	}
 }
 
-
-
 // InitializePopulation 初始化种群
 func (ga *GeneticAlgorithm) InitializePopulation(candidates []*IndexCandidate, benefits map[string]float64) *Population {
 	ga.mu.Lock()
@@ -340,8 +338,8 @@ func (ga *GeneticAlgorithm) Run(ctx context.Context, candidates []*IndexCandidat
 	pop := ga.InitializePopulation(candidates, benefits)
 
 	// 进化循环
-	eliteCount := 2                                       // 保留前2个精英
-	convergenceThreshold := 0.01                          // 1% 差异认为收敛
+	eliteCount := 2              // 保留前2个精英
+	convergenceThreshold := 0.01 // 1% 差异认为收敛
 
 	for generation := 0; generation < ga.config.MaxGenerations; generation++ {
 		// 检查上下文取消

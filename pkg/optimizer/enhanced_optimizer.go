@@ -22,15 +22,15 @@ import (
 // EnhancedOptimizer 增强的优化器
 // 集成所有新的优化模块，使用接口实现依赖注入
 type EnhancedOptimizer struct {
-	baseOptimizer    *Optimizer
-	costModel       cost.CostModel
-	indexSelector   *index.IndexSelector
-	dpJoinReorder   *join.DPJoinReorder
-	bushyTree      *join.BushyJoinTreeBuilder
-	statsCache      *statistics.AutoRefreshStatisticsCache
-	parallelism     int
-	estimator       CardinalityEstimator
-	hintsParser     *parser.HintsParser
+	baseOptimizer *Optimizer
+	costModel     cost.CostModel
+	indexSelector *index.IndexSelector
+	dpJoinReorder *join.DPJoinReorder
+	bushyTree     *join.BushyJoinTreeBuilder
+	statsCache    *statistics.AutoRefreshStatisticsCache
+	parallelism   int
+	estimator     CardinalityEstimator
+	hintsParser   *parser.HintsParser
 }
 
 // NewEnhancedOptimizer 创建增强的优化器
@@ -72,15 +72,15 @@ func NewEnhancedOptimizer(dataSource domain.DataSource, parallelism int) *Enhanc
 	optimizerEstimatorAdapter := &optimizerCardinalityAdapter{estimator: estimator}
 
 	return &EnhancedOptimizer{
-		baseOptimizer:    baseOptimizer,
-		costModel:       costModel,
-		indexSelector:   indexSelector,
-		dpJoinReorder:   dpJoinReorder,
-		bushyTree:      bushyTree,
-		statsCache:      autoRefreshStatsCache, // 修改为 autoRefreshStatsCache
-		parallelism:     parallelism,
-		estimator:       optimizerEstimatorAdapter, // 添加estimator
-		hintsParser:     parser.NewHintsParser(), // 初始化 hints 解析器
+		baseOptimizer: baseOptimizer,
+		costModel:     costModel,
+		indexSelector: indexSelector,
+		dpJoinReorder: dpJoinReorder,
+		bushyTree:     bushyTree,
+		statsCache:    autoRefreshStatsCache, // 修改为 autoRefreshStatsCache
+		parallelism:   parallelism,
+		estimator:     optimizerEstimatorAdapter, // 添加estimator
+		hintsParser:   parser.NewHintsParser(),   // 初始化 hints 解析器
 	}
 }
 
@@ -272,8 +272,6 @@ func (a *costModelAdapter) ProjectCost(inputRows int64, projCols int) float64 {
 	return a.costModel.ProjectCost(inputRows, projCols)
 }
 
-
-
 // Optimize 优化查询（增强版）
 func (eo *EnhancedOptimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (*plan.Plan, error) {
 	debugln("=== Enhanced Optimizer Started ===")
@@ -309,11 +307,11 @@ func (eo *EnhancedOptimizer) Optimize(ctx context.Context, stmt *parser.SQLState
 
 	// 3. 创建增强的优化上下文（包含 hints）
 	optCtx := &OptimizationContext{
-		DataSource:   eo.baseOptimizer.dataSource,
-		TableInfo:    make(map[string]*domain.TableInfo),
-		Stats:       make(map[string]*Statistics),
-		CostModel:   NewDefaultCostModel(),
-		Hints:       hints, // 添加 hints 到上下文
+		DataSource: eo.baseOptimizer.dataSource,
+		TableInfo:  make(map[string]*domain.TableInfo),
+		Stats:      make(map[string]*Statistics),
+		CostModel:  NewDefaultCostModel(),
+		Hints:      hints, // 添加 hints 到上下文
 	}
 
 	// 4. 应用增强的优化规则（包含 hint-aware 规则）
@@ -351,7 +349,7 @@ func (eo *EnhancedOptimizer) applyEnhancedRules(ctx context.Context, plan Logica
 		// Index Selection
 		&IndexSelectionAdapter{
 			indexSelector: eo.indexSelector,
-			costModel:    eo.costModel,
+			costModel:     eo.costModel,
 		},
 	}
 
@@ -405,16 +403,16 @@ func (eo *EnhancedOptimizer) convertToPlanEnhanced(ctx context.Context, logicalP
 // convertDataSourceEnhanced 转换数据源（增强版）
 func (eo *EnhancedOptimizer) convertDataSourceEnhanced(ctx context.Context, p *LogicalDataSource) (*plan.Plan, error) {
 	tableName := p.TableName
-	
+
 	// 应用索引选择
 	requiredCols := make([]string, 0)
 	for _, col := range p.Columns {
 		requiredCols = append(requiredCols, col.Name)
 	}
-	
+
 	// 从谓词条件中提取过滤器
 	filters := convertPredicatesToFilters(p.GetPushedDownPredicates())
-	
+
 	// 选择最佳索引
 	indexSelection := eo.indexSelector.SelectBestIndex(tableName, filters, requiredCols)
 	debugf("  [ENHANCED] Index Selection: %s\n", indexSelection.String())
@@ -449,10 +447,10 @@ func (eo *EnhancedOptimizer) convertDataSourceEnhanced(ctx context.Context, p *L
 	scanCost := eo.costModel.ScanCost(tableName, 10000, useIndex) // 使用默认估算
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("scan_%s", tableName),
-		Type: plan.TypeTableScan,
+		ID:           fmt.Sprintf("scan_%s", tableName),
+		Type:         plan.TypeTableScan,
 		OutputSchema: columns,
-		Children: []*plan.Plan{},
+		Children:     []*plan.Plan{},
 		Config: &plan.TableScanConfig{
 			TableName:       tableName,
 			Columns:         columns,
@@ -481,10 +479,10 @@ func (eo *EnhancedOptimizer) convertSelectionEnhanced(ctx context.Context, p *Lo
 	_ = optCtx.CostModel.FilterCost(int64(10000), 0.1) // 使用默认估算
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("sel_%d", len(p.GetConditions())),
-		Type: plan.TypeSelection,
+		ID:           fmt.Sprintf("sel_%d", len(p.GetConditions())),
+		Type:         plan.TypeSelection,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.SelectionConfig{
 			Condition: p.GetConditions()[0],
 		},
@@ -511,10 +509,10 @@ func (eo *EnhancedOptimizer) convertProjectionEnhanced(ctx context.Context, p *L
 	_ = optCtx.CostModel.ProjectCost(int64(10000), projCols) // 使用默认估算
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("proj_%d", len(projExprs)),
-		Type: plan.TypeProjection,
+		ID:           fmt.Sprintf("proj_%d", len(projExprs)),
+		Type:         plan.TypeProjection,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.ProjectionConfig{
 			Expressions: projExprs,
 			Aliases:     aliases,
@@ -540,10 +538,10 @@ func (eo *EnhancedOptimizer) convertLimitEnhanced(ctx context.Context, p *Logica
 	_ = optCtx.CostModel.FilterCost(int64(10000), 0.0001) // 极低成本
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("limit_%d_%d", limit, offset),
-		Type: plan.TypeLimit,
+		ID:           fmt.Sprintf("limit_%d_%d", limit, offset),
+		Type:         plan.TypeLimit,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.LimitConfig{
 			Limit:  limit,
 			Offset: offset,
@@ -566,10 +564,10 @@ func (eo *EnhancedOptimizer) convertSortEnhanced(ctx context.Context, p *Logical
 	orderBy := p.GetOrderBy()
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("sort_%d", len(orderBy)),
-		Type: plan.TypeSort,
+		ID:           fmt.Sprintf("sort_%d", len(orderBy)),
+		Type:         plan.TypeSort,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.SortConfig{
 			OrderByItems: orderBy,
 		},
@@ -602,12 +600,12 @@ func (eo *EnhancedOptimizer) convertJoinEnhanced(ctx context.Context, p *Logical
 	outputSchema := make([]types.ColumnInfo, 0, len(left.OutputSchema)+len(right.OutputSchema))
 	outputSchema = append(outputSchema, left.OutputSchema...)
 	outputSchema = append(outputSchema, right.OutputSchema...)
-	
+
 	return &plan.Plan{
-		ID:   fmt.Sprintf("join_%d", len(p.GetJoinConditions())),
-		Type: plan.TypeHashJoin,
+		ID:           fmt.Sprintf("join_%d", len(p.GetJoinConditions())),
+		Type:         plan.TypeHashJoin,
 		OutputSchema: outputSchema,
-		Children: []*plan.Plan{left, right},
+		Children:     []*plan.Plan{left, right},
 		Config: &plan.HashJoinConfig{
 			JoinType:  types.JoinType(p.GetJoinType()),
 			LeftCond:  convertToTypesJoinCondition(p.GetJoinConditions()[0]),
@@ -707,10 +705,10 @@ func (eo *EnhancedOptimizer) convertAggregateEnhanced(ctx context.Context, p *Lo
 	}
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("agg_%d_%d", len(groupByCols), len(aggFuncs)),
-		Type: plan.TypeAggregate,
+		ID:           fmt.Sprintf("agg_%d_%d", len(groupByCols), len(aggFuncs)),
+		Type:         plan.TypeAggregate,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.AggregateConfig{
 			GroupByCols: groupByCols,
 			AggFuncs:    convertedAggFuncs,
@@ -726,13 +724,13 @@ func (eo *EnhancedOptimizer) convertInsertEnhanced(ctx context.Context, p *Logic
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert SELECT for INSERT: %v", err)
 		}
-		
+
 		var onDuplicate *map[string]parser.Expression
 		if p.OnDuplicate != nil {
 			onDuplicateMap := p.OnDuplicate.GetSet()
 			onDuplicate = &onDuplicateMap
 		}
-		
+
 		return &plan.Plan{
 			ID:   fmt.Sprintf("insert_%s_select", p.TableName),
 			Type: plan.TypeInsert,
@@ -749,14 +747,14 @@ func (eo *EnhancedOptimizer) convertInsertEnhanced(ctx context.Context, p *Logic
 			},
 		}, nil
 	}
-	
+
 	// 处理直接值插入的情况
 	var onDuplicate *map[string]parser.Expression
 	if p.OnDuplicate != nil {
 		onDuplicateMap := p.OnDuplicate.GetSet()
 		onDuplicate = &onDuplicateMap
 	}
-	
+
 	return &plan.Plan{
 		ID:   fmt.Sprintf("insert_%s_values", p.TableName),
 		Type: plan.TypeInsert,
@@ -831,10 +829,10 @@ func (eo *EnhancedOptimizer) convertUnionEnhanced(ctx context.Context, p *Logica
 	outputSchema := children[0].OutputSchema
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("union_%d", len(children)),
-		Type: plan.TypeUnion,
+		ID:           fmt.Sprintf("union_%d", len(children)),
+		Type:         plan.TypeUnion,
 		OutputSchema: outputSchema,
-		Children: children,
+		Children:     children,
 		Config: &plan.UnionConfig{
 			Distinct: !p.IsAll(),
 		},
@@ -892,7 +890,6 @@ func (a *DPJoinReorderAdapter) Apply(ctx context.Context, plan LogicalPlan, optC
 
 	return result, nil
 }
-
 
 // convertToJoinPlan 将 optimizer.LogicalPlan 转换为 join.LogicalPlan
 // 这是一个适配器方法，用于桥接两个包之间的类型差异
@@ -1044,7 +1041,7 @@ func (a *BushyTreeAdapter) containsJoin(plan LogicalPlan) bool {
 // IndexSelectionAdapter 索引选择适配器
 type IndexSelectionAdapter struct {
 	indexSelector *index.IndexSelector
-	costModel    cost.CostModel
+	costModel     cost.CostModel
 }
 
 func (a *IndexSelectionAdapter) Name() string {
@@ -1139,8 +1136,6 @@ func expressionToFilter(expr *parser.Expression) *domain.Filter {
 	return nil
 }
 
-
-
 func convertAggFuncs(aggItems []*AggregationItem) []*AggregationItem {
 	funcs := make([]*AggregationItem, len(aggItems))
 	for i, item := range aggItems {
@@ -1228,22 +1223,22 @@ func convertParsedHints(ph *parser.ParsedHints) *OptimizerHints {
 
 	return &OptimizerHints{
 		// JOIN hints
-		HashJoinTables:    ph.HashJoinTables,
-		MergeJoinTables:   ph.MergeJoinTables,
-		INLJoinTables:     ph.INLJoinTables,
-		INLHashJoinTables: ph.INLHashJoinTables,
+		HashJoinTables:     ph.HashJoinTables,
+		MergeJoinTables:    ph.MergeJoinTables,
+		INLJoinTables:      ph.INLJoinTables,
+		INLHashJoinTables:  ph.INLHashJoinTables,
 		INLMergeJoinTables: ph.INLMergeJoinTables,
-		NoHashJoinTables:  ph.NoHashJoinTables,
-		NoMergeJoinTables: ph.NoMergeJoinTables,
-		NoIndexJoinTables: ph.NoIndexJoinTables,
-		LeadingOrder:      ph.LeadingOrder,
-		StraightJoin:      ph.StraightJoin,
+		NoHashJoinTables:   ph.NoHashJoinTables,
+		NoMergeJoinTables:  ph.NoMergeJoinTables,
+		NoIndexJoinTables:  ph.NoIndexJoinTables,
+		LeadingOrder:       ph.LeadingOrder,
+		StraightJoin:       ph.StraightJoin,
 
 		// INDEX hints
-		UseIndex:    copyStringMap(ph.UseIndex),
-		ForceIndex:  copyStringMap(ph.ForceIndex),
-		IgnoreIndex: copyStringMap(ph.IgnoreIndex),
-		OrderIndex:  ph.OrderIndex,
+		UseIndex:     copyStringMap(ph.UseIndex),
+		ForceIndex:   copyStringMap(ph.ForceIndex),
+		IgnoreIndex:  copyStringMap(ph.IgnoreIndex),
+		OrderIndex:   ph.OrderIndex,
 		NoOrderIndex: ph.NoOrderIndex,
 
 		// AGG hints

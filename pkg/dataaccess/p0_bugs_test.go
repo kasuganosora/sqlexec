@@ -17,16 +17,16 @@ import (
 
 // TrackingDataSource records which operations were called on it
 type TrackingDataSource struct {
-	name         string
-	insertCount  int64
-	updateCount  int64
-	deleteCount  int64
+	name        string
+	insertCount int64
+	updateCount int64
+	deleteCount int64
 }
 
-func (t *TrackingDataSource) Connect(ctx context.Context) error   { return nil }
-func (t *TrackingDataSource) Close(ctx context.Context) error     { return nil }
-func (t *TrackingDataSource) IsConnected() bool                   { return true }
-func (t *TrackingDataSource) IsWritable() bool                    { return true }
+func (t *TrackingDataSource) Connect(ctx context.Context) error { return nil }
+func (t *TrackingDataSource) Close(ctx context.Context) error   { return nil }
+func (t *TrackingDataSource) IsConnected() bool                 { return true }
+func (t *TrackingDataSource) IsWritable() bool                  { return true }
 func (t *TrackingDataSource) GetConfig() *domain.DataSourceConfig {
 	return &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory}
 }
@@ -51,9 +51,11 @@ func (t *TrackingDataSource) Delete(ctx context.Context, tableName string, filte
 	atomic.AddInt64(&t.deleteCount, 1)
 	return 1, nil
 }
-func (t *TrackingDataSource) CreateTable(ctx context.Context, info *domain.TableInfo) error { return nil }
-func (t *TrackingDataSource) DropTable(ctx context.Context, tableName string) error         { return nil }
-func (t *TrackingDataSource) TruncateTable(ctx context.Context, tableName string) error     { return nil }
+func (t *TrackingDataSource) CreateTable(ctx context.Context, info *domain.TableInfo) error {
+	return nil
+}
+func (t *TrackingDataSource) DropTable(ctx context.Context, tableName string) error     { return nil }
+func (t *TrackingDataSource) TruncateTable(ctx context.Context, tableName string) error { return nil }
 func (t *TrackingDataSource) GetTableInfo(ctx context.Context, tableName string) (*domain.TableInfo, error) {
 	return &domain.TableInfo{
 		Name:    tableName,

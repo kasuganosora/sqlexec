@@ -355,11 +355,11 @@ func TestACLManagerCheckPermission(t *testing.T) {
 
 func TestACLManagerHasGrantOption(t *testing.T) {
 	tests := []struct {
-		name        string
-		setupGrant  bool
-		host        string
-		user        string
-		want        bool
+		name       string
+		setupGrant bool
+		host       string
+		user       string
+		want       bool
 	}{
 		{
 			name:       "Has global GRANT OPTION",
@@ -701,15 +701,15 @@ func TestGrant(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		host        string
-		user        string
-		privileges  []PermissionType
-		level       PermissionLevel
-		db          string
-		table       string
-		column      string
-		wantErr     bool
+		name       string
+		host       string
+		user       string
+		privileges []PermissionType
+		level      PermissionLevel
+		db         string
+		table      string
+		column     string
+		wantErr    bool
 	}{
 		{
 			name:       "Grant database-level permissions",

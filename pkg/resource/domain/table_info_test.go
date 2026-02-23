@@ -314,9 +314,9 @@ func TestColumnInfo_IsVectorType(t *testing.T) {
 
 func TestColumnInfo_Clone(t *testing.T) {
 	original := ColumnInfo{
-		Name:         "id",
-		Type:         "int",
-		ForeignKey:   &ForeignKeyInfo{Table: "users", Column: "id"},
+		Name:             "id",
+		Type:             "int",
+		ForeignKey:       &ForeignKeyInfo{Table: "users", Column: "id"},
 		GeneratedDepends: []string{"col1", "col2"},
 	}
 

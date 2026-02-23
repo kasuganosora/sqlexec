@@ -13,16 +13,16 @@ import (
 // DataSourceManager 数据源管理器
 type DataSourceManager struct {
 	sources      map[string]domain.DataSource
-	registry      *Registry
-	defaultDS     string
-	enabledTypes  map[domain.DataSourceType]bool
-	mu            sync.RWMutex
+	registry     *Registry
+	defaultDS    string
+	enabledTypes map[domain.DataSourceType]bool
+	mu           sync.RWMutex
 }
 
 // NewDataSourceManager 创建数据源管理器
 func NewDataSourceManager() *DataSourceManager {
 	return &DataSourceManager{
-		sources:     make(map[string]domain.DataSource),
+		sources:      make(map[string]domain.DataSource),
 		registry:     NewRegistry(),
 		enabledTypes: make(map[domain.DataSourceType]bool),
 	}
@@ -31,7 +31,7 @@ func NewDataSourceManager() *DataSourceManager {
 // NewDataSourceManagerWithRegistry 使用指定注册表创建数据源管理器
 func NewDataSourceManagerWithRegistry(registry *Registry) *DataSourceManager {
 	return &DataSourceManager{
-		sources:     make(map[string]domain.DataSource),
+		sources:      make(map[string]domain.DataSource),
 		registry:     registry,
 		enabledTypes: make(map[domain.DataSourceType]bool),
 	}

@@ -9,13 +9,13 @@ type FunctionBuilder struct {
 func NewFunctionBuilder(name, displayName string) *FunctionBuilder {
 	return &FunctionBuilder{
 		meta: &FunctionMetadata{
-			Name:            name,
-			DisplayName:      displayName,
-			Type:            FunctionTypeScalar,
-			Scope:           ScopeGlobal,
-			Parameters:      []FunctionParam{},
-			Examples:        []string{},
-			Tags:           []string{},
+			Name:        name,
+			DisplayName: displayName,
+			Type:        FunctionTypeScalar,
+			Scope:       ScopeGlobal,
+			Parameters:  []FunctionParam{},
+			Examples:    []string{},
+			Tags:        []string{},
 		},
 	}
 }
@@ -144,7 +144,7 @@ func (b *FunctionBuilder) Build() *FunctionMetadata {
 // Register 注册函数到API
 func (b *FunctionBuilder) Register(api *FunctionAPI) error {
 	meta := b.Build()
-	
+
 	if meta.Type == FunctionTypeAggregate {
 		return api.GetRegistry().RegisterAggregate(meta)
 	}
@@ -192,10 +192,10 @@ func AggregateFunctionBuilder(name, displayName, description string, returnType 
 // ============ 便捷函数注册方法 ============
 
 // RegisterSimpleScalar 注册简单标量函数
-func RegisterSimpleScalar(api *FunctionAPI, category FunctionCategory, 
-	name, displayName, description, returnType string, 
+func RegisterSimpleScalar(api *FunctionAPI, category FunctionCategory,
+	name, displayName, description, returnType string,
 	handler FunctionHandle, argCount int) error {
-	
+
 	return api.RegisterScalarFunction(name, displayName, description, handler,
 		WithCategory(category),
 		WithReturnType(returnType),
@@ -205,9 +205,9 @@ func RegisterSimpleScalar(api *FunctionAPI, category FunctionCategory,
 
 // RegisterVariadicScalar 注册可变参数标量函数
 func RegisterVariadicScalar(api *FunctionAPI, category FunctionCategory,
-	name, displayName, description, returnType string, 
+	name, displayName, description, returnType string,
 	handler FunctionHandle, minArgs int) error {
-	
+
 	return api.RegisterScalarFunction(name, displayName, description, handler,
 		WithCategory(category),
 		WithReturnType(returnType),
@@ -221,7 +221,7 @@ func RegisterVariadicScalar(api *FunctionAPI, category FunctionCategory,
 func RegisterSimpleAggregate(api *FunctionAPI,
 	name, displayName, description, returnType string,
 	handler AggregateHandle, result AggregateResult) error {
-	
+
 	return api.RegisterAggregateFunction(name, displayName, description, handler, result,
 		WithCategory(CategoryAggregate),
 		WithReturnType(returnType),
@@ -234,11 +234,11 @@ func RegisterSimpleAggregate(api *FunctionAPI,
 /*
 api := builtin.NewFunctionAPI()
 
-builtin.RegisterSimpleScalar(api, builtin.CategoryMath, 
+builtin.RegisterSimpleScalar(api, builtin.CategoryMath,
 	"myfunc", "MyFunc", "我的自定义函数", "number",
 	func(args []interface{}) (interface{}, error) {
 		return args[0], nil
-	}, 
+	},
 	1,
 )
 */
@@ -259,7 +259,7 @@ err := builtin.MathFunctionBuilder("complex", "Complex", "复杂计算函数").
 		x, _ := toFloat64(args[0])
 		y, _ := toFloat64(args[1])
 		op := args[2].(string)
-		
+
 		switch op {
 		case "add":
 			return x + y, nil

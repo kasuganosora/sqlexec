@@ -131,7 +131,6 @@ func (r *JoinEliminationRule) isForeignKeyPrimaryKeyJoin(join *LogicalJoin) bool
 	return false
 }
 
-
 // extractTableNames 从计划中提取表名
 func extractTableNames(plan LogicalPlan) []string {
 	if dataSource, ok := plan.(*LogicalDataSource); ok {

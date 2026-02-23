@@ -1,6 +1,5 @@
 package optimizer
 
-
 // Hints support methods for LogicalDataSource
 
 // ForceUseIndex 强制使用指定索引（FORCE_INDEX）

@@ -67,9 +67,9 @@ func NewAdaptiveCostModel(estimator CardinalityEstimator) *AdaptiveCostModel {
 	hardware := DetectHardwareProfile()
 
 	return &AdaptiveCostModel{
-		hardware:     hardware,
-		factors:      hardware.CalculateCostFactors(),
-		estimator:    estimator,
+		hardware:  hardware,
+		factors:   hardware.CalculateCostFactors(),
+		estimator: estimator,
 		cacheHitInfo: &CacheHitInfo{
 			TableHitRates: make(map[string]float64),
 			LastUpdate:    time.Now(),
@@ -86,9 +86,9 @@ func NewEnhancedCostModel(hardware *HardwareProfile) *AdaptiveCostModel {
 	estimator := &SimpleCardinalityEstimator{}
 
 	return &AdaptiveCostModel{
-		hardware:     hardware,
-		factors:      hardware.CalculateCostFactors(),
-		estimator:    estimator,
+		hardware:  hardware,
+		factors:   hardware.CalculateCostFactors(),
+		estimator: estimator,
 		cacheHitInfo: &CacheHitInfo{
 			TableHitRates: make(map[string]float64),
 			LastUpdate:    time.Now(),
@@ -110,10 +110,10 @@ func (acm *AdaptiveCostModel) ScanCost(tableName string, rowCount int64, useInde
 		// 索引扫描成本 = 索引高度 + 叶子节点访问
 		indexHeight := acm.estimateIndexHeight(tableName)
 		leafAccess := float64(rowCount) * acm.factors.IOFactor * 0.1
-		
+
 		// 索引通常比全表扫描快10倍
 		indexCost := (float64(indexHeight) * acm.factors.CPUFactor) + leafAccess
-		return math.Min(baseCost, indexCost * 0.1)
+		return math.Min(baseCost, indexCost*0.1)
 	}
 
 	// 考虑缓存命中率
@@ -281,7 +281,7 @@ func (acm *AdaptiveCostModel) estimateIndexHeight(tableName string) int {
 	if rowCount <= 0 {
 		return 3
 	}
-	
+
 	height := math.Ceil(math.Log2(float64(rowCount)))
 	return int(math.Max(2, height))
 }
@@ -298,7 +298,7 @@ func (acm *AdaptiveCostModel) buildHashTableCost(rows int64) float64 {
 func (acm *AdaptiveCostModel) probeHashTableCost(buildRows, probeRows int64, conditions []*parser.Expression) float64 {
 	// 探测成本 = 探测行数 * 条件数 * CPU因子
 	probeCost := float64(probeRows) * float64(len(conditions)+1) * acm.factors.CPUFactor
-	
+
 	// 内存成本：加载探测表
 	memoryCost := float64(probeRows) * acm.factors.MemoryFactor * 0.001
 
@@ -310,7 +310,7 @@ func (acm *AdaptiveCostModel) estimateSortingCost(rows int64, sortCols int) floa
 	if rows <= 1 {
 		return 0
 	}
-	
+
 	// 外部排序成本：n * log(n) * (列数/10)
 	logCost := math.Log2(float64(rows))
 	return float64(rows) * logCost * float64(sortCols) * acm.factors.CPUFactor

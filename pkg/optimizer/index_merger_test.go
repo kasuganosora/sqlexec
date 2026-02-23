@@ -228,21 +228,21 @@ func TestFindMergeableIndexes(t *testing.T) {
 	// 创建测试索引
 	existingIndexes := []*Index{
 		{
-			TableName:  "test_table",
-			Columns:    []string{"a"},
-			Name:       "idx_a",
+			TableName:   "test_table",
+			Columns:     []string{"a"},
+			Name:        "idx_a",
 			Cardinality: 1024,
 		},
 		{
-			TableName:  "test_table",
-			Columns:    []string{"a", "b"},
-			Name:       "idx_ab",
+			TableName:   "test_table",
+			Columns:     []string{"a", "b"},
+			Name:        "idx_ab",
 			Cardinality: 2048,
 		},
 		{
-			TableName:  "test_table",
-			Columns:    []string{"c"},
-			Name:       "idx_c",
+			TableName:   "test_table",
+			Columns:     []string{"c"},
+			Name:        "idx_c",
 			Cardinality: 1024,
 		},
 	}
@@ -284,15 +284,15 @@ func TestGetRecommendedMerges(t *testing.T) {
 
 	existingIndexes := []*Index{
 		{
-			TableName:  "test_table",
-			Columns:    []string{"a"},
-			Name:       "idx_a",
+			TableName:   "test_table",
+			Columns:     []string{"a"},
+			Name:        "idx_a",
 			Cardinality: 1024,
 		},
 		{
-			TableName:  "test_table",
-			Columns:    []string{"a", "b"},
-			Name:       "idx_ab",
+			TableName:   "test_table",
+			Columns:     []string{"a", "b"},
+			Name:        "idx_ab",
 			Cardinality: 2048,
 		},
 	}
@@ -452,27 +452,27 @@ func TestComplexMergeScenario(t *testing.T) {
 	// 创建多个有重叠的索引
 	existingIndexes := []*Index{
 		{
-			TableName:  "orders",
-			Columns:    []string{"customer_id"},
-			Name:       "idx_customer_id",
+			TableName:   "orders",
+			Columns:     []string{"customer_id"},
+			Name:        "idx_customer_id",
 			Cardinality: 1024,
 		},
 		{
-			TableName:  "orders",
-			Columns:    []string{"customer_id", "order_date"},
-			Name:       "idx_customer_date",
+			TableName:   "orders",
+			Columns:     []string{"customer_id", "order_date"},
+			Name:        "idx_customer_date",
 			Cardinality: 2048,
 		},
 		{
-			TableName:  "orders",
-			Columns:    []string{"customer_id", "order_date", "status"},
-			Name:       "idx_customer_date_status",
+			TableName:   "orders",
+			Columns:     []string{"customer_id", "order_date", "status"},
+			Name:        "idx_customer_date_status",
 			Cardinality: 3072,
 		},
 		{
-			TableName:  "orders",
-			Columns:    []string{"status"},
-			Name:       "idx_status",
+			TableName:   "orders",
+			Columns:     []string{"status"},
+			Name:        "idx_status",
 			Cardinality: 1024,
 		},
 	}

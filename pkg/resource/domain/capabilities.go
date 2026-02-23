@@ -9,13 +9,13 @@ import "context"
 type IsMVCCable interface {
 	// SupportsMVCC 是否支持MVCC
 	SupportsMVCC() bool
-	
+
 	// BeginTx 开始事务
 	BeginTx(ctx context.Context, readOnly bool) (int64, error)
-	
+
 	// CommitTx 提交事务
 	CommitTx(ctx context.Context, txnID int64) error
-	
+
 	// RollbackTx 回滚事务
 	RollbackTx(ctx context.Context, txnID int64) error
 }
@@ -25,7 +25,7 @@ type IsMVCCable interface {
 // 这个接口用于标记数据源明确支持写操作
 type IsWritableSource interface {
 	DataSource
-	
+
 	// SupportsWrite 明确声明支持写操作
 	SupportsWrite() bool
 }

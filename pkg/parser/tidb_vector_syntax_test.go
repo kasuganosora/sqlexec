@@ -11,72 +11,72 @@ func TestTiDBVectorIndexSyntax(t *testing.T) {
 	adapter := NewSQLAdapter()
 
 	testCases := []struct {
-		name           string
-		sql            string
-		expectVector   bool
+		name            string
+		sql             string
+		expectVector    bool
 		expectIndexType string
-		expectMetric   string
-		expectDim      int
-		expectColumn   string
+		expectMetric    string
+		expectDim       int
+		expectColumn    string
 	}{
 		{
-			name:           "TiDB VEC_COSINE_DISTANCE",
-			sql:            "CREATE VECTOR INDEX idx_emb ON articles((VEC_COSINE_DISTANCE(embedding)))",
-			expectVector:   true,
+			name:            "TiDB VEC_COSINE_DISTANCE",
+			sql:             "CREATE VECTOR INDEX idx_emb ON articles((VEC_COSINE_DISTANCE(embedding)))",
+			expectVector:    true,
 			expectIndexType: "VECTOR",
-			expectMetric:   "cosine",
-			expectDim:      0, // 维度可能在其他地方获取
-			expectColumn:   "embedding",
+			expectMetric:    "cosine",
+			expectDim:       0, // 维度可能在其他地方获取
+			expectColumn:    "embedding",
 		},
 		{
-			name:           "TiDB VEC_L2_DISTANCE",
-			sql:            "CREATE VECTOR INDEX idx_vec ON products((VEC_L2_DISTANCE(features)))",
-			expectVector:   true,
+			name:            "TiDB VEC_L2_DISTANCE",
+			sql:             "CREATE VECTOR INDEX idx_vec ON products((VEC_L2_DISTANCE(features)))",
+			expectVector:    true,
 			expectIndexType: "VECTOR",
-			expectMetric:   "l2",
-			expectColumn:   "features",
+			expectMetric:    "l2",
+			expectColumn:    "features",
 		},
 		{
-			name:           "TiDB VEC_INNER_PRODUCT",
-			sql:            "CREATE VECTOR INDEX idx_ip ON items((VEC_INNER_PRODUCT(vec)))",
-			expectVector:   true,
+			name:            "TiDB VEC_INNER_PRODUCT",
+			sql:             "CREATE VECTOR INDEX idx_ip ON items((VEC_INNER_PRODUCT(vec)))",
+			expectVector:    true,
 			expectIndexType: "VECTOR",
-			expectMetric:   "inner_product",
-			expectColumn:   "vec",
+			expectMetric:    "inner_product",
+			expectColumn:    "vec",
 		},
 		{
-			name:           "TiDB VEC_COSINE_DISTANCE USING HNSW",
-			sql:            "CREATE VECTOR INDEX idx_emb ON articles((VEC_COSINE_DISTANCE(embedding))) USING HNSW",
-			expectVector:   true,
+			name:            "TiDB VEC_COSINE_DISTANCE USING HNSW",
+			sql:             "CREATE VECTOR INDEX idx_emb ON articles((VEC_COSINE_DISTANCE(embedding))) USING HNSW",
+			expectVector:    true,
 			expectIndexType: "VECTOR",
-			expectMetric:   "cosine",
-			expectColumn:   "embedding",
+			expectMetric:    "cosine",
+			expectColumn:    "embedding",
 		},
 		{
-			name:           "TiDB mixed syntax - with COMMENT",
-			sql:            "CREATE VECTOR INDEX idx_emb ON articles((VEC_COSINE_DISTANCE(embedding))) COMMENT 'dim=768, M=8'",
-			expectVector:   true,
+			name:            "TiDB mixed syntax - with COMMENT",
+			sql:             "CREATE VECTOR INDEX idx_emb ON articles((VEC_COSINE_DISTANCE(embedding))) COMMENT 'dim=768, M=8'",
+			expectVector:    true,
 			expectIndexType: "VECTOR",
-			expectMetric:   "cosine",
-			expectDim:      768,
-			expectColumn:   "embedding",
+			expectMetric:    "cosine",
+			expectDim:       768,
+			expectColumn:    "embedding",
 		},
 
 		{
-			name:           "Traditional vector index syntax (backward compatibility)",
-			sql:            "CREATE VECTOR INDEX idx_emb ON articles(embedding) USING HNSW COMMENT 'metric=cosine, dim=768'",
-			expectVector:   true,
+			name:            "Traditional vector index syntax (backward compatibility)",
+			sql:             "CREATE VECTOR INDEX idx_emb ON articles(embedding) USING HNSW COMMENT 'metric=cosine, dim=768'",
+			expectVector:    true,
 			expectIndexType: "VECTOR",
-			expectMetric:   "cosine",
-			expectDim:      768,
-			expectColumn:   "embedding",
+			expectMetric:    "cosine",
+			expectDim:       768,
+			expectColumn:    "embedding",
 		},
 		{
-			name:           "Regular BTREE index (not vector)",
-			sql:            "CREATE INDEX idx_id ON users(id)",
-			expectVector:   false,
+			name:            "Regular BTREE index (not vector)",
+			sql:             "CREATE INDEX idx_id ON users(id)",
+			expectVector:    false,
 			expectIndexType: "BTREE",
-			expectColumn:   "id",
+			expectColumn:    "id",
 		},
 	}
 
@@ -114,26 +114,26 @@ func TestTiDBVectorIndexSyntax(t *testing.T) {
 // TestTiDBVectorDistanceFunctions 测试向量距离函数解析
 func TestTiDBVectorDistanceFunctions(t *testing.T) {
 	testCases := []struct {
-		name     string
-		expr     string
+		name      string
+		expr      string
 		expectCol string
 		expectMet string
 	}{
 		{
-			name:     "VEC_COSINE_DISTANCE",
-			expr:     "VEC_COSINE_DISTANCE(embedding)",
+			name:      "VEC_COSINE_DISTANCE",
+			expr:      "VEC_COSINE_DISTANCE(embedding)",
 			expectCol: "embedding",
 			expectMet: "cosine",
 		},
 		{
-			name:     "VEC_L2_DISTANCE",
-			expr:     "VEC_L2_DISTANCE(features)",
+			name:      "VEC_L2_DISTANCE",
+			expr:      "VEC_L2_DISTANCE(features)",
 			expectCol: "features",
 			expectMet: "l2",
 		},
 		{
-			name:     "VEC_INNER_PRODUCT",
-			expr:     "VEC_INNER_PRODUCT(vec)",
+			name:      "VEC_INNER_PRODUCT",
+			expr:      "VEC_INNER_PRODUCT(vec)",
 			expectCol: "vec",
 			expectMet: "inner_product",
 		},
@@ -160,31 +160,31 @@ func TestWithClausePreprocess(t *testing.T) {
 	adapter := NewSQLAdapter()
 
 	testCases := []struct {
-		name           string
-		sql            string
-		expectVector   bool
+		name            string
+		sql             string
+		expectVector    bool
 		expectIndexType string
-		expectMetric   string
-		expectDim      int
-		expectColumn   string
+		expectMetric    string
+		expectDim       int
+		expectColumn    string
 	}{
 		{
-			name:           "WITH clause after USING HNSW",
-			sql:            "CREATE VECTOR INDEX idx_emb ON articles(embedding) USING HNSW WITH (metric='cosine', dim=768, M=8)",
-			expectVector:   true,
+			name:            "WITH clause after USING HNSW",
+			sql:             "CREATE VECTOR INDEX idx_emb ON articles(embedding) USING HNSW WITH (metric='cosine', dim=768, M=8)",
+			expectVector:    true,
 			expectIndexType: "VECTOR",
-			expectMetric:   "cosine",
-			expectDim:      768,
-			expectColumn:   "embedding",
+			expectMetric:    "cosine",
+			expectDim:       768,
+			expectColumn:    "embedding",
 		},
 		{
-			name:           "WITH clause without USING (default HNSW)",
-			sql:            "CREATE VECTOR INDEX idx_emb ON articles(embedding) WITH (metric='cosine', dim=512)",
-			expectVector:   true,
+			name:            "WITH clause without USING (default HNSW)",
+			sql:             "CREATE VECTOR INDEX idx_emb ON articles(embedding) WITH (metric='cosine', dim=512)",
+			expectVector:    true,
 			expectIndexType: "VECTOR",
-			expectMetric:   "cosine",
-			expectDim:      512,
-			expectColumn:   "embedding",
+			expectMetric:    "cosine",
+			expectDim:       512,
+			expectColumn:    "embedding",
 		},
 	}
 
@@ -218,4 +218,3 @@ func TestWithClausePreprocess(t *testing.T) {
 		})
 	}
 }
-

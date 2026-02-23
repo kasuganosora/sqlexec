@@ -12,7 +12,7 @@ type BatchExecutor struct {
 	batch         []interface{}
 	timer         *time.Timer
 	mu            sync.Mutex
-	flushFunc      func([]interface{}) error
+	flushFunc     func([]interface{}) error
 }
 
 // NewBatchExecutor 创建批量执行器

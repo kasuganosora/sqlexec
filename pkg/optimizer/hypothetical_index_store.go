@@ -11,8 +11,8 @@ import (
 // 内存存储，不持久化，用于 What-If 分析
 type HypotheticalIndexStore struct {
 	mu          sync.RWMutex
-	indexes     map[string]*HypotheticalIndex    // indexID -> index
-	tableMap    map[string]map[string]bool       // tableName -> indexIDs
+	indexes     map[string]*HypotheticalIndex // indexID -> index
+	tableMap    map[string]map[string]bool    // tableName -> indexIDs
 	nextIndexID int64
 }
 

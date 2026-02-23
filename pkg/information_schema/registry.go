@@ -57,4 +57,3 @@ func (a *aclManagerAdapter) GetUsers() []*acl.User {
 func (a *aclManagerAdapter) IsLoaded() bool {
 	return a.aclMgr.IsLoaded()
 }
-

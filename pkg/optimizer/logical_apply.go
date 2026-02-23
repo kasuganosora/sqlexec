@@ -7,10 +7,10 @@ import (
 // LogicalApply represents a correlated subquery execution
 // It executes the inner query for each row from the outer query
 type LogicalApply struct {
-	joinType    JoinType
-	conditions   []*parser.Expression
-	correlated  []CorrelatedColumn
-	children     []LogicalPlan
+	joinType   JoinType
+	conditions []*parser.Expression
+	correlated []CorrelatedColumn
+	children   []LogicalPlan
 }
 
 // CorrelatedColumn represents a column that references outer query
@@ -24,9 +24,9 @@ type CorrelatedColumn struct {
 func NewLogicalApply(joinType JoinType, outerPlan, innerPlan LogicalPlan, conditions []*parser.Expression) *LogicalApply {
 	return &LogicalApply{
 		joinType:   joinType,
-		conditions:  conditions,
-		correlated:  []CorrelatedColumn{},
-		children:    []LogicalPlan{outerPlan, innerPlan},
+		conditions: conditions,
+		correlated: []CorrelatedColumn{},
+		children:   []LogicalPlan{outerPlan, innerPlan},
 	}
 }
 

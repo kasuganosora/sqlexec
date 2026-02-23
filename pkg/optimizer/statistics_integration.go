@@ -10,14 +10,14 @@ import (
 // StatisticsIntegrator 统计信息集成器
 // 用于将真实统计信息与虚拟索引统计信息集成
 type StatisticsIntegrator struct {
-	estimator statistics.CardinalityEstimator
+	estimator  statistics.CardinalityEstimator
 	statsCache map[string]*statistics.TableStatistics
 }
 
 // NewStatisticsIntegrator 创建统计信息集成器
 func NewStatisticsIntegrator(estimator statistics.CardinalityEstimator) *StatisticsIntegrator {
 	return &StatisticsIntegrator{
-		estimator: estimator,
+		estimator:  estimator,
 		statsCache: make(map[string]*statistics.TableStatistics),
 	}
 }
@@ -388,7 +388,7 @@ func (si *StatisticsIntegrator) estimateDefaultIndexSize(tableName string, colum
 	}
 
 	avgColSize := int64(len(columns) * 8) // 每列 8 字节
-	entrySize := avgColSize + 8            // 加上行指针
+	entrySize := avgColSize + 8           // 加上行指针
 	fillFactor := 0.75
 
 	totalSize := float64(stats.RowCount*entrySize) / fillFactor

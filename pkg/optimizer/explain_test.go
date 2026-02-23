@@ -36,7 +36,7 @@ func (m *MockPhysicalPlan) SetChildren(children ...PhysicalPlan) {
 func TestExplainPlan(t *testing.T) {
 	// Test with a mock PhysicalPlan
 	mockPlan := &MockPhysicalPlan{explain: "MockPhysicalPlan"}
-	
+
 	result := ExplainPlan(mockPlan)
 	if result != "MockPhysicalPlan\n" {
 		t.Errorf("Expected 'MockPhysicalPlan\\n', got '%s'", result)

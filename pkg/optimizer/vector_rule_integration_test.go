@@ -11,66 +11,66 @@ import (
 // TestVectorIndexRuleWithSQLParsing tests vector index rule integration with SQL parsing
 func TestVectorIndexRuleWithSQLParsing(t *testing.T) {
 	testCases := []struct {
-		name              string
-		sql               string
-		shouldTransform    bool
-		expectedPlanType  string
-		description       string
+		name             string
+		sql              string
+		shouldTransform  bool
+		expectedPlanType string
+		description      string
 	}{
 		{
 			name:             "simple_vector_search",
 			sql:              "SELECT * FROM articles ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2, 0.3]') LIMIT 10",
-			shouldTransform:   true,
-			expectedPlanType:  "VectorScan",
+			shouldTransform:  true,
+			expectedPlanType: "VectorScan",
 			description:      "Simple vector search should be converted to VectorScan",
 		},
 		{
 			name:             "vector_search_with_filter",
 			sql:              "SELECT * FROM articles WHERE category = 'tech' ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2, 0.3]') LIMIT 10",
-			shouldTransform:   true,
-			expectedPlanType:  "VectorScan",
+			shouldTransform:  true,
+			expectedPlanType: "VectorScan",
 			description:      "Vector search with filter conditions",
 		},
 		{
 			name:             "vector_search_specific_columns",
 			sql:              "SELECT id, title FROM articles ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2, 0.3]') LIMIT 5",
-			shouldTransform:   true,
-			expectedPlanType:  "VectorScan",
+			shouldTransform:  true,
+			expectedPlanType: "VectorScan",
 			description:      "Vector search with specific columns",
 		},
 		{
 			name:             "vector_search_l2_distance",
 			sql:              "SELECT * FROM products ORDER BY vec_l2_distance(features, '[1.0, 2.0, 3.0]') LIMIT 10",
-			shouldTransform:   true,
-			expectedPlanType:  "VectorScan",
+			shouldTransform:  true,
+			expectedPlanType: "VectorScan",
 			description:      "Vector search using L2 distance",
 		},
 		{
 			name:             "vector_search_inner_product",
 			sql:              "SELECT * FROM items ORDER BY vec_inner_product_distance(vec, '[0.5, 0.5]') LIMIT 10",
-			shouldTransform:   true,
-			expectedPlanType:  "VectorScan",
+			shouldTransform:  true,
+			expectedPlanType: "VectorScan",
 			description:      "Vector search using inner product distance",
 		},
 		{
 			name:             "non_vector_order_by",
 			sql:              "SELECT * FROM articles ORDER BY created_at DESC LIMIT 10",
-			shouldTransform:   false,
-			expectedPlanType:  "DataSource",
+			shouldTransform:  false,
+			expectedPlanType: "DataSource",
 			description:      "Non-vector ORDER BY should not be converted to VectorScan",
 		},
 		{
 			name:             "regular_order_by",
 			sql:              "SELECT * FROM articles ORDER BY title ASC LIMIT 10",
-			shouldTransform:   false,
-			expectedPlanType:  "DataSource",
+			shouldTransform:  false,
+			expectedPlanType: "DataSource",
 			description:      "Regular ORDER BY should not be converted to VectorScan",
 		},
 		{
 			name:             "vector_search_with_distance_column",
 			sql:              "SELECT id, title, vec_cosine_distance(embedding, '[0.1, 0.2, 0.3]') as distance FROM articles ORDER BY distance LIMIT 10",
-			shouldTransform:   true,
-			expectedPlanType:  "VectorScan",
+			shouldTransform:  true,
+			expectedPlanType: "VectorScan",
 			description:      "Vector search with distance column calculation",
 		},
 	}
@@ -110,10 +110,10 @@ func TestVectorIndexRuleWithSQLParsing(t *testing.T) {
 // TestVectorIndexRulePriority tests priority of vector index rule
 func TestVectorIndexRulePriority(t *testing.T) {
 	testCases := []struct {
-		name         string
-		sql          string
-		ruleApplied  string
-		description  string
+		name        string
+		sql         string
+		ruleApplied string
+		description string
 	}{
 		{
 			name:        "vector_search_priority_over_regular",
@@ -155,24 +155,24 @@ func TestVectorIndexRulePriority(t *testing.T) {
 // TestVectorIndexPlanOptimization tests optimization of vector index plans
 func TestVectorIndexPlanOptimization(t *testing.T) {
 	testCases := []struct {
-		name              string
-		sql               string
-		expectedBehavior  string
+		name             string
+		sql              string
+		expectedBehavior string
 	}{
 		{
 			name:             "limit_pushdown_vector_search",
 			sql:              "SELECT * FROM articles ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2]') LIMIT 10",
-			expectedBehavior:  "LIMIT should be pushed down to VectorScan",
+			expectedBehavior: "LIMIT should be pushed down to VectorScan",
 		},
 		{
 			name:             "filter_pushdown_vector_search",
 			sql:              "SELECT * FROM articles WHERE id > 100 ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2]') LIMIT 10",
-			expectedBehavior:  "Filter should be combined with VectorScan",
+			expectedBehavior: "Filter should be combined with VectorScan",
 		},
 		{
 			name:             "projection_vector_search",
 			sql:              "SELECT id, title FROM articles ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2]') LIMIT 10",
-			expectedBehavior:  "Only required columns should be fetched",
+			expectedBehavior: "Only required columns should be fetched",
 		},
 	}
 
@@ -258,33 +258,33 @@ func TestVectorIndexRuleErrorHandling(t *testing.T) {
 // TestVectorIndexRuleWithComplexQueries tests vector rule application with complex queries
 func TestVectorIndexRuleWithComplexQueries(t *testing.T) {
 	complexCases := []struct {
-		name            string
-		sql             string
-		description     string
-		expectedResult  string
+		name           string
+		sql            string
+		description    string
+		expectedResult string
 	}{
 		{
-			name:       "vector_search_with_join",
-			sql:        "SELECT a.*, b.category FROM articles a JOIN categories b ON a.category_id = b.id ORDER BY vec_cosine_distance(a.embedding, '[0.1, 0.2]') LIMIT 10",
-			description: "Vector search with JOIN",
+			name:           "vector_search_with_join",
+			sql:            "SELECT a.*, b.category FROM articles a JOIN categories b ON a.category_id = b.id ORDER BY vec_cosine_distance(a.embedding, '[0.1, 0.2]') LIMIT 10",
+			description:    "Vector search with JOIN",
 			expectedResult: "Vector scan with join",
 		},
 		{
-			name:       "vector_search_with_aggregation",
-			sql:        "SELECT category, COUNT(*) FROM articles WHERE vec_cosine_distance(embedding, '[0.1, 0.2]') < 0.5 GROUP BY category",
-			description: "Vector search with aggregation (WHERE clause)",
+			name:           "vector_search_with_aggregation",
+			sql:            "SELECT category, COUNT(*) FROM articles WHERE vec_cosine_distance(embedding, '[0.1, 0.2]') < 0.5 GROUP BY category",
+			description:    "Vector search with aggregation (WHERE clause)",
 			expectedResult: "Vector scan with aggregation",
 		},
 		{
-			name:       "vector_search_with_subquery",
-			sql:        "SELECT * FROM articles WHERE id IN (SELECT id FROM recent_items) ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2]') LIMIT 10",
-			description: "Vector search with subquery",
+			name:           "vector_search_with_subquery",
+			sql:            "SELECT * FROM articles WHERE id IN (SELECT id FROM recent_items) ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2]') LIMIT 10",
+			description:    "Vector search with subquery",
 			expectedResult: "Vector scan with subquery",
 		},
 		{
-			name:       "vector_search_with_union",
-			sql:        "SELECT * FROM articles WHERE vec_cosine_distance(embedding, '[0.1, 0.2]') < 0.5 LIMIT 5 UNION SELECT * FROM old_articles WHERE vec_cosine_distance(embedding, '[0.1, 0.2]') < 0.5 LIMIT 5",
-			description: "Vector search with UNION",
+			name:           "vector_search_with_union",
+			sql:            "SELECT * FROM articles WHERE vec_cosine_distance(embedding, '[0.1, 0.2]') < 0.5 LIMIT 5 UNION SELECT * FROM old_articles WHERE vec_cosine_distance(embedding, '[0.1, 0.2]') < 0.5 LIMIT 5",
+			description:    "Vector search with UNION",
 			expectedResult: "Multiple vector scans with union",
 		},
 	}
@@ -297,7 +297,7 @@ func TestVectorIndexRuleWithComplexQueries(t *testing.T) {
 			// Parse SQL
 			adapter := parser.NewSQLAdapter()
 			result, err := adapter.Parse(tc.sql)
-			
+
 			// Some complex queries may not be supported yet
 			if err != nil {
 				t.Logf("⚠️ Complex query not supported yet (expected): %v", err)

@@ -14,12 +14,12 @@ import (
 
 // BinlogEventHeader 二进制日志事件头（19字节）
 type BinlogEventHeader struct {
-	Timestamp  uint32 // 事件创建时间（秒）
-	EventType  uint8  // 事件类型代码
-	ServerID   uint32 // 创建事件的服务器ID
+	Timestamp   uint32 // 事件创建时间（秒）
+	EventType   uint8  // 事件类型代码
+	ServerID    uint32 // 创建事件的服务器ID
 	EventLength uint32 // 事件长度（头部+数据）
-	NextPos    uint32 // 下一个事件在文件中的位置
-	Flags      uint16 // 事件标志位
+	NextPos     uint32 // 下一个事件在文件中的位置
+	Flags       uint16 // 事件标志位
 }
 
 // Unmarshal 解析事件头
@@ -64,15 +64,15 @@ type FormatDescriptionEvent struct {
 	Header BinlogEventHeader
 
 	// 固定数据部分
-	BinlogFormatVersion   uint16   // 二进制日志格式版本（固定为4）
-	ServerVersion        string   // 服务器版本字符串（50字节，以NULL填充）
-	CreateTimestamp     uint32   // 创建时间戳
-	HeaderLength        uint8    // 事件头长度（通常为19）
-	EventTypePostHeader  []uint8  // 事件类型后长度数组（每个字节对应一个事件类型）
+	BinlogFormatVersion uint16  // 二进制日志格式版本（固定为4）
+	ServerVersion       string  // 服务器版本字符串（50字节，以NULL填充）
+	CreateTimestamp     uint32  // 创建时间戳
+	HeaderLength        uint8   // 事件头长度（通常为19）
+	EventTypePostHeader []uint8 // 事件类型后长度数组（每个字节对应一个事件类型）
 
 	// 校验和
 	ChecksumAlgorithm uint8  // 校验和算法类型
-	ChecksumValue    uint32 // CRC32 校验和值
+	ChecksumValue     uint32 // CRC32 校验和值
 }
 
 // Unmarshal 解析 FORMAT_DESCRIPTION_EVENT
@@ -192,14 +192,14 @@ type GtidEvent struct {
 	Header BinlogEventHeader
 
 	// 事件体字段
-	GtidSeqNo      uint64 // GTID 序列号
-	DomainID       uint32 // 复制域 ID
-	Flags          uint8  // 标志位
-	CommitID       *uint64 // 组提交 ID（可选）
-	XaFormatID     *uint32 // XA 事务格式 ID（可选）
-	GtridLength    *uint8  // 全局事务标识符长度（可选）
-	BqualLength    *uint8  // 分支限定符长度（可选）
-	XidData        []byte  // XID 数据（可选）
+	GtidSeqNo   uint64  // GTID 序列号
+	DomainID    uint32  // 复制域 ID
+	Flags       uint8   // 标志位
+	CommitID    *uint64 // 组提交 ID（可选）
+	XaFormatID  *uint32 // XA 事务格式 ID（可选）
+	GtridLength *uint8  // 全局事务标识符长度（可选）
+	BqualLength *uint8  // 分支限定符长度（可选）
+	XidData     []byte  // XID 数据（可选）
 }
 
 // Unmarshal 解析 GTID_EVENT
@@ -393,16 +393,16 @@ type QueryEvent struct {
 	Header BinlogEventHeader
 
 	// 固定数据部分
-	ThreadID         uint32 // 执行此语句的线程 ID
+	ThreadID        uint32 // 执行此语句的线程 ID
 	ExecutionTime   uint32 // 执行时间（秒）
 	DatabaseNameLen uint8  // 数据库名长度
 	ErrorCode       uint16 // 错误代码
 	StatusVarLen    uint16 // 状态变量块长度
 
 	// 可变数据部分
-	StatusVariables  []byte // 状态变量
+	StatusVariables []byte // 状态变量
 	DatabaseName    string // 数据库名
-	Query          string // SQL 语句
+	Query           string // SQL 语句
 }
 
 // Unmarshal 解析 QUERY_EVENT
@@ -483,20 +483,20 @@ type TableMapEvent struct {
 	Header BinlogEventHeader
 
 	// 固定数据部分
-	TableID      uint64 // 表 ID（6字节）
-	Reserved     uint16 // 保留字段
+	TableID  uint64 // 表 ID（6字节）
+	Reserved uint16 // 保留字段
 
 	// 可变数据部分
-	DatabaseNameLen uint8    // 数据库名长度
-	DatabaseName    string   // 数据库名
-	TableNameLen    uint8    // 表名长度
-	TableName       string   // 表名
-	ColumnCount     int      // 列数
-	ColumnTypes     []uint8  // 列类型数组
-	MetadataLen    int      // 元数据块长度
-	Metadata       []byte   // 元数据块
-	NullBitmap      []byte   // NULL 位图
-	OptionalMetadata []byte   // 可选元数据块
+	DatabaseNameLen  uint8   // 数据库名长度
+	DatabaseName     string  // 数据库名
+	TableNameLen     uint8   // 表名长度
+	TableName        string  // 表名
+	ColumnCount      int     // 列数
+	ColumnTypes      []uint8 // 列类型数组
+	MetadataLen      int     // 元数据块长度
+	Metadata         []byte  // 元数据块
+	NullBitmap       []byte  // NULL 位图
+	OptionalMetadata []byte  // 可选元数据块
 }
 
 // Unmarshal 解析 TABLE_MAP_EVENT
@@ -641,11 +641,11 @@ func (e *XidEvent) Marshal() ([]byte, error) {
 // ============================================
 
 type ReplicationNetworkStream struct {
-	reader         *bufio.Reader
-	lastPacket     Packet
-	statusByte     uint8
-	currentEvent   []byte
-	eventPosition  int
+	reader        *bufio.Reader
+	lastPacket    Packet
+	statusByte    uint8
+	currentEvent  []byte
+	eventPosition int
 }
 
 // NewReplicationNetworkStream 创建新的复制网络流解析器
@@ -722,7 +722,7 @@ func (s *ReplicationNetworkStream) ReadEvent() (BinlogEventHeader, []byte, uint8
 	s.lastPacket = Packet{
 		PayloadLength: payloadLength,
 		SequenceID:    sequenceID,
-		Payload:      payload,
+		Payload:       payload,
 	}
 
 	return header, eventData, status, nil

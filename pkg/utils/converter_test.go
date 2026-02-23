@@ -248,8 +248,8 @@ func TestToInt64EdgeCases(t *testing.T) {
 		{"最小int64", int64(math.MinInt64), math.MinInt64, false},
 		{"uint转int64最大", uint64(math.MaxInt64), math.MaxInt64, false},
 		{"float64大数", float64(1.7976931348623157e+308), math.MinInt64, false}, // overflow returns MinInt64
-		{"float64 NaN", math.NaN(), math.MinInt64, false}, // NaN returns MinInt64
-		{"float64 Inf", math.Inf(1), math.MinInt64, false}, // Inf returns MinInt64
+		{"float64 NaN", math.NaN(), math.MinInt64, false},                     // NaN returns MinInt64
+		{"float64 Inf", math.Inf(1), math.MinInt64, false},                    // Inf returns MinInt64
 		{"负浮点转整数", float64(-10.9), -10, false},
 		{"正浮点转整数", float64(10.9), 10, false},
 	}
@@ -282,7 +282,7 @@ func TestToFloat64EdgeCases(t *testing.T) {
 		{"字符串转科学计数", "1.23e10", 1.23e10, false},
 		{"字符串转负科学计数", "-1.23e10", -1.23e10, false},
 		{"字符串转Inf", "Inf", math.Inf(1), false}, // Inf is valid float
-		{"字符串转NaN", "NaN", math.NaN(), false}, // NaN is valid float
+		{"字符串转NaN", "NaN", math.NaN(), false},  // NaN is valid float
 	}
 
 	for _, tt := range tests {
@@ -302,9 +302,9 @@ func TestToFloat64EdgeCases(t *testing.T) {
 
 func TestToFloat64StringEdgeCases(t *testing.T) {
 	tests := []struct {
-		name     string
-		arg      interface{}
-		wantErr  bool
+		name    string
+		arg     interface{}
+		wantErr bool
 	}{
 		{"字符串十六进制", "0x10", true},
 		{"字符串二进制", "0b10", true},

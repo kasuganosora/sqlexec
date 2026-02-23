@@ -14,37 +14,37 @@ func GetRecallValue(trueIDs [][]int64, resultIDs [][]int64) float64 {
 	if len(trueIDs) == 0 || len(resultIDs) == 0 {
 		return 0.0
 	}
-	
+
 	if len(trueIDs) != len(resultIDs) {
 		return 0.0
 	}
-	
+
 	sumRatio := 0.0
 	numQueries := len(trueIDs)
-	
+
 	for i := 0; i < numQueries; i++ {
 		if len(resultIDs[i]) == 0 {
 			continue
 		}
-		
+
 		// 计算当前查询的召回率
 		// recall = |trueIDs[i] ∩ resultIDs[i]| / |resultIDs[i]|
 		hitCount := 0
 		trueSet := make(map[int64]bool, len(trueIDs[i]))
-		
+
 		for _, id := range trueIDs[i] {
 			trueSet[id] = true
 		}
-		
+
 		for _, id := range resultIDs[i] {
 			if trueSet[id] {
 				hitCount++
 			}
 		}
-		
+
 		sumRatio += float64(hitCount) / float64(len(resultIDs[i]))
 	}
-	
+
 	// 计算平均召回率并保留3位小数
 	avgRecall := sumRatio / float64(numQueries)
 	return math.Round(avgRecall*1000) / 1000.0
@@ -56,11 +56,11 @@ func GetRecallValueAtK(trueIDs [][]int64, resultIDs [][]int64, k int) float64 {
 	if len(trueIDs) == 0 || len(resultIDs) == 0 || k <= 0 {
 		return 0.0
 	}
-	
+
 	if len(trueIDs) != len(resultIDs) {
 		return 0.0
 	}
-	
+
 	// 截取前K个结果
 	truncatedResultIDs := make([][]int64, len(resultIDs))
 	for i := range resultIDs {
@@ -70,7 +70,7 @@ func GetRecallValueAtK(trueIDs [][]int64, resultIDs [][]int64, k int) float64 {
 			truncatedResultIDs[i] = resultIDs[i][:k]
 		}
 	}
-	
+
 	return GetRecallValue(trueIDs, truncatedResultIDs)
 }
 
@@ -79,19 +79,19 @@ func GetIntersectionSize(list1, list2 []int64) int {
 	if len(list1) == 0 || len(list2) == 0 {
 		return 0
 	}
-	
+
 	set := make(map[int64]bool, len(list1))
 	for _, id := range list1 {
 		set[id] = true
 	}
-	
+
 	count := 0
 	for _, id := range list2 {
 		if set[id] {
 			count++
 		}
 	}
-	
+
 	return count
 }
 
@@ -100,7 +100,7 @@ func CalculateSingleRecall(trueIDs, resultIDs []int64) float64 {
 	if len(trueIDs) == 0 || len(resultIDs) == 0 {
 		return 0.0
 	}
-	
+
 	hitCount := GetIntersectionSize(trueIDs, resultIDs)
 	return float64(hitCount) / float64(len(trueIDs))
 }
@@ -110,11 +110,11 @@ func GetMinRecall(trueIDs [][]int64, resultIDs [][]int64) float64 {
 	if len(trueIDs) == 0 || len(resultIDs) == 0 {
 		return 0.0
 	}
-	
+
 	if len(trueIDs) != len(resultIDs) {
 		return 0.0
 	}
-	
+
 	minRecall := 1.0
 	for i := 0; i < len(trueIDs); i++ {
 		recall := CalculateSingleRecall(trueIDs[i], resultIDs[i])
@@ -122,7 +122,7 @@ func GetMinRecall(trueIDs [][]int64, resultIDs [][]int64) float64 {
 			minRecall = recall
 		}
 	}
-	
+
 	return minRecall
 }
 
@@ -132,21 +132,21 @@ func GetRecallStats(trueIDs [][]int64, resultIDs [][]int64) (avg, min, max, std 
 	if len(trueIDs) == 0 || len(resultIDs) == 0 || len(trueIDs) != len(resultIDs) {
 		return 0.0, 0.0, 0.0, 0.0
 	}
-	
+
 	numQueries := len(trueIDs)
 	recalls := make([]float64, numQueries)
-	
+
 	for i := 0; i < numQueries; i++ {
 		recalls[i] = CalculateSingleRecall(trueIDs[i], resultIDs[i])
 	}
-	
+
 	// 计算平均值
 	sum := 0.0
 	for _, r := range recalls {
 		sum += r
 	}
 	avg = sum / float64(numQueries)
-	
+
 	// 计算最小值和最大值
 	min = 1.0
 	max = 0.0
@@ -158,7 +158,7 @@ func GetRecallStats(trueIDs [][]int64, resultIDs [][]int64) (avg, min, max, std 
 			max = r
 		}
 	}
-	
+
 	// 计算标准差
 	variance := 0.0
 	for _, r := range recalls {
@@ -167,6 +167,6 @@ func GetRecallStats(trueIDs [][]int64, resultIDs [][]int64) (avg, min, max, std 
 	}
 	variance /= float64(numQueries)
 	std = math.Sqrt(variance)
-	
+
 	return avg, min, max, std
 }

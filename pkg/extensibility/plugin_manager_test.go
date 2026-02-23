@@ -523,14 +523,14 @@ type MockDataSourcePlugin struct {
 	running bool
 }
 
-func (m *MockDataSourcePlugin) Name() string               { return m.name }
-func (m *MockDataSourcePlugin) Version() string            { return m.version }
+func (m *MockDataSourcePlugin) Name() string                                   { return m.name }
+func (m *MockDataSourcePlugin) Version() string                                { return m.version }
 func (m *MockDataSourcePlugin) Initialize(config map[string]interface{}) error { return nil }
-func (m *MockDataSourcePlugin) Start() error               { m.running = true; return nil }
-func (m *MockDataSourcePlugin) Stop() error                { m.running = false; return nil }
-func (m *MockDataSourcePlugin) IsRunning() bool            { return m.running }
-func (m *MockDataSourcePlugin) Connect(conn string) (interface{}, error) { return nil, nil }
-func (m *MockDataSourcePlugin) Disconnect(conn interface{}) error        { return nil }
+func (m *MockDataSourcePlugin) Start() error                                   { m.running = true; return nil }
+func (m *MockDataSourcePlugin) Stop() error                                    { m.running = false; return nil }
+func (m *MockDataSourcePlugin) IsRunning() bool                                { return m.running }
+func (m *MockDataSourcePlugin) Connect(conn string) (interface{}, error)       { return nil, nil }
+func (m *MockDataSourcePlugin) Disconnect(conn interface{}) error              { return nil }
 func (m *MockDataSourcePlugin) Query(conn interface{}, query string, params []interface{}) (interface{}, error) {
 	return nil, nil
 }
@@ -544,14 +544,14 @@ type MockFunctionPlugin struct {
 	running bool
 }
 
-func (m *MockFunctionPlugin) Name() string                          { return m.name }
-func (m *MockFunctionPlugin) Version() string                       { return m.version }
+func (m *MockFunctionPlugin) Name() string                                   { return m.name }
+func (m *MockFunctionPlugin) Version() string                                { return m.version }
 func (m *MockFunctionPlugin) Initialize(config map[string]interface{}) error { return nil }
-func (m *MockFunctionPlugin) Start() error                          { m.running = true; return nil }
-func (m *MockFunctionPlugin) Stop() error                           { m.running = false; return nil }
-func (m *MockFunctionPlugin) IsRunning() bool                        { return m.running }
-func (m *MockFunctionPlugin) Register(name string, fn interface{}) error    { return nil }
-func (m *MockFunctionPlugin) Unregister(name string) error                 { return nil }
+func (m *MockFunctionPlugin) Start() error                                   { m.running = true; return nil }
+func (m *MockFunctionPlugin) Stop() error                                    { m.running = false; return nil }
+func (m *MockFunctionPlugin) IsRunning() bool                                { return m.running }
+func (m *MockFunctionPlugin) Register(name string, fn interface{}) error     { return nil }
+func (m *MockFunctionPlugin) Unregister(name string) error                   { return nil }
 func (m *MockFunctionPlugin) Call(name string, args []interface{}) (interface{}, error) {
 	return nil, nil
 }
@@ -566,13 +566,13 @@ type MockMonitorPlugin struct {
 	running bool
 }
 
-func (m *MockMonitorPlugin) Name() string                          { return m.name }
-func (m *MockMonitorPlugin) Version() string                       { return m.version }
-func (m *MockMonitorPlugin) Initialize(config map[string]interface{}) error { return nil }
-func (m *MockMonitorPlugin) Start() error                          { m.running = true; return nil }
-func (m *MockMonitorPlugin) Stop() error                           { m.running = false; return nil }
-func (m *MockMonitorPlugin) IsRunning() bool                        { return m.running }
+func (m *MockMonitorPlugin) Name() string                                                    { return m.name }
+func (m *MockMonitorPlugin) Version() string                                                 { return m.version }
+func (m *MockMonitorPlugin) Initialize(config map[string]interface{}) error                  { return nil }
+func (m *MockMonitorPlugin) Start() error                                                    { m.running = true; return nil }
+func (m *MockMonitorPlugin) Stop() error                                                     { m.running = false; return nil }
+func (m *MockMonitorPlugin) IsRunning() bool                                                 { return m.running }
 func (m *MockMonitorPlugin) RecordMetric(name string, value float64, tags map[string]string) {}
-func (m *MockMonitorPlugin) RecordEvent(name string, data map[string]interface{}) {}
-func (m *MockMonitorPlugin) GetMetric(name string) (float64, error)         { return 0, nil }
-func (m *MockMonitorPlugin) GetMetrics() map[string]float64                  { return nil }
+func (m *MockMonitorPlugin) RecordEvent(name string, data map[string]interface{})            {}
+func (m *MockMonitorPlugin) GetMetric(name string) (float64, error)                          { return 0, nil }
+func (m *MockMonitorPlugin) GetMetrics() map[string]float64                                  { return nil }

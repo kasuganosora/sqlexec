@@ -6,7 +6,7 @@ import (
 
 // LogicalSort represents a logical sort operation
 type LogicalSort struct {
-	orderBy []*parser.OrderItem
+	orderBy  []*parser.OrderItem
 	children []LogicalPlan
 }
 
@@ -50,5 +50,3 @@ func (p *LogicalSort) GetOrderBy() []*parser.OrderItem {
 func (p *LogicalSort) Explain() string {
 	return "LogicalSort"
 }
-
-

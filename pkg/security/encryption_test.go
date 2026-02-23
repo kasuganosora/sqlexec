@@ -100,8 +100,8 @@ func TestDecryptInvalidCiphertext(t *testing.T) {
 	}
 
 	tests := []struct {
-		name string
-		ciphertext string
+		name        string
+		ciphertext  string
 		expectError bool
 	}{
 		{"Invalid base64", "not valid base64!!!", true},
@@ -477,10 +477,10 @@ func TestEncryptRecordWithNonStringValues(t *testing.T) {
 	manager, _ := NewSensitiveFieldsManager("password123", []string{})
 
 	record := map[string]interface{}{
-		"id":       123,
-		"active":   true,
-		"score":    95.5,
-		"email":    "test@example.com",
+		"id":     123,
+		"active": true,
+		"score":  95.5,
+		"email":  "test@example.com",
 	}
 
 	decrypted, err := manager.DecryptRecord("users", record)

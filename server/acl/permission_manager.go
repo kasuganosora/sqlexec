@@ -9,9 +9,9 @@ import (
 // PermissionManager handles permission grants, revokes, and checks
 type PermissionManager struct {
 	dbPermissions     map[string]*DatabasePermission // Key: "host:db:user"
-	tablePermissions  map[string]*TablePermission  // Key: "host:db:user:table"
-	columnPermissions map[string]*ColumnPermission // Key: "host:db:user:table:column"
-	mu               sync.RWMutex
+	tablePermissions  map[string]*TablePermission    // Key: "host:db:user:table"
+	columnPermissions map[string]*ColumnPermission   // Key: "host:db:user:table:column"
+	mu                sync.RWMutex
 }
 
 // NewPermissionManager creates a new permission manager

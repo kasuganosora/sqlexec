@@ -177,10 +177,10 @@ func (r *OrderByHintRule) Explain() string {
 // EnhancedLogicalSort 增强的LogicalSort（支持hints）
 type EnhancedLogicalSort struct {
 	*LogicalSort
-	ForceIndex      string  // 强制使用的索引
-	DisableIndex    bool    // 禁止使用索引排序
-	SortMethod      string  // 排序方法（INDEX_SORT, EXTERNAL_SORT, QUICK_SORT）
-	MemoryLimit     int64   // 内存限制（字节）
+	ForceIndex   string // 强制使用的索引
+	DisableIndex bool   // 禁止使用索引排序
+	SortMethod   string // 排序方法（INDEX_SORT, EXTERNAL_SORT, QUICK_SORT）
+	MemoryLimit  int64  // 内存限制（字节）
 }
 
 // GetOrderByItems 获取排序项
@@ -203,8 +203,8 @@ func (r *OrderByHintRule) GetOrderByItems(plan *LogicalSort) []OrderByItem {
 func ApplyOrderByHintsToPhysicalPlan(plan *LogicalSort, hints *OptimizerHints, optCtx *OptimizationContext) *EnhancedLogicalSort {
 	enhancedSort := &EnhancedLogicalSort{
 		LogicalSort: plan,
-		SortMethod:  "EXTERNAL_SORT", // 默认
-		MemoryLimit: 64 * 1024 * 1024,  // 默认64MB
+		SortMethod:  "EXTERNAL_SORT",  // 默认
+		MemoryLimit: 64 * 1024 * 1024, // 默认64MB
 	}
 
 	if hints == nil {
@@ -242,4 +242,3 @@ func parseColumnName(fullName string) (string, string) {
 	}
 	return "", fullName
 }
-

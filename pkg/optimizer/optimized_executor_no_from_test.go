@@ -33,10 +33,10 @@ func TestHandleNoFromQuery(t *testing.T) {
 				if result.Columns[0].Name != "1" {
 					t.Errorf("Expected column name '1', got '%s'", result.Columns[0].Name)
 				}
-			val, exists := result.Rows[0]["1"]
-			if !exists || fmt.Sprintf("%v", val) != "1" {
-				t.Errorf("Expected value 1, got %v (type: %T)", val, val)
-			}
+				val, exists := result.Rows[0]["1"]
+				if !exists || fmt.Sprintf("%v", val) != "1" {
+					t.Errorf("Expected value 1, got %v (type: %T)", val, val)
+				}
 			},
 		},
 		{
@@ -47,10 +47,10 @@ func TestHandleNoFromQuery(t *testing.T) {
 				if result.Columns[0].Name != "result" {
 					t.Errorf("Expected column name 'result', got '%s'", result.Columns[0].Name)
 				}
-			val, exists := result.Rows[0]["result"]
-			if !exists || fmt.Sprintf("%v", val) != "1" {
-				t.Errorf("Expected value 1, got %v (type: %T)", val, val)
-			}
+				val, exists := result.Rows[0]["result"]
+				if !exists || fmt.Sprintf("%v", val) != "1" {
+					t.Errorf("Expected value 1, got %v (type: %T)", val, val)
+				}
 			},
 		},
 		{
@@ -92,10 +92,10 @@ func TestHandleNoFromQuery(t *testing.T) {
 				if result.Columns[0].Name != "1+1" {
 					t.Errorf("Expected column name '1+1', got '%s'", result.Columns[0].Name)
 				}
-			val, exists := result.Rows[0]["1+1"]
-			if !exists || fmt.Sprintf("%v", val) != "2" {
-				t.Errorf("Expected 2, got %v (type: %T)", val, val)
-			}
+				val, exists := result.Rows[0]["1+1"]
+				if !exists || fmt.Sprintf("%v", val) != "2" {
+					t.Errorf("Expected 2, got %v (type: %T)", val, val)
+				}
 			},
 		},
 		{
@@ -106,10 +106,10 @@ func TestHandleNoFromQuery(t *testing.T) {
 				if result.Columns[0].Name != "2*3" {
 					t.Errorf("Expected column name '2*3', got '%s'", result.Columns[0].Name)
 				}
-			val, exists := result.Rows[0]["2*3"]
-			if !exists || fmt.Sprintf("%v", val) != "6" {
-				t.Errorf("Expected 6, got %v (type: %T)", val, val)
-			}
+				val, exists := result.Rows[0]["2*3"]
+				if !exists || fmt.Sprintf("%v", val) != "6" {
+					t.Errorf("Expected 6, got %v (type: %T)", val, val)
+				}
 			},
 		},
 		{
@@ -120,11 +120,11 @@ func TestHandleNoFromQuery(t *testing.T) {
 				if result.Columns[0].Name != "10/2" {
 					t.Errorf("Expected column name '10/2', got '%s'", result.Columns[0].Name)
 				}
-			val, exists := result.Rows[0]["10/2"]
-			if !exists || fmt.Sprintf("%v", val) != "5" {
-				t.Errorf("Expected 5, got %v (type: %T)", val, val)
-			}
-		},
+				val, exists := result.Rows[0]["10/2"]
+				if !exists || fmt.Sprintf("%v", val) != "5" {
+					t.Errorf("Expected 5, got %v (type: %T)", val, val)
+				}
+			},
 		},
 		{
 			name:        "SELECT @@version_comment",
@@ -157,12 +157,12 @@ func TestHandleNoFromQuery(t *testing.T) {
 				if len(result.Columns) != 3 {
 					t.Errorf("Expected 3 columns, got %d", len(result.Columns))
 				}
-			val1, _ := result.Rows[0]["1"]
-			val2, _ := result.Rows[0]["2"]
-			val3, _ := result.Rows[0]["3"]
-			if fmt.Sprintf("%v", val1) != "1" || fmt.Sprintf("%v", val2) != "2" || fmt.Sprintf("%v", val3) != "3" {
-				t.Errorf("Expected 1,2,3 got %v,%v,%v (types: %T, %T, %T)", val1, val2, val3, val1, val2, val3)
-			}
+				val1, _ := result.Rows[0]["1"]
+				val2, _ := result.Rows[0]["2"]
+				val3, _ := result.Rows[0]["3"]
+				if fmt.Sprintf("%v", val1) != "1" || fmt.Sprintf("%v", val2) != "2" || fmt.Sprintf("%v", val3) != "3" {
+					t.Errorf("Expected 1,2,3 got %v,%v,%v (types: %T, %T, %T)", val1, val2, val3, val1, val2, val3)
+				}
 			},
 		},
 	}

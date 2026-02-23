@@ -21,7 +21,7 @@ func TestMariaDBFormatDescriptionEvent(t *testing.T) {
 		0x01, 0x00, 0x00, 0x00, // ServerID: 1
 		0xfc, 0x00, 0x00, 0x00, // EventLength: 252
 		0x00, 0x00, 0x00, 0x00, // NextPos: 0
-		0x00, 0x00,             // Flags: 0
+		0x00, 0x00, // Flags: 0
 		// Event Body
 		0x04, 0x00, // Format version: 4
 		// Server version (50 bytes, fixed) - "10.4.3-MariaDB-debug-log"
@@ -33,7 +33,7 @@ func TestMariaDBFormatDescriptionEvent(t *testing.T) {
 		// Created timestamp
 		0xee, 0x94, 0x65, 0x5c, // Created timestamp: 0x5c6594ee
 		// Header length
-		0x13,                   // Header length: 19
+		0x13, // Header length: 19
 		// Event type post header lengths
 		0x00, 0x00,
 	}
@@ -82,9 +82,9 @@ func TestMariaDBQueryEventCreateTable(t *testing.T) {
 	bodyData := []byte{
 		0x00, 0x00, 0x00, 0x00, // ThreadID: 0
 		0x00, 0x00, 0x00, 0x00, // Execution time: 0
-		0x04,                   // Database length: 4
-		0x00, 0x00,             // Error code: 0
-		0x00, 0x00,             // Status vars length: 0 (简化：无状态变量)
+		0x04,       // Database length: 4
+		0x00, 0x00, // Error code: 0
+		0x00, 0x00, // Status vars length: 0 (简化：无状态变量)
 		// Database name + NULL terminator
 		't', 'e', 's', 't', 0x00,
 		// SQL: "CREATE TABLE t1(a int)" + NULL

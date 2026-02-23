@@ -9,9 +9,9 @@ import (
 type FunctionType int
 
 const (
-	FunctionTypeScalar FunctionType = iota // 标量函数
-	FunctionTypeAggregate                  // 聚合函数
-	FunctionTypeWindow                    // 窗口函数
+	FunctionTypeScalar    FunctionType = iota // 标量函数
+	FunctionTypeAggregate                     // 聚合函数
+	FunctionTypeWindow                        // 窗口函数
 )
 
 // FunctionSignature 函数签名

@@ -216,10 +216,10 @@ func (k *KeyLeg) String() string {
 
 // ArrayLeg represents array index access
 type ArrayLeg struct {
-	Index      int    // -1 for last, -2 for wildcard
+	Index      int // -1 for last, -2 for wildcard
 	Last       bool
 	LastOffset int
-	Wildcard  bool
+	Wildcard   bool
 }
 
 // Apply applies the array leg to a JSON value
@@ -312,7 +312,6 @@ func (r *RangeLeg) Apply(bj BinaryJSON) ([]BinaryJSON, error) {
 
 	return result, nil
 }
-
 
 // String returns string representation
 func (r *RangeLeg) String() string {

@@ -30,7 +30,7 @@ func (api *FunctionAPI) RegisterFunction(fn FunctionRegisterFunc) error {
 	if err != nil {
 		return fmt.Errorf("function registration failed: %w", err)
 	}
-	
+
 	if meta.Type == FunctionTypeAggregate {
 		return api.registry.RegisterAggregate(meta)
 	}
@@ -40,73 +40,73 @@ func (api *FunctionAPI) RegisterFunction(fn FunctionRegisterFunc) error {
 // RegisterScalarFunction 注册标量函数
 func (api *FunctionAPI) RegisterScalarFunction(name, displayName, description string,
 	handler FunctionHandle, options ...FunctionOption) error {
-	
+
 	meta := &FunctionMetadata{
 		Name:        name,
-		DisplayName:  displayName,
+		DisplayName: displayName,
 		Type:        FunctionTypeScalar,
 		Scope:       ScopeGlobal,
 		Handler:     handler,
-		Description:  description,
+		Description: description,
 		Parameters:  []FunctionParam{},
-		Examples:     []string{},
-		Tags:         []string{},
+		Examples:    []string{},
+		Tags:        []string{},
 	}
-	
+
 	// 应用选项
 	for _, opt := range options {
 		opt(meta)
 	}
-	
+
 	return api.registry.RegisterScalar(meta)
 }
 
 // RegisterAggregateFunction 注册聚合函数
 func (api *FunctionAPI) RegisterAggregateFunction(name, displayName, description string,
 	handler AggregateHandle, result AggregateResult, options ...FunctionOption) error {
-	
+
 	meta := &FunctionMetadata{
 		Name:             name,
-		DisplayName:       displayName,
+		DisplayName:      displayName,
 		Type:             FunctionTypeAggregate,
 		Scope:            ScopeGlobal,
-		AggregateHandler:  handler,
-		AggregateResult:    result,
-		Description:       description,
+		AggregateHandler: handler,
+		AggregateResult:  result,
+		Description:      description,
 		Parameters:       []FunctionParam{},
-		Examples:          []string{},
+		Examples:         []string{},
 		Tags:             []string{},
 	}
-	
+
 	// 应用选项
 	for _, opt := range options {
 		opt(meta)
 	}
-	
+
 	return api.registry.RegisterAggregate(meta)
 }
 
 // RegisterUserFunction 注册用户自定义函数
 func (api *FunctionAPI) RegisterUserFunction(name, displayName, description string,
 	handler FunctionHandle, options ...FunctionOption) error {
-	
+
 	meta := &FunctionMetadata{
 		Name:        name,
-		DisplayName:  displayName,
+		DisplayName: displayName,
 		Type:        FunctionTypeScalar,
 		Scope:       ScopeUser,
 		Handler:     handler,
-		Description:  description,
+		Description: description,
 		Parameters:  []FunctionParam{},
-		Examples:     []string{},
-		Tags:         []string{},
+		Examples:    []string{},
+		Tags:        []string{},
 	}
-	
+
 	// 应用选项
 	for _, opt := range options {
 		opt(meta)
 	}
-	
+
 	return api.registry.RegisterUserFunction(meta)
 }
 
@@ -195,7 +195,7 @@ func (api *FunctionAPI) GetFunctionAliases() map[string]string {
 // GenerateDocumentation 生成函数文档
 func (api *FunctionAPI) GenerateDocumentation() string {
 	docs := "# 内置函数文档\n\n"
-	
+
 	// 按类别分组
 	categories := []FunctionCategory{
 		CategoryMath,
@@ -213,47 +213,47 @@ func (api *FunctionAPI) GenerateDocumentation() string {
 		if len(functions) == 0 {
 			continue
 		}
-		
+
 		docs += fmt.Sprintf("## %s\n\n", string(category))
-		
+
 		for _, fn := range functions {
 			docs += api.generateFunctionDoc(fn)
 		}
 	}
-	
+
 	return docs
 }
 
 // GenerateJSON 生成JSON格式文档
 func (api *FunctionAPI) GenerateJSON() (string, error) {
 	functions := api.registry.List()
-	
+
 	data := map[string]any{
-		"functions": functions,
-		"count":     len(functions),
+		"functions":  functions,
+		"count":      len(functions),
 		"categories": api.getCategoryStats(),
 	}
-	
+
 	jsonBytes, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return "", err
 	}
-	
+
 	return string(jsonBytes), nil
 }
 
 // generateFunctionDoc 生成单个函数文档
 func (api *FunctionAPI) generateFunctionDoc(meta *FunctionMetadata) string {
 	docs := fmt.Sprintf("### %s\n\n", meta.DisplayName)
-	
+
 	if meta.Description != "" {
 		docs += fmt.Sprintf("**描述**: %s\n\n", meta.Description)
 	}
-	
+
 	docs += fmt.Sprintf("**类型**: %s\n\n", api.getTypeName(meta.Type))
 	docs += fmt.Sprintf("**作用域**: %s\n\n", string(meta.Scope))
 	docs += fmt.Sprintf("**类别**: %s\n\n", string(meta.Category))
-	
+
 	// 参数
 	if len(meta.Parameters) > 0 {
 		docs += "**参数**:\n\n"
@@ -262,12 +262,12 @@ func (api *FunctionAPI) generateFunctionDoc(meta *FunctionMetadata) string {
 			if param.Required {
 				required = "必需"
 			}
-			docs += fmt.Sprintf("%d. `%s` (%s) - %s [%s]\n", 
+			docs += fmt.Sprintf("%d. `%s` (%s) - %s [%s]\n",
 				i+1, param.Name, param.Type, param.Description, required)
 		}
 		docs += "\n"
 	}
-	
+
 	// 示例
 	if len(meta.Examples) > 0 {
 		docs += "**示例**:\n\n"
@@ -275,12 +275,12 @@ func (api *FunctionAPI) generateFunctionDoc(meta *FunctionMetadata) string {
 			docs += fmt.Sprintf("```sql\n%s\n```\n\n", example)
 		}
 	}
-	
+
 	// 返回类型
 	if meta.ReturnType != "" {
 		docs += fmt.Sprintf("**返回类型**: %s\n\n", meta.ReturnType)
 	}
-	
+
 	docs += "---\n\n"
 	return docs
 }
@@ -302,7 +302,7 @@ func (api *FunctionAPI) getTypeName(fnType FunctionType) string {
 // getCategoryStats 获取类别统计
 func (api *FunctionAPI) getCategoryStats() map[string]int {
 	stats := make(map[string]int)
-	
+
 	categories := []FunctionCategory{
 		CategoryMath,
 		CategoryString,
@@ -317,7 +317,7 @@ func (api *FunctionAPI) getCategoryStats() map[string]int {
 	for _, category := range categories {
 		stats[string(category)] = api.registry.CountByCategory(category)
 	}
-	
+
 	return stats
 }
 
@@ -413,13 +413,13 @@ func (api *FunctionAPI) RegisterUDF(udf *UDFFunction) error {
 	if err := manager.Register(udf); err != nil {
 		return err
 	}
-	
+
 	// 同时注册到函数注册表，以便在SQL中使用
 	// 类型转换：UDFHandler -> FunctionHandle
 	wrappedHandler := func(args []any) (any, error) {
 		return udf.Handler(args)
 	}
-	
+
 	return api.RegisterScalarFunction(
 		udf.Metadata.Name,
 		udf.Metadata.Name,
@@ -444,7 +444,7 @@ func (api *FunctionAPI) UnregisterUDF(name string) error {
 	if err := manager.Unregister(name); err != nil {
 		return err
 	}
-	
+
 	// 从函数注册表中移除
 	return api.UnregisterFunction(name)
 }
@@ -481,7 +481,7 @@ func (api *FunctionAPI) UDFExists(name string) bool {
 func (api *FunctionAPI) ClearUDFs() {
 	// 从函数注册表中清除
 	api.ClearUserFunctions()
-	
+
 	// 从UDF管理器中清除
 	manager := GetGlobalUDFManager()
 	manager.Clear()

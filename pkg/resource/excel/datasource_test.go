@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/xuri/excelize/v2"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/xuri/excelize/v2"
 )
 
 // createTestExcelFile 创建测试用的Excel文件（单sheet）

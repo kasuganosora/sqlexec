@@ -11,20 +11,20 @@ import (
 // IndexCandidateExtractor 索引候选提取器
 // 从 SQL 语句中提取可索引的列，作为索引推荐的候选
 type IndexCandidateExtractor struct {
-	excludeTypes           map[string]bool // 排除的列类型（对于 BTree 索引）
-	fulltextSupport       *FullTextIndexSupport
-	spatialSupport        *SpatialIndexSupport
+	excludeTypes    map[string]bool // 排除的列类型（对于 BTree 索引）
+	fulltextSupport *FullTextIndexSupport
+	spatialSupport  *SpatialIndexSupport
 }
 
 // NewIndexCandidateExtractor 创建索引候选提取器
 func NewIndexCandidateExtractor() *IndexCandidateExtractor {
 	return &IndexCandidateExtractor{
 		excludeTypes: map[string]bool{
-			"BLOB":      true,
-			"TEXT":      true,
-			"JSON":      true,
-			"LONGBLOB":  true,
-			"LONGTEXT":  true,
+			"BLOB":       true,
+			"TEXT":       true,
+			"JSON":       true,
+			"LONGBLOB":   true,
+			"LONGTEXT":   true,
 			"MEDIUMTEXT": true,
 		},
 		fulltextSupport: NewFullTextIndexSupport(),

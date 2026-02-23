@@ -568,7 +568,7 @@ func TestMatchesPrivilegeFilter(t *testing.T) {
 	row := domain.Row{
 		"GRANTEE":        "'testuser'@'%'",
 		"PRIVILEGE_TYPE": "SELECT",
-		"IS_GRANTABLE":  "NO",
+		"IS_GRANTABLE":   "NO",
 	}
 
 	tests := []struct {

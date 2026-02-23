@@ -388,11 +388,11 @@ func TestHintsParser_ExtractHintsFromSQL(t *testing.T) {
 	parser := NewHintsParser()
 
 	tests := []struct {
-		name           string
-		inputSQL       string
-		expectedHints  string
-		expectedSQL    string
-		expectNoHints  bool
+		name          string
+		inputSQL      string
+		expectedHints string
+		expectedSQL   string
+		expectNoHints bool
 	}{
 		{
 			name:          "Single hint",
@@ -427,21 +427,21 @@ func TestHintsParser_ExtractHintsFromSQL(t *testing.T) {
 				t.Fatalf("ExtractHintsFromSQL failed: %v", err)
 			}
 
-		if tt.expectNoHints {
-			hintString := hints.String()
-			if hintString != "" {
-				t.Errorf("Expected no hints, got some: %s", hintString)
-			}
-		} else {
-			if hints == nil {
-				t.Fatal("Expected hints, got nil")
-			}
+			if tt.expectNoHints {
+				hintString := hints.String()
+				if hintString != "" {
+					t.Errorf("Expected no hints, got some: %s", hintString)
+				}
+			} else {
+				if hints == nil {
+					t.Fatal("Expected hints, got nil")
+				}
 
-			hintString := hints.String()
-			if hintString != tt.expectedHints {
-				t.Errorf("Expected hints %s, got %s", tt.expectedHints, hintString)
+				hintString := hints.String()
+				if hintString != tt.expectedHints {
+					t.Errorf("Expected hints %s, got %s", tt.expectedHints, hintString)
+				}
 			}
-		}
 
 			if cleanSQL != tt.expectedSQL {
 				t.Errorf("Expected clean SQL '%s', got '%s'", tt.expectedSQL, cleanSQL)
@@ -452,9 +452,9 @@ func TestHintsParser_ExtractHintsFromSQL(t *testing.T) {
 
 func TestParsedHints_String(t *testing.T) {
 	hints := &ParsedHints{
-		HashAgg:        true,
-		HashJoinTables:  []string{"t1", "t2"},
-		UseIndex:        map[string][]string{"t": []string{"idx1"}},
+		HashAgg:          true,
+		HashJoinTables:   []string{"t1", "t2"},
+		UseIndex:         map[string][]string{"t": []string{"idx1"}},
 		MaxExecutionTime: 1000 * time.Millisecond,
 	}
 

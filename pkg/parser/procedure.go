@@ -6,10 +6,10 @@ import (
 
 // ProcedureInfo 存储过程信息
 type ProcedureInfo struct {
-	Name     string
-	Params   []ProcedureParam
-	Body     *BlockStmt
-	Returns  []ColumnInfo // 返回值(用于函数)
+	Name    string
+	Params  []ProcedureParam
+	Body    *BlockStmt
+	Returns []ColumnInfo // 返回值(用于函数)
 }
 
 // FunctionInfo 函数信息
@@ -31,15 +31,15 @@ type ProcedureParam struct {
 type ParamType int
 
 const (
-	ParamTypeIn     ParamType = iota // IN参数
-	ParamTypeOut                     // OUT参数
-	ParamTypeInOut                   // INOUT参数
+	ParamTypeIn    ParamType = iota // IN参数
+	ParamTypeOut                    // OUT参数
+	ParamTypeInOut                  // INOUT参数
 )
 
 // BlockStmt 语句块
 type BlockStmt struct {
 	Declarations []Declaration
-	Statements  []Statement
+	Statements   []Statement
 }
 
 // Declaration 变量声明
@@ -69,10 +69,10 @@ type FunctionStmt struct {
 
 // IfStmt IF语句
 type IfStmt struct {
-	Condition  Expression
-	Then       *BlockStmt
-	ElseIfs    []*ElseIfStmt
-	Else       *BlockStmt
+	Condition Expression
+	Then      *BlockStmt
+	ElseIfs   []*ElseIfStmt
+	Else      *BlockStmt
 }
 
 // ElseIfStmt ELSE IF语句
@@ -119,7 +119,7 @@ type ReturnStmt struct {
 // CallStmt CALL语句
 type CallStmt struct {
 	ProcedureName string
-	Args         []Expression // 参数
+	Args          []Expression // 参数
 }
 
 // 创建辅助函数
@@ -137,7 +137,7 @@ func NewProcedure(name string, body *BlockStmt, params ...ProcedureParam) *Proce
 func NewFunction(name string, returnType string, body *BlockStmt, params ...ProcedureParam) *FunctionStmt {
 	return &FunctionStmt{
 		Name:       name,
-		ReturnType:  returnType,
+		ReturnType: returnType,
 		Params:     params,
 		Body:       body,
 	}
@@ -147,7 +147,7 @@ func NewFunction(name string, returnType string, body *BlockStmt, params ...Proc
 func NewBlock(decls []Declaration, stmts []Statement) *BlockStmt {
 	return &BlockStmt{
 		Declarations: decls,
-		Statements:  stmts,
+		Statements:   stmts,
 	}
 }
 
@@ -239,7 +239,7 @@ func NewReturn(expr Expression) *ReturnStmt {
 func NewCall(procedureName string, args ...Expression) *CallStmt {
 	return &CallStmt{
 		ProcedureName: procedureName,
-		Args:         args,
+		Args:          args,
 	}
 }
 
@@ -251,7 +251,7 @@ func ParseVariableName(name string) (string, error) {
 	if len(name) == 0 {
 		return "", fmt.Errorf("empty variable name")
 	}
-	
+
 	// 移除前缀
 	switch {
 	case name[0] == '@':
@@ -277,28 +277,28 @@ func ValidateProcedure(proc *ProcedureStmt) error {
 	if proc == nil {
 		return fmt.Errorf("procedure is nil")
 	}
-	
+
 	if proc.Name == "" {
 		return fmt.Errorf("procedure name is required")
 	}
-	
+
 	if proc.Body == nil {
 		return fmt.Errorf("procedure body is required")
 	}
-	
+
 	// 检查参数名重复
 	paramNames := make(map[string]bool)
 	for _, param := range proc.Params {
 		if param.Name == "" {
 			return fmt.Errorf("parameter name is required")
 		}
-		
+
 		if paramNames[param.Name] {
 			return fmt.Errorf("duplicate parameter name: %s", param.Name)
 		}
 		paramNames[param.Name] = true
 	}
-	
+
 	return nil
 }
 
@@ -307,32 +307,32 @@ func ValidateFunction(fn *FunctionStmt) error {
 	if fn == nil {
 		return fmt.Errorf("function is nil")
 	}
-	
+
 	if fn.Name == "" {
 		return fmt.Errorf("function name is required")
 	}
-	
+
 	if fn.ReturnType == "" {
 		return fmt.Errorf("function return type is required")
 	}
-	
+
 	if fn.Body == nil {
 		return fmt.Errorf("function body is required")
 	}
-	
+
 	// 检查参数名重复
 	paramNames := make(map[string]bool)
 	for _, param := range fn.Params {
 		if param.Name == "" {
 			return fmt.Errorf("parameter name is required")
 		}
-		
+
 		if paramNames[param.Name] {
 			return fmt.Errorf("duplicate parameter name: %s", param.Name)
 		}
 		paramNames[param.Name] = true
 	}
-	
+
 	// 检查函数体是否有RETURN语句
 	hasReturn := false
 	for _, stmt := range fn.Body.Statements {
@@ -341,11 +341,11 @@ func ValidateFunction(fn *FunctionStmt) error {
 			break
 		}
 	}
-	
+
 	if !hasReturn {
 		return fmt.Errorf("function must have a RETURN statement")
 	}
-	
+
 	return nil
 }
 

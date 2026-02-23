@@ -19,13 +19,13 @@ type BadgerDataSource struct {
 	mu        sync.RWMutex
 
 	// codecs
-	rowCodec     *RowCodec
-	tableCodec   *TableInfoCodec
-	indexCodec   *IndexValueCodec
-	configCodec  *TableConfigCodec
-	keyEncoder   *KeyEncoder
-	pkGenerator  *PrimaryKeyGenerator
-	valueConv    *ValueConverter
+	rowCodec    *RowCodec
+	tableCodec  *TableInfoCodec
+	indexCodec  *IndexValueCodec
+	configCodec *TableConfigCodec
+	keyEncoder  *KeyEncoder
+	pkGenerator *PrimaryKeyGenerator
+	valueConv   *ValueConverter
 
 	// managers
 	indexManager *IndexManager
@@ -199,6 +199,15 @@ func (ds *BadgerDataSource) IsWritable() bool {
 // GetConfig returns the data source configuration
 func (ds *BadgerDataSource) GetConfig() *domain.DataSourceConfig {
 	return ds.config
+}
+
+// GetDB returns the underlying Badger DB instance. This allows other
+// components (such as the hybrid datasource's TableConfigManager) to share
+// the same database for configuration persistence.
+func (ds *BadgerDataSource) GetDB() *badger.DB {
+	ds.mu.RLock()
+	defer ds.mu.RUnlock()
+	return ds.db
 }
 
 // loadTablesFromDB loads all existing tables from database into cache

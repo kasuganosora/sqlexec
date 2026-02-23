@@ -23,14 +23,14 @@ const (
 	ErrCodeTableNotFound   ErrorCode = "TABLE_NOT_FOUND"
 	ErrCodeColumnNotFound  ErrorCode = "COLUMN_NOT_FOUND"
 	ErrCodeSyntax          ErrorCode = "SYNTAX_ERROR"
-	ErrCodeConstraint       ErrorCode = "CONSTRAINT"
+	ErrCodeConstraint      ErrorCode = "CONSTRAINT"
 	ErrCodeTransaction     ErrorCode = "TRANSACTION"
 	ErrCodeTimeout         ErrorCode = "TIMEOUT"
 	ErrCodeQueryKilled     ErrorCode = "QUERY_KILLED"
 	ErrCodeInvalidParam    ErrorCode = "INVALID_PARAM"
 	ErrCodeNotSupported    ErrorCode = "NOT_SUPPORTED"
 	ErrCodeClosed          ErrorCode = "CLOSED"
-	ErrCodeInternal         ErrorCode = "INTERNAL"
+	ErrCodeInternal        ErrorCode = "INTERNAL"
 )
 
 // Error 接口实现

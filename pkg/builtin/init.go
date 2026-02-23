@@ -8,7 +8,7 @@ import (
 func InitBuiltinFunctions() {
 	// 初始化聚合函数
 	InitAggregateFunctions()
-	
+
 	// 其他函数（数学、字符串、日期）已在各自的init()函数中自动注册
 	// 只需确保包被导入即可
 }

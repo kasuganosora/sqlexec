@@ -160,14 +160,14 @@ type mockConn struct {
 	closed bool
 }
 
-func (m *mockConn) Read(b []byte) (n int, err error)  { return m.buf.Read(b) }
+func (m *mockConn) Read(b []byte) (n int, err error)   { return m.buf.Read(b) }
 func (m *mockConn) Write(b []byte) (n int, err error)  { return m.buf.Write(b) }
 func (m *mockConn) Close() error                       { m.closed = true; return nil }
-func (m *mockConn) LocalAddr() net.Addr                 { return &net.TCPAddr{} }
-func (m *mockConn) RemoteAddr() net.Addr                { return &net.TCPAddr{} }
-func (m *mockConn) SetDeadline(t time.Time) error       { return nil }
-func (m *mockConn) SetReadDeadline(t time.Time) error   { return nil }
-func (m *mockConn) SetWriteDeadline(t time.Time) error  { return nil }
+func (m *mockConn) LocalAddr() net.Addr                { return &net.TCPAddr{} }
+func (m *mockConn) RemoteAddr() net.Addr               { return &net.TCPAddr{} }
+func (m *mockConn) SetDeadline(t time.Time) error      { return nil }
+func (m *mockConn) SetReadDeadline(t time.Time) error  { return nil }
+func (m *mockConn) SetWriteDeadline(t time.Time) error { return nil }
 
 func TestPacket_Send(t *testing.T) {
 	conn := &mockConn{}

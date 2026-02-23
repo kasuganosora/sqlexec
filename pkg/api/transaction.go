@@ -2,8 +2,11 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 
+	"github.com/kasuganosora/sqlexec/pkg/parser"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
@@ -44,9 +47,65 @@ func (t *Transaction) Query(sql string, args ...interface{}) (*Query, error) {
 		}
 	}
 
-	// 使用事务执行查询
-	// TODO: Parse SQL to get table name
-	result, err := t.tx.Query(context.Background(), "SELECT", &domain.QueryOptions{})
+	// Parse SQL to extract table name and query options
+	adapter := parser.NewSQLAdapter()
+	parseResult, err := adapter.Parse(boundSQL)
+	if err != nil {
+		return nil, WrapError(err, ErrCodeSyntax, "failed to parse SQL")
+	}
+	if !parseResult.Success {
+		return nil, NewError(ErrCodeSyntax, "SQL parse error: "+parseResult.Error, nil)
+	}
+	if parseResult.Statement.Type != parser.SQLTypeSelect || parseResult.Statement.Select == nil {
+		return nil, NewError(ErrCodeInvalidParam, "transaction.Query only supports SELECT statements", nil)
+	}
+
+	selectStmt := parseResult.Statement.Select
+	tableName := selectStmt.From
+	options := &domain.QueryOptions{}
+
+	// Extract WHERE filters
+	if selectStmt.Where != nil {
+		options.Filters = expressionToFilters(selectStmt.Where)
+	}
+
+	// Extract ORDER BY
+	if len(selectStmt.OrderBy) > 0 {
+		options.OrderBy = selectStmt.OrderBy[0].Column
+		options.Order = selectStmt.OrderBy[0].Direction
+	}
+
+	// Extract LIMIT and OFFSET
+	if selectStmt.Limit != nil {
+		options.Limit = int(*selectStmt.Limit)
+	}
+	if selectStmt.Offset != nil {
+		options.Offset = int(*selectStmt.Offset)
+	}
+
+	// Extract select columns
+	hasWildcard := false
+	for _, col := range selectStmt.Columns {
+		if col.IsWildcard {
+			hasWildcard = true
+			break
+		}
+	}
+	if hasWildcard {
+		options.SelectAll = true
+	} else {
+		cols := make([]string, 0, len(selectStmt.Columns))
+		for _, col := range selectStmt.Columns {
+			if col.Alias != "" {
+				cols = append(cols, col.Alias)
+			} else {
+				cols = append(cols, col.Name)
+			}
+		}
+		options.SelectColumns = cols
+	}
+
+	result, err := t.tx.Query(context.Background(), tableName, options)
 	if err != nil {
 		return nil, WrapError(err, ErrCodeTransaction, "transaction query failed")
 	}
@@ -74,15 +133,82 @@ func (t *Transaction) Execute(sql string, args ...interface{}) (*Result, error) 
 		}
 	}
 
-	// 解析 SQL 确定操作类型
-	// 简化实现：假设用户直接调用 DataSource 的方法
-	// 实际实现需要解析 SQL 并调用相应的方法
+	// Parse SQL to determine statement type and extract parameters
+	adapter := parser.NewSQLAdapter()
+	parseResult, err := adapter.Parse(boundSQL)
+	if err != nil {
+		return nil, WrapError(err, ErrCodeSyntax, "failed to parse SQL")
+	}
+	if !parseResult.Success {
+		return nil, NewError(ErrCodeSyntax, "SQL parse error: "+parseResult.Error, nil)
+	}
 
-	// TODO: 解析 boundSQL 并执行
-	// 这里需要完善：解析 SQL -> 调用 Insert/Update/Delete 方法
-	// 临时返回错误
-	_ = boundSQL // Use boundSQL to avoid "declared and not used" error
-	return nil, NewError(ErrCodeNotSupported, "transaction.Execute not fully implemented yet", nil)
+	ctx := context.Background()
+
+	switch parseResult.Statement.Type {
+	case parser.SQLTypeInsert:
+		insertStmt := parseResult.Statement.Insert
+		if insertStmt == nil {
+			return nil, NewError(ErrCodeSyntax, "invalid INSERT statement", nil)
+		}
+		// Convert parsed values to domain.Row slice
+		rows := make([]domain.Row, 0, len(insertStmt.Values))
+		for _, vals := range insertStmt.Values {
+			row := domain.Row{}
+			for i, val := range vals {
+				if i < len(insertStmt.Columns) {
+					row[insertStmt.Columns[i]] = val
+				}
+			}
+			rows = append(rows, row)
+		}
+		affected, err := t.tx.Insert(ctx, insertStmt.Table, rows, nil)
+		if err != nil {
+			return nil, WrapError(err, ErrCodeTransaction, "transaction insert failed")
+		}
+		return NewResult(affected, 0, nil), nil
+
+	case parser.SQLTypeUpdate:
+		updateStmt := parseResult.Statement.Update
+		if updateStmt == nil {
+			return nil, NewError(ErrCodeSyntax, "invalid UPDATE statement", nil)
+		}
+		// Convert SET clause to domain.Row
+		updates := domain.Row{}
+		for col, val := range updateStmt.Set {
+			updates[col] = val
+		}
+		// Convert WHERE clause to filters
+		var filters []domain.Filter
+		if updateStmt.Where != nil {
+			filters = expressionToFilters(updateStmt.Where)
+		}
+		affected, err := t.tx.Update(ctx, updateStmt.Table, filters, updates, nil)
+		if err != nil {
+			return nil, WrapError(err, ErrCodeTransaction, "transaction update failed")
+		}
+		return NewResult(affected, 0, nil), nil
+
+	case parser.SQLTypeDelete:
+		deleteStmt := parseResult.Statement.Delete
+		if deleteStmt == nil {
+			return nil, NewError(ErrCodeSyntax, "invalid DELETE statement", nil)
+		}
+		// Convert WHERE clause to filters
+		var filters []domain.Filter
+		if deleteStmt.Where != nil {
+			filters = expressionToFilters(deleteStmt.Where)
+		}
+		affected, err := t.tx.Delete(ctx, deleteStmt.Table, filters, nil)
+		if err != nil {
+			return nil, WrapError(err, ErrCodeTransaction, "transaction delete failed")
+		}
+		return NewResult(affected, 0, nil), nil
+
+	default:
+		return nil, NewError(ErrCodeNotSupported,
+			fmt.Sprintf("transaction.Execute does not support %s statements", parseResult.Statement.Type), nil)
+	}
 }
 
 // Commit 提交事务
@@ -147,4 +273,106 @@ func (t *Transaction) IsActive() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.active
+}
+
+// expressionToFilters converts a parser.Expression tree into a slice of domain.Filter.
+// It handles AND expressions by flattening them, and converts binary comparison
+// expressions (column op value) into individual filters.
+func expressionToFilters(expr *parser.Expression) []domain.Filter {
+	if expr == nil {
+		return nil
+	}
+
+	// If it's an AND operator, recursively flatten both sides
+	if expr.Type == parser.ExprTypeOperator && strings.EqualFold(expr.Operator, "and") {
+		var filters []domain.Filter
+		if expr.Left != nil {
+			filters = append(filters, expressionToFilters(expr.Left)...)
+		}
+		if expr.Right != nil {
+			filters = append(filters, expressionToFilters(expr.Right)...)
+		}
+		return filters
+	}
+
+	// If it's an OR operator, create a nested filter with Logic="OR"
+	if expr.Type == parser.ExprTypeOperator && strings.EqualFold(expr.Operator, "or") {
+		var subFilters []domain.Filter
+		if expr.Left != nil {
+			subFilters = append(subFilters, expressionToFilters(expr.Left)...)
+		}
+		if expr.Right != nil {
+			subFilters = append(subFilters, expressionToFilters(expr.Right)...)
+		}
+		return []domain.Filter{
+			{
+				Logic:      "OR",
+				SubFilters: subFilters,
+			},
+		}
+	}
+
+	// Handle unary operators: IS NULL, IS NOT NULL
+	if expr.Type == parser.ExprTypeOperator && expr.Left != nil && expr.Right == nil {
+		op := strings.ToUpper(expr.Operator)
+		if op == "IS NULL" || op == "ISNULL" || op == "IS NOT NULL" || op == "ISNOTNULL" {
+			if expr.Left.Type == parser.ExprTypeColumn && expr.Left.Column != "" {
+				return []domain.Filter{
+					{
+						Field:    expr.Left.Column,
+						Operator: op,
+						Value:    nil,
+					},
+				}
+			}
+		}
+	}
+
+	// Handle binary comparison: column op value
+	if expr.Type == parser.ExprTypeOperator && expr.Left != nil && expr.Right != nil {
+		if expr.Left.Type == parser.ExprTypeColumn && expr.Left.Column != "" {
+			if expr.Right.Type == parser.ExprTypeValue {
+				operator := mapParserOperator(expr.Operator)
+				return []domain.Filter{
+					{
+						Field:    expr.Left.Column,
+						Operator: operator,
+						Value:    expr.Right.Value,
+					},
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// mapParserOperator converts parser operator strings to domain filter operator strings.
+func mapParserOperator(op string) string {
+	switch strings.ToLower(op) {
+	case "eq", "===":
+		return "="
+	case "ne":
+		return "!="
+	case "gt":
+		return ">"
+	case "gte":
+		return ">="
+	case "lt":
+		return "<"
+	case "lte":
+		return "<="
+	case "like":
+		return "LIKE"
+	case "not like", "notlike":
+		return "NOT LIKE"
+	case "in":
+		return "IN"
+	case "not in", "notin":
+		return "NOT IN"
+	case "between":
+		return "BETWEEN"
+	default:
+		return op
+	}
 }

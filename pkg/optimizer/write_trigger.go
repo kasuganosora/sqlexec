@@ -13,39 +13,39 @@ import (
 // WriteTriggerManager 写入触发器管理器
 // 监控表写入操作，自动触发统计信息刷新
 type WriteTriggerManager struct {
-	collector         *IncrementalStatisticsCollector
-	triggers          map[string]*TableTrigger // 表名 -> 触发器
-	triggerThreshold  int64                   // 触发阈值（写入行数）
-	refreshInterval   time.Duration            // 最小刷新间隔
-	refreshQueue      chan *RefreshTask        // 刷新任务队列
-	workerPool        int                      // 工作协程数
-	ctx               context.Context
-	cancel            context.CancelFunc
-	mu                sync.RWMutex
+	collector        *IncrementalStatisticsCollector
+	triggers         map[string]*TableTrigger // 表名 -> 触发器
+	triggerThreshold int64                    // 触发阈值（写入行数）
+	refreshInterval  time.Duration            // 最小刷新间隔
+	refreshQueue     chan *RefreshTask        // 刷新任务队列
+	workerPool       int                      // 工作协程数
+	ctx              context.Context
+	cancel           context.CancelFunc
+	mu               sync.RWMutex
 }
 
 // TableTrigger 表触发器
 type TableTrigger struct {
-	TableName        string
-	LastRefreshTime  time.Time
-	TotalWrites      int64 // 累计写入量
-	PendingRefresh   bool  // 是否有待处理的刷新
-	WriteHistory     []WriteRecord // 写入历史
+	TableName       string
+	LastRefreshTime time.Time
+	TotalWrites     int64         // 累计写入量
+	PendingRefresh  bool          // 是否有待处理的刷新
+	WriteHistory    []WriteRecord // 写入历史
 }
 
 // WriteRecord 写入记录
 type WriteRecord struct {
-	Operation  string // INSERT, UPDATE, DELETE
-	RowCount   int64
-	Timestamp  time.Time
+	Operation string // INSERT, UPDATE, DELETE
+	RowCount  int64
+	Timestamp time.Time
 }
 
 // RefreshTask 刷新任务
 type RefreshTask struct {
-	TableName  string
-	Reason     string
-	Priority   int // 优先级：0=低, 1=中, 2=高
-	Timestamp  time.Time
+	TableName string
+	Reason    string
+	Priority  int // 优先级：0=低, 1=中, 2=高
+	Timestamp time.Time
 }
 
 // NewWriteTriggerManager 创建写入触发器管理器
@@ -141,8 +141,8 @@ func (wtm *WriteTriggerManager) recordWrite(trigger *TableTrigger, operation str
 	// 记录写入历史
 	record := WriteRecord{
 		Operation: operation,
-		RowCount:   rowCount,
-		Timestamp:  time.Now(),
+		RowCount:  rowCount,
+		Timestamp: time.Now(),
 	}
 
 	// 保持最近100条记录
@@ -290,11 +290,11 @@ func (wtm *WriteTriggerManager) GetWriteStats(tableName string) *TableTriggerSta
 	}
 
 	stats := &TableTriggerStats{
-		TableName:        trigger.TableName,
-		LastRefreshTime:  trigger.LastRefreshTime,
-		TotalWrites:      trigger.TotalWrites,
-		PendingRefresh:   trigger.PendingRefresh,
-		DeltaBufferSize:  wtm.collector.GetDeltaBufferSize(tableName),
+		TableName:       trigger.TableName,
+		LastRefreshTime: trigger.LastRefreshTime,
+		TotalWrites:     trigger.TotalWrites,
+		PendingRefresh:  trigger.PendingRefresh,
+		DeltaBufferSize: wtm.collector.GetDeltaBufferSize(tableName),
 	}
 
 	return stats
@@ -321,11 +321,11 @@ func (wtm *WriteTriggerManager) GetAllStats() map[string]*TableTriggerStats {
 
 // TableTriggerStats 表触发器统计信息
 type TableTriggerStats struct {
-	TableName        string
-	LastRefreshTime  time.Time
-	TotalWrites      int64
-	PendingRefresh   bool
-	DeltaBufferSize  int64
+	TableName       string
+	LastRefreshTime time.Time
+	TotalWrites     int64
+	PendingRefresh  bool
+	DeltaBufferSize int64
 }
 
 // SetRefreshInterval 设置刷新间隔
@@ -355,8 +355,8 @@ func (wtm *WriteTriggerManager) Stop() {
 // WriteTriggerDataSource 带写入触发器的数据源包装器
 // 自动监控写入操作并触发统计信息刷新
 type WriteTriggerDataSource struct {
-	base      domain.DataSource
-	trigger   *WriteTriggerManager
+	base    domain.DataSource
+	trigger *WriteTriggerManager
 }
 
 // NewWriteTriggerDataSource 创建带写入触发器的数据源

@@ -10,17 +10,17 @@ import (
 
 // PhysicalTableScan 物理表扫描算子
 type PhysicalTableScan struct {
-	TableName          string
-	Columns            []optimizer.ColumnInfo
-	TableInfo          *domain.TableInfo
-	cost               float64
-	children           []PhysicalOperator
-	dataSource         domain.DataSource
-	filters            []domain.Filter // 下推的过滤条件
-	limitInfo          *LimitInfo      // 下推的Limit信息
-	parallelScanner    *optimizer.OptimizedParallelScanner // 并行扫描器
-	enableParallelScan bool           // 是否启用并行扫描
-	minParallelScanRows int64          // 启用并行扫描的最小行数
+	TableName           string
+	Columns             []optimizer.ColumnInfo
+	TableInfo           *domain.TableInfo
+	cost                float64
+	children            []PhysicalOperator
+	dataSource          domain.DataSource
+	filters             []domain.Filter                     // 下推的过滤条件
+	limitInfo           *LimitInfo                          // 下推的Limit信息
+	parallelScanner     *optimizer.OptimizedParallelScanner // 并行扫描器
+	enableParallelScan  bool                                // 是否启用并行扫描
+	minParallelScanRows int64                               // 启用并行扫描的最小行数
 }
 
 // NewPhysicalTableScan 创建物理表扫描算子

@@ -8,24 +8,24 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/config"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/kasuganosora/sqlexec/server"
-	_ "github.com/go-sql-driver/mysql"
 )
 
 // TestServer 提供一个可以在测试中启动和停止的MySQL协议服务器
 type TestServer struct {
-	ctx        context.Context
-	cancel     context.CancelFunc
-	listener   net.Listener
-	srv        *server.Server
-	port       int
-	db         *api.DB
-	mu         sync.Mutex
-	started    bool
+	ctx      context.Context
+	cancel   context.CancelFunc
+	listener net.Listener
+	srv      *server.Server
+	port     int
+	db       *api.DB
+	mu       sync.Mutex
+	started  bool
 }
 
 // NewTestServer 创建一个新的测试服务器
@@ -60,10 +60,10 @@ func (s *TestServer) Start(port int) error {
 
 	// 初始化 API DB
 	db, err := api.NewDB(&api.DBConfig{
-		CacheEnabled:  false,
-		CacheSize:     1000,
-		CacheTTL:      300,
-		DebugMode:     false,
+		CacheEnabled: false,
+		CacheSize:    1000,
+		CacheTTL:     300,
+		DebugMode:    false,
 	})
 	if err != nil {
 		listener.Close()

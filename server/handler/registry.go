@@ -9,14 +9,14 @@ import (
 type HandlerRegistry struct {
 	handlers map[uint8]Handler
 	mu       sync.RWMutex
-	logger    Logger
+	logger   Logger
 }
 
 // NewHandlerRegistry 创建注册中心
 func NewHandlerRegistry(logger Logger) *HandlerRegistry {
 	return &HandlerRegistry{
 		handlers: make(map[uint8]Handler),
-		logger:    logger,
+		logger:   logger,
 	}
 }
 

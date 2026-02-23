@@ -25,10 +25,10 @@ func TestAddIndex(t *testing.T) {
 
 	// Add first index
 	index1 := &Index{
-		Name:       "idx_id",
-		TableName:  "test_table",
-		Columns:    []string{"id"},
-		Unique:     true,
+		Name:        "idx_id",
+		TableName:   "test_table",
+		Columns:     []string{"id"},
+		Unique:      true,
 		Primary:     true,
 		Cardinality: 1000,
 	}
@@ -66,10 +66,10 @@ func TestGetIndices(t *testing.T) {
 
 	// Add indices
 	im.AddIndex(&Index{
-		Name:       "idx_id",
-		TableName:  "test_table",
-		Columns:    []string{"id"},
-		Unique:     true,
+		Name:        "idx_id",
+		TableName:   "test_table",
+		Columns:     []string{"id"},
+		Unique:      true,
 		Primary:     true,
 		Cardinality: 1000,
 	})
@@ -90,28 +90,28 @@ func TestFindBestIndex(t *testing.T) {
 
 	// Add multiple indices
 	im.AddIndex(&Index{
-		Name:       "idx_id_primary",
-		TableName:  "test_table",
-		Columns:    []string{"id"},
-		Unique:     true,
+		Name:        "idx_id_primary",
+		TableName:   "test_table",
+		Columns:     []string{"id"},
+		Unique:      true,
 		Primary:     true,
 		Cardinality: 1000,
 	})
 
 	im.AddIndex(&Index{
-		Name:       "idx_name",
-		TableName:  "test_table",
-		Columns:    []string{"name"},
-		Unique:     false,
+		Name:        "idx_name",
+		TableName:   "test_table",
+		Columns:     []string{"name"},
+		Unique:      false,
 		Primary:     false,
 		Cardinality: 100,
 	})
 
 	im.AddIndex(&Index{
-		Name:       "idx_id_name",
-		TableName:  "test_table",
-		Columns:    []string{"id", "name"},
-		Unique:     true,
+		Name:        "idx_id_name",
+		TableName:   "test_table",
+		Columns:     []string{"id", "name"},
+		Unique:      true,
 		Primary:     false,
 		Cardinality: 500,
 	})

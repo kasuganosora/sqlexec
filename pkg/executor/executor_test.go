@@ -50,7 +50,7 @@ func (m *MockDataService) Delete(ctx context.Context, tableName string, where *d
 func TestNewExecutor(t *testing.T) {
 	mockService := &MockDataService{}
 	executor := NewExecutor(mockService)
-	
+
 	assert.NotNil(t, executor)
 	assert.NotNil(t, executor.(*BaseExecutor).runtime)
 }
@@ -58,12 +58,12 @@ func TestNewExecutor(t *testing.T) {
 func TestBaseExecutor_Execute_UnsupportedPlanType(t *testing.T) {
 	mockService := &MockDataService{}
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	testPlan := &plan.Plan{
 		ID:   "test",
 		Type: "UnknownType",
 	}
-	
+
 	_, err := executor.Execute(context.Background(), testPlan)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported plan type")
@@ -80,12 +80,12 @@ func TestBaseExecutor_Execute_TableScan(t *testing.T) {
 			{"id": 1, "name": "Alice"},
 		},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	testPlan := &plan.Plan{
 		ID:   "test_scan",
-		Type:  plan.TypeTableScan,
+		Type: plan.TypeTableScan,
 		OutputSchema: []types.ColumnInfo{
 			{Name: "id", Type: "int"},
 			{Name: "name", Type: "string"},
@@ -98,7 +98,7 @@ func TestBaseExecutor_Execute_TableScan(t *testing.T) {
 			},
 		},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -114,12 +114,12 @@ func TestBaseExecutor_Execute_Selection(t *testing.T) {
 			{"id": 1},
 		},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	childPlan := &plan.Plan{
 		ID:   "child_scan",
-		Type:  plan.TypeTableScan,
+		Type: plan.TypeTableScan,
 		Config: &plan.TableScanConfig{
 			TableName: "test_table",
 			Columns: []types.ColumnInfo{
@@ -127,17 +127,17 @@ func TestBaseExecutor_Execute_Selection(t *testing.T) {
 			},
 		},
 	}
-	
+
 	testPlan := &plan.Plan{
 		ID:   "test_selection",
-		Type:  plan.TypeSelection,
+		Type: plan.TypeSelection,
 		OutputSchema: []types.ColumnInfo{
 			{Name: "id", Type: "int"},
 		},
 		Config:   &plan.SelectionConfig{},
 		Children: []*plan.Plan{childPlan},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -153,12 +153,12 @@ func TestBaseExecutor_Execute_Projection(t *testing.T) {
 			{"name": "Alice"},
 		},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	childPlan := &plan.Plan{
 		ID:   "child_scan",
-		Type:  plan.TypeTableScan,
+		Type: plan.TypeTableScan,
 		Config: &plan.TableScanConfig{
 			TableName: "test_table",
 			Columns: []types.ColumnInfo{
@@ -166,17 +166,17 @@ func TestBaseExecutor_Execute_Projection(t *testing.T) {
 			},
 		},
 	}
-	
+
 	testPlan := &plan.Plan{
 		ID:   "test_projection",
-		Type:  plan.TypeProjection,
+		Type: plan.TypeProjection,
 		OutputSchema: []types.ColumnInfo{
 			{Name: "name", Type: "string"},
 		},
 		Config:   &plan.ProjectionConfig{},
 		Children: []*plan.Plan{childPlan},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -192,12 +192,12 @@ func TestBaseExecutor_Execute_Limit(t *testing.T) {
 			{"id": 1},
 		},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	childPlan := &plan.Plan{
 		ID:   "child_scan",
-		Type:  plan.TypeTableScan,
+		Type: plan.TypeTableScan,
 		Config: &plan.TableScanConfig{
 			TableName: "test_table",
 			Columns: []types.ColumnInfo{
@@ -205,17 +205,17 @@ func TestBaseExecutor_Execute_Limit(t *testing.T) {
 			},
 		},
 	}
-	
+
 	testPlan := &plan.Plan{
 		ID:   "test_limit",
-		Type:  plan.TypeLimit,
+		Type: plan.TypeLimit,
 		OutputSchema: []types.ColumnInfo{
 			{Name: "id", Type: "int"},
 		},
-		Config: &plan.LimitConfig{},
+		Config:   &plan.LimitConfig{},
 		Children: []*plan.Plan{childPlan},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -231,12 +231,12 @@ func TestBaseExecutor_Execute_Aggregate(t *testing.T) {
 			{"count": 10},
 		},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	childPlan := &plan.Plan{
 		ID:   "child_scan",
-		Type:  plan.TypeTableScan,
+		Type: plan.TypeTableScan,
 		Config: &plan.TableScanConfig{
 			TableName: "test_table",
 			Columns: []types.ColumnInfo{
@@ -244,17 +244,17 @@ func TestBaseExecutor_Execute_Aggregate(t *testing.T) {
 			},
 		},
 	}
-	
+
 	testPlan := &plan.Plan{
 		ID:   "test_aggregate",
-		Type:  plan.TypeAggregate,
+		Type: plan.TypeAggregate,
 		OutputSchema: []types.ColumnInfo{
 			{Name: "count", Type: "int"},
 		},
 		Config:   &plan.AggregateConfig{},
 		Children: []*plan.Plan{childPlan},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -271,12 +271,12 @@ func TestBaseExecutor_Execute_HashJoin(t *testing.T) {
 			{"id": 1, "name": "Alice"},
 		},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	leftPlan := &plan.Plan{
 		ID:   "left_scan",
-		Type:  plan.TypeTableScan,
+		Type: plan.TypeTableScan,
 		Config: &plan.TableScanConfig{
 			TableName: "test_table",
 			Columns: []types.ColumnInfo{
@@ -284,10 +284,10 @@ func TestBaseExecutor_Execute_HashJoin(t *testing.T) {
 			},
 		},
 	}
-	
+
 	rightPlan := &plan.Plan{
 		ID:   "right_scan",
-		Type:  plan.TypeTableScan,
+		Type: plan.TypeTableScan,
 		Config: &plan.TableScanConfig{
 			TableName: "test_table",
 			Columns: []types.ColumnInfo{
@@ -295,10 +295,10 @@ func TestBaseExecutor_Execute_HashJoin(t *testing.T) {
 			},
 		},
 	}
-	
+
 	testPlan := &plan.Plan{
 		ID:   "test_hashjoin",
-		Type:  plan.TypeHashJoin,
+		Type: plan.TypeHashJoin,
 		OutputSchema: []types.ColumnInfo{
 			{Name: "id", Type: "int"},
 			{Name: "name", Type: "string"},
@@ -306,7 +306,7 @@ func TestBaseExecutor_Execute_HashJoin(t *testing.T) {
 		Config:   &plan.HashJoinConfig{},
 		Children: []*plan.Plan{leftPlan, rightPlan},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -318,16 +318,16 @@ func TestBaseExecutor_Execute_Insert(t *testing.T) {
 		Columns: []domain.ColumnInfo{},
 		Rows:    []domain.Row{},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	testPlan := &plan.Plan{
-		ID:   "test_insert",
-		Type:  plan.TypeInsert,
+		ID:           "test_insert",
+		Type:         plan.TypeInsert,
 		OutputSchema: []types.ColumnInfo{},
-		Config: &plan.InsertConfig{},
+		Config:       &plan.InsertConfig{},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -339,16 +339,16 @@ func TestBaseExecutor_Execute_Update(t *testing.T) {
 		Columns: []domain.ColumnInfo{},
 		Rows:    []domain.Row{},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	testPlan := &plan.Plan{
-		ID:   "test_update",
-		Type:  plan.TypeUpdate,
+		ID:           "test_update",
+		Type:         plan.TypeUpdate,
 		OutputSchema: []types.ColumnInfo{},
-		Config: &plan.UpdateConfig{},
+		Config:       &plan.UpdateConfig{},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -360,16 +360,16 @@ func TestBaseExecutor_Execute_Delete(t *testing.T) {
 		Columns: []domain.ColumnInfo{},
 		Rows:    []domain.Row{},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	testPlan := &plan.Plan{
-		ID:   "test_delete",
-		Type:  plan.TypeDelete,
+		ID:           "test_delete",
+		Type:         plan.TypeDelete,
 		OutputSchema: []types.ColumnInfo{},
-		Config: &plan.DeleteConfig{},
+		Config:       &plan.DeleteConfig{},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -385,12 +385,12 @@ func TestBaseExecutor_Execute_Sort(t *testing.T) {
 			{"id": 1},
 		},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	testPlan := &plan.Plan{
 		ID:   "test_sort",
-		Type:  plan.TypeSort,
+		Type: plan.TypeSort,
 		OutputSchema: []types.ColumnInfo{
 			{Name: "id", Type: "int"},
 		},
@@ -398,7 +398,7 @@ func TestBaseExecutor_Execute_Sort(t *testing.T) {
 		Children: []*plan.Plan{
 			{
 				ID:   "child_scan",
-				Type:  plan.TypeTableScan,
+				Type: plan.TypeTableScan,
 				Config: &plan.TableScanConfig{
 					TableName: "test_table",
 					Columns: []types.ColumnInfo{
@@ -408,7 +408,7 @@ func TestBaseExecutor_Execute_Sort(t *testing.T) {
 			},
 		},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -501,12 +501,12 @@ func TestBaseExecutor_Execute_Union(t *testing.T) {
 			{"id": 1},
 		},
 	}
-	
+
 	executor := NewExecutor(mockService).(*BaseExecutor)
-	
+
 	childPlan := &plan.Plan{
 		ID:   "child_scan",
-		Type:  plan.TypeTableScan,
+		Type: plan.TypeTableScan,
 		Config: &plan.TableScanConfig{
 			TableName: "test_table",
 			Columns: []types.ColumnInfo{
@@ -514,17 +514,17 @@ func TestBaseExecutor_Execute_Union(t *testing.T) {
 			},
 		},
 	}
-	
+
 	testPlan := &plan.Plan{
 		ID:   "test_union",
-		Type:  plan.TypeUnion,
+		Type: plan.TypeUnion,
 		OutputSchema: []types.ColumnInfo{
 			{Name: "id", Type: "int"},
 		},
-		Config: &plan.UnionConfig{},
+		Config:   &plan.UnionConfig{},
 		Children: []*plan.Plan{childPlan, childPlan},
 	}
-	
+
 	result, err := executor.Execute(context.Background(), testPlan)
 	require.NoError(t, err)
 	assert.NotNil(t, result)

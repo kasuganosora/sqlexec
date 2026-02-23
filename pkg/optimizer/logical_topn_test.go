@@ -295,5 +295,3 @@ func TestLogicalTopN_EmptyOrderItems(t *testing.T) {
 		t.Errorf("Expected 'TopN' in explain, got: %s", explain)
 	}
 }
-
-

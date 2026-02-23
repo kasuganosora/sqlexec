@@ -35,7 +35,7 @@ func (v *SparseVector) CalculateNorm() float64 {
 	if v.Norm > 0 {
 		return v.Norm
 	}
-	
+
 	var sum float64
 	for _, weight := range v.Terms {
 		sum += weight * weight
@@ -50,7 +50,7 @@ func (v *SparseVector) Normalize() {
 	if norm == 0 {
 		return
 	}
-	
+
 	for termID := range v.Terms {
 		v.Terms[termID] /= norm
 	}
@@ -60,18 +60,18 @@ func (v *SparseVector) Normalize() {
 // DotProduct 计算点积
 func (v *SparseVector) DotProduct(other *SparseVector) float64 {
 	var result float64
-	
+
 	// 遍历较小的向量以提高效率
 	if len(v.Terms) > len(other.Terms) {
 		v, other = other, v
 	}
-	
+
 	for termID, weight := range v.Terms {
 		if otherWeight, ok := other.Terms[termID]; ok {
 			result += weight * otherWeight
 		}
 	}
-	
+
 	return result
 }
 
@@ -79,11 +79,11 @@ func (v *SparseVector) DotProduct(other *SparseVector) float64 {
 func (v *SparseVector) CosineSimilarity(other *SparseVector) float64 {
 	norm1 := v.CalculateNorm()
 	norm2 := other.CalculateNorm()
-	
+
 	if norm1 == 0 || norm2 == 0 {
 		return 0
 	}
-	
+
 	return v.DotProduct(other) / (norm1 * norm2)
 }
 
@@ -99,12 +99,12 @@ func (v *SparseVector) Multiply(scalar float64) *SparseVector {
 // Add 向量加法
 func (v *SparseVector) Add(other *SparseVector) *SparseVector {
 	result := NewSparseVector()
-	
+
 	// 复制当前向量
 	for termID, weight := range v.Terms {
 		result.Set(termID, weight)
 	}
-	
+
 	// 添加另一个向量
 	for termID, weight := range other.Terms {
 		if existing, ok := result.Terms[termID]; ok {
@@ -113,7 +113,7 @@ func (v *SparseVector) Add(other *SparseVector) *SparseVector {
 			result.Set(termID, weight)
 		}
 	}
-	
+
 	return result
 }
 
@@ -126,11 +126,11 @@ func (v *SparseVector) GetSortedTerms() []TermWeight {
 			Weight: weight,
 		})
 	}
-	
+
 	sort.Slice(terms, func(i, j int) bool {
 		return terms[i].Weight > terms[j].Weight
 	})
-	
+
 	return terms
 }
 

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xuri/excelize/v2"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/xuri/excelize/v2"
 )
 
 // TestExcelAdapter_writeBack 测试写回功能

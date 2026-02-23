@@ -9,15 +9,15 @@ import (
 
 // QueryContext 查询上下文,用于追踪和控制查询执行
 type QueryContext struct {
-	QueryID    string        // 查询唯一ID (生成格式: {ThreadID}_{timestamp}_{sequence})
-	ThreadID   uint32        // 关联的线程ID
-	TraceID    string        // 追踪ID (来自 Session 或 SQL 注释覆盖)
-	SQL        string        // 执行的SQL
-	StartTime  time.Time     // 开始时间
+	QueryID    string             // 查询唯一ID (生成格式: {ThreadID}_{timestamp}_{sequence})
+	ThreadID   uint32             // 关联的线程ID
+	TraceID    string             // 追踪ID (来自 Session 或 SQL 注释覆盖)
+	SQL        string             // 执行的SQL
+	StartTime  time.Time          // 开始时间
 	CancelFunc context.CancelFunc // 取消函数
-	User       string        // 执行该查询的用户
-	Host       string        // 客户端主机地址 (格式: host:port)
-	DB         string        // 当前使用的数据库
+	User       string             // 执行该查询的用户
+	Host       string             // 客户端主机地址 (格式: host:port)
+	DB         string             // 当前使用的数据库
 	mu         sync.RWMutex
 	canceled   bool
 	timeout    bool
@@ -102,7 +102,7 @@ func (qc *QueryContext) GetStatus() QueryStatus {
 type QueryContextManager struct {
 	mu        sync.RWMutex
 	queries   map[string]*QueryContext // QueryID -> QueryContext
-	threadMap map[uint32]*QueryContext  // ThreadID -> 当前查询
+	threadMap map[uint32]*QueryContext // ThreadID -> 当前查询
 }
 
 // NewQueryContextManager 创建查询上下文管理器

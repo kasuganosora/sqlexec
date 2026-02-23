@@ -87,18 +87,18 @@ func (t *BaseTokenizer) FilterToken(token string) (string, bool) {
 	if t.Lowercase {
 		token = strings.ToLower(token)
 	}
-	
+
 	// 过滤停用词
 	if t.IsStopWord(token) {
 		return "", false
 	}
-	
+
 	// 过滤长度不符的词
 	runes := []rune(token)
 	if len(runes) < t.MinTokenLen || len(runes) > t.MaxTokenLen {
 		return "", false
 	}
-	
+
 	return token, true
 }
 
@@ -127,11 +127,11 @@ func (t *StandardTokenizer) TokenizeForSearch(text string) ([]Token, error) {
 func (t *StandardTokenizer) tokenizeInternal(text string, forSearch bool) ([]Token, error) {
 	var tokens []Token
 	position := 0
-	
+
 	// 使用Unicode分词
 	start := -1
 	runes := []rune(text)
-	
+
 	for i, r := range runes {
 		if t.isTokenChar(r) {
 			if start == -1 {
@@ -153,7 +153,7 @@ func (t *StandardTokenizer) tokenizeInternal(text string, forSearch bool) ([]Tok
 			}
 		}
 	}
-	
+
 	// 处理最后一个词
 	if start != -1 {
 		token := string(runes[start:])
@@ -166,7 +166,7 @@ func (t *StandardTokenizer) tokenizeInternal(text string, forSearch bool) ([]Tok
 			})
 		}
 	}
-	
+
 	return tokens, nil
 }
 
@@ -198,13 +198,13 @@ func (t *NgramTokenizer) Tokenize(text string) ([]Token, error) {
 	runes := []rune(text)
 	var tokens []Token
 	position := 0
-	
+
 	for i := 0; i < len(runes); i++ {
 		maxJ := t.MaxGram
 		if t.PrefixOnly {
 			maxJ = t.MinGram
 		}
-		
+
 		for j := t.MinGram; j <= maxJ && i+j <= len(runes); j++ {
 			token := string(runes[i : i+j])
 			if filtered, ok := t.FilterToken(token); ok {
@@ -218,7 +218,7 @@ func (t *NgramTokenizer) Tokenize(text string) ([]Token, error) {
 			}
 		}
 	}
-	
+
 	return tokens, nil
 }
 
@@ -228,13 +228,13 @@ func (t *NgramTokenizer) TokenizeForSearch(text string) ([]Token, error) {
 	runes := []rune(text)
 	var tokens []Token
 	position := 0
-	
+
 	for i := 0; i < len(runes); i++ {
 		for j := 1; j <= t.MaxGram && i+j <= len(runes); j++ {
 			if j < t.MinGram && !t.PrefixOnly {
 				continue
 			}
-			
+
 			token := string(runes[i : i+j])
 			if filtered, ok := t.FilterToken(token); ok {
 				tokens = append(tokens, Token{
@@ -247,7 +247,7 @@ func (t *NgramTokenizer) TokenizeForSearch(text string) ([]Token, error) {
 			}
 		}
 	}
-	
+
 	return tokens, nil
 }
 
@@ -274,12 +274,12 @@ func (t *EnglishTokenizer) Tokenize(text string) ([]Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 词干提取
 	for i := range tokens {
 		tokens[i].Text = t.stem(tokens[i].Text)
 	}
-	
+
 	return tokens, nil
 }
 
@@ -309,7 +309,7 @@ func TokenizerFactory(tokenizerType TokenizerType, options map[string]interface{
 		minGram := 2
 		maxGram := 3
 		prefixOnly := false
-		
+
 		if v, ok := options["min_gram"].(int); ok {
 			minGram = v
 		}
@@ -319,7 +319,7 @@ func TokenizerFactory(tokenizerType TokenizerType, options map[string]interface{
 		if v, ok := options["prefix_only"].(bool); ok {
 			prefixOnly = v
 		}
-		
+
 		return NewNgramTokenizer(minGram, maxGram, prefixOnly, nil), nil
 	case TokenizerTypeEnglish:
 		return NewEnglishTokenizer(nil), nil
@@ -327,7 +327,7 @@ func TokenizerFactory(tokenizerType TokenizerType, options map[string]interface{
 		dictPath := ""
 		hmmPath := ""
 		userDictPath := ""
-		
+
 		if v, ok := options["dict_path"].(string); ok {
 			dictPath = v
 		}
@@ -337,7 +337,7 @@ func TokenizerFactory(tokenizerType TokenizerType, options map[string]interface{
 		if v, ok := options["user_dict_path"].(string); ok {
 			userDictPath = v
 		}
-		
+
 		return NewJiebaTokenizer(dictPath, hmmPath, userDictPath, nil)
 	default:
 		return NewStandardTokenizer(nil), nil

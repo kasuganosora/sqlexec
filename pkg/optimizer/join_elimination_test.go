@@ -217,8 +217,8 @@ func createSimpleJoinPlan() LogicalPlan {
 // Helper function to create a mock table info for join tests
 func createMockTableInfoForJoin(tableName string, columnNames []string) *domain.TableInfo {
 	tableInfo := &domain.TableInfo{
-		Name:     tableName,
-		Columns:  make([]domain.ColumnInfo, 0, len(columnNames)),
+		Name:    tableName,
+		Columns: make([]domain.ColumnInfo, 0, len(columnNames)),
 	}
 	for _, colName := range columnNames {
 		tableInfo.Columns = append(tableInfo.Columns, domain.ColumnInfo{

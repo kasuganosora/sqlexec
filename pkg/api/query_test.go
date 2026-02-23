@@ -165,10 +165,10 @@ func TestQuery_RowCopy(t *testing.T) {
 
 	// Should be independent copies
 	assert.Equal(t, row1["id"], row2["id"])
-	
+
 	// Modify one copy
 	row1["id"] = int64(999)
-	
+
 	// Other copy should not be affected
 	assert.Equal(t, int64(1), row2["id"])
 }
@@ -414,28 +414,28 @@ func getValueFromPointer(ptr interface{}) interface{} {
 
 func TestConvertValue(t *testing.T) {
 	tests := []struct {
-		name     string
-		value    interface{}
-		target   reflect.Type
-		wantErr  bool
+		name    string
+		value   interface{}
+		target  reflect.Type
+		wantErr bool
 	}{
 		{
-			name:     "int64 to int",
-			value:    int64(123),
-			target:   reflect.TypeOf(0),
-			wantErr:  false,
+			name:    "int64 to int",
+			value:   int64(123),
+			target:  reflect.TypeOf(0),
+			wantErr: false,
 		},
 		{
-			name:     "string to string",
-			value:    "hello",
-			target:   reflect.TypeOf(""),
-			wantErr:  false,
+			name:    "string to string",
+			value:   "hello",
+			target:  reflect.TypeOf(""),
+			wantErr: false,
 		},
 		{
-			name:     "nil to int",
-			value:    nil,
-			target:   reflect.TypeOf(0),
-			wantErr:  false,
+			name:    "nil to int",
+			value:   nil,
+			target:  reflect.TypeOf(0),
+			wantErr: false,
 		},
 	}
 

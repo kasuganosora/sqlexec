@@ -15,11 +15,11 @@ import (
 func TestBinlogEventHeader(t *testing.T) {
 	testData := []byte{
 		0x71, 0x17, 0x28, 0x5a, // 时间戳: 1512576881
-		0x0f,                         // 事件类型: FORMAT_DESCRIPTION_EVENT
+		0x0f,                   // 事件类型: FORMAT_DESCRIPTION_EVENT
 		0x8c, 0x27, 0x00, 0x00, // 服务器ID: 10124
 		0xfc, 0x00, 0x00, 0x00, // 事件长度: 252
 		0x01, 0x09, 0x00, 0x00, // 下一个位置: 2305
-		0x00, 0x00,                 // 标志: 0
+		0x00, 0x00, // 标志: 0
 	}
 
 	header := &BinlogEventHeader{}
@@ -47,12 +47,12 @@ func TestBinlogEventHeader(t *testing.T) {
 
 func TestComRegisterSlave(t *testing.T) {
 	payload := []byte{
-		0x15,               // 命令: COM_REGISTER_SLAVE
+		0x15,                   // 命令: COM_REGISTER_SLAVE
 		0x75, 0x27, 0x00, 0x00, // 服务器ID: 10101
 		's', 'l', 'a', 'v', 'e', '_', 'n', '_', '1',
-		0x00, // 主机名（以 NULL 结尾）
-		0x00, // 用户名（为空，以 NULL 结尾）
-		0x00, // 密码（为空，以 NULL 结尾）
+		0x00,       // 主机名（以 NULL 结尾）
+		0x00,       // 用户名（为空，以 NULL 结尾）
+		0x00,       // 密码（为空，以 NULL 结尾）
 		0xc9, 0x5a, // 端口: 23241
 		0x00, 0x00, 0x00, 0x00, // 复制等级: 0
 		0x00, 0x00, 0x00, 0x00, // 主服务器ID: 0
@@ -87,9 +87,9 @@ func TestComRegisterSlave(t *testing.T) {
 
 func TestComBinlogDump(t *testing.T) {
 	payload := []byte{
-		0x12,               // 命令: COM_BINLOG_DUMP
+		0x12,                   // 命令: COM_BINLOG_DUMP
 		0x34, 0x06, 0x00, 0x00, // 日志位置: 1588
-		0x02, 0x00,               // 标志
+		0x02, 0x00, // 标志
 		0x75, 0x27, 0x00, 0x00, // 服务器ID: 10101
 		'm', 'y', 's', 'q', 'l', '-', 'b', 'i', 'n', '.', '0', '0', '0', '0', '1', '9',
 		0x00, // NULL 终止符
@@ -133,7 +133,7 @@ func TestFormatDescriptionEventSimple(t *testing.T) {
 		// 事件类型后长度数组（14字节，对应前14种事件类型）
 		0x13, 0x0f, 0x13, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00,
-		0x02, // 校验和算法: CRC32 (值为2) (1字节)
+		0x02,                   // 校验和算法: CRC32 (值为2) (1字节)
 		0xe2, 0x13, 0xce, 0xd6, // CRC32 校验和（4字节）
 	}
 
@@ -251,10 +251,10 @@ func TestQueryEventSimple(t *testing.T) {
 	bodyData := []byte{
 		0x66, 0x01, 0x00, 0x00, // 线程ID: 358
 		0x00, 0x00, 0x00, 0x00, // 执行时间: 0
-		0x00,                     // 数据库名长度: 0
-		0x00, 0x00,               // 错误代码: 0
-		0x00, 0x00,               // 状态变量块长度: 0
-		0x00,                     // 数据库名: 空
+		0x00,       // 数据库名长度: 0
+		0x00, 0x00, // 错误代码: 0
+		0x00, 0x00, // 状态变量块长度: 0
+		0x00, // 数据库名: 空
 		// SQL 语句: "SELECT 1"
 		'S', 'E', 'L', 'E', 'C', 'T', ' ', '1',
 		0x00, // NULL 终止符
@@ -289,18 +289,18 @@ func TestTableMapEventSimple(t *testing.T) {
 
 	bodyData := []byte{
 		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, // 表ID: 1
-		0x00, 0x00,                           // 保留: 0
-		0x04,                     // 数据库名长度: 4
-		't', 'e', 's', 't',     // 数据库名
-		0x00,                     // NULL 终止符
-		0x02,                     // 表名长度: 2
-		't', '1',               // 表名
-		0x00,                     // NULL 终止符
-		0x02,                     // 列数: 2
-		0x01, 0x02,               // 列类型
-		0x02, 0x00,               // 元数据长度: 2
-		0x08, 0x02,               // 元数据
-		0x01,                     // NULL 位图
+		0x00, 0x00, // 保留: 0
+		0x04,               // 数据库名长度: 4
+		't', 'e', 's', 't', // 数据库名
+		0x00,     // NULL 终止符
+		0x02,     // 表名长度: 2
+		't', '1', // 表名
+		0x00,       // NULL 终止符
+		0x02,       // 列数: 2
+		0x01, 0x02, // 列类型
+		0x02, 0x00, // 元数据长度: 2
+		0x08, 0x02, // 元数据
+		0x01, // NULL 位图
 		// CRC32 校验和
 		0x00, 0x00, 0x00, 0x00,
 	}
@@ -391,13 +391,13 @@ func TestReplicationNetworkStream(t *testing.T) {
 	binary.Write(eventBuf, binary.LittleEndian, uint32(1512576683)) // 时间戳
 	eventBuf.WriteByte(BINLOG_GTID_EVENT)                           // 事件类型
 	binary.Write(eventBuf, binary.LittleEndian, uint32(10124))      // 服务器ID
-	binary.Write(eventBuf, binary.LittleEndian, uint32(42))        // 事件长度
-	binary.Write(eventBuf, binary.LittleEndian, uint32(535))       // 下一个位置
-	binary.Write(eventBuf, binary.LittleEndian, uint16(0))         // 标志
-	binary.Write(eventBuf, binary.LittleEndian, uint64(9883))     // GTID 序列号
-	binary.Write(eventBuf, binary.LittleEndian, uint32(0))        // 域ID
-	eventBuf.WriteByte(0x29)                                     // 标志
-	eventBuf.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}) // 填充
+	binary.Write(eventBuf, binary.LittleEndian, uint32(42))         // 事件长度
+	binary.Write(eventBuf, binary.LittleEndian, uint32(535))        // 下一个位置
+	binary.Write(eventBuf, binary.LittleEndian, uint16(0))          // 标志
+	binary.Write(eventBuf, binary.LittleEndian, uint64(9883))       // GTID 序列号
+	binary.Write(eventBuf, binary.LittleEndian, uint32(0))          // 域ID
+	eventBuf.WriteByte(0x29)                                        // 标志
+	eventBuf.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})      // 填充
 
 	eventData := eventBuf.Bytes()
 

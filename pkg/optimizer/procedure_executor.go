@@ -10,13 +10,13 @@ import (
 type ProcedureExecutor struct {
 	// 变量作用域栈
 	scopeStack []*Scope
-	
+
 	// 存储过程缓存
 	procedures map[string]*parser.ProcedureInfo
-	
+
 	// 函数缓存
 	functions map[string]*parser.FunctionInfo
-	
+
 	// 执行上下文
 	ctx context.Context
 }
@@ -40,12 +40,12 @@ func (s *Scope) GetVariable(name string) (interface{}, bool) {
 	if val, exists := s.Variables[name]; exists {
 		return val, true
 	}
-	
+
 	// 查找父作用域
 	if s.Parent != nil {
 		return s.Parent.GetVariable(name)
 	}
-	
+
 	return nil, false
 }
 
@@ -59,7 +59,7 @@ func NewProcedureExecutor() *ProcedureExecutor {
 	return &ProcedureExecutor{
 		scopeStack: make([]*Scope, 0),
 		procedures: make(map[string]*parser.ProcedureInfo),
-		functions:   make(map[string]*parser.FunctionInfo),
+		functions:  make(map[string]*parser.FunctionInfo),
 	}
 }
 
@@ -72,7 +72,7 @@ func (pe *ProcedureExecutor) RegisterProcedure(proc *parser.ProcedureInfo) error
 	}); err != nil {
 		return fmt.Errorf("procedure validation failed: %w", err)
 	}
-	
+
 	pe.procedures[proc.Name] = proc
 	return nil
 }
@@ -81,13 +81,13 @@ func (pe *ProcedureExecutor) RegisterProcedure(proc *parser.ProcedureInfo) error
 func (pe *ProcedureExecutor) RegisterFunction(fn *parser.FunctionInfo) error {
 	if err := parser.ValidateFunction(&parser.FunctionStmt{
 		Name:       fn.Name,
-		ReturnType:  fn.ReturnType,
+		ReturnType: fn.ReturnType,
 		Params:     fn.Params,
 		Body:       fn.Body,
 	}); err != nil {
 		return fmt.Errorf("function validation failed: %w", err)
 	}
-	
+
 	pe.functions[fn.Name] = fn
 	return nil
 }
@@ -95,27 +95,27 @@ func (pe *ProcedureExecutor) RegisterFunction(fn *parser.FunctionInfo) error {
 // ExecuteProcedure 执行存储过程
 func (pe *ProcedureExecutor) ExecuteProcedure(ctx context.Context, name string, args ...interface{}) ([]map[string]interface{}, error) {
 	pe.ctx = ctx
-	
+
 	// 查找存储过程
 	proc, exists := pe.procedures[name]
 	if !exists {
 		return nil, fmt.Errorf("procedure not found: %s", name)
 	}
-	
+
 	// 创建新作用域
 	newScope := NewScope(pe.currentScope())
 	pe.pushScope(newScope)
 	defer pe.popScope()
-	
+
 	// 绑定参数
 	if len(args) != len(proc.Params) {
 		return nil, fmt.Errorf("parameter count mismatch: expected %d, got %d", len(proc.Params), len(args))
 	}
-	
+
 	for i, param := range proc.Params {
 		newScope.SetVariable(param.Name, args[i])
 	}
-	
+
 	// 执行存储过程体
 	return pe.executeBlock(proc.Body)
 }
@@ -123,27 +123,27 @@ func (pe *ProcedureExecutor) ExecuteProcedure(ctx context.Context, name string, 
 // ExecuteFunction 执行函数
 func (pe *ProcedureExecutor) ExecuteFunction(ctx context.Context, name string, args ...interface{}) (interface{}, error) {
 	pe.ctx = ctx
-	
+
 	// 查找函数
 	fn, exists := pe.functions[name]
 	if !exists {
 		return nil, fmt.Errorf("function not found: %s", name)
 	}
-	
+
 	// 创建新作用域
 	newScope := NewScope(pe.currentScope())
 	pe.pushScope(newScope)
 	defer pe.popScope()
-	
+
 	// 绑定参数
 	if len(args) != len(fn.Params) {
 		return nil, fmt.Errorf("parameter count mismatch: expected %d, got %d", len(fn.Params), len(args))
 	}
-	
+
 	for i, param := range fn.Params {
 		newScope.SetVariable(param.Name, args[i])
 	}
-	
+
 	// 执行函数体
 	result, err := pe.executeBlockWithReturn(fn.Body)
 	return result, err
@@ -154,14 +154,14 @@ func (pe *ProcedureExecutor) executeBlock(block *parser.BlockStmt) ([]map[string
 	if block == nil {
 		return nil, nil
 	}
-	
+
 	// 执行声明
 	for _, decl := range block.Declarations {
 		if err := pe.executeDeclaration(decl); err != nil {
 			return nil, err
 		}
 	}
-	
+
 	// 执行语句
 	for _, stmt := range block.Statements {
 		switch s := stmt.(type) {
@@ -186,7 +186,7 @@ func (pe *ProcedureExecutor) executeBlock(block *parser.BlockStmt) ([]map[string
 			return nil, fmt.Errorf("RETURN statement not allowed in procedure")
 		}
 	}
-	
+
 	// 返回空结果集
 	return []map[string]interface{}{}, nil
 }
@@ -196,14 +196,14 @@ func (pe *ProcedureExecutor) executeBlockWithReturn(block *parser.BlockStmt) (in
 	if block == nil {
 		return nil, nil
 	}
-	
+
 	// 执行声明
 	for _, decl := range block.Declarations {
 		if err := pe.executeDeclaration(decl); err != nil {
 			return nil, err
 		}
 	}
-	
+
 	// 执行语句
 	for _, stmt := range block.Statements {
 		switch s := stmt.(type) {
@@ -223,30 +223,30 @@ func (pe *ProcedureExecutor) executeBlockWithReturn(block *parser.BlockStmt) (in
 			if err := pe.executeCase(s); err != nil {
 				return nil, err
 			}
-	case *parser.ReturnStmt:
-		// RETURN语句,返回值
-		result, err := pe.evaluateExpression(&s.Expression)
-		if err != nil {
-			return nil, err
+		case *parser.ReturnStmt:
+			// RETURN语句,返回值
+			result, err := pe.evaluateExpression(&s.Expression)
+			if err != nil {
+				return nil, err
+			}
+			return result, nil
 		}
-		return result, nil
 	}
-	}
-	
+
 	return nil, nil
 }
 
 // executeDeclaration 执行变量声明
 func (pe *ProcedureExecutor) executeDeclaration(decl parser.Declaration) error {
 	scope := pe.currentScope()
-	
+
 	// 设置初始值
 	value := interface{}(nil)
 	if decl.Initial != nil {
 		// 初始值直接使用，无需表达式求值
 		value = decl.Initial
 	}
-	
+
 	scope.SetVariable(decl.Name, value)
 	return nil
 }
@@ -258,33 +258,33 @@ func (pe *ProcedureExecutor) executeIf(ifStmt *parser.IfStmt) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// 判断条件
 	if isTrue(cond) {
 		// 执行THEN块
 		_, err := pe.executeBlock(ifStmt.Then)
 		return err
 	}
-	
+
 	// 执行ELSE IF块
 	for _, elif := range ifStmt.ElseIfs {
 		cond, err := pe.evaluateExpression(&elif.Condition)
 		if err != nil {
 			return err
 		}
-		
+
 		if isTrue(cond) {
 			_, err := pe.executeBlock(elif.Then)
 			return err
 		}
 	}
-	
+
 	// 执行ELSE块
 	if ifStmt.Else != nil {
 		_, err := pe.executeBlock(ifStmt.Else)
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -297,19 +297,19 @@ func (pe *ProcedureExecutor) executeWhile(whileStmt *parser.WhileStmt) error {
 		if err != nil {
 			return err
 		}
-		
+
 		// 如果条件为假,退出循环
 		if !isTrue(cond) {
 			break
 		}
-		
+
 		// 执行循环体
 		_, err = pe.executeBlock(whileStmt.Body)
 		if err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -320,11 +320,11 @@ func (pe *ProcedureExecutor) executeSet(setStmt *parser.SetStmt) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// 设置变量
 	scope := pe.currentScope()
 	scope.SetVariable(setStmt.Variable, value)
-	
+
 	return nil
 }
 
@@ -339,14 +339,14 @@ func (pe *ProcedureExecutor) executeCase(caseStmt *parser.CaseStmt) error {
 		}
 		caseExpr = val
 	}
-	
+
 	// 检查每个WHEN
 	for _, when := range caseStmt.Cases {
 		cond, err := pe.evaluateExpression(&when.Condition)
 		if err != nil {
 			return err
 		}
-		
+
 		// 如果没有表达式,直接判断WHEN条件
 		if caseStmt.Expression.Type == "" {
 			if isTrue(cond) {
@@ -361,13 +361,13 @@ func (pe *ProcedureExecutor) executeCase(caseStmt *parser.CaseStmt) error {
 			}
 		}
 	}
-	
+
 	// 执行ELSE块
 	if caseStmt.Else != nil {
 		_, err := pe.executeBlock(caseStmt.Else)
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -377,7 +377,7 @@ func (pe *ProcedureExecutor) evaluateExpression(expr *parser.Expression) (interf
 	if expr.Value != nil {
 		return expr.Value, nil
 	}
-	
+
 	if expr.Column != "" {
 		scope := pe.currentScope()
 		val, exists := scope.GetVariable(expr.Column)
@@ -386,12 +386,12 @@ func (pe *ProcedureExecutor) evaluateExpression(expr *parser.Expression) (interf
 		}
 		return val, nil
 	}
-	
+
 	if expr.Function != "" {
 		// 简化实现:不支持复杂函数
 		return nil, fmt.Errorf("function evaluation not yet implemented: %s", expr.Function)
 	}
-	
+
 	return nil, fmt.Errorf("unsupported expression")
 }
 
@@ -458,5 +458,3 @@ func isTrue(value interface{}) bool {
 		return true
 	}
 }
-
-

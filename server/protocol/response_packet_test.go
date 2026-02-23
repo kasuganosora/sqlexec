@@ -95,17 +95,17 @@ func TestProgressReportPacketUnmarshal(t *testing.T) {
 	// Progress: 0x000001F4 = 500 (4字节小端)
 	// Info: "Copying data...\0"
 	payload := []byte{
-		0xFF, // Header
+		0xFF,       // Header
 		0xFF, 0xFF, // Error Code 0xFFFF
-		0x01,       // Stage: 1
-		0x03,       // Max Stage: 3
+		0x01,                   // Stage: 1
+		0x03,                   // Max Stage: 3
 		0xF4, 0x01, 0x00, 0x00, // Progress: 500 (小端，4字节)
 		'C', 'o', 'p', 'y', 'i', 'n', 'g', ' ', 'd', 'a', 't', 'a', '.', '.', '.',
 		0x00, // NULL 终止符
 	}
-	
+
 	testData := []byte{
-		byte(len(payload)), byte(len(payload)>>8), byte(len(payload)>>16), // Payload length (3字节)
+		byte(len(payload)), byte(len(payload) >> 8), byte(len(payload) >> 16), // Payload length (3字节)
 		0x00, // Sequence ID
 	}
 	testData = append(testData, payload...)
@@ -181,7 +181,7 @@ func TestBinaryRowDataPacket(t *testing.T) {
 	err = packet2.Unmarshal(bytes.NewReader(data), 3, columnTypes)
 	assert.NoError(t, err)
 	assert.Equal(t, len(packet.Values), len(packet2.Values))
-	
+
 	// 验证值
 	if val, ok := packet2.Values[0].(int32); ok {
 		assert.Equal(t, int32(123), val)
@@ -237,8 +237,8 @@ func TestBinaryRowDataPacketUnmarshal(t *testing.T) {
 	// 00 - NULL位图（1列，没有NULL）
 	// 7B - int32(123) 小端
 	testData := []byte{
-		0x00, // Header
-		0x00, // NULL bitmap (no nulls)
+		0x00,                   // Header
+		0x00,                   // NULL bitmap (no nulls)
 		0x7B, 0x00, 0x00, 0x00, // int32(123)
 	}
 
@@ -296,7 +296,7 @@ func TestErrorPacketWithoutSqlState(t *testing.T) {
 	// Error Code: 10
 	// Error Message: "Error message\0"
 	testData := []byte{
-		0xFF, // Header
+		0xFF,       // Header
 		0x0A, 0x00, // Error Code: 10
 		'E', 'r', 'r', 'o', 'r', ' ', 'm', 'e', 's', 's', 'a', 'g', 'e',
 		0x00, // NULL 终止符
@@ -320,10 +320,10 @@ func TestErrorPacketWithoutSqlState(t *testing.T) {
 func TestErrorPacketWithSqlState(t *testing.T) {
 	// FF 15 04 23 32 38 30 30 30 41 63 63 65 73 73 20 64 65 6e 69 65 64 20 66 6f 72 20 75 73 65 72 20 27 72 6f 6f 74 27 40 27 6c 6f 63 61 6c 68 6f 73 74 27 20 28 75 73 69 6e 67 20 70 61 73 73 77 6f 72 64 3a 20 59 45 53 29 00
 	testData := []byte{
-		0xFF,                         // Header
-		0x15, 0x04,                   // Error Code: 1045
-		'#',                          // SQL State Marker
-		'2', '8', '0', '0', '0',      // SQL State: 28000
+		0xFF,       // Header
+		0x15, 0x04, // Error Code: 1045
+		'#',                     // SQL State Marker
+		'2', '8', '0', '0', '0', // SQL State: 28000
 		'A', 'c', 'c', 'e', 's', 's', ' ', 'd', 'e', 'n', 'i', 'e', 'd', ' ', 'f', 'o', 'r', ' ', 'u', 's', 'e', 'r', ' ', '\'', 'r', 'o', 'o', 't', '\'', '@', '\'', 'l', 'o', 'c', 'a', 'l', 'h', 'o', 's', 't', '\'', ' ', '(', 'u', 's', 'i', 'n', 'g', ' ', 'p', 'a', 's', 's', 'w', 'o', 'r', 'd', ':', ' ', 'Y', 'E', 'S', ')',
 		0x00, // NULL 终止符
 	}
@@ -384,10 +384,10 @@ func TestBinaryRowDataPacketDateTime(t *testing.T) {
 	//   19 - Seconds: 25
 	//   D8 8B 0B 00 - Microseconds: 765432 (0x000BB8D8 in little-endian)
 	testData := []byte{
-		0x00,                   // Header
-		0x00,                   // NULL bitmap (no nulls)
-		0x0B,                   // Length: 11
-		0xE8, 0x07,             // Year: 2024 (小端序: 0x07E8 = 2024)
+		0x00,       // Header
+		0x00,       // NULL bitmap (no nulls)
+		0x0B,       // Length: 11
+		0xE8, 0x07, // Year: 2024 (小端序: 0x07E8 = 2024)
 		0x07,                   // Month: 7
 		0x17,                   // Day: 23
 		0x0C,                   // Hours: 12
@@ -400,18 +400,18 @@ func TestBinaryRowDataPacketDateTime(t *testing.T) {
 	err := packet.Unmarshal(bytes.NewReader(testData), 1, []uint8{0x0c})
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(packet.Values))
-	
+
 	// Debug: print the first few bytes of payload
 	if len(packet.Packet.Payload) >= 4 {
-		t.Logf("Payload bytes 0-3: %02X %02X %02X %02X", 
-			packet.Packet.Payload[0], packet.Packet.Payload[1], 
+		t.Logf("Payload bytes 0-3: %02X %02X %02X %02X",
+			packet.Packet.Payload[0], packet.Packet.Payload[1],
 			packet.Packet.Payload[2], packet.Packet.Payload[3])
 	}
-	
+
 	// Debug: print testData bytes 5-8 (payload bytes 0-3)
 	t.Logf("testData bytes 5-8: %02X %02X %02X %02X",
 		testData[5], testData[6], testData[7], testData[8])
-	
+
 	if val, ok := packet.Values[0].(string); ok {
 		assert.Equal(t, "2024-07-23 12:11:25.755576", val)
 	}
@@ -438,7 +438,7 @@ func TestBinaryRowDataPacketTime(t *testing.T) {
 
 	// 添加调试信息
 	t.Logf("测试数据 (%d bytes): %x", len(testData), testData)
-	
+
 	packet := &BinaryRowDataPacket{}
 	err := packet.Unmarshal(bytes.NewReader(testData), 1, []uint8{0x07})
 	assert.NoError(t, err)
@@ -457,9 +457,9 @@ func TestBinaryRowDataPacketBlob(t *testing.T) {
 	// MEDIUM_BLOB (0xfd) 需要 3 字节长度前缀
 	// Payload: Header(1) + NULL bitmap(1) + Length prefix(3) + data(3) = 8字节
 	testData := []byte{
-		0x00,                   // Header
-		0x00,                   // NULL bitmap (no nulls)
-		0x03, 0x00, 0x00,     // 3字节长度前缀 (小端序: 0x000003)
+		0x00,             // Header
+		0x00,             // NULL bitmap (no nulls)
+		0x03, 0x00, 0x00, // 3字节长度前缀 (小端序: 0x000003)
 		'a', 'b', 'c',
 	}
 
@@ -496,7 +496,7 @@ func TestBinaryRowDataPacketFloatDouble(t *testing.T) {
 	err = packet2.Unmarshal(bytes.NewReader(data), 2, columnTypes)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(packet2.Values))
-	
+
 	// 浮点数有精度损失，使用近似值比较
 	if val, ok := packet2.Values[0].(float32); ok {
 		assert.InDelta(t, float32(3.14), val, 0.01)
@@ -511,9 +511,9 @@ func TestBinaryRowDataPacketFloatDouble(t *testing.T) {
 // TestBinaryRowDataPacketVarchar 测试VARCHAR类型
 func TestBinaryRowDataPacketVarchar(t *testing.T) {
 	testData := []byte{
-		0x00,             // Header
-		0x00,             // NULL bitmap (no nulls)
-		0x05,             // Length: 5
+		0x00, // Header
+		0x00, // NULL bitmap (no nulls)
+		0x05, // Length: 5
 		'h', 'e', 'l', 'l', 'o',
 	}
 
@@ -548,7 +548,7 @@ func TestResultSetPacketStructure(t *testing.T) {
 	// 3. EOF包（中间）
 	// 4. 数据行包（文本格式）
 	// 5. EOF包（最终）
-	
+
 	// 1. 列数包
 	columnCount := &ColumnCountPacket{
 		Packet: Packet{
@@ -580,11 +580,11 @@ func TestResultSetPacketStructure(t *testing.T) {
 		},
 	}
 	fieldMetaData, _ := fieldMeta.MarshalDefault()
-	
+
 	// 3. 中间EOF包
 	intermediateEof := CreateIntermediateEofPacket(3)
 	intermediateEofData, _ := intermediateEof.Marshal()
-	
+
 	// 4. 数据行包（文本格式）
 	rowData := &RowDataPacket{
 		Packet: Packet{
@@ -593,11 +593,11 @@ func TestResultSetPacketStructure(t *testing.T) {
 		RowData: []string{"123"},
 	}
 	rowDataData, _ := rowData.Marshal()
-	
+
 	// 5. 最终EOF包
 	finalEof := CreateFinalEofPacket(5)
 	finalEofData, _ := finalEof.Marshal()
-	
+
 	// 合并所有包数据
 	allData := make([]byte, 0, len(columnCountData)+len(fieldMetaData)+len(intermediateEofData)+len(rowDataData)+len(finalEofData))
 	allData = append(allData, columnCountData...)
@@ -605,7 +605,7 @@ func TestResultSetPacketStructure(t *testing.T) {
 	allData = append(allData, intermediateEofData...)
 	allData = append(allData, rowDataData...)
 	allData = append(allData, finalEofData...)
-	
+
 	t.Logf("Complete result set packet size: %d bytes", len(allData))
 	assert.Greater(t, len(allData), 0)
 }

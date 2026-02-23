@@ -22,19 +22,19 @@ func TestEvaluateExpressionWithConstants(t *testing.T) {
 				expr:     "2 * (width + height)",
 				row:      domain.Row{"width": 5.0, "height": 3.0},
 				expected: 16.0,
-				err:       false,
+				err:      false,
 			},
 			{
 				expr:     "2 * width + height",
 				row:      domain.Row{"width": 5.0, "height": 3.0},
 				expected: 13.0,
-				err:       false,
+				err:      false,
 			},
 			{
 				expr:     "(width + height) * 2",
 				row:      domain.Row{"width": 5.0, "height": 3.0},
 				expected: 16.0,
-				err:       false,
+				err:      false,
 			},
 		}
 
@@ -53,7 +53,7 @@ func TestEvaluateExpressionWithConstants(t *testing.T) {
 		row := domain.Row{
 			"price":    10.50,
 			"quantity": 5,
-			"discount":  0.1,
+			"discount": 0.1,
 		}
 
 		testCases := []struct {
@@ -161,9 +161,9 @@ func TestEvaluateWithComplexParentheses(t *testing.T) {
 
 	t.Run("operators with different precedence", func(t *testing.T) {
 		row := domain.Row{
-			"width": 5,
+			"width":  5,
 			"height": 3,
-			"depth": 2,
+			"depth":  2,
 		}
 
 		testCases := []struct {

@@ -104,7 +104,7 @@ func (r *VectorIndexRule) Apply(ctx context.Context, plan LogicalPlan, optCtx *O
 	// 检查是否有对应的向量索引
 	if r.indexManager != nil && !r.indexManager.HasVectorIndex(dataSource.TableName, vectorInfo.ColumnName) {
 		// 没有找到向量索引，但也可以尝试优化
-		debugf("  [DEBUG] VectorIndexRule: 表 %s 列 %s 没有向量索引\n", 
+		debugf("  [DEBUG] VectorIndexRule: 表 %s 列 %s 没有向量索引\n",
 			dataSource.TableName, vectorInfo.ColumnName)
 	}
 
@@ -245,7 +245,7 @@ func parseVectorString(s string) []float32 {
 	s = strings.TrimSpace(s)
 	s = strings.Trim(s, "[]")
 	parts := strings.Split(s, ",")
-	
+
 	result := make([]float32, 0, len(parts))
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -254,7 +254,7 @@ func parseVectorString(s string) []float32 {
 			result = append(result, float32(val))
 		}
 	}
-	
+
 	if len(result) == 0 {
 		return nil
 	}
@@ -287,7 +287,7 @@ func NewLogicalVectorScan(tableName, columnName string, queryVector []float32, k
 
 // Explain 返回节点说明
 func (l *LogicalVectorScan) Explain() string {
-	return fmt.Sprintf("VectorScan[%s.%s, k=%d, metric=%s]", 
+	return fmt.Sprintf("VectorScan[%s.%s, k=%d, metric=%s]",
 		l.TableName, l.ColumnName, l.K, l.MetricType)
 }
 

@@ -297,12 +297,12 @@ func dateYear(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("year() requires exactly 1 argument")
 	}
-	
+
 	t, err := toTime(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return int64(t.Year()), nil
 }
 
@@ -310,12 +310,12 @@ func dateMonth(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("month() requires exactly 1 argument")
 	}
-	
+
 	t, err := toTime(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return int64(t.Month()), nil
 }
 
@@ -323,12 +323,12 @@ func dateDay(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("day() requires exactly 1 argument")
 	}
-	
+
 	t, err := toTime(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return int64(t.Day()), nil
 }
 
@@ -336,12 +336,12 @@ func dateHour(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("hour() requires exactly 1 argument")
 	}
-	
+
 	t, err := toTime(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return int64(t.Hour()), nil
 }
 
@@ -349,12 +349,12 @@ func dateMinute(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("minute() requires exactly 1 argument")
 	}
-	
+
 	t, err := toTime(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return int64(t.Minute()), nil
 }
 
@@ -362,12 +362,12 @@ func dateSecond(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("second() requires exactly 1 argument")
 	}
-	
+
 	t, err := toTime(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return int64(t.Second()), nil
 }
 
@@ -375,12 +375,12 @@ func dateDate(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("date() requires exactly 1 argument")
 	}
-	
+
 	t, err := toTime(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()), nil
 }
 
@@ -388,12 +388,12 @@ func dateTime(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("time() requires exactly 1 argument")
 	}
-	
+
 	t, err := toTime(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return t.Format("15:04:05"), nil
 }
 
@@ -401,14 +401,14 @@ func dateFormat(args []interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return nil, fmt.Errorf("date_format() requires exactly 2 arguments")
 	}
-	
+
 	t, err := toTime(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	format := toString(args[1])
-	
+
 	// 简化实现，支持常见格式
 	layout := "2006-01-02 15:04:05"
 	if format == "%Y-%m-%d" {
@@ -418,7 +418,7 @@ func dateFormat(args []interface{}) (interface{}, error) {
 	} else if format == "%Y-%m-%d %H:%i:%s" {
 		layout = "2006-01-02 15:04:05"
 	}
-	
+
 	return t.Format(layout), nil
 }
 

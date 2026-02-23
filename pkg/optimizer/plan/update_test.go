@@ -27,7 +27,7 @@ func TestUpdateConfig(t *testing.T) {
 			name:      "Update with SET clause",
 			tableName: "products",
 			set: map[string]parser.Expression{
-				"price":    {Type: parser.ExprTypeValue, Value: "price * 1.1"},
+				"price":      {Type: parser.ExprTypeValue, Value: "price * 1.1"},
 				"updated_at": {Type: parser.ExprTypeValue, Value: "NOW()"},
 			},
 			where:   nil,
@@ -51,9 +51,9 @@ func TestUpdateConfig(t *testing.T) {
 				"archived": {Type: parser.ExprTypeValue, Value: "true"},
 			},
 			where: nil,
-orderBy: []*parser.OrderItem{
-			{Expr: parser.Expression{Type: parser.ExprTypeValue, Value: "created_at"}, Direction: "ASC"},
-		},
+			orderBy: []*parser.OrderItem{
+				{Expr: parser.Expression{Type: parser.ExprTypeValue, Value: "created_at"}, Direction: "ASC"},
+			},
 			limit: nil,
 		},
 		{
@@ -70,14 +70,14 @@ orderBy: []*parser.OrderItem{
 			name:      "Update with all options",
 			tableName: "priority_queue",
 			set: map[string]parser.Expression{
-				"status":   {Type: parser.ExprTypeValue, Value: "'processing'"},
+				"status":    {Type: parser.ExprTypeValue, Value: "'processing'"},
 				"worker_id": {Type: parser.ExprTypeValue, Value: "123"},
 			},
 			where: &parser.Expression{Type: parser.ExprTypeValue, Value: "status = 'pending'"},
-orderBy: []*parser.OrderItem{
-			{Expr: parser.Expression{Type: parser.ExprTypeValue, Value: "priority"}, Direction: "DESC"},
-			{Expr: parser.Expression{Type: parser.ExprTypeValue, Value: "created_at"}, Direction: "ASC"},
-		},
+			orderBy: []*parser.OrderItem{
+				{Expr: parser.Expression{Type: parser.ExprTypeValue, Value: "priority"}, Direction: "DESC"},
+				{Expr: parser.Expression{Type: parser.ExprTypeValue, Value: "created_at"}, Direction: "ASC"},
+			},
 			limit: func() *int64 { l := int64(10); return &l }(),
 		},
 	}
@@ -127,7 +127,7 @@ orderBy: []*parser.OrderItem{
 
 func TestUpdateConfigWithPlan(t *testing.T) {
 	set := map[string]parser.Expression{
-		"status":    {Type: parser.ExprTypeValue, Value: "'active'"},
+		"status":      {Type: parser.ExprTypeValue, Value: "'active'"},
 		"login_count": {Type: parser.ExprTypeValue, Value: "login_count + 1"},
 	}
 	where := &parser.Expression{Type: parser.ExprTypeValue, Value: "last_login < DATE_SUB(NOW(), INTERVAL 30 DAY)"}
@@ -216,12 +216,12 @@ func TestUpdateConfigComplexSet(t *testing.T) {
 	config := &UpdateConfig{
 		TableName: "analytics",
 		Set: map[string]parser.Expression{
-			"views":           {Type: parser.ExprTypeValue, Value: "views + 1"},
-			"last_viewed":     {Type: parser.ExprTypeValue, Value: "NOW()"},
-			"unique_viewers":  {Type: parser.ExprTypeValue, Value: "CASE WHEN viewer_id NOT IN (SELECT viewer_id FROM views) THEN unique_viewers + 1 ELSE unique_viewers END"},
-			"avg_view_time":   {Type: parser.ExprTypeValue, Value: "(total_view_time + :view_time) / (views + 1)"},
+			"views":          {Type: parser.ExprTypeValue, Value: "views + 1"},
+			"last_viewed":    {Type: parser.ExprTypeValue, Value: "NOW()"},
+			"unique_viewers": {Type: parser.ExprTypeValue, Value: "CASE WHEN viewer_id NOT IN (SELECT viewer_id FROM views) THEN unique_viewers + 1 ELSE unique_viewers END"},
+			"avg_view_time":  {Type: parser.ExprTypeValue, Value: "(total_view_time + :view_time) / (views + 1)"},
 		},
-		Where: &parser.Expression{Type: parser.ExprTypeValue, Value: "content_id = :content_id"},
+		Where:   &parser.Expression{Type: parser.ExprTypeValue, Value: "content_id = :content_id"},
 		OrderBy: nil,
 		Limit:   nil,
 	}

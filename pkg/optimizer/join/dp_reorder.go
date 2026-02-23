@@ -39,16 +39,16 @@ type CardinalityEstimator interface {
 // DPJoinReorder DP算法JOIN重排序器
 // 使用动态规划算法寻找最优JOIN顺序
 type DPJoinReorder struct {
-	costModel   CostModel
-	estimator   CardinalityEstimator
-	maxTables    int // 最大表数量限制
-	cache        *ReorderCache
+	costModel CostModel
+	estimator CardinalityEstimator
+	maxTables int // 最大表数量限制
+	cache     *ReorderCache
 }
 
 // ReorderCache 重排序缓存
 type ReorderCache struct {
 	mu    sync.RWMutex
-	cache  map[string]*ReorderResult
+	cache map[string]*ReorderResult
 }
 
 // ReorderResult 重排序结果
@@ -62,10 +62,10 @@ type ReorderResult struct {
 // NewDPJoinReorder 创建DP JOIN重排序器
 func NewDPJoinReorder(costModel CostModel, estimator CardinalityEstimator, maxTables int) *DPJoinReorder {
 	return &DPJoinReorder{
-		costModel:   costModel,
-		estimator:   estimator,
-		maxTables:    maxTables,
-		cache:        NewReorderCache(1000), // 最多缓存1000个结果
+		costModel: costModel,
+		estimator: estimator,
+		maxTables: maxTables,
+		cache:     NewReorderCache(1000), // 最多缓存1000个结果
 	}
 }
 
@@ -119,7 +119,7 @@ func (dpr *DPJoinReorder) collectJoinsRecursive(plan LogicalPlan, joinNodes *[]L
 	if plan != nil && len(plan.Children()) == 2 {
 		// 假设这是JOIN节点
 		*joinNodes = append(*joinNodes, plan)
-		
+
 		// 递归处理子节点
 		for _, child := range plan.Children() {
 			dpr.collectJoinsRecursive(child, joinNodes, tables)
@@ -222,7 +222,7 @@ func (dpr *DPJoinReorder) solveDP(tables []string, dp map[string]*DPState, joinN
 
 			leftSet := []string{}
 			rightSet := []string{}
-			
+
 			for j := 0; j < n; j++ {
 				if (mask & (1 << uint(j))) != 0 {
 					leftSet = append(leftSet, tables[j])
@@ -297,7 +297,7 @@ func (dpr *DPJoinReorder) greedyReorder(tables []string, joinNodes []LogicalPlan
 		for _, table := range remainingTables {
 			// 计算将table加入当前顺序的成本
 			joinCost := dpr.estimateGreedyJoinCost(order, table, remainingCosts[table], joinNodes)
-			
+
 			if joinCost < bestJoinCost {
 				bestJoinCost = joinCost
 				bestTable = table
@@ -311,7 +311,7 @@ func (dpr *DPJoinReorder) greedyReorder(tables []string, joinNodes []LogicalPlan
 		// 添加到顺序
 		order = append(order, bestTable)
 		totalCost += bestJoinCost + remainingCosts[bestTable]
-		
+
 		// 从剩余表中移除
 		for i, t := range remainingTables {
 			if t == bestTable {
@@ -363,11 +363,11 @@ func (dpr *DPJoinReorder) estimateGreedyJoinCost(currentOrder []string, newTable
 	}
 
 	lastTable := currentOrder[len(currentOrder)-1]
-	
+
 	// 估算连接lastTable和newTable的成本
 	leftCard := float64(dpr.estimator.EstimateTableScan(lastTable))
 	rightCard := float64(dpr.estimator.EstimateTableScan(newTable))
-	
+
 	// 简化的JOIN成本估算
 	joinCost := leftCard * rightCard * 0.1
 
@@ -377,7 +377,7 @@ func (dpr *DPJoinReorder) estimateGreedyJoinCost(currentOrder []string, newTable
 // buildPlanFromOrder 根据表顺序构建JOIN树
 func (dpr *DPJoinReorder) buildPlanFromOrder(order []string, joinNodes []LogicalPlan) LogicalPlan {
 	if len(order) == 0 {
-		return nil  // 空order返回nil
+		return nil // 空order返回nil
 	}
 
 	if len(order) == 1 {

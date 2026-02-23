@@ -284,9 +284,9 @@ func (fm *FailoverManager) ManualFailover(targetNodeID string) error {
 
 // LoadBalancer 负载均衡器
 type LoadBalancer struct {
-	nodes    []*Node
-	current  int
-	mu       sync.RWMutex
+	nodes   []*Node
+	current int
+	mu      sync.RWMutex
 }
 
 // NewLoadBalancer 创建负载均衡器

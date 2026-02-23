@@ -26,7 +26,7 @@ type JiebaTokenizer struct {
 func NewJiebaTokenizer(dictPath, hmmPath, userDictPath string, stopWords []string) (*JiebaTokenizer, error) {
 	// 创建 gojieba 分词器
 	var seg *gojieba.Jieba
-	
+
 	if dictPath != "" && hmmPath != "" {
 		// 使用自定义词典
 		seg = gojieba.NewJieba(dictPath, hmmPath, userDictPath, "")
@@ -34,14 +34,14 @@ func NewJiebaTokenizer(dictPath, hmmPath, userDictPath string, stopWords []strin
 		// 使用默认词典
 		seg = gojieba.NewJieba()
 	}
-	
+
 	tokenizer := &JiebaTokenizer{
 		BaseTokenizer: NewBaseTokenizer(stopWords, 1, 50),
 		segmenter:     seg,
 		useHMM:        true,
 		searchMode:    false,
 	}
-	
+
 	return tokenizer, nil
 }
 
@@ -49,7 +49,7 @@ func NewJiebaTokenizer(dictPath, hmmPath, userDictPath string, stopWords []strin
 func (j *JiebaTokenizer) Tokenize(text string) ([]Token, error) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
-	
+
 	// 使用精确模式
 	words := j.segmenter.Cut(text, j.useHMM)
 	return j.convertToTokens(words, text)
@@ -59,7 +59,7 @@ func (j *JiebaTokenizer) Tokenize(text string) ([]Token, error) {
 func (j *JiebaTokenizer) TokenizeForSearch(text string) ([]Token, error) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
-	
+
 	// 使用搜索引擎模式（更细粒度）
 	words := j.segmenter.CutForSearch(text, j.useHMM)
 	return j.convertToTokens(words, text)
@@ -69,7 +69,7 @@ func (j *JiebaTokenizer) TokenizeForSearch(text string) ([]Token, error) {
 func (j *JiebaTokenizer) CutAll(text string) ([]Token, error) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
-	
+
 	words := j.segmenter.CutAll(text)
 	return j.convertToTokens(words, text)
 }
@@ -79,14 +79,14 @@ func (j *JiebaTokenizer) CutAll(text string) ([]Token, error) {
 func (j *JiebaTokenizer) CutForIndex(text string) ([]Token, error) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
-	
+
 	// 先进行精确模式分词
 	words := j.segmenter.Cut(text, j.useHMM)
-	
+
 	var allWords []string
 	for _, word := range words {
 		allWords = append(allWords, word)
-		
+
 		// 对长词（>=3字）生成前缀
 		runes := []rune(word)
 		if len(runes) >= 3 {
@@ -102,7 +102,7 @@ func (j *JiebaTokenizer) CutForIndex(text string) ([]Token, error) {
 			}
 		}
 	}
-	
+
 	return j.convertToTokens(allWords, text)
 }
 
@@ -110,23 +110,23 @@ func (j *JiebaTokenizer) CutForIndex(text string) ([]Token, error) {
 func (j *JiebaTokenizer) Tag(text string) ([]Token, error) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
-	
+
 	tags := j.segmenter.Tag(text)
-	
+
 	tokens := make([]Token, 0, len(tags))
 	position := 0
 	offset := 0
-	
+
 	for _, tag := range tags {
 		word := tag
 		pos := "x" // 词性
-		
+
 		// gojieba.Tag 返回格式: "词/词性"
 		if idx := strings.Index(tag, "/"); idx != -1 {
 			word = tag[:idx]
 			pos = tag[idx+1:]
 		}
-		
+
 		if filtered, ok := j.FilterToken(word); ok {
 			start := strings.Index(text[offset:], word)
 			if start != -1 {
@@ -144,7 +144,7 @@ func (j *JiebaTokenizer) Tag(text string) ([]Token, error) {
 			}
 		}
 	}
-	
+
 	return tokens, nil
 }
 
@@ -152,9 +152,9 @@ func (j *JiebaTokenizer) Tag(text string) ([]Token, error) {
 func (j *JiebaTokenizer) Extract(text string, topK int) ([]Token, error) {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
-	
+
 	keywords := j.segmenter.Extract(text, topK)
-	
+
 	tokens := make([]Token, 0, len(keywords))
 	for i, kw := range keywords {
 		if filtered, ok := j.FilterToken(kw); ok {
@@ -165,7 +165,7 @@ func (j *JiebaTokenizer) Extract(text string, topK int) ([]Token, error) {
 			})
 		}
 	}
-	
+
 	return tokens, nil
 }
 
@@ -227,7 +227,7 @@ func (j *JiebaTokenizer) convertToTokens(words []string, originalText string) ([
 	tokens := make([]Token, 0, len(words))
 	position := 0
 	offset := 0
-	
+
 	for _, word := range words {
 		if filtered, ok := j.FilterToken(word); ok {
 			// 查找词在原文中的位置
@@ -236,7 +236,7 @@ func (j *JiebaTokenizer) convertToTokens(words []string, originalText string) ([
 				// 如果找不到，可能是 Unicode 字符
 				start = j.findRuneIndex(originalText[offset:], word)
 			}
-			
+
 			if start != -1 {
 				start += offset
 				end := start + len(word)
@@ -252,7 +252,7 @@ func (j *JiebaTokenizer) convertToTokens(words []string, originalText string) ([
 			}
 		}
 	}
-	
+
 	return tokens, nil
 }
 
@@ -260,7 +260,7 @@ func (j *JiebaTokenizer) convertToTokens(words []string, originalText string) ([
 func (j *JiebaTokenizer) findRuneIndex(s, substr string) int {
 	runes := []rune(s)
 	subRunes := []rune(substr)
-	
+
 	for i := 0; i <= len(runes)-len(subRunes); i++ {
 		match := true
 		for j := 0; j < len(subRunes); j++ {

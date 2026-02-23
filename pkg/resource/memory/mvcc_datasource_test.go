@@ -1708,4 +1708,3 @@ func TestMVCCDataSource_GeneratedColumn_CyclicDependency(t *testing.T) {
 		t.Error("Expected error when creating table with cyclic dependency")
 	}
 }
-

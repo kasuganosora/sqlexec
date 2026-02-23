@@ -25,9 +25,9 @@ func TestIndexHelper_CanIndexGeneratedColumn_STORED(t *testing.T) {
 	helper := NewIndexHelper()
 
 	col := &domain.ColumnInfo{
-		Name:         "total",
-		Type:         "INT",
-		IsGenerated:  true,
+		Name:          "total",
+		Type:          "INT",
+		IsGenerated:   true,
 		GeneratedType: "STORED",
 		GeneratedExpr: "price * quantity",
 	}
@@ -41,9 +41,9 @@ func TestIndexHelper_CanIndexGeneratedColumn_VIRTUAL(t *testing.T) {
 	helper := NewIndexHelper()
 
 	col := &domain.ColumnInfo{
-		Name:         "full_name",
-		Type:         "VARCHAR",
-		IsGenerated:  true,
+		Name:          "full_name",
+		Type:          "VARCHAR",
+		IsGenerated:   true,
 		GeneratedType: "VIRTUAL",
 		GeneratedExpr: "CONCAT(first_name, ' ', last_name)",
 	}
@@ -64,9 +64,9 @@ func TestIndexHelper_CanIndexGeneratedColumn_VIRTUAL_TooComplex(t *testing.T) {
 	}
 
 	col := &domain.ColumnInfo{
-		Name:         "complex_col",
-		Type:         "VARCHAR",
-		IsGenerated:  true,
+		Name:          "complex_col",
+		Type:          "VARCHAR",
+		IsGenerated:   true,
 		GeneratedType: "VIRTUAL",
 		GeneratedExpr: longExpr,
 	}
@@ -102,9 +102,9 @@ func TestIndexHelper_CanIndexGeneratedColumn_UnsupportedType(t *testing.T) {
 	helper := NewIndexHelper()
 
 	col := &domain.ColumnInfo{
-		Name:         "test",
-		Type:         "INT",
-		IsGenerated:  true,
+		Name:          "test",
+		Type:          "INT",
+		IsGenerated:   true,
 		GeneratedType: "UNKNOWN_TYPE",
 		GeneratedExpr: "id * 2",
 	}
@@ -270,7 +270,7 @@ func TestIndexHelper_GetIndexableGeneratedColumns(t *testing.T) {
 	}
 
 	indexable := helper.GetIndexableGeneratedColumns(schema)
-	
+
 	// 应该包含total和full_name，不包含complex
 	assert.Contains(t, indexable, "total")
 	assert.Contains(t, indexable, "full_name")
@@ -306,13 +306,59 @@ func TestIndexHelper_isIndexableExpression_Simple(t *testing.T) {
 
 func TestIndexHelper_isIndexableExpression_TooLong(t *testing.T) {
 	helper := NewIndexHelper()
-	
+
 	longExpr := ""
 	for i := 0; i < 1001; i++ {
 		longExpr += "a"
 	}
-	
+
 	assert.False(t, helper.isIndexableExpression(longExpr))
+}
+
+func TestIndexHelper_isIndexableExpression_NonDeterministic(t *testing.T) {
+	helper := NewIndexHelper()
+
+	// Non-deterministic functions should not be indexable
+	assert.False(t, helper.isIndexableExpression("RAND()"))
+	assert.False(t, helper.isIndexableExpression("NOW()"))
+	assert.False(t, helper.isIndexableExpression("UUID()"))
+	assert.False(t, helper.isIndexableExpression("CURRENT_TIMESTAMP()"))
+	assert.False(t, helper.isIndexableExpression("CURRENT_DATE()"))
+	assert.False(t, helper.isIndexableExpression("CURRENT_TIME()"))
+	assert.False(t, helper.isIndexableExpression("SYSDATE()"))
+	assert.False(t, helper.isIndexableExpression("UNIX_TIMESTAMP()"))
+	assert.False(t, helper.isIndexableExpression("CONNECTION_ID()"))
+	assert.False(t, helper.isIndexableExpression("LAST_INSERT_ID()"))
+
+	// Case-insensitive detection
+	assert.False(t, helper.isIndexableExpression("rand()"))
+	assert.False(t, helper.isIndexableExpression("now()"))
+	assert.False(t, helper.isIndexableExpression("Rand()"))
+
+	// Non-deterministic embedded in expressions
+	assert.False(t, helper.isIndexableExpression("price * RAND()"))
+	assert.False(t, helper.isIndexableExpression("CONCAT(name, UUID())"))
+}
+
+func TestIndexHelper_isIndexableExpression_Subqueries(t *testing.T) {
+	helper := NewIndexHelper()
+
+	// Subqueries should not be indexable
+	assert.False(t, helper.isIndexableExpression("(SELECT MAX(id) FROM orders)"))
+	assert.False(t, helper.isIndexableExpression("id + (select count(*) from users)"))
+}
+
+func TestIndexHelper_isIndexableExpression_DeterministicFunctions(t *testing.T) {
+	helper := NewIndexHelper()
+
+	// Deterministic functions should be indexable
+	assert.True(t, helper.isIndexableExpression("UPPER(name)"))
+	assert.True(t, helper.isIndexableExpression("LOWER(name)"))
+	assert.True(t, helper.isIndexableExpression("CONCAT(first_name, ' ', last_name)"))
+	assert.True(t, helper.isIndexableExpression("price * quantity"))
+	assert.True(t, helper.isIndexableExpression("a + b"))
+	assert.True(t, helper.isIndexableExpression("LENGTH(name)"))
+	assert.True(t, helper.isIndexableExpression("COALESCE(a, b)"))
 }
 
 func TestIndexHelper_getColumnInfo(t *testing.T) {

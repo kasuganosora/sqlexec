@@ -3,8 +3,8 @@ package parser
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	_ "github.com/pingcap/tidb/pkg/parser/test_driver"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestSimplifyTypeName 测试简化类型名

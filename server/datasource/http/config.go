@@ -10,16 +10,16 @@ import (
 
 // 默认路径模板
 const (
-	DefaultPathTables  = "/_schema/tables"
-	DefaultPathSchema  = "/_schema/tables/{table}"
-	DefaultPathQuery   = "/_query/{table}"
-	DefaultPathInsert  = "/_insert/{table}"
-	DefaultPathUpdate  = "/_update/{table}"
-	DefaultPathDelete  = "/_delete/{table}"
-	DefaultPathHealth  = "/_health"
+	DefaultPathTables = "/_schema/tables"
+	DefaultPathSchema = "/_schema/tables/{table}"
+	DefaultPathQuery  = "/_query/{table}"
+	DefaultPathInsert = "/_insert/{table}"
+	DefaultPathUpdate = "/_update/{table}"
+	DefaultPathDelete = "/_delete/{table}"
+	DefaultPathHealth = "/_health"
 
-	DefaultTimeoutMs   = 30000
-	DefaultRetryCount  = 0
+	DefaultTimeoutMs    = 30000
+	DefaultRetryCount   = 0
 	DefaultRetryDelayMs = 1000
 )
 
@@ -48,9 +48,9 @@ type HTTPConfig struct {
 
 	// 认证
 	AuthType     string `json:"auth_type,omitempty"`      // bearer, basic, api_key, ""
-	AuthToken    string `json:"auth_token,omitempty"`      // Bearer token 或签名密钥
-	APIKeyHeader string `json:"api_key_header,omitempty"`  // API Key header 名
-	APIKeyValue  string `json:"api_key_value,omitempty"`   // API Key 值
+	AuthToken    string `json:"auth_token,omitempty"`     // Bearer token 或签名密钥
+	APIKeyHeader string `json:"api_key_header,omitempty"` // API Key header 名
+	APIKeyValue  string `json:"api_key_value,omitempty"`  // API Key 值
 
 	// 超时与重试
 	TimeoutMs    int `json:"timeout_ms,omitempty"`

@@ -16,10 +16,10 @@ import (
 type OptimizedParallelScanner struct {
 	dataSource  domain.DataSource
 	parallelism int
-	batchSize   int            // 批量大小
-	scanPool    *workerpool.Pool // worker pool for parallel scanning
+	batchSize   int                 // 批量大小
+	scanPool    *workerpool.Pool    // worker pool for parallel scanning
 	rowPool     *workerpool.RowPool // row pool for memory reuse
-	once        sync.Once      // for lazy initialization
+	once        sync.Once           // for lazy initialization
 }
 
 // NewOptimizedParallelScanner 创建优化的并行扫描器

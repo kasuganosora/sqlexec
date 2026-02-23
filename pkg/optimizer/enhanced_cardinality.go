@@ -27,13 +27,13 @@ type EnhancedTableStatistics struct {
 
 // Histogram 直方图（等宽或等高）
 type Histogram struct {
-	ColumnName     string
-	Buckets        []*HistogramBucket // 直方图桶
-	BucketCount     int                 // 桶数量
-	IsEquiDepth     bool               // 是否等深直方图
-	TotalNDV        int64              // 总的不同值数
-	SampleCount     int64              // 样本数
-	NullCount       int64              // NULL值数
+	ColumnName  string
+	Buckets     []*HistogramBucket // 直方图桶
+	BucketCount int                // 桶数量
+	IsEquiDepth bool               // 是否等深直方图
+	TotalNDV    int64              // 总的不同值数
+	SampleCount int64              // 样本数
+	NullCount   int64              // NULL值数
 }
 
 // HistogramBucket 直方图桶
@@ -49,9 +49,9 @@ type HistogramBucket struct {
 func NewEnhancedCardinalityEstimator(baseEstimator CardinalityEstimator) *EnhancedCardinalityEstimator {
 	return &EnhancedCardinalityEstimator{
 		baseEstimator: baseEstimator,
-		stats:        make(map[string]*EnhancedTableStatistics),
-		correlations: make(map[string]map[string]float64),
-		fkRelations:  make(map[string]string),
+		stats:         make(map[string]*EnhancedTableStatistics),
+		correlations:  make(map[string]map[string]float64),
+		fkRelations:   make(map[string]string),
 	}
 }
 
@@ -506,8 +506,8 @@ func (e *EnhancedCardinalityEstimator) UpdateStatistics(tableName string, stats 
 
 	// 更新增强统计信息
 	enhancedStats := &EnhancedTableStatistics{
-		Base:       stats,
-		Histograms: make(map[string]*Histogram),
+		Base:         stats,
+		Histograms:   make(map[string]*Histogram),
 		Correlations: make(map[string]float64),
 	}
 
@@ -523,13 +523,13 @@ func (e *EnhancedCardinalityEstimator) UpdateStatistics(tableName string, stats 
 // createSimpleHistogram 创建简单直方图
 func (e *EnhancedCardinalityEstimator) createSimpleHistogram(colName string, colStats *ColumnStatistics) *Histogram {
 	return &Histogram{
-		ColumnName:     colName,
-		Buckets:        []*HistogramBucket{},
-		BucketCount:     10, // 默认10个桶
-		IsEquiDepth:     false,
-		TotalNDV:        colStats.DistinctCount,
-		SampleCount:     colStats.DistinctCount * 10, // 假设
-		NullCount:       colStats.NullCount,
+		ColumnName:  colName,
+		Buckets:     []*HistogramBucket{},
+		BucketCount: 10, // 默认10个桶
+		IsEquiDepth: false,
+		TotalNDV:    colStats.DistinctCount,
+		SampleCount: colStats.DistinctCount * 10, // 假设
+		NullCount:   colStats.NullCount,
 	}
 }
 

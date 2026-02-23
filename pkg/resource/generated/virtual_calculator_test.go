@@ -19,12 +19,12 @@ func TestVirtualCalculator(t *testing.T) {
 			{Name: "price", Type: "DECIMAL", Nullable: false},
 			{Name: "quantity", Type: "INT", Nullable: false},
 			{
-				Name:         "total",
-				Type:         "DECIMAL",
-				Nullable:     false,
-				IsGenerated:  true,
-				GeneratedType: "VIRTUAL",
-				GeneratedExpr: "price * quantity",
+				Name:             "total",
+				Type:             "DECIMAL",
+				Nullable:         false,
+				IsGenerated:      true,
+				GeneratedType:    "VIRTUAL",
+				GeneratedExpr:    "price * quantity",
 				GeneratedDepends: []string{"price", "quantity"},
 			},
 		},
@@ -33,8 +33,8 @@ func TestVirtualCalculator(t *testing.T) {
 	// 测试数据
 	row := domain.Row{
 		"id":       int64(1),
-		"price":     10.5,
-		"quantity":  int64(2),
+		"price":    10.5,
+		"quantity": int64(2),
 	}
 
 	t.Run("HasVirtualColumns", func(t *testing.T) {
@@ -45,7 +45,7 @@ func TestVirtualCalculator(t *testing.T) {
 	t.Run("CalculateColumn", func(t *testing.T) {
 		colInfo := schema.Columns[3] // total 列
 		result, err := calc.CalculateColumn(&colInfo, row, schema)
-		
+
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
 		// 10.5 * 2 = 21.0
@@ -54,7 +54,7 @@ func TestVirtualCalculator(t *testing.T) {
 
 	t.Run("CalculateRowVirtuals", func(t *testing.T) {
 		result, err := calc.CalculateRowVirtuals(row, schema)
-		
+
 		assert.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Contains(t, result, "total")
@@ -70,10 +70,10 @@ func TestVirtualCalculator(t *testing.T) {
 		}
 
 		results, err := calc.CalculateBatchVirtuals(rows, schema)
-		
+
 		assert.NoError(t, err)
 		assert.Len(t, results, 3)
-		
+
 		// 直接检查计算结果（跳过中间步骤）
 		// 注意：由于 GeneratedDepends 解析问题，我们直接验证最终结果
 		if val, ok := results[0]["total"]; ok {
@@ -84,7 +84,7 @@ func TestVirtualCalculator(t *testing.T) {
 			directResult, _ := calc.CalculateColumn(&totalCol, rows[0], schema)
 			assert.Equal(t, 21.0, directResult)
 		}
-		
+
 		if val, ok := results[1]["total"]; ok {
 			assert.Equal(t, 15.0, val)
 		} else {
@@ -92,7 +92,7 @@ func TestVirtualCalculator(t *testing.T) {
 			directResult, _ := calc.CalculateColumn(&totalCol, rows[1], schema)
 			assert.Equal(t, 15.0, directResult)
 		}
-		
+
 		if val, ok := results[2]["total"]; ok {
 			assert.Equal(t, 30.0, val)
 		} else {
@@ -105,13 +105,13 @@ func TestVirtualCalculator(t *testing.T) {
 	t.Run("NULL 传播", func(t *testing.T) {
 		rowWithNull := domain.Row{
 			"id":       int64(1),
-			"price":     nil, // NULL 值
-			"quantity":  int64(2),
+			"price":    nil, // NULL 值
+			"quantity": int64(2),
 		}
 
 		colInfo := schema.Columns[3]
 		result, err := calc.CalculateColumn(&colInfo, rowWithNull, schema)
-		
+
 		// NULL 传播：price 为 NULL，total 应为 NULL
 		// 注意：计算可能返回错误或 nil
 		if err == nil {
@@ -184,7 +184,7 @@ func TestExpressionCache(t *testing.T) {
 	t.Run("GetStats", func(t *testing.T) {
 		cache.Set("table1", "col1", "expr1")
 		cache.Set("table1", "col2", "expr2")
-		
+
 		// 访问缓存以增加计数
 		cache.Get("table1", "col1")
 		cache.Get("table1", "col1")
@@ -201,16 +201,16 @@ func TestIsVirtualColumn(t *testing.T) {
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INT", IsGenerated: false},
 			{
-				Name:         "stored_col",
-				Type:         "INT",
-				IsGenerated:  true,
+				Name:          "stored_col",
+				Type:          "INT",
+				IsGenerated:   true,
 				GeneratedType: "STORED",
 				GeneratedExpr: "price * 2",
 			},
 			{
-				Name:         "virtual_col",
-				Type:         "INT",
-				IsGenerated:  true,
+				Name:          "virtual_col",
+				Type:          "INT",
+				IsGenerated:   true,
 				GeneratedType: "VIRTUAL",
 				GeneratedExpr: "price * 2",
 			},

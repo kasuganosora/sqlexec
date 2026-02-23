@@ -12,7 +12,7 @@ import (
 func TestNewVirtualCalculatorWithCache(t *testing.T) {
 	cache := NewExpressionCache()
 	calc := NewVirtualCalculatorWithCache(cache)
-	
+
 	assert.NotNil(t, calc)
 	assert.Equal(t, cache, calc.exprCache)
 }
@@ -21,7 +21,7 @@ func TestNewVirtualCalculatorWithCache(t *testing.T) {
 func TestNewGeneratedColumnEvaluatorWithCache(t *testing.T) {
 	cache := NewExpressionCache()
 	evaluator := NewGeneratedColumnEvaluatorWithCache(cache)
-	
+
 	assert.NotNil(t, evaluator)
 	assert.NotNil(t, evaluator.functionAPI)
 }
@@ -29,7 +29,7 @@ func TestNewGeneratedColumnEvaluatorWithCache(t *testing.T) {
 // TestGetVirtualColumnNames 测试获取所有 VIRTUAL 列名称
 func TestGetVirtualColumnNames(t *testing.T) {
 	calc := NewVirtualCalculator()
-	
+
 	schema := &domain.TableInfo{
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INT", IsGenerated: false},
@@ -38,7 +38,7 @@ func TestGetVirtualColumnNames(t *testing.T) {
 			{Name: "virtual2", Type: "INT", IsGenerated: true, GeneratedType: "VIRTUAL"},
 		},
 	}
-	
+
 	names := calc.GetVirtualColumnNames(schema)
 	assert.Len(t, names, 2)
 	assert.Contains(t, names, "virtual1")
@@ -56,10 +56,10 @@ func TestCalculateColumnErrorCases(t *testing.T) {
 		},
 	}
 	row := domain.Row{"price": 10.5, "quantity": int64(2)}
-	
-	tests := []struct{
-		name string
-		col *domain.ColumnInfo
+
+	tests := []struct {
+		name        string
+		col         *domain.ColumnInfo
 		expectError bool
 	}{
 		{"nil column", nil, true},
@@ -67,7 +67,7 @@ func TestCalculateColumnErrorCases(t *testing.T) {
 		{"stored column", &domain.ColumnInfo{Name: "x", IsGenerated: true, GeneratedType: "STORED"}, true},
 		{"empty expression", &domain.ColumnInfo{Name: "x", IsGenerated: true, GeneratedType: "VIRTUAL", GeneratedExpr: ""}, true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := calc.CalculateColumn(tt.col, row, schema)
@@ -83,10 +83,10 @@ func TestCalculateColumnErrorCases(t *testing.T) {
 
 // TestCastTypeCoverage 测试类型转换的覆盖率
 func TestCastTypeCoverage(t *testing.T) {
-	tests := []struct{
-		name string
-		value interface{}
-		targetType string
+	tests := []struct {
+		name        string
+		value       interface{}
+		targetType  string
 		expectError bool
 	}{
 		// castToInt 的更多测试
@@ -100,7 +100,7 @@ func TestCastTypeCoverage(t *testing.T) {
 		{"uint64 to int", uint64(42), "INT", false},
 		{"float32 to int", float32(3.14), "INT", false},
 		{"string to int error", "abc", "INT", true},
-		
+
 		// castToFloat 的更多测试
 		{"int to float", int(42), "FLOAT", false},
 		{"int8 to float", int8(42), "FLOAT", false},
@@ -114,11 +114,11 @@ func TestCastTypeCoverage(t *testing.T) {
 		{"uint64 to float", uint64(42), "FLOAT", false},
 		{"float32 to float", float32(3.14), "FLOAT", false},
 		{"string to float error", "abc", "FLOAT", true},
-		
+
 		// 未知类型
 		{"unknown type", struct{}{}, "UNKNOWN", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := CastToType(tt.value, tt.targetType)
@@ -135,11 +135,11 @@ func TestCastTypeCoverage(t *testing.T) {
 // TestHasVirtualColumnsCoverage 测试 HasVirtualColumns 的边界情况
 func TestHasVirtualColumnsCoverage(t *testing.T) {
 	calc := NewVirtualCalculator()
-	
+
 	// 空 schema
 	emptySchema := &domain.TableInfo{}
 	assert.False(t, calc.HasVirtualColumns(emptySchema))
-	
+
 	// 只有非 VIRTUAL 列
 	noVirtualSchema := &domain.TableInfo{
 		Columns: []domain.ColumnInfo{
@@ -153,24 +153,24 @@ func TestHasVirtualColumnsCoverage(t *testing.T) {
 // TestGetColumnInfoCoverage 测试 getColumnInfo 的边界情况
 func TestGetColumnInfoCoverage(t *testing.T) {
 	calc := NewVirtualCalculator()
-	
+
 	schema := &domain.TableInfo{
 		Columns: []domain.ColumnInfo{
 			{Name: "col1", Type: "INT"},
 			{Name: "col2", Type: "STRING"},
 		},
 	}
-	
+
 	// 找到存在的列
 	col1 := calc.getColumnInfo("col1", schema)
 	assert.NotNil(t, col1)
 	assert.Equal(t, "col1", col1.Name)
-	
+
 	// 找到存在的列
 	col2 := calc.getColumnInfo("col2", schema)
 	assert.NotNil(t, col2)
 	assert.Equal(t, "col2", col2.Name)
-	
+
 	// 不存在的列
 	col3 := calc.getColumnInfo("col3", schema)
 	assert.Nil(t, col3)
@@ -178,9 +178,9 @@ func TestGetColumnInfoCoverage(t *testing.T) {
 
 // TestParseNumericLiteral 测试数字字面量解析
 func TestParseNumericLiteral(t *testing.T) {
-	tests := []struct{
-		input string
-		expected interface{}
+	tests := []struct {
+		input       string
+		expected    interface{}
 		expectError bool
 	}{
 		{"123", float64(123), false}, // parseNumericLiteral 返回 float64
@@ -190,7 +190,7 @@ func TestParseNumericLiteral(t *testing.T) {
 		{"abc", nil, true},
 		{"", nil, true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			result, err := strconv.ParseFloat(tt.input, 64)
@@ -206,10 +206,10 @@ func TestParseNumericLiteral(t *testing.T) {
 
 // TestToFloat64Coverage 测试 toFloat64 的边界情况
 func TestToFloat64Coverage(t *testing.T) {
-	tests := []struct{
-		input interface{}
+	tests := []struct {
+		input    interface{}
 		expected float64
-		ok bool
+		ok       bool
 	}{
 		// 已经测试过的类型
 		{int(42), 42.0, true},
@@ -223,7 +223,7 @@ func TestToFloat64Coverage(t *testing.T) {
 		{uint32(42), 42.0, true},
 		{uint64(42), 42.0, true},
 		{float64(3.14), 3.14, true},
-		
+
 		// 边界情况
 		{"123", 123.0, true},
 		{"123.45", 123.45, true},
@@ -231,7 +231,7 @@ func TestToFloat64Coverage(t *testing.T) {
 		{"", 0.0, false},
 		{struct{}{}, 0.0, false},
 	}
-	
+
 	for i, tt := range tests {
 		t.Run(string(rune(i)), func(t *testing.T) {
 			evaluator := NewGeneratedColumnEvaluator()

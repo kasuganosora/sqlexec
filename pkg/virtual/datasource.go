@@ -43,8 +43,8 @@ func (v *VirtualDataSource) IsWritable() bool {
 // GetConfig returns a minimal data source config for virtual data source
 func (v *VirtualDataSource) GetConfig() *domain.DataSourceConfig {
 	return &domain.DataSourceConfig{
-		Type:   "virtual",
-		Name:   "information_schema",
+		Type: "virtual",
+		Name: "information_schema",
 	}
 }
 

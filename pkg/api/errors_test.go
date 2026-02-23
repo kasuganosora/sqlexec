@@ -51,7 +51,7 @@ func TestError_StackTrace(t *testing.T) {
 
 	assert.NotEmpty(t, stack)
 	assert.Greater(t, len(stack), 0)
-	
+
 	// Each stack line should contain a colon (file:line format)
 	for _, line := range stack {
 		assert.Contains(t, line, ":")
@@ -60,10 +60,10 @@ func TestError_StackTrace(t *testing.T) {
 
 func TestCaptureStackTrace(t *testing.T) {
 	stack := captureStackTrace()
-	
+
 	assert.NotEmpty(t, stack)
 	assert.Greater(t, len(stack), 0)
-	
+
 	// Check that we have some stack frames (don't check specific function names as they may vary)
 	for _, line := range stack {
 		assert.Contains(t, line, ":", "Stack line should contain file:line format")
@@ -201,7 +201,7 @@ func TestErrorWithCause(t *testing.T) {
 
 	// Check that original error is accessible
 	assert.Equal(t, causeErr, apiErr.Cause)
-	
+
 	// Check that errors.Is works
 	assert.True(t, errors.Is(apiErr, causeErr))
 }

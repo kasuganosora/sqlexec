@@ -6,14 +6,14 @@ import (
 	"net"
 
 	"github.com/kasuganosora/sqlexec/pkg/api"
+	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 	"github.com/kasuganosora/sqlexec/server/handler"
 	"github.com/kasuganosora/sqlexec/server/protocol"
-	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 )
 
 // DefaultHandshakeHandler 默认握手处理器
 type DefaultHandshakeHandler struct {
-	db *api.DB
+	db     *api.DB
 	logger handler.Logger
 }
 

@@ -22,26 +22,26 @@ import (
 // CoreSession 核心会话实现（用于用户 API）
 // 这个 Session 不是协议层的 Session，而是数据库层面的会话（相当于 MySQL 的一个连接）
 type CoreSession struct {
-	dataSource     domain.DataSource
-	dsManager      *application.DataSourceManager
-	executor       *optimizer.OptimizedExecutor
-	adapter        *parser.SQLAdapter
-	currentDB      string // 当前使用的数据库名（USE 语句）
-	user           string // 当前登录用户名
-	host           string // 当前客户端主机
-	mu             sync.RWMutex
-	txn            domain.Transaction
-	txnMu         sync.Mutex       // 事务锁（防止嵌套）
-	tempTables     []string          // 会话级临时表列表
-	closed         bool
-	queryTimeout   time.Duration    // 查询超时时间
-	threadID       uint32           // 关联的线程ID (用于KILL)
-	traceID        string           // 追踪ID (来自协议层 Session)
-	queryMu        sync.Mutex       // 查询锁
-	vdbRegistry    *virtual.VirtualDatabaseRegistry // 虚拟数据库注册表
-	sessionVars    map[string]string // 会话级系统变量覆盖 (SET NAMES, SET @@var, etc.)
-	databaseDir    string                                                  // 持久化存储根目录
-	tablePersistence map[string]map[string]*xmlpersist.TablePersistConfig  // dbName -> tableName -> config
+	dataSource       domain.DataSource
+	dsManager        *application.DataSourceManager
+	executor         *optimizer.OptimizedExecutor
+	adapter          *parser.SQLAdapter
+	currentDB        string // 当前使用的数据库名（USE 语句）
+	user             string // 当前登录用户名
+	host             string // 当前客户端主机
+	mu               sync.RWMutex
+	txn              domain.Transaction
+	txnMu            sync.Mutex // 事务锁（防止嵌套）
+	tempTables       []string   // 会话级临时表列表
+	closed           bool
+	queryTimeout     time.Duration                                        // 查询超时时间
+	threadID         uint32                                               // 关联的线程ID (用于KILL)
+	traceID          string                                               // 追踪ID (来自协议层 Session)
+	queryMu          sync.Mutex                                           // 查询锁
+	vdbRegistry      *virtual.VirtualDatabaseRegistry                     // 虚拟数据库注册表
+	sessionVars      map[string]string                                    // 会话级系统变量覆盖 (SET NAMES, SET @@var, etc.)
+	databaseDir      string                                               // 持久化存储根目录
+	tablePersistence map[string]map[string]*xmlpersist.TablePersistConfig // dbName -> tableName -> config
 }
 
 // NewCoreSession 创建核心会话（默认使用增强优化器）

@@ -154,7 +154,7 @@ func TestEnhancedOptimizer_Aggregation(t *testing.T) {
 			{Name: "COUNT(*)", Alias: "count"},
 			{Name: "SUM(amount)", Alias: "total"},
 		},
-		From:   "sales",
+		From:    "sales",
 		GroupBy: []string{"category"},
 	}
 

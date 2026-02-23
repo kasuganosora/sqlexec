@@ -12,9 +12,10 @@ import (
 
 // EscapeSQL 将参数安全地转义并插入到 SQL 字符串中
 // 使用格式说明符：
-//   %? - 自动类型转换的参数（类似数据库的参数绑定）
-//   %% - 输出 %
-//   %n - 标识符（表名、列名等），自动用反引号包裹
+//
+//	%? - 自动类型转换的参数（类似数据库的参数绑定）
+//	%% - 输出 %
+//	%n - 标识符（表名、列名等），自动用反引号包裹
 //
 // 注意：此工具不能阻止所有类型的 SQL 注入。
 // 编写安全 SQL 仍然是开发者的责任。
@@ -92,7 +93,7 @@ func escapeSQL(sql string, args ...interface{}) ([]byte, error) {
 			identifier, ok := arg.(string)
 			if !ok {
 				return nil, &formatError{
-					arg:    argPos + 1,
+					arg:     argPos + 1,
 					want:    "string identifier",
 					got:     arg,
 					message: "identifier must be a string",
@@ -138,7 +139,7 @@ func escapeSQL(sql string, args ...interface{}) ([]byte, error) {
 	// 检查是否有未使用的参数
 	if argPos < len(args) {
 		return nil, &formatError{
-			arg:    argPos + 1,
+			arg:     argPos + 1,
 			want:    "no more placeholders",
 			got:     len(args) - argPos,
 			message: "too many arguments provided",
@@ -256,7 +257,7 @@ func appendSQLArg(buf []byte, arg interface{}) ([]byte, error) {
 			}
 		default:
 			return nil, &formatError{
-				arg:    0,
+				arg:     0,
 				want:    "supported SQL type",
 				got:     kind.String(),
 				message: "unsupported argument type",
@@ -334,7 +335,7 @@ func appendTime(buf []byte, t time.Time) []byte {
 // newArgError 创建参数数量错误
 func newArgError(arg, total int) *formatError {
 	return &formatError{
-		arg:    arg,
+		arg:     arg,
 		want:    "argument",
 		got:     total,
 		message: "not enough arguments",
@@ -343,9 +344,9 @@ func newArgError(arg, total int) *formatError {
 
 // formatError 格式化错误
 type formatError struct {
-	arg    int
-	want   string
-	got    interface{}
+	arg     int
+	want    string
+	got     interface{}
 	message string
 }
 

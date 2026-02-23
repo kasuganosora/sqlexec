@@ -53,12 +53,12 @@ func TestStatisticsCache_Get(t *testing.T) {
 
 	// Set a stat
 	testStats := &TableStatistics{
-		Name:            "test_table",
-		RowCount:        1000,
-		SampleCount:     100,
-		SampleRatio:     0.1,
-		ColumnStats:     make(map[string]*ColumnStatistics),
-		Histograms:      make(map[string]*Histogram),
+		Name:             "test_table",
+		RowCount:         1000,
+		SampleCount:      100,
+		SampleRatio:      0.1,
+		ColumnStats:      make(map[string]*ColumnStatistics),
+		Histograms:       make(map[string]*Histogram),
 		CollectTimestamp: time.Now(),
 	}
 	cache.Set("test_table", testStats)
@@ -76,8 +76,8 @@ func TestStatisticsCache_Get_TTLExpiry(t *testing.T) {
 	cache := NewStatisticsCache(10 * time.Millisecond)
 
 	testStats := &TableStatistics{
-		Name:       "test_table",
-		RowCount:   1000,
+		Name:        "test_table",
+		RowCount:    1000,
 		ColumnStats: make(map[string]*ColumnStatistics),
 		Histograms:  make(map[string]*Histogram),
 	}
@@ -315,21 +315,21 @@ func TestStatisticsCache_Stats_HitRate(t *testing.T) {
 
 func TestCachedStatistics(t *testing.T) {
 	stats := &TableStatistics{
-		Name:            "test_table",
-		RowCount:        1000,
-		SampleCount:     100,
-		SampleRatio:     0.1,
-		ColumnStats:     make(map[string]*ColumnStatistics),
-		Histograms:      make(map[string]*Histogram),
-		CollectTimestamp: time.Now(),
+		Name:              "test_table",
+		RowCount:          1000,
+		SampleCount:       100,
+		SampleRatio:       0.1,
+		ColumnStats:       make(map[string]*ColumnStatistics),
+		Histograms:        make(map[string]*Histogram),
+		CollectTimestamp:  time.Now(),
 		EstimatedRowCount: 1000,
 	}
 
 	cached := &CachedStatistics{
-		Statistics:    stats,
-		CollectTime:    time.Now(),
-		LastAccessed:   time.Now(),
-		HitCount:       0,
+		Statistics:   stats,
+		CollectTime:  time.Now(),
+		LastAccessed: time.Now(),
+		HitCount:     0,
 	}
 
 	assert.NotNil(t, cached.Statistics)
@@ -410,13 +410,13 @@ func TestAutoRefreshStatisticsCache_Stats(t *testing.T) {
 
 func TestTableStatistics(t *testing.T) {
 	stats := &TableStatistics{
-		Name:            "test_table",
-		RowCount:        1000,
-		SampleCount:     100,
-		SampleRatio:     0.1,
-		ColumnStats:     make(map[string]*ColumnStatistics),
-		Histograms:      make(map[string]*Histogram),
-		CollectTimestamp: time.Now(),
+		Name:              "test_table",
+		RowCount:          1000,
+		SampleCount:       100,
+		SampleRatio:       0.1,
+		ColumnStats:       make(map[string]*ColumnStatistics),
+		Histograms:        make(map[string]*Histogram),
+		CollectTimestamp:  time.Now(),
 		EstimatedRowCount: 1000,
 	}
 
@@ -433,9 +433,9 @@ func TestTableStatistics(t *testing.T) {
 
 	// Add histogram
 	stats.Histograms["id"] = &Histogram{
-		Type:       EquiWidthHistogram,
+		Type:        EquiWidthHistogram,
 		BucketCount: 10,
-		NDV:        1000,
+		NDV:         1000,
 	}
 
 	assert.Equal(t, "test_table", stats.Name)
@@ -459,7 +459,7 @@ func TestColumnStatistics(t *testing.T) {
 		NullFraction:  0.1,
 		AvgWidth:      4.0,
 		MedianValue:   int64(30),
-		StdDev:       15.5,
+		StdDev:        15.5,
 	}
 
 	assert.Equal(t, "age", colStats.Name)
@@ -476,11 +476,11 @@ func TestColumnStatistics(t *testing.T) {
 
 func TestCacheStats(t *testing.T) {
 	stats := CacheStats{
-		Size:     10,
-		Hits:     100,
-		Misses:   20,
-		HitRate:  0.833333,
-		TTL:      time.Hour,
+		Size:    10,
+		Hits:    100,
+		Misses:  20,
+		HitRate: 0.833333,
+		TTL:     time.Hour,
 	}
 
 	assert.Equal(t, 10, stats.Size)

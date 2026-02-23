@@ -160,23 +160,23 @@ func TestEstimateDiskIO(t *testing.T) {
 		wantRange [2]float64 // [min, max]
 	}{
 		{
-			name:     "NVMe",
-			diskType: "NVMe",
+			name:      "NVMe",
+			diskType:  "NVMe",
 			wantRange: [2]float64{3000.0, 4000.0},
 		},
 		{
-			name:     "SSD",
-			diskType: "SSD",
+			name:      "SSD",
+			diskType:  "SSD",
 			wantRange: [2]float64{400.0, 600.0},
 		},
 		{
-			name:     "HDD",
-			diskType: "HDD",
+			name:      "HDD",
+			diskType:  "HDD",
 			wantRange: [2]float64{80.0, 120.0},
 		},
 		{
-			name:     "unknown",
-			diskType: "UNKNOWN",
+			name:      "unknown",
+			diskType:  "UNKNOWN",
 			wantRange: [2]float64{400.0, 600.0}, // defaults to SSD
 		},
 	}
@@ -192,28 +192,28 @@ func TestEstimateDiskIO(t *testing.T) {
 
 func TestEstimateDiskSeekTime(t *testing.T) {
 	tests := []struct {
-		name       string
-		diskType   string
-		wantRange  [2]float64 // [min, max]
+		name      string
+		diskType  string
+		wantRange [2]float64 // [min, max]
 	}{
 		{
-			name:     "NVMe",
-			diskType: "NVMe",
+			name:      "NVMe",
+			diskType:  "NVMe",
 			wantRange: [2]float64{0.005, 0.02},
 		},
 		{
-			name:     "SSD",
-			diskType: "SSD",
+			name:      "SSD",
+			diskType:  "SSD",
 			wantRange: [2]float64{0.05, 0.2},
 		},
 		{
-			name:     "HDD",
-			diskType: "HDD",
+			name:      "HDD",
+			diskType:  "HDD",
 			wantRange: [2]float64{4.0, 6.0},
 		},
 		{
-			name:     "unknown",
-			diskType: "UNKNOWN",
+			name:      "unknown",
+			diskType:  "UNKNOWN",
 			wantRange: [2]float64{0.05, 0.2}, // defaults to SSD
 		},
 	}
@@ -229,16 +229,16 @@ func TestEstimateDiskSeekTime(t *testing.T) {
 
 func TestCalculateCostFactors(t *testing.T) {
 	profile := &HardwareProfile{
-		CPUCores:        4,
-		CPUFrequency:   2.4,
-		CPUSpeed:       1.0,
-		TotalMemory:     8192,
-		AvailableMemory: 4096,
-		MemorySpeed:    1.0,
-		DiskType:       "SSD",
-		DiskIO:         500.0,
+		CPUCores:         4,
+		CPUFrequency:     2.4,
+		CPUSpeed:         1.0,
+		TotalMemory:      8192,
+		AvailableMemory:  4096,
+		MemorySpeed:      1.0,
+		DiskType:         "SSD",
+		DiskIO:           500.0,
 		NetworkBandwidth: 1000.0,
-		NetworkLatency:    1.0,
+		NetworkLatency:   1.0,
 		IsCloudEnv:       false,
 	}
 
@@ -254,7 +254,7 @@ func TestCalculateCostFactors(t *testing.T) {
 func TestCalculateCostFactors_CloudEnvironment(t *testing.T) {
 	localProfile := &HardwareProfile{
 		CPUCores:         4,
-		CPUFrequency:    2.4,
+		CPUFrequency:     2.4,
 		DiskType:         "SSD",
 		DiskIO:           500.0,
 		NetworkBandwidth: 1000.0,
@@ -263,7 +263,7 @@ func TestCalculateCostFactors_CloudEnvironment(t *testing.T) {
 
 	cloudProfile := &HardwareProfile{
 		CPUCores:         4,
-		CPUFrequency:    2.4,
+		CPUFrequency:     2.4,
 		DiskType:         "SSD",
 		DiskIO:           500.0,
 		NetworkBandwidth: 1000.0,

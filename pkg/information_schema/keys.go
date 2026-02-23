@@ -74,18 +74,18 @@ func (t *KeyColumnUsageTable) Query(ctx context.Context, filters []domain.Filter
 			for i, column := range tableInfo.Columns {
 				if column.Primary {
 					row := domain.Row{
-						"constraint_catalog":              "def",
-						"constraint_schema":               dsName,
-						"constraint_name":                "PRIMARY",
-						"table_catalog":                  "def",
-						"table_schema":                   dsName,
-						"table_name":                     tableName,
-						"column_name":                    column.Name,
-						"ordinal_position":               ordinalPos,
-						"position_in_unique_constraint":   ordinalPos,
-						"referenced_table_schema":        nil,
-						"referenced_table_name":          nil,
-						"referenced_column_name":         nil,
+						"constraint_catalog":            "def",
+						"constraint_schema":             dsName,
+						"constraint_name":               "PRIMARY",
+						"table_catalog":                 "def",
+						"table_schema":                  dsName,
+						"table_name":                    tableName,
+						"column_name":                   column.Name,
+						"ordinal_position":              ordinalPos,
+						"position_in_unique_constraint": ordinalPos,
+						"referenced_table_schema":       nil,
+						"referenced_table_name":         nil,
+						"referenced_column_name":        nil,
 					}
 					rows = append(rows, row)
 					ordinalPos++
@@ -97,46 +97,46 @@ func (t *KeyColumnUsageTable) Query(ctx context.Context, filters []domain.Filter
 			for i, column := range tableInfo.Columns {
 				if column.Unique && !column.Primary {
 					row := domain.Row{
-						"constraint_catalog":              "def",
-						"constraint_schema":               dsName,
-						"constraint_name":                fmt.Sprintf("unique_%s", column.Name),
-						"table_catalog":                  "def",
-						"table_schema":                   dsName,
-						"table_name":                     tableName,
-						"column_name":                    column.Name,
-						"ordinal_position":               1,
-						"position_in_unique_constraint":   1,
-						"referenced_table_schema":        nil,
-						"referenced_table_name":          nil,
-						"referenced_column_name":         nil,
+						"constraint_catalog":            "def",
+						"constraint_schema":             dsName,
+						"constraint_name":               fmt.Sprintf("unique_%s", column.Name),
+						"table_catalog":                 "def",
+						"table_schema":                  dsName,
+						"table_name":                    tableName,
+						"column_name":                   column.Name,
+						"ordinal_position":              1,
+						"position_in_unique_constraint": 1,
+						"referenced_table_schema":       nil,
+						"referenced_table_name":         nil,
+						"referenced_column_name":        nil,
 					}
 					rows = append(rows, row)
 					_ = i // Use index to avoid linter warning
 				}
 			}
 
-				// Add foreign key columns (if any)
-				// Note: Foreign key information can be extended when full FK support is added
-				for i, column := range tableInfo.Columns {
-					if column.ForeignKey != nil {
-						row := domain.Row{
-							"constraint_catalog":              "def",
-							"constraint_schema":               dsName,
-							"constraint_name":                fmt.Sprintf("fk_%s_%s", tableName, column.Name),
-							"table_catalog":                  "def",
-							"table_schema":                   dsName,
-							"table_name":                     tableName,
-							"column_name":                    column.Name,
-							"ordinal_position":               1,
-							"position_in_unique_constraint":   nil,
-							"referenced_table_schema":        dsName,
-							"referenced_table_name":          column.ForeignKey.Table,
-							"referenced_column_name":         column.ForeignKey.Column,
-						}
-						rows = append(rows, row)
-						_ = i // Use index to avoid linter warning
+			// Add foreign key columns (if any)
+			// Note: Foreign key information can be extended when full FK support is added
+			for i, column := range tableInfo.Columns {
+				if column.ForeignKey != nil {
+					row := domain.Row{
+						"constraint_catalog":            "def",
+						"constraint_schema":             dsName,
+						"constraint_name":               fmt.Sprintf("fk_%s_%s", tableName, column.Name),
+						"table_catalog":                 "def",
+						"table_schema":                  dsName,
+						"table_name":                    tableName,
+						"column_name":                   column.Name,
+						"ordinal_position":              1,
+						"position_in_unique_constraint": nil,
+						"referenced_table_schema":       dsName,
+						"referenced_table_name":         column.ForeignKey.Table,
+						"referenced_column_name":        column.ForeignKey.Column,
 					}
+					rows = append(rows, row)
+					_ = i // Use index to avoid linter warning
 				}
+			}
 		}
 	}
 

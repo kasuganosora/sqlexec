@@ -21,25 +21,25 @@ type IVFPQIndex struct {
 	vectors map[int64][]float32
 
 	// PQ 参数
-	nsubq      int         // 子向量数量（维度分片）
-	centroids  [][][]float32 // centroids[subq][centroid_id][subvec_dim]
-	codebooks  [][][]float32 // 每个子量化器的码本
-	codes      map[int64][]int8 // 向量ID -> PQ编码
+	nsubq     int              // 子向量数量（维度分片）
+	centroids [][][]float32    // centroids[subq][centroid_id][subvec_dim]
+	codebooks [][][]float32    // 每个子量化器的码本
+	codes     map[int64][]int8 // 向量ID -> PQ编码
 
 	// IVF 结构
-	ivfCentroids     [][]float32           // IVF 聚类中心
-	vectorsByCluster map[int][]VectorRecord  // 每个聚类的向量
+	ivfCentroids     [][]float32            // IVF 聚类中心
+	vectorsByCluster map[int][]VectorRecord // 每个聚类的向量
 	assignments      map[int64]int          // 向量ID -> 聚类ID
 	clusterCounts    []int                  // 每个聚类的向量数量
 
 	// 参数
-	nlist  int // IVF 聚类数量
-	m      int // 子量化器数量
-	nbits  int // 每个子量化器的编码位数
-	ksubq  int // 每个子量化器的质心数量 (2^nbits)
+	nlist int // IVF 聚类数量
+	m     int // 子量化器数量
+	nbits int // 每个子量化器的编码位数
+	ksubq int // 每个子量化器的质心数量 (2^nbits)
 
-	mu   sync.RWMutex
-	rng  *rand.Rand
+	mu  sync.RWMutex
+	rng *rand.Rand
 }
 
 // IVFPQParams IVF-PQ 参数
@@ -86,23 +86,23 @@ func NewIVFPQIndex(columnName string, config *VectorIndexConfig) (*IVFPQIndex, e
 	ksubq := 1 << uint(nbits)
 
 	return &IVFPQIndex{
-		columnName:        columnName,
-		config:            config,
-		distFunc:          distFunc,
-		vectors:           make(map[int64][]float32),
-		codes:             make(map[int64][]int8),
-		ivfCentroids:      make([][]float32, nlist),
-		vectorsByCluster:  make(map[int][]VectorRecord, nlist),
-		assignments:       make(map[int64]int),
-		clusterCounts:     make([]int, nlist),
-		nlist:             nlist,
-		m:                 m,
-		nbits:             nbits,
-		ksubq:             ksubq,
-		nsubq:             m,
-		centroids:         make([][][]float32, m),
-		codebooks:         make([][][]float32, m),
-		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
+		columnName:       columnName,
+		config:           config,
+		distFunc:         distFunc,
+		vectors:          make(map[int64][]float32),
+		codes:            make(map[int64][]int8),
+		ivfCentroids:     make([][]float32, nlist),
+		vectorsByCluster: make(map[int][]VectorRecord, nlist),
+		assignments:      make(map[int64]int),
+		clusterCounts:    make([]int, nlist),
+		nlist:            nlist,
+		m:                m,
+		nbits:            nbits,
+		ksubq:            ksubq,
+		nsubq:            m,
+		centroids:        make([][][]float32, m),
+		codebooks:        make([][][]float32, m),
+		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 

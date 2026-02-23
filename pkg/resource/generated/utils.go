@@ -213,7 +213,7 @@ func castToString(value interface{}) (interface{}, error) {
 	if value == nil {
 		return "", nil
 	}
-	
+
 	switch v := value.(type) {
 	case string:
 		return v, nil

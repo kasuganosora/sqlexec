@@ -180,7 +180,7 @@ func (e *GeneratedColumnEvaluator) evaluateExpression(expr string, row domain.Ro
 				}
 			}
 		}
-		
+
 		if matchIndex == len(expr)-1 {
 			return e.evaluateParentheses(expr, row)
 		}

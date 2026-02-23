@@ -126,8 +126,8 @@ func TestMySQLUserTableQueryWithFilters(t *testing.T) {
 			wantRows: 2, // testuser1 + root
 		},
 		{
-			name:     "Filter by user and host",
-			filters:  []domain.Filter{
+			name: "Filter by user and host",
+			filters: []domain.Filter{
 				{Field: "User", Operator: "=", Value: "testuser1"},
 				{Field: "Host", Operator: "=", Value: "%"},
 			},

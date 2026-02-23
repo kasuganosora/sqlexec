@@ -10,22 +10,22 @@ import (
 
 // DataFile represents the structure of users.json and permissions.json
 type DataFile struct {
-	Users              []User              `json:"users"`
-	DBPermissions      []DatabasePermission `json:"db"`
-	TablePermissions   []TablePermission  `json:"tables_priv"`
-	ColumnPermissions []ColumnPermission `json:"columns_priv"`
+	Users             []User               `json:"users"`
+	DBPermissions     []DatabasePermission `json:"db"`
+	TablePermissions  []TablePermission    `json:"tables_priv"`
+	ColumnPermissions []ColumnPermission   `json:"columns_priv"`
 }
 
 // ACLManager integrates user and permission management with JSON persistence
 type ACLManager struct {
-	userManager      *UserManager
-	permissionMgr   *PermissionManager
-	authenticator    *Authenticator
-	dataDir         string
-	usersFilePath    string
-	permsFilePath    string
-	loaded          bool
-	mu              sync.RWMutex
+	userManager   *UserManager
+	permissionMgr *PermissionManager
+	authenticator *Authenticator
+	dataDir       string
+	usersFilePath string
+	permsFilePath string
+	loaded        bool
+	mu            sync.RWMutex
 }
 
 // NewACLManager creates a new ACL manager
@@ -35,12 +35,12 @@ func NewACLManager(dataDir string) (*ACLManager, error) {
 	}
 
 	am := &ACLManager{
-		userManager:    NewUserManager(),
-		permissionMgr:   NewPermissionManager(),
-		authenticator:  NewAuthenticator(),
+		userManager:   NewUserManager(),
+		permissionMgr: NewPermissionManager(),
+		authenticator: NewAuthenticator(),
 		dataDir:       dataDir,
-		usersFilePath:  filepath.Join(dataDir, "users.json"),
-		permsFilePath:  filepath.Join(dataDir, "permissions.json"),
+		usersFilePath: filepath.Join(dataDir, "users.json"),
+		permsFilePath: filepath.Join(dataDir, "permissions.json"),
 		loaded:        false,
 	}
 
@@ -68,9 +68,9 @@ func (am *ACLManager) initializeFiles() error {
 	if _, err := os.Stat(am.usersFilePath); os.IsNotExist(err) {
 		// Create default users.json with root user
 		defaultUser := User{
-			Host:     "%",
-			User:     "root",
-			Password:  "", // No password for root
+			Host:       "%",
+			User:       "root",
+			Password:   "", // No password for root
 			Privileges: DefaultPrivileges(),
 		}
 
@@ -92,8 +92,8 @@ func (am *ACLManager) initializeFiles() error {
 	if _, err := os.Stat(am.permsFilePath); os.IsNotExist(err) {
 		// Create empty permissions.json
 		data := DataFile{
-			DBPermissions:      []DatabasePermission{},
-			TablePermissions:   []TablePermission{},
+			DBPermissions:     []DatabasePermission{},
+			TablePermissions:  []TablePermission{},
 			ColumnPermissions: []ColumnPermission{},
 		}
 
@@ -166,8 +166,8 @@ func (am *ACLManager) saveWithoutLock() error {
 	// Prepare data structure for permissions.json
 	dbPerms, tablePerms, colPerms := am.permissionMgr.ExportPermissions()
 	permsData := DataFile{
-		DBPermissions:      dbPerms,
-		TablePermissions:   tablePerms,
+		DBPermissions:     dbPerms,
+		TablePermissions:  tablePerms,
 		ColumnPermissions: colPerms,
 	}
 

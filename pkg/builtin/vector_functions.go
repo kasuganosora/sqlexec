@@ -31,8 +31,8 @@ func registerVectorFunctions() {
 				Variadic:   false,
 			},
 		},
-		Handler:     vecCosineDistanceHandler,
-		Example:     "SELECT vec_cosine_distance(embedding, '[0.1, 0.2, 0.3]') FROM articles",
+		Handler: vecCosineDistanceHandler,
+		Example: "SELECT vec_cosine_distance(embedding, '[0.1, 0.2, 0.3]') FROM articles",
 	})
 
 	// VEC_L2_DISTANCE - L2/Euclidean 距离
@@ -49,8 +49,8 @@ func registerVectorFunctions() {
 				Variadic:   false,
 			},
 		},
-		Handler:     vecL2DistanceHandler,
-		Example:     "SELECT vec_l2_distance(embedding, '[0.1, 0.2, 0.3]') FROM articles",
+		Handler: vecL2DistanceHandler,
+		Example: "SELECT vec_l2_distance(embedding, '[0.1, 0.2, 0.3]') FROM articles",
 	})
 
 	// VEC_INNER_PRODUCT - 内积
@@ -67,8 +67,8 @@ func registerVectorFunctions() {
 				Variadic:   false,
 			},
 		},
-		Handler:     vecInnerProductHandler,
-		Example:     "SELECT vec_inner_product(embedding, '[0.1, 0.2, 0.3]') FROM articles",
+		Handler: vecInnerProductHandler,
+		Example: "SELECT vec_inner_product(embedding, '[0.1, 0.2, 0.3]') FROM articles",
 	})
 
 	// VEC_DISTANCE - 通用距离函数（默认使用余弦）
@@ -85,8 +85,8 @@ func registerVectorFunctions() {
 				Variadic:   false,
 			},
 		},
-		Handler:     vecCosineDistanceHandler, // 默认使用余弦距离
-		Example:     "SELECT vec_distance(embedding, '[0.1, 0.2, 0.3]') FROM articles",
+		Handler: vecCosineDistanceHandler, // 默认使用余弦距离
+		Example: "SELECT vec_distance(embedding, '[0.1, 0.2, 0.3]') FROM articles",
 	})
 }
 
@@ -198,7 +198,7 @@ func parseVector(arg interface{}) ([]float64, error) {
 // parseVectorString 解析向量字符串
 func parseVectorString(s string) ([]float64, error) {
 	s = strings.TrimSpace(s)
-	
+
 	// 处理 JSON 数组格式
 	if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
 		var vec []float64
@@ -223,7 +223,7 @@ func parseVectorString(s string) ([]float64, error) {
 		}
 		return vec, nil
 	}
-	
+
 	return nil, fmt.Errorf("invalid vector format: %s", s)
 }
 

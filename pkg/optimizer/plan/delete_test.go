@@ -29,14 +29,14 @@ func TestDeleteConfig(t *testing.T) {
 			limit:     nil,
 		},
 		{
-		name:      "Delete with order by",
-		tableName: "logs",
-		where:     nil,
-		orderBy: []*parser.OrderItem{
-			{Expr: parser.Expression{Type: parser.ExprTypeValue, Value: "created_at"}, Direction: "DESC"},
+			name:      "Delete with order by",
+			tableName: "logs",
+			where:     nil,
+			orderBy: []*parser.OrderItem{
+				{Expr: parser.Expression{Type: parser.ExprTypeValue, Value: "created_at"}, Direction: "DESC"},
+			},
+			limit: nil,
 		},
-		limit: nil,
-	},
 		{
 			name:      "Delete with limit",
 			tableName: "temp_data",
@@ -92,7 +92,7 @@ func TestDeleteConfigWithPlan(t *testing.T) {
 	whereExpr := &parser.Expression{Type: parser.ExprTypeColumn, Value: "age > 18"}
 	limitVal := int64(50)
 
-deleteConfig := &DeleteConfig{
+	deleteConfig := &DeleteConfig{
 		TableName: "students",
 		Where:     whereExpr,
 		OrderBy: []*parser.OrderItem{

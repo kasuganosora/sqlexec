@@ -7,25 +7,25 @@ import (
 // JoinGraph JOIN关系图
 // 用于表示表之间的连接关系，辅助JOIN重排序
 type JoinGraph struct {
-	nodes      map[string]*JoinNode      // table_name -> node
-	edges      []*JoinEdge              // 所有边
-	edgeCount  int                      // 边数
+	nodes     map[string]*JoinNode // table_name -> node
+	edges     []*JoinEdge          // 所有边
+	edgeCount int                  // 边数
 }
 
 // JoinNode JOIN图节点
 type JoinNode struct {
-	Name       string            // 表名
-	Degree     int                // 度数（连接的边数）
-	Edges      []*JoinEdge        // 连接的边
-	Cardinality int64              // 表基数（可选）
+	Name        string      // 表名
+	Degree      int         // 度数（连接的边数）
+	Edges       []*JoinEdge // 连接的边
+	Cardinality int64       // 表基数（可选）
 }
 
 // JoinEdge JOIN图边
 type JoinEdge struct {
-	From      string                // 起始表
-	To        string                // 目标表
-	JoinType  string                // 连接类型
-	Cardinality float64             // 估算的基数
+	From        string  // 起始表
+	To          string  // 目标表
+	JoinType    string  // 连接类型
+	Cardinality float64 // 估算的基数
 }
 
 // NewJoinGraph 创建JOIN图
@@ -41,9 +41,9 @@ func NewJoinGraph() *JoinGraph {
 func (jg *JoinGraph) AddNode(name string, cardinality int64) {
 	if _, exists := jg.nodes[name]; !exists {
 		jg.nodes[name] = &JoinNode{
-			Name:       name,
-			Degree:     0,
-			Edges:      []*JoinEdge{},
+			Name:        name,
+			Degree:      0,
+			Edges:       []*JoinEdge{},
 			Cardinality: cardinality,
 		}
 	}
@@ -53,9 +53,9 @@ func (jg *JoinGraph) AddNode(name string, cardinality int64) {
 func (jg *JoinGraph) AddEdge(from, to, joinType string, cardinality float64) {
 	// 添加边
 	edge := &JoinEdge{
-		From:      from,
-		To:        to,
-		JoinType:  joinType,
+		From:        from,
+		To:          to,
+		JoinType:    joinType,
 		Cardinality: cardinality,
 	}
 	jg.edges = append(jg.edges, edge)
@@ -272,7 +272,7 @@ func (jg *JoinGraph) IsStarGraph() bool {
 	if len(centerNodes) == 1 {
 		center := centerNodes[0]
 		neighbors := jg.GetNeighbors(center)
-		
+
 		// 检查度数是否等于节点数-1
 		if len(neighbors) == len(jg.nodes)-1 {
 			return true
@@ -305,16 +305,16 @@ func (jg *JoinGraph) EstimateJoinCardinality(from, to string) float64 {
 // GetStats 获取图的统计信息
 func (jg *JoinGraph) GetStats() GraphStats {
 	stats := GraphStats{
-		NodeCount:    len(jg.nodes),
-		EdgeCount:    jg.edgeCount,
-		IsConnected:   jg.isConnected(),
-		IsStar:       jg.IsStarGraph(),
+		NodeCount:   len(jg.nodes),
+		EdgeCount:   jg.edgeCount,
+		IsConnected: jg.isConnected(),
+		IsStar:      jg.IsStarGraph(),
 	}
 
 	if len(jg.nodes) > 0 {
 		stats.MaxDegree = jg.getMaxDegree()
 		stats.MinDegree = jg.getMinDegree()
-		stats.AvgDegree = float64(jg.edgeCount * 2) / float64(len(jg.nodes))
+		stats.AvgDegree = float64(jg.edgeCount*2) / float64(len(jg.nodes))
 	}
 
 	return stats
@@ -375,16 +375,16 @@ type GraphStats struct {
 // Explain 返回图的说明
 func (jg *JoinGraph) Explain() string {
 	stats := jg.GetStats()
-	
+
 	return fmt.Sprintf(
 		"=== Join Graph ===\n"+
-		"Nodes: %d\n"+
-		"Edges: %d\n"+
-		"Max Degree: %d\n"+
-		"Min Degree: %d\n"+
-		"Avg Degree: %.2f\n"+
-		"Connected: %v\n"+
-		"Star Graph: %v\n",
+			"Nodes: %d\n"+
+			"Edges: %d\n"+
+			"Max Degree: %d\n"+
+			"Min Degree: %d\n"+
+			"Avg Degree: %.2f\n"+
+			"Connected: %v\n"+
+			"Star Graph: %v\n",
 		stats.NodeCount,
 		stats.EdgeCount,
 		stats.MaxDegree,

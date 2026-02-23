@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/parser"
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // LogicalPlan 逻辑计划接口
@@ -246,29 +246,29 @@ type OptimizationRule interface {
 // OptimizerHints 优化器 hints（TiDB 兼容）
 type OptimizerHints struct {
 	// JOIN hints
-	HashJoinTables    []string
-	MergeJoinTables   []string
-	INLJoinTables     []string
-	INLHashJoinTables []string
+	HashJoinTables     []string
+	MergeJoinTables    []string
+	INLJoinTables      []string
+	INLHashJoinTables  []string
 	INLMergeJoinTables []string
-	NoHashJoinTables  []string
-	NoMergeJoinTables []string
-	NoIndexJoinTables []string
-	LeadingOrder      []string
-	StraightJoin      bool
+	NoHashJoinTables   []string
+	NoMergeJoinTables  []string
+	NoIndexJoinTables  []string
+	LeadingOrder       []string
+	StraightJoin       bool
 
 	// INDEX hints
-	UseIndex      map[string][]string  // table -> index list
-	ForceIndex    map[string][]string  // table -> index list
-	IgnoreIndex   map[string][]string  // table -> index list
-	OrderIndex    map[string]string    // table -> index name
-	NoOrderIndex  map[string]string    // table -> index name
+	UseIndex     map[string][]string // table -> index list
+	ForceIndex   map[string][]string // table -> index list
+	IgnoreIndex  map[string][]string // table -> index list
+	OrderIndex   map[string]string   // table -> index name
+	NoOrderIndex map[string]string   // table -> index name
 
 	// AGG hints
-	HashAgg           bool
-	StreamAgg         bool
-	MPP1PhaseAgg      bool
-	MPP2PhaseAgg      bool
+	HashAgg      bool
+	StreamAgg    bool
+	MPP1PhaseAgg bool
+	MPP2PhaseAgg bool
 
 	// Subquery hints
 	SemiJoinRewrite bool
@@ -276,11 +276,11 @@ type OptimizerHints struct {
 	UseTOJA         bool
 
 	// Global hints
-	QBName             string
-	MaxExecutionTime   time.Duration
-	MemoryQuota        int64
+	QBName                string
+	MaxExecutionTime      time.Duration
+	MemoryQuota           int64
 	ReadConsistentReplica bool
-	ResourceGroup      string
+	ResourceGroup         string
 }
 
 // HintAwareRule 支持 hints 的优化规则接口
@@ -323,43 +323,43 @@ func (aa AggregationAlgorithm) String() string {
 
 // HypotheticalIndexStats 虚拟索引统计信息
 type HypotheticalIndexStats struct {
-	NDV            int64   // Number of Distinct Values
-	Selectivity    float64 // 选择性（0-1）
-	EstimatedSize  int64   // 预估索引大小（字节）
-	NullFraction   float64 // NULL 值比例
-	Correlation    float64 // 列相关性因子
+	NDV           int64   // Number of Distinct Values
+	Selectivity   float64 // 选择性（0-1）
+	EstimatedSize int64   // 预估索引大小（字节）
+	NullFraction  float64 // NULL 值比例
+	Correlation   float64 // 列相关性因子
 }
 
 // HypotheticalIndex 虚拟索引
 type HypotheticalIndex struct {
-	ID         string
-	TableName  string
-	Columns    []string
-	IsUnique   bool
-	IsPrimary  bool
-	Stats      *HypotheticalIndexStats
-	CreatedAt  time.Time
+	ID        string
+	TableName string
+	Columns   []string
+	IsUnique  bool
+	IsPrimary bool
+	Stats     *HypotheticalIndexStats
+	CreatedAt time.Time
 }
 
 // IndexRecommendation 索引推荐
 type IndexRecommendation struct {
-	TableName         string
-	Columns           []string
-	EstimatedBenefit  float64 // 收益（0-1）
-	EstimatedCost      float64 // 成本降低百分比
-	Reason            string
-	CreateStatement   string
-	RecommendationID  string
+	TableName        string
+	Columns          []string
+	EstimatedBenefit float64 // 收益（0-1）
+	EstimatedCost    float64 // 成本降低百分比
+	Reason           string
+	CreateStatement  string
+	RecommendationID string
 }
 
 // IndexCandidate 索引候选
 type IndexCandidate struct {
-	TableName   string
-	Columns     []string
-	Priority    int    // 优先级（WHERE=4, JOIN=3, GROUP=2, ORDER=1）
-	Source      string // 来源（WHERE, JOIN, GROUP, ORDER）
-	Unique      bool   // 是否唯一索引
-	IndexType   string // 索引类型：BTREE, FULLTEXT, SPATIAL
+	TableName string
+	Columns   []string
+	Priority  int    // 优先级（WHERE=4, JOIN=3, GROUP=2, ORDER=1）
+	Source    string // 来源（WHERE, JOIN, GROUP, ORDER）
+	Unique    bool   // 是否唯一索引
+	IndexType string // 索引类型：BTREE, FULLTEXT, SPATIAL
 }
 
 // IndexType 索引类型常量
@@ -386,16 +386,16 @@ type SpatialIndexCandidate struct {
 
 // SpatialFunction 空间函数类型
 const (
-	SpatialFuncContains      = "ST_Contains"
-	SpatialFuncIntersects   = "ST_Intersects"
-	SpatialFuncWithin       = "ST_Within"
-	SpatialFuncOverlaps     = "ST_Overlaps"
-	SpatialFuncTouches      = "ST_Touches"
-	SpatialFuncCrosses      = "ST_Crosses"
-	SpatialFuncDistance     = "ST_Distance"
-	SpatialFuncArea         = "ST_Area"
-	SpatialFuncLength       = "ST_Length"
-	SpatialFuncBuffer       = "ST_Buffer"
+	SpatialFuncContains   = "ST_Contains"
+	SpatialFuncIntersects = "ST_Intersects"
+	SpatialFuncWithin     = "ST_Within"
+	SpatialFuncOverlaps   = "ST_Overlaps"
+	SpatialFuncTouches    = "ST_Touches"
+	SpatialFuncCrosses    = "ST_Crosses"
+	SpatialFuncDistance   = "ST_Distance"
+	SpatialFuncArea       = "ST_Area"
+	SpatialFuncLength     = "ST_Length"
+	SpatialFuncBuffer     = "ST_Buffer"
 )
 
 // FullTextFunction 全文函数类型

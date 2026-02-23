@@ -43,10 +43,10 @@ func TestSelectColumns_DifferentColumnsMatchingCount(t *testing.T) {
 // SelectColumnsTestDS returns 3-column data for testing selectColumns optimization
 type SelectColumnsTestDS struct{}
 
-func (s *SelectColumnsTestDS) Connect(ctx context.Context) error   { return nil }
-func (s *SelectColumnsTestDS) Close(ctx context.Context) error     { return nil }
-func (s *SelectColumnsTestDS) IsConnected() bool                   { return true }
-func (s *SelectColumnsTestDS) IsWritable() bool                    { return true }
+func (s *SelectColumnsTestDS) Connect(ctx context.Context) error { return nil }
+func (s *SelectColumnsTestDS) Close(ctx context.Context) error   { return nil }
+func (s *SelectColumnsTestDS) IsConnected() bool                 { return true }
+func (s *SelectColumnsTestDS) IsWritable() bool                  { return true }
 func (s *SelectColumnsTestDS) GetConfig() *domain.DataSourceConfig {
 	return &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory}
 }
@@ -75,9 +75,11 @@ func (s *SelectColumnsTestDS) Update(ctx context.Context, tableName string, filt
 func (s *SelectColumnsTestDS) Delete(ctx context.Context, tableName string, filters []domain.Filter, options *domain.DeleteOptions) (int64, error) {
 	return 0, nil
 }
-func (s *SelectColumnsTestDS) CreateTable(ctx context.Context, info *domain.TableInfo) error { return nil }
-func (s *SelectColumnsTestDS) DropTable(ctx context.Context, tableName string) error         { return nil }
-func (s *SelectColumnsTestDS) TruncateTable(ctx context.Context, tableName string) error     { return nil }
+func (s *SelectColumnsTestDS) CreateTable(ctx context.Context, info *domain.TableInfo) error {
+	return nil
+}
+func (s *SelectColumnsTestDS) DropTable(ctx context.Context, tableName string) error     { return nil }
+func (s *SelectColumnsTestDS) TruncateTable(ctx context.Context, tableName string) error { return nil }
 func (s *SelectColumnsTestDS) GetTableInfo(ctx context.Context, tableName string) (*domain.TableInfo, error) {
 	return &domain.TableInfo{
 		Name: tableName,

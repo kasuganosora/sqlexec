@@ -190,8 +190,8 @@ func (r *DecorrelateRule) projectionSubquery(apply *LogicalApply, projection *Lo
 		decorrelated, exprMapping := Decorrelate(expr, outerSchema)
 		newExprs = append(newExprs, decorrelated)
 
-// Merge mappings
-	maps.Copy(mapping, exprMapping)
+		// Merge mappings
+		maps.Copy(mapping, exprMapping)
 	}
 
 	// Get inner child of projection
@@ -211,9 +211,9 @@ func (r *DecorrelateRule) projectionSubquery(apply *LogicalApply, projection *Lo
 	if apply.joinType == LeftOuterJoin {
 		join := NewLogicalJoinWithExprs(LeftOuterJoin, apply.children[0], innerChild, newConditions)
 
-	// Add projection on top
-	newProjection := NewLogicalProjection(newExprs, []string{}, join)
-	return newProjection, nil
+		// Add projection on top
+		newProjection := NewLogicalProjection(newExprs, []string{}, join)
+		return newProjection, nil
 	}
 
 	// For other join types, create regular Join

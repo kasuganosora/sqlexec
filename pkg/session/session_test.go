@@ -12,10 +12,10 @@ import (
 
 // MockSessionDriver implements SessionDriver for testing
 type MockSessionDriver struct {
-	sessions   map[string]*Session
-	threadIDs  map[uint32]*Session
-	keys       map[string]map[string]interface{}
-	mu         sync.RWMutex
+	sessions  map[string]*Session
+	threadIDs map[uint32]*Session
+	keys      map[string]map[string]interface{}
+	mu        sync.RWMutex
 }
 
 func NewMockSessionDriver() *MockSessionDriver {

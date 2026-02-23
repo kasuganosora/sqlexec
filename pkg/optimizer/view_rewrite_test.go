@@ -35,8 +35,8 @@ func TestRewrite_InvalidAlgorithm(t *testing.T) {
 	}
 
 	viewInfo := &domain.ViewInfo{
-		SelectStmt:  "SELECT id FROM users",
-		Algorithm:   domain.ViewAlgorithmTempTable, // Invalid for MERGE rewriter
+		SelectStmt: "SELECT id FROM users",
+		Algorithm:  domain.ViewAlgorithmTempTable, // Invalid for MERGE rewriter
 	}
 
 	_, err := rewriter.Rewrite(outerQuery, viewInfo)
@@ -60,8 +60,8 @@ func TestRewrite_InvalidViewSelect(t *testing.T) {
 	}
 
 	viewInfo := &domain.ViewInfo{
-		SelectStmt:  "INVALID SQL",
-		Algorithm:   domain.ViewAlgorithmMerge,
+		SelectStmt: "INVALID SQL",
+		Algorithm:  domain.ViewAlgorithmMerge,
 	}
 
 	_, err := rewriter.Rewrite(outerQuery, viewInfo)
@@ -81,8 +81,8 @@ func TestRewrite_MaximumViewDepth(t *testing.T) {
 	}
 
 	viewInfo := &domain.ViewInfo{
-		SelectStmt:  "SELECT id FROM users",
-		Algorithm:   domain.ViewAlgorithmMerge,
+		SelectStmt: "SELECT id FROM users",
+		Algorithm:  domain.ViewAlgorithmMerge,
 	}
 
 	// Set view depth to maximum
@@ -131,9 +131,9 @@ func TestMergeWhereClauses(t *testing.T) {
 				Type:     parser.ExprTypeOperator,
 				Operator: "eq",
 			},
-			viewWhere:  nil,
-			wantNil:    false,
-			wantAnd:    false,
+			viewWhere: nil,
+			wantNil:   false,
+			wantAnd:   false,
 		},
 		{
 			name: "both non-nil",
@@ -286,10 +286,10 @@ func TestBuildMergedFrom(t *testing.T) {
 	rewriter := NewViewRewriter()
 
 	tests := []struct {
-		name       string
-		view       *parser.SelectStatement
-		outer      *parser.SelectStatement
-		expected   string
+		name     string
+		view     *parser.SelectStatement
+		outer    *parser.SelectStatement
+		expected string
 	}{
 		{
 			name:     "both empty",
@@ -306,8 +306,8 @@ func TestBuildMergedFrom(t *testing.T) {
 			expected: "users",
 		},
 		{
-			name:     "outer has FROM",
-			view:     &parser.SelectStatement{},
+			name: "outer has FROM",
+			view: &parser.SelectStatement{},
 			outer: &parser.SelectStatement{
 				From: "orders",
 			},
@@ -365,9 +365,9 @@ func TestMapColumnsByViewDefinition(t *testing.T) {
 // TestIsUpdatable tests checking if a view is updatable
 func TestIsUpdatable(t *testing.T) {
 	tests := []struct {
-		name        string
-		viewInfo    *domain.ViewInfo
-		expected    bool
+		name     string
+		viewInfo *domain.ViewInfo
+		expected bool
 	}{
 		{
 			name:     "nil view info",

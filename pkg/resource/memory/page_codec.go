@@ -15,12 +15,13 @@ import (
 // value types directly and achieves ~10-50x faster serialization.
 //
 // Wire format:
-//   [rowCount:uint32]
-//   for each row:
-//     [fieldCount:uint16]
-//     for each field:
-//       [keyLen:uint16][key:bytes]
-//       [typeTag:byte][value:bytes]
+//
+//	[rowCount:uint32]
+//	for each row:
+//	  [fieldCount:uint16]
+//	  for each field:
+//	    [keyLen:uint16][key:bytes]
+//	    [typeTag:byte][value:bytes]
 //
 // Type tags:
 const (

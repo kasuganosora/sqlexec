@@ -165,11 +165,11 @@ func TestSamplingCollector_CalculateSampleSize(t *testing.T) {
 	collector := NewSamplingCollector(mockDS, 0.05) // 5%
 
 	tests := []struct {
-		name         string
-		totalRows    int64
-		sampleRate   float64
-		expectedMin  int64
-		expectedMax  int64
+		name        string
+		totalRows   int64
+		sampleRate  float64
+		expectedMin int64
+		expectedMax int64
 	}{
 		{
 			name:        "small table",
@@ -545,7 +545,7 @@ func TestSamplingCollector_CollectColumnStats(t *testing.T) {
 	assert.True(t, exists, "age stats should exist")
 	assert.Equal(t, "age", ageStats.Name)
 	assert.Equal(t, "integer", ageStats.DataType)
-	assert.Equal(t, int64(1), ageStats.NullCount) // one null value
+	assert.Equal(t, int64(1), ageStats.NullCount)     // one null value
 	assert.Equal(t, int64(3), ageStats.DistinctCount) // 25, 30, 35
 	assert.Equal(t, int64(25), ageStats.MinValue.(int64))
 	assert.Equal(t, int64(35), ageStats.MaxValue.(int64))
@@ -553,13 +553,13 @@ func TestSamplingCollector_CollectColumnStats(t *testing.T) {
 
 func TestTableStatistics_Completeness(t *testing.T) {
 	stats := &TableStatistics{
-		Name:             "test_table",
-		RowCount:         1000,
-		SampleCount:      100,
-		SampleRatio:      0.1,
-		ColumnStats:      make(map[string]*ColumnStatistics),
-		Histograms:       make(map[string]*Histogram),
-		CollectTimestamp: time.Now(),
+		Name:              "test_table",
+		RowCount:          1000,
+		SampleCount:       100,
+		SampleRatio:       0.1,
+		ColumnStats:       make(map[string]*ColumnStatistics),
+		Histograms:        make(map[string]*Histogram),
+		CollectTimestamp:  time.Now(),
 		EstimatedRowCount: 1000,
 	}
 

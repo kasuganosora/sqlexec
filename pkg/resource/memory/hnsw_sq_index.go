@@ -37,14 +37,14 @@ type HNSWSQIndex struct {
 	efConstruction int // 构建时的探索宽度
 	ef             int // 搜索时的探索宽度
 
-	mu   sync.RWMutex
-	rng  *rand.Rand
+	mu  sync.RWMutex
+	rng *rand.Rand
 }
 
 // hnswNodeSQ HNSW-SQ 节点
 type hnswNodeSQ struct {
 	id        int64
-	vector    []int8   // 量化后的向量
+	vector    []int8    // 量化后的向量
 	neighbors [][]int64 // 每一层的邻居
 }
 
@@ -57,9 +57,9 @@ type heapNodeSQ struct {
 // minHeap 最小堆实现
 type minHeapSQ []*heapNodeSQ
 
-func (h minHeapSQ) Len() int           { return len(h) }
-func (h minHeapSQ) Less(i, j int) bool { return h[i].distance < h[j].distance }
-func (h minHeapSQ) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h minHeapSQ) Len() int            { return len(h) }
+func (h minHeapSQ) Less(i, j int) bool  { return h[i].distance < h[j].distance }
+func (h minHeapSQ) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
 func (h *minHeapSQ) Push(x interface{}) { *h = append(*h, x.(*heapNodeSQ)) }
 func (h *minHeapSQ) Pop() interface{} {
 	old := *h
@@ -115,19 +115,19 @@ func NewHNSWSQIndex(columnName string, config *VectorIndexConfig) (*HNSWSQIndex,
 	}
 
 	return &HNSWSQIndex{
-		columnName:        columnName,
-		config:            config,
-		distFunc:          distFunc,
-		vectors:           make(map[int64][]float32),
-		quantizedVectors:  make(map[int64][]int8),
-		scale:             make([]float32, config.Dimension),
-		shift:             make([]float32, config.Dimension),
-		layers:            make([]map[int64]*hnswNodeSQ, maxLevel),
-		maxLevel:          maxLevel,
-		ml:                ml,
-		efConstruction:     efConstruction,
-		ef:                ef,
-		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
+		columnName:       columnName,
+		config:           config,
+		distFunc:         distFunc,
+		vectors:          make(map[int64][]float32),
+		quantizedVectors: make(map[int64][]int8),
+		scale:            make([]float32, config.Dimension),
+		shift:            make([]float32, config.Dimension),
+		layers:           make([]map[int64]*hnswNodeSQ, maxLevel),
+		maxLevel:         maxLevel,
+		ml:               ml,
+		efConstruction:   efConstruction,
+		ef:               ef,
+		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -338,11 +338,11 @@ func (h *HNSWSQIndex) insertNoLock(id int64, vector []float32) {
 			continue
 		}
 
-	// 在第 l 层搜索最近的 efConstruction 个节点
-	nearest := h.searchLayerSQ(vector, l, h.efConstruction, enterPoint)
+		// 在第 l 层搜索最近的 efConstruction 个节点
+		nearest := h.searchLayerSQ(vector, l, h.efConstruction, enterPoint)
 
-	// 连接到最近的节点
-	maxNeighbors := DefaultHNSWSQParams.M
+		// 连接到最近的节点
+		maxNeighbors := DefaultHNSWSQParams.M
 		if l == 0 {
 			maxNeighbors = DefaultHNSWSQParams.M * 2 // 第0层连接更多
 		}
@@ -440,8 +440,8 @@ func (h *HNSWSQIndex) pruneNeighbors(level int, id int64, maxNeighbors int) {
 
 	// 计算所有邻居到 id 的距离
 	type neighborDist struct {
-		id     int64
-		dist   float32
+		id   int64
+		dist float32
 	}
 
 	neighbors := make([]neighborDist, len(node.neighbors[level]))
@@ -504,35 +504,35 @@ func (h *HNSWSQIndex) Search(ctx context.Context, query []float32, k int, filter
 
 	// 从顶层到第1层，只做搜索更新
 	for l := h.maxLevel - 1; l > 0; l-- {
-			if len(h.layers[l]) == 0 {
+		if len(h.layers[l]) == 0 {
+			continue
+		}
+		// 在第 l 层搜索
+		candidates := []int64{enterPoint}
+		visited := make(map[int64]bool)
+
+		pq := make(minHeapSQ, 0)
+		heap.Init(&pq)
+
+		enterDist := h.computeQuantizedDistance(query, h.layers[l][enterPoint].vector)
+		heap.Push(&pq, &heapNodeSQ{id: enterPoint, distance: enterDist})
+
+		for len(pq) > 0 && len(candidates) < h.ef {
+			current := heap.Pop(&pq).(*heapNodeSQ)
+			if visited[current.id] {
 				continue
 			}
-			// 在第 l 层搜索
-			candidates := []int64{enterPoint}
-			visited := make(map[int64]bool)
+			visited[current.id] = true
+			candidates = append(candidates, current.id)
 
-			pq := make(minHeapSQ, 0)
-			heap.Init(&pq)
-
-			enterDist := h.computeQuantizedDistance(query, h.layers[l][enterPoint].vector)
-			heap.Push(&pq, &heapNodeSQ{id: enterPoint, distance: enterDist})
-
-			for len(pq) > 0 && len(candidates) < h.ef {
-				current := heap.Pop(&pq).(*heapNodeSQ)
-				if visited[current.id] {
-					continue
-				}
-				visited[current.id] = true
-				candidates = append(candidates, current.id)
-
-				nodeL := h.layers[l][current.id]
-				for _, neighborID := range nodeL.neighbors[l] {
-					if !visited[neighborID] {
-						neighborDist := h.computeQuantizedDistance(query, h.layers[l][neighborID].vector)
-						heap.Push(&pq, &heapNodeSQ{id: neighborID, distance: neighborDist})
-					}
+			nodeL := h.layers[l][current.id]
+			for _, neighborID := range nodeL.neighbors[l] {
+				if !visited[neighborID] {
+					neighborDist := h.computeQuantizedDistance(query, h.layers[l][neighborID].vector)
+					heap.Push(&pq, &heapNodeSQ{id: neighborID, distance: neighborDist})
 				}
 			}
+		}
 
 		// 更新入口点
 		if len(candidates) > 0 {
@@ -593,8 +593,8 @@ func (h *HNSWSQIndex) Search(ctx context.Context, query []float32, k int, filter
 
 	// 按距离排序
 	type resultItem struct {
-		id     int64
-		dist   float32
+		id   int64
+		dist float32
 	}
 	results := make([]resultItem, len(candidates))
 	for i, cid := range candidates {

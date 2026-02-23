@@ -955,17 +955,17 @@ func BenchmarkECommerce_ProductAnalysis(b *testing.B) {
 
 // BenchmarkResult 基准测试结果
 type BenchmarkResult struct {
-	Timestamp   string                      `json:"timestamp"`
-	GoVersion   string                      `json:"go_version"`
-	SystemInfo  SystemInfo                  `json:"system_info"`
-	Benchmarks  map[string]BenchmarkMetric  `json:"benchmarks"`
+	Timestamp  string                     `json:"timestamp"`
+	GoVersion  string                     `json:"go_version"`
+	SystemInfo SystemInfo                 `json:"system_info"`
+	Benchmarks map[string]BenchmarkMetric `json:"benchmarks"`
 }
 
 // SystemInfo 系统信息
 type SystemInfo struct {
-	CPUCores    int `json:"cpu_cores"`
-	MemoryGB    int `json:"memory_gb"`
-	GOMAXPROCS  int `json:"gomaxprocs"`
+	CPUCores   int `json:"cpu_cores"`
+	MemoryGB   int `json:"memory_gb"`
+	GOMAXPROCS int `json:"gomaxprocs"`
 }
 
 // BenchmarkMetric 基准测试指标
@@ -1001,9 +1001,9 @@ func parseBenchmarkOutput(output string) map[string]BenchmarkMetric {
 		opsPerSec := 1e9 / nsPerOp
 
 		results[name] = BenchmarkMetric{
-			OpsPerSec:        opsPerSec,
-			NsPerOp:          nsPerOp,
-			AllocsPerOp:      allocsPerOp,
+			OpsPerSec:         opsPerSec,
+			NsPerOp:           nsPerOp,
+			AllocsPerOp:       allocsPerOp,
 			AllocedBytesPerOp: allocedBytesPerOp,
 		}
 	}
@@ -1414,4 +1414,3 @@ func TestP99LatencyTracker(t *testing.T) {
 
 	t.Logf("P99: %v, Mean: %v", p99, mean)
 }
-

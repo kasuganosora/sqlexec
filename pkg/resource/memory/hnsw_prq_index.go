@@ -37,33 +37,33 @@ type HNSWPRQIndex struct {
 	layers []map[int64]*hnswNodePRQ
 
 	// 参数
-	maxLevel     int
-	ml           float64
-	ef           int
-	nsubq        int   // 子量化器数量
-	ksubq        int   // 每个子量化器的质心数量
-	kcoarse      int   // 粗量化码本大小
+	maxLevel int
+	ml       float64
+	ef       int
+	nsubq    int // 子量化器数量
+	ksubq    int // 每个子量化器的质心数量
+	kcoarse  int // 粗量化码本大小
 
-	mu   sync.RWMutex
-	rng  *rand.Rand
+	mu  sync.RWMutex
+	rng *rand.Rand
 }
 
 // hnswNodePRQ HNSW-PRQ 节点
 type hnswNodePRQ struct {
 	id         int64
-	coarseCode int8       // 粗量化编码
-	residual   []int8     // 残差 PQ 编码
-	neighbors  [][]int64  // 每一层的邻居
+	coarseCode int8      // 粗量化编码
+	residual   []int8    // 残差 PQ 编码
+	neighbors  [][]int64 // 每一层的邻居
 }
 
 // HNSWPRQParams HNSW-PRQ 参数
 type HNSWPRQParams struct {
-	M         int     // 每层连接数
-	MaxLevel  int     // 最大层数
-	ML        float64 // level generation factor
-	EF        int     // 构建时的搜索宽度
-	Nbits     int     // 每个子量化器的编码位数
-	Kcoarse   int     // 粗量化码本大小
+	M        int     // 每层连接数
+	MaxLevel int     // 最大层数
+	ML       float64 // level generation factor
+	EF       int     // 构建时的搜索宽度
+	Nbits    int     // 每个子量化器的编码位数
+	Kcoarse  int     // 粗量化码本大小
 }
 
 // DefaultHNSWPRQParams 默认参数
@@ -124,7 +124,7 @@ func NewHNSWPRQIndex(columnName string, config *VectorIndexConfig) (*HNSWPRQInde
 		config:            config,
 		distFunc:          distFunc,
 		vectors:           make(map[int64][]float32),
-		coarseCodes:      make(map[int64]int8),
+		coarseCodes:       make(map[int64]int8),
 		residualCodes:     make(map[int64][]int8),
 		coarseCodebook:    make([][]float32, kcoarse),
 		residualCodebooks: make([][][]float32, nsubq),
@@ -491,9 +491,9 @@ type heapNodePRQ struct {
 // minHeap 最小堆实现
 type minHeapPRQ []*heapNodePRQ
 
-func (h minHeapPRQ) Len() int           { return len(h) }
-func (h minHeapPRQ) Less(i, j int) bool { return h[i].distance < h[j].distance }
-func (h minHeapPRQ) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h minHeapPRQ) Len() int            { return len(h) }
+func (h minHeapPRQ) Less(i, j int) bool  { return h[i].distance < h[j].distance }
+func (h minHeapPRQ) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
 func (h *minHeapPRQ) Push(x interface{}) { *h = append(*h, x.(*heapNodePRQ)) }
 func (h *minHeapPRQ) Pop() interface{} {
 	old := *h

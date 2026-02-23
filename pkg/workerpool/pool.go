@@ -61,18 +61,18 @@ func DefaultConfig() Config {
 
 // Pool represents a worker pool
 type Pool struct {
-	config   Config
-	tasks    chan taskWrapper
-	results  chan Result
-	wg       sync.WaitGroup
-	ctx      context.Context
-	cancel   context.CancelFunc
-	running  atomic.Bool
-	closed   atomic.Bool
-	mu       sync.RWMutex
-	workers  int32
-	taskCnt  int64
-	errCnt   int64
+	config  Config
+	tasks   chan taskWrapper
+	results chan Result
+	wg      sync.WaitGroup
+	ctx     context.Context
+	cancel  context.CancelFunc
+	running atomic.Bool
+	closed  atomic.Bool
+	mu      sync.RWMutex
+	workers int32
+	taskCnt int64
+	errCnt  int64
 }
 
 // taskWrapper wraps a task with its result channel

@@ -10,7 +10,7 @@ import (
 
 // ConnectionPool 连接池
 type ConnectionPool struct {
-	connections  chan *sql.Conn
+	connections chan *sql.Conn
 	factory     func() (*sql.Conn, error)
 	destroy     func(*sql.Conn) error
 	maxSize     int
@@ -152,7 +152,7 @@ func (p *ConnectionPool) Stats() PoolStats {
 		CurrentSize: p.currentSize,
 		MaxSize:     p.maxSize,
 		IdleCount:   len(p.connections),
-		ActiveCount:  p.currentSize - len(p.connections),
+		ActiveCount: p.currentSize - len(p.connections),
 	}
 }
 

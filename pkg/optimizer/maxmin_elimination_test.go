@@ -14,11 +14,11 @@ func TestMaxMinEliminationSingleMax(t *testing.T) {
 	// Verify the plan is transformed correctly
 	rule := NewMaxMinEliminationRule(nil)
 
-	// Create test plan
+	// Create test plan - column "a" must be indexed for optimization to apply
 	tableInfo := &domain.TableInfo{
-		Name:    "test_table",
+		Name: "test_table",
 		Columns: []domain.ColumnInfo{
-			{Name: "a", Type: "INT64"},
+			{Name: "a", Type: "INT64", Primary: true},
 		},
 	}
 
@@ -60,10 +60,11 @@ func TestMaxMinEliminationSingleMax(t *testing.T) {
 func TestMaxMinEliminationSingleMin(t *testing.T) {
 	rule := NewMaxMinEliminationRule(nil)
 
+	// Column "b" must be indexed for optimization to apply
 	tableInfo := &domain.TableInfo{
-		Name:    "test_table",
+		Name: "test_table",
 		Columns: []domain.ColumnInfo{
-			{Name: "b", Type: "INT64"},
+			{Name: "b", Type: "INT64", Unique: true},
 		},
 	}
 
@@ -100,10 +101,11 @@ func TestMaxMinEliminationSingleMin(t *testing.T) {
 func TestMaxMinEliminationMultiple(t *testing.T) {
 	rule := NewMaxMinEliminationRule(nil)
 
+	// Column "a" must be indexed for optimization to apply
 	tableInfo := &domain.TableInfo{
-		Name:    "test_table",
+		Name: "test_table",
 		Columns: []domain.ColumnInfo{
-			{Name: "a", Type: "INT64"},
+			{Name: "a", Type: "INT64", Primary: true},
 		},
 	}
 
@@ -144,7 +146,7 @@ func TestMaxMinEliminationWithGroupBy(t *testing.T) {
 	rule := NewMaxMinEliminationRule(nil)
 
 	tableInfo := &domain.TableInfo{
-		Name:    "test_table",
+		Name: "test_table",
 		Columns: []domain.ColumnInfo{
 			{Name: "a", Type: "INT64"},
 			{Name: "b", Type: "INT64"},
@@ -172,7 +174,7 @@ func TestMaxMinEliminationNonMaxMin(t *testing.T) {
 	rule := NewMaxMinEliminationRule(nil)
 
 	tableInfo := &domain.TableInfo{
-		Name:    "test_table",
+		Name: "test_table",
 		Columns: []domain.ColumnInfo{
 			{Name: "a", Type: "INT64"},
 		},
@@ -214,5 +216,153 @@ func TestMaxMinEliminationEmptyAggregation(t *testing.T) {
 
 	if rule.Match(agg) {
 		t.Error("Rule should NOT match empty aggregation")
+	}
+}
+
+func TestCheckColumnHasIndex_PrimaryKey(t *testing.T) {
+	rule := NewMaxMinEliminationRule(nil)
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Primary: true},
+			{Name: "name", Type: "VARCHAR"},
+		},
+	}
+
+	optCtx := &OptimizationContext{
+		TableInfo: map[string]*domain.TableInfo{
+			"test_table": tableInfo,
+		},
+	}
+
+	// Primary key column should have an index
+	if !rule.checkColumnHasIndex("test_table", "id", optCtx) {
+		t.Error("Primary key column should have an index")
+	}
+}
+
+func TestCheckColumnHasIndex_UniqueColumn(t *testing.T) {
+	rule := NewMaxMinEliminationRule(nil)
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Primary: true},
+			{Name: "email", Type: "VARCHAR", Unique: true},
+		},
+	}
+
+	optCtx := &OptimizationContext{
+		TableInfo: map[string]*domain.TableInfo{
+			"test_table": tableInfo,
+		},
+	}
+
+	// Unique column should have an index
+	if !rule.checkColumnHasIndex("test_table", "email", optCtx) {
+		t.Error("Unique column should have an index")
+	}
+}
+
+func TestCheckColumnHasIndex_RegularColumn(t *testing.T) {
+	rule := NewMaxMinEliminationRule(nil)
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Primary: true},
+			{Name: "name", Type: "VARCHAR"},
+		},
+	}
+
+	optCtx := &OptimizationContext{
+		TableInfo: map[string]*domain.TableInfo{
+			"test_table": tableInfo,
+		},
+	}
+
+	// Regular column without any index should return false
+	if rule.checkColumnHasIndex("test_table", "name", optCtx) {
+		t.Error("Regular column without index should return false")
+	}
+}
+
+func TestCheckColumnHasIndex_WithExplicitIndex(t *testing.T) {
+	rule := NewMaxMinEliminationRule(nil)
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Primary: true},
+			{Name: "age", Type: "INT"},
+		},
+		Atts: map[string]interface{}{
+			"__indexes__": []*domain.Index{
+				{Name: "idx_age", Table: "test_table", Columns: []string{"age"}},
+			},
+		},
+	}
+
+	optCtx := &OptimizationContext{
+		TableInfo: map[string]*domain.TableInfo{
+			"test_table": tableInfo,
+		},
+	}
+
+	// Column with explicit index in Atts should have an index
+	if !rule.checkColumnHasIndex("test_table", "age", optCtx) {
+		t.Error("Column with explicit index should have an index")
+	}
+}
+
+func TestCheckColumnHasIndex_NonExistentTable(t *testing.T) {
+	rule := NewMaxMinEliminationRule(nil)
+
+	optCtx := &OptimizationContext{
+		TableInfo: map[string]*domain.TableInfo{},
+	}
+
+	if rule.checkColumnHasIndex("nonexistent", "id", optCtx) {
+		t.Error("Non-existent table should return false")
+	}
+}
+
+func TestMaxMinElimination_NoIndex_NoOptimization(t *testing.T) {
+	// When a column has no index, MAX/MIN elimination should NOT apply
+	rule := NewMaxMinEliminationRule(nil)
+
+	tableInfo := &domain.TableInfo{
+		Name: "test_table",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Primary: true},
+			{Name: "value", Type: "INT"}, // No index
+		},
+	}
+
+	dataSource := NewLogicalDataSource("test_table", tableInfo)
+
+	agg := NewLogicalAggregate(
+		[]*AggregationItem{
+			{Type: Max, Expr: &parser.Expression{Type: parser.ExprTypeColumn, Column: "value"}, Alias: "max_value"},
+		},
+		[]string{},
+		dataSource,
+	)
+
+	optCtx := &OptimizationContext{
+		TableInfo: map[string]*domain.TableInfo{
+			"test_table": tableInfo,
+		},
+	}
+
+	result, err := rule.Apply(context.Background(), agg, optCtx)
+	if err != nil {
+		t.Fatalf("Apply failed: %v", err)
+	}
+
+	// Since "value" has no index, the optimization should return the original plan
+	if result != agg {
+		t.Error("Expected original plan when column has no index")
 	}
 }

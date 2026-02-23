@@ -13,26 +13,30 @@ import (
 
 // CacheConfig 缓存配置
 type CacheConfig struct {
-	Enabled bool
-	TTL     time.Duration // 缓存过期时间
-	MaxSize int           // 最大缓存条目数
+	Enabled     bool
+	TTL         time.Duration // 缓存过期时间
+	MaxSize     int           // 最大缓存条目数
+	MaxMemoryMB int           // 最大内存使用量（MB），0 表示不限制
 }
 
 // DefaultCacheConfig 默认缓存配置
 var DefaultCacheConfig = CacheConfig{
-	Enabled: true,
-	TTL:     5 * time.Minute,
-	MaxSize: 1000,
+	Enabled:     true,
+	TTL:         5 * time.Minute,
+	MaxSize:     1000,
+	MaxMemoryMB: 256,
 }
 
 // QueryCache 查询缓存
 type QueryCache struct {
-	store         map[string]*CacheEntry
-	explainStore  map[string]*ExplainEntry
-	mu            sync.RWMutex
-	ttl           time.Duration
-	maxSize       int
-	currentDB     string // 当前数据库上下文
+	store        map[string]*CacheEntry
+	explainStore map[string]*ExplainEntry
+	mu           sync.RWMutex
+	ttl          time.Duration
+	maxSize      int
+	maxMemBytes  int64  // 最大内存字节数，0 表示不限制
+	curMemBytes  int64  // 当前估算内存使用量
+	currentDB    string // 当前数据库上下文
 }
 
 // CacheEntry 缓存条目
@@ -43,6 +47,7 @@ type CacheEntry struct {
 	CreatedAt time.Time
 	ExpiresAt time.Time
 	Hits      int64
+	memSize   int64 // 估算内存占用（字节）
 }
 
 // ExplainEntry Explain 缓存条目
@@ -64,6 +69,7 @@ func NewQueryCache(config CacheConfig) *QueryCache {
 		explainStore: make(map[string]*ExplainEntry),
 		ttl:          config.TTL,
 		maxSize:      config.MaxSize,
+		maxMemBytes:  int64(config.MaxMemoryMB) * 1024 * 1024,
 	}
 }
 
@@ -104,13 +110,22 @@ func (c *QueryCache) Set(sql string, params []interface{}, result *domain.QueryR
 	}
 
 	key := c.generateKey(sql, params)
+	entrySize := estimateResultSize(result)
 
 	// 检查缓存大小限制
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if len(c.store) >= c.maxSize {
-		c.evictOldest()
+	// 如果替换已有条目，先减去旧条目的内存
+	if old, exists := c.store[key]; exists {
+		c.curMemBytes -= old.memSize
+	}
+
+	// 淘汰直到满足条目数和内存限制
+	for len(c.store) >= c.maxSize || (c.maxMemBytes > 0 && c.curMemBytes+entrySize > c.maxMemBytes) {
+		if !c.evictOldest() {
+			break
+		}
 	}
 
 	now := time.Now()
@@ -121,9 +136,11 @@ func (c *QueryCache) Set(sql string, params []interface{}, result *domain.QueryR
 		CreatedAt: now,
 		ExpiresAt: now.Add(c.ttl),
 		Hits:      0,
+		memSize:   entrySize,
 	}
 
 	c.store[key] = entry
+	c.curMemBytes += entrySize
 }
 
 // Clear 清空所有缓存
@@ -135,6 +152,7 @@ func (c *QueryCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.store = make(map[string]*CacheEntry)
+	c.curMemBytes = 0
 }
 
 // SetCurrentDB 设置当前数据库上下文
@@ -161,6 +179,7 @@ func (c *QueryCache) ClearTable(tableName string) {
 	// 删除所有SQL中包含该表名的缓存条目
 	for key, entry := range c.store {
 		if strings.Contains(entry.SQL, tableName) {
+			c.curMemBytes -= entry.memSize
 			delete(c.store, key)
 		}
 	}
@@ -177,6 +196,7 @@ func (c *QueryCache) ClearExpired() {
 	c.mu.Lock()
 	for key, entry := range c.store {
 		if now.After(entry.ExpiresAt) {
+			c.curMemBytes -= entry.memSize
 			delete(c.store, key)
 		}
 	}
@@ -208,11 +228,13 @@ func (c *QueryCache) Stats() CacheStats {
 	}
 
 	return CacheStats{
-		Size:     size,
-		MaxSize:  c.maxSize,
-		TotalHits: totalHits,
-		Oldest:   oldest,
-		Newest:   newest,
+		Size:        size,
+		MaxSize:     c.maxSize,
+		TotalHits:   totalHits,
+		Oldest:      oldest,
+		Newest:      newest,
+		MemoryBytes: c.curMemBytes,
+		MaxMemBytes: c.maxMemBytes,
 	}
 }
 
@@ -239,10 +261,10 @@ func (c *QueryCache) generateKey(sql string, params []interface{}) string {
 	return fmt.Sprintf("%x", h.Sum32())
 }
 
-// evictOldest 淘汰最老的缓存条目
-func (c *QueryCache) evictOldest() {
+// evictOldest 淘汰最老的缓存条目，返回是否成功淘汰
+func (c *QueryCache) evictOldest() bool {
 	if len(c.store) == 0 {
-		return
+		return false
 	}
 
 	oldestKey := ""
@@ -256,23 +278,70 @@ func (c *QueryCache) evictOldest() {
 	}
 
 	if oldestKey != "" {
+		if entry, exists := c.store[oldestKey]; exists {
+			c.curMemBytes -= entry.memSize
+		}
 		delete(c.store, oldestKey)
+		return true
+	}
+	return false
+}
+
+// estimateResultSize 估算 QueryResult 的内存占用（字节）
+func estimateResultSize(result *domain.QueryResult) int64 {
+	if result == nil {
+		return 0
+	}
+	// 基础结构开销
+	size := int64(128)
+	// 列信息
+	for _, col := range result.Columns {
+		size += int64(len(col.Name) + len(col.Type) + 64)
+	}
+	// 行数据：每行按列数 × 平均值大小估算
+	for _, row := range result.Rows {
+		size += 64 // map 开销
+		for k, v := range row {
+			size += int64(len(k)) + estimateValueSize(v)
+		}
+	}
+	return size
+}
+
+// estimateValueSize 估算单个值的内存占用
+func estimateValueSize(val interface{}) int64 {
+	if val == nil {
+		return 8
+	}
+	switch v := val.(type) {
+	case string:
+		return int64(len(v) + 16)
+	case []byte:
+		return int64(len(v) + 24)
+	case int, int64, float64, bool:
+		return 8
+	default:
+		return 32
 	}
 }
 
 // CacheStats 缓存统计信息
 type CacheStats struct {
-	Size     int       // 当前缓存条目数
-	MaxSize  int       // 最大缓存条目数
-	TotalHits int64     // 总命中次数
-	Oldest   time.Time // 最老的缓存创建时间
-	Newest   time.Time // 最新的缓存创建时间
+	Size        int       // 当前缓存条目数
+	MaxSize     int       // 最大缓存条目数
+	TotalHits   int64     // 总命中次数
+	Oldest      time.Time // 最老的缓存创建时间
+	Newest      time.Time // 最新的缓存创建时间
+	MemoryBytes int64     // 当前估算内存使用量（字节）
+	MaxMemBytes int64     // 最大内存限制（字节），0 表示不限制
 }
 
 // String 返回统计信息的字符串表示
 func (s CacheStats) String() string {
-	return fmt.Sprintf("Size: %d/%d, TotalHits: %d, Oldest: %v, Newest: %v",
-		s.Size, s.MaxSize, s.TotalHits, s.Oldest, s.Newest)
+	memMB := float64(s.MemoryBytes) / (1024 * 1024)
+	maxMemMB := float64(s.MaxMemBytes) / (1024 * 1024)
+	return fmt.Sprintf("Size: %d/%d, Memory: %.1fMB/%.1fMB, TotalHits: %d, Oldest: %v, Newest: %v",
+		s.Size, s.MaxSize, memMB, maxMemMB, s.TotalHits, s.Oldest, s.Newest)
 }
 
 // GetExplain 获取 Explain 缓存
@@ -352,4 +421,3 @@ func (c *QueryCache) evictOldestExplain() {
 		delete(c.explainStore, oldestKey)
 	}
 }
-

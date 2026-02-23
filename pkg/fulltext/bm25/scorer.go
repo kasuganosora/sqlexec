@@ -146,10 +146,10 @@ func (s *Scorer) Score(termID int64, freq int, docLength int) float64 {
 
 // Document 文档（用于评分计算）
 type Document struct {
-	ID         int64
-	TermFreqs  map[int64]int // termID -> frequency
-	Length     int
-	Vector     *SparseVector
+	ID        int64
+	TermFreqs map[int64]int // termID -> frequency
+	Length    int
+	Vector    *SparseVector
 }
 
 // ComputeDocumentVector 计算文档的BM25稀疏向量
@@ -202,8 +202,8 @@ func (s *Scorer) ComputeDocumentVectorWithStats(termFreqs map[int64]int, docLeng
 
 // QueryScorer 查询评分器
 type QueryScorer struct {
-	scorer       *Scorer
-	queryVector  *SparseVector
+	scorer      *Scorer
+	queryVector *SparseVector
 }
 
 // NewQueryScorer 创建查询评分器
@@ -212,7 +212,7 @@ func NewQueryScorer(scorer *Scorer, queryTerms map[int64]float64) *QueryScorer {
 	for termID, weight := range queryTerms {
 		vector.Set(termID, weight)
 	}
-	
+
 	return &QueryScorer{
 		scorer:      scorer,
 		queryVector: vector,
@@ -228,7 +228,7 @@ func (qs *QueryScorer) Score(docVector *SparseVector) float64 {
 func (qs *QueryScorer) ScoreWithDetails(docVector *SparseVector) (float64, map[int64]float64) {
 	var totalScore float64
 	details := make(map[int64]float64)
-	
+
 	for termID, queryWeight := range qs.queryVector.Terms {
 		if docWeight, ok := docVector.Terms[termID]; ok {
 			score := queryWeight * docWeight
@@ -236,6 +236,6 @@ func (qs *QueryScorer) ScoreWithDetails(docVector *SparseVector) (float64, map[i
 			details[termID] = score
 		}
 	}
-	
+
 	return totalScore, details
 }

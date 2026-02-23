@@ -143,7 +143,7 @@ func TestAggCountIfNoArgs(t *testing.T) {
 
 func TestAggCountIfStrings(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggCountIf(ctx, []interface{}{"hello"})   // truthy
+	aggCountIf(ctx, []interface{}{"hello"})    // truthy
 	aggCountIf(ctx, []interface{}{""})         // falsy
 	aggCountIf(ctx, []interface{}{"0"})        // falsy
 	aggCountIf(ctx, []interface{}{"false"})    // falsy

@@ -168,8 +168,8 @@ func TestPhysicalSort_Explain(t *testing.T) {
 			expectedPattern: "Sort(id ASC, name DESC, age ASC",
 		},
 		{
-			name: "empty order by",
-			orderByItems: []*OrderByItem{},
+			name:            "empty order by",
+			orderByItems:    []*OrderByItem{},
 			expectedPattern: "Sort(",
 		},
 	}

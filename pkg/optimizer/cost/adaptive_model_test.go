@@ -42,9 +42,9 @@ func TestNewAdaptiveCostModel(t *testing.T) {
 
 func TestNewEnhancedCostModel(t *testing.T) {
 	tests := []struct {
-		name      string
-		hardware  *HardwareProfile
-		wantNil   bool
+		name     string
+		hardware *HardwareProfile
+		wantNil  bool
 	}{
 		{
 			name:     "with hardware profile",
@@ -150,22 +150,22 @@ func TestAdaptiveCostModel_FilterCost(t *testing.T) {
 	model := NewAdaptiveCostModel(&SimpleCardinalityEstimator{})
 
 	tests := []struct {
-		name         string
-		inputRows    int64
-		selectivity  float64
-		filters      []domain.Filter
-		wantNonNeg   bool
+		name        string
+		inputRows   int64
+		selectivity float64
+		filters     []domain.Filter
+		wantNonNeg  bool
 	}{
 		{
-			name:       "no filters",
-			inputRows:  1000,
+			name:        "no filters",
+			inputRows:   1000,
 			selectivity: 0.5,
-			filters:    []domain.Filter{},
-			wantNonNeg: true,
+			filters:     []domain.Filter{},
+			wantNonNeg:  true,
 		},
 		{
-			name:       "single filter",
-			inputRows:  1000,
+			name:        "single filter",
+			inputRows:   1000,
 			selectivity: 0.1,
 			filters: []domain.Filter{
 				{Field: "age", Operator: ">", Value: 18},
@@ -173,8 +173,8 @@ func TestAdaptiveCostModel_FilterCost(t *testing.T) {
 			wantNonNeg: true,
 		},
 		{
-			name:       "multiple filters",
-			inputRows:  1000,
+			name:        "multiple filters",
+			inputRows:   1000,
 			selectivity: 0.05,
 			filters: []domain.Filter{
 				{Field: "age", Operator: ">", Value: 18},
@@ -183,18 +183,18 @@ func TestAdaptiveCostModel_FilterCost(t *testing.T) {
 			wantNonNeg: true,
 		},
 		{
-			name:       "zero selectivity",
-			inputRows:  1000,
+			name:        "zero selectivity",
+			inputRows:   1000,
 			selectivity: 0,
-			filters:    []domain.Filter{},
-			wantNonNeg: true,
+			filters:     []domain.Filter{},
+			wantNonNeg:  true,
 		},
 		{
-			name:       "full selectivity",
-			inputRows:  1000,
+			name:        "full selectivity",
+			inputRows:   1000,
 			selectivity: 1.0,
-			filters:    []domain.Filter{},
-			wantNonNeg: true,
+			filters:     []domain.Filter{},
+			wantNonNeg:  true,
 		},
 	}
 
@@ -269,39 +269,39 @@ func TestAdaptiveCostModel_AggregateCost(t *testing.T) {
 	model := NewAdaptiveCostModel(&SimpleCardinalityEstimator{})
 
 	tests := []struct {
-		name       string
-		inputRows  int64
+		name        string
+		inputRows   int64
 		groupByCols int
-		aggFuncs   int
-		wantNonNeg bool
+		aggFuncs    int
+		wantNonNeg  bool
 	}{
 		{
-			name:       "zero rows",
-			inputRows:  0,
+			name:        "zero rows",
+			inputRows:   0,
 			groupByCols: 1,
-			aggFuncs:   1,
-			wantNonNeg: true,
+			aggFuncs:    1,
+			wantNonNeg:  true,
 		},
 		{
-			name:       "single group",
-			inputRows:  1000,
+			name:        "single group",
+			inputRows:   1000,
 			groupByCols: 1,
-			aggFuncs:   1,
-			wantNonNeg: true,
+			aggFuncs:    1,
+			wantNonNeg:  true,
 		},
 		{
-			name:       "multiple groups",
-			inputRows:  1000,
+			name:        "multiple groups",
+			inputRows:   1000,
 			groupByCols: 3,
-			aggFuncs:   2,
-			wantNonNeg: true,
+			aggFuncs:    2,
+			wantNonNeg:  true,
 		},
 		{
-			name:       "large table",
-			inputRows:  1000000,
+			name:        "large table",
+			inputRows:   1000000,
 			groupByCols: 2,
-			aggFuncs:   3,
-			wantNonNeg: true,
+			aggFuncs:    3,
+			wantNonNeg:  true,
 		},
 	}
 
@@ -411,9 +411,9 @@ func TestAdaptiveCostModel_UpdateCacheHitInfo(t *testing.T) {
 	model := NewAdaptiveCostModel(&SimpleCardinalityEstimator{})
 
 	tests := []struct {
-		name     string
-		table    string
-		hitRate  float64
+		name    string
+		table   string
+		hitRate float64
 	}{
 		{
 			name:    "normal hit rate",
@@ -542,10 +542,10 @@ func TestAdaptiveCostModel_ScanCostForJoinModel(t *testing.T) {
 	model := NewAdaptiveCostModel(&SimpleCardinalityEstimator{})
 
 	tests := []struct {
-		name       string
-		tableName  string
-		rowCount   int64
-		useIndex   bool
+		name      string
+		tableName string
+		rowCount  int64
+		useIndex  bool
 	}{
 		{
 			name:      "without index",

@@ -176,8 +176,8 @@ func TestDefaultServices(t *testing.T) {
 
 	// Test that services can be retrieved and are of correct type
 	tests := []struct {
-		name        string
-		typeCheck   func(interface{}) bool
+		name      string
+		typeCheck func(interface{}) bool
 	}{
 		{
 			name:      "stats.cache.auto_refresh",

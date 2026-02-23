@@ -50,22 +50,22 @@ func (t *SchemataTable) Query(ctx context.Context, filters []domain.Filter, opti
 
 	// Add information_schema (always available)
 	rows = append(rows, domain.Row{
-		"catalog_name":              "def",
-		"schema_name":               "information_schema",
+		"catalog_name":               "def",
+		"schema_name":                "information_schema",
 		"default_character_set_name": "utf8mb4",
 		"default_collation_name":     "utf8mb4_general_ci",
-		"sql_path":                 nil,
+		"sql_path":                   nil,
 	})
 
 	// Add all registered virtual databases from registry
 	if t.vdbRegistry != nil {
 		for _, entry := range t.vdbRegistry.List() {
 			rows = append(rows, domain.Row{
-				"catalog_name":              "def",
-				"schema_name":               entry.Name,
+				"catalog_name":               "def",
+				"schema_name":                entry.Name,
 				"default_character_set_name": "utf8mb4",
 				"default_collation_name":     "utf8mb4_general_ci",
-				"sql_path":                 nil,
+				"sql_path":                   nil,
 			})
 		}
 	}
@@ -80,11 +80,11 @@ func (t *SchemataTable) Query(ctx context.Context, filters []domain.Filter, opti
 			continue
 		}
 		row := domain.Row{
-			"catalog_name":              "def",
-			"schema_name":               name,
+			"catalog_name":               "def",
+			"schema_name":                name,
 			"default_character_set_name": "utf8mb4",
 			"default_collation_name":     "utf8mb4_general_ci",
-			"sql_path":                 nil,
+			"sql_path":                   nil,
 		}
 		rows = append(rows, row)
 	}

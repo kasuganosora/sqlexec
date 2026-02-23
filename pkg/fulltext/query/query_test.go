@@ -33,12 +33,12 @@ func TestRangeQuery(t *testing.T) {
 	t.Run("IntegerRange", func(t *testing.T) {
 		query := NewRangeQuery("price", 100, 200, true, true)
 		results := query.Execute(idx)
-		
+
 		fmt.Printf("Integer range query results: %d\n", len(results))
 		for _, r := range results {
 			fmt.Printf("  Doc %d: price=%v\n", r.DocID, r.Doc.Fields["price"])
 		}
-		
+
 		if len(results) != 3 {
 			t.Errorf("Expected 2 results, got %d", len(results))
 		}
@@ -48,12 +48,12 @@ func TestRangeQuery(t *testing.T) {
 	t.Run("FloatRange", func(t *testing.T) {
 		query := NewRangeQuery("rating", 3.0, 5.0, true, true)
 		results := query.Execute(idx)
-		
+
 		fmt.Printf("Float range query results: %d\n", len(results))
 		for _, r := range results {
 			fmt.Printf("  Doc %d: rating=%v\n", r.DocID, r.Doc.Fields["rating"])
 		}
-		
+
 		if len(results) != 3 {
 			t.Errorf("Expected 2 results, got %d", len(results))
 		}
@@ -63,12 +63,12 @@ func TestRangeQuery(t *testing.T) {
 	t.Run("StringRange", func(t *testing.T) {
 		query := NewRangeQuery("date", "2024-02-01", "2024-03-01", true, true)
 		results := query.Execute(idx)
-		
+
 		fmt.Printf("String range query results: %d\n", len(results))
 		for _, r := range results {
 			fmt.Printf("  Doc %d: date=%v\n", r.DocID, r.Doc.Fields["date"])
 		}
-		
+
 		if len(results) != 2 {
 			t.Errorf("Expected 2 results, got %d", len(results))
 		}
@@ -85,9 +85,9 @@ func TestFuzzyQuery(t *testing.T) {
 	// 添加测试文档
 	docs := []*index.Document{
 		{ID: 1, Content: "hello world", Fields: map[string]interface{}{"text": "hello world"}},
-		{ID: 2, Content: "helo world", Fields: map[string]interface{}{"text": "helo world"}},  // 编辑距离1
-		{ID: 3, Content: "help world", Fields: map[string]interface{}{"text": "help world"}},  // 编辑距离2
-		{ID: 4, Content: "hell world", Fields: map[string]interface{}{"text": "hell world"}},  // 编辑距离1
+		{ID: 2, Content: "helo world", Fields: map[string]interface{}{"text": "helo world"}}, // 编辑距离1
+		{ID: 3, Content: "help world", Fields: map[string]interface{}{"text": "help world"}}, // 编辑距离2
+		{ID: 4, Content: "hell world", Fields: map[string]interface{}{"text": "hell world"}}, // 编辑距离1
 		{ID: 5, Content: "helicopter", Fields: map[string]interface{}{"text": "helicopter"}}, // 编辑距离4 (太远)
 	}
 
@@ -101,12 +101,12 @@ func TestFuzzyQuery(t *testing.T) {
 	t.Run("FuzzyDistance1", func(t *testing.T) {
 		query := NewFuzzyQuery("text", "hello", 1)
 		results := query.Execute(idx)
-		
+
 		fmt.Printf("Fuzzy query (distance=1) results: %d\n", len(results))
 		for _, r := range results {
 			fmt.Printf("  Doc %d: %v (score=%.4f)\n", r.DocID, r.Doc.Fields["text"], r.Score)
 		}
-		
+
 		if len(results) < 2 {
 			t.Errorf("Expected at least 2 results, got %d", len(results))
 		}
@@ -116,12 +116,12 @@ func TestFuzzyQuery(t *testing.T) {
 	t.Run("FuzzyDistance2", func(t *testing.T) {
 		query := NewFuzzyQuery("text", "hello", 2)
 		results := query.Execute(idx)
-		
+
 		fmt.Printf("Fuzzy query (distance=2) results: %d\n", len(results))
 		for _, r := range results {
 			fmt.Printf("  Doc %d: %v (score=%.4f)\n", r.DocID, r.Doc.Fields["text"], r.Score)
 		}
-		
+
 		if len(results) < 3 {
 			t.Errorf("Expected at least 3 results, got %d", len(results))
 		}
@@ -153,14 +153,14 @@ func TestRegexQuery(t *testing.T) {
 	// 测试邮箱正则
 	t.Run("EmailRegex", func(t *testing.T) {
 		query := NewRegexQuery("email", `^[a-zA-Z0-9._%+-]+@example\.com$`)
-		
+
 		results := query.Execute(idx)
-		
+
 		fmt.Printf("Email regex query results: %d\n", len(results))
 		for _, r := range results {
 			fmt.Printf("  Doc %d: %v\n", r.DocID, r.Doc.Fields["email"])
 		}
-		
+
 		if len(results) != 2 {
 			t.Errorf("Expected 2 results, got %d", len(results))
 		}
@@ -170,14 +170,14 @@ func TestRegexQuery(t *testing.T) {
 	t.Run("WildcardQuery", func(t *testing.T) {
 		// 测试 * 通配符
 		query := NewWildcardQuery("email", "*@*.com")
-		
+
 		results := query.Execute(idx)
-		
+
 		fmt.Printf("Wildcard query results: %d\n", len(results))
 		for _, r := range results {
 			fmt.Printf("  Doc %d: %v\n", r.DocID, r.Doc.Fields["email"])
 		}
-		
+
 		if len(results) != 3 {
 			t.Errorf("Expected 2 results, got %d", len(results))
 		}
@@ -187,14 +187,14 @@ func TestRegexQuery(t *testing.T) {
 	t.Run("ComplexRegex", func(t *testing.T) {
 		// 匹配格式：XXX-XXX-XXXX
 		query := NewRegexQuery("code", `^[A-Z]{3}-\d{3}-[A-Z]{3}$`)
-		
+
 		results := query.Execute(idx)
-		
+
 		fmt.Printf("Complex regex query results: %d\n", len(results))
 		for _, r := range results {
 			fmt.Printf("  Doc %d: %v\n", r.DocID, r.Doc.Fields["code"])
 		}
-		
+
 		if len(results) != 1 {
 			t.Errorf("Expected 1 result, got %d", len(results))
 		}
@@ -226,23 +226,23 @@ func TestCombinedQueries(t *testing.T) {
 	t.Run("RangeAndFuzzy", func(t *testing.T) {
 		// 价格范围 10-20
 		rangeQuery := NewRangeQuery("price", 10, 20, true, true)
-		
+
 		// 名称模糊匹配 "appel" (拼写错误)
 		// "appel" 到 "apple" 的编辑距离是 2 (交换)，所以需要 distance=2
 		fuzzyQuery := NewFuzzyQuery("name", "appel", 2)
-		
+
 		// 布尔查询
 		boolQuery := NewBooleanQuery()
 		boolQuery.AddMust(rangeQuery)
 		boolQuery.AddMust(fuzzyQuery)
-		
+
 		results := boolQuery.Execute(idx)
-		
+
 		fmt.Printf("Range + Fuzzy query results: %d\n", len(results))
 		for _, r := range results {
 			fmt.Printf("  Doc %d: name=%v, price=%v\n", r.DocID, r.Doc.Fields["name"], r.Doc.Fields["price"])
 		}
-		
+
 		// 只有 Doc 1 满足条件: name="apple" (匹配 "appel" 的模糊查询) 且 price=10 (在范围内)
 		if len(results) != 1 {
 			t.Errorf("Expected 1 result, got %d", len(results))

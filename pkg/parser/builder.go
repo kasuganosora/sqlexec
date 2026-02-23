@@ -3,12 +3,14 @@ package parser
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
 	domain "github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/generated"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
+	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
 // QueryBuilder 查询构建器
@@ -98,20 +100,23 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 		options.Filters = b.convertExpressionToFilters(stmt.Where)
 	}
 
-	// 处理 ORDER BY
-	if len(stmt.OrderBy) > 0 {
-		options.OrderBy = stmt.OrderBy[0].Column
-		options.Order = stmt.OrderBy[0].Direction
-	}
+	// Detect if post-processing is needed
+	hasAggregates := b.hasAggregateFunctions(stmt.Columns)
+	hasGroupBy := len(stmt.GroupBy) > 0
+	hasJoins := len(stmt.Joins) > 0
 
-	// 处理 LIMIT
-	if stmt.Limit != nil {
-		options.Limit = int(*stmt.Limit)
-	}
-
-	// 处理 OFFSET
-	if stmt.Offset != nil {
-		options.Offset = int(*stmt.Offset)
+	// Only apply ORDER BY/LIMIT/OFFSET at dataSource level if no post-processing needed
+	if !hasAggregates && !hasGroupBy && !hasJoins {
+		if len(stmt.OrderBy) > 0 {
+			options.OrderBy = stmt.OrderBy[0].Column
+			options.Order = stmt.OrderBy[0].Direction
+		}
+		if stmt.Limit != nil {
+			options.Limit = int(*stmt.Limit)
+		}
+		if stmt.Offset != nil {
+			options.Offset = int(*stmt.Offset)
+		}
 	}
 
 	// 执行查询
@@ -120,10 +125,194 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 		return nil, fmt.Errorf("query failed: %w", err)
 	}
 
+	// =========================================================================
+	// 处理 JOIN
+	// =========================================================================
+	if hasJoins {
+		mainTableName := stmt.From
+		// Prefix main table rows with table name to avoid column name conflicts
+		prefixedRows := make([]domain.Row, 0, len(result.Rows))
+		for _, row := range result.Rows {
+			newRow := make(domain.Row)
+			for k, v := range row {
+				newRow[k] = v
+				newRow[mainTableName+"."+k] = v
+			}
+			prefixedRows = append(prefixedRows, newRow)
+		}
+		currentRows := prefixedRows
+
+		for _, join := range stmt.Joins {
+			joinTableName := join.Table
+			joinAlias := join.Alias
+			if joinAlias == "" {
+				joinAlias = joinTableName
+			}
+
+			// Query the join table (fetch all rows, no filters)
+			joinResult, err := b.dataSource.Query(ctx, joinTableName, &domain.QueryOptions{SelectAll: true})
+			if err != nil {
+				return nil, fmt.Errorf("join query on table '%s' failed: %w", joinTableName, err)
+			}
+
+			// Prefix join table rows with table name and alias
+			joinRows := make([]domain.Row, 0, len(joinResult.Rows))
+			for _, row := range joinResult.Rows {
+				newRow := make(domain.Row)
+				for k, v := range row {
+					newRow[joinTableName+"."+k] = v
+					if joinAlias != joinTableName {
+						newRow[joinAlias+"."+k] = v
+					}
+				}
+				joinRows = append(joinRows, newRow)
+			}
+
+			// Merge rows based on join type
+			currentRows = b.performJoin(currentRows, joinRows, join, joinTableName, joinAlias, joinResult.Columns)
+		}
+
+		result.Rows = currentRows
+		result.Total = int64(len(currentRows))
+
+		// Update column info to include joined table columns with table prefix
+		joinedColumns := make([]domain.ColumnInfo, 0)
+		// Add main table columns with prefix
+		for _, col := range result.Columns {
+			joinedColumns = append(joinedColumns, domain.ColumnInfo{
+				Name: mainTableName + "." + col.Name, Type: col.Type, Nullable: col.Nullable, Primary: col.Primary,
+			})
+		}
+		// Add joined table columns with prefix
+		for _, join := range stmt.Joins {
+			joinTableName := join.Table
+			joinResult, err := b.dataSource.Query(ctx, joinTableName, &domain.QueryOptions{SelectAll: true})
+			if err == nil {
+				for _, col := range joinResult.Columns {
+					joinedColumns = append(joinedColumns, domain.ColumnInfo{
+						Name: joinTableName + "." + col.Name, Type: col.Type, Nullable: col.Nullable,
+					})
+				}
+			}
+		}
+		result.Columns = joinedColumns
+	}
+
+	// =========================================================================
+	// 处理 GROUP BY + 聚合函数 + HAVING
+	// =========================================================================
+	if hasGroupBy {
+		// Group rows by the specified columns
+		groups := b.groupRows(result.Rows, stmt.GroupBy)
+
+		// Compute aggregates for each group
+		groupedRows := make([]domain.Row, 0, len(groups))
+		for _, groupRows := range groups {
+			row := make(domain.Row)
+			// Copy group-by column values from the first row in the group
+			for _, gbCol := range stmt.GroupBy {
+				if len(groupRows) > 0 {
+					row[gbCol] = b.getColumnValue(groupRows[0], gbCol)
+				}
+			}
+			// Compute aggregate columns
+			for _, col := range stmt.Columns {
+				if col.Expr != nil && col.Expr.Type == ExprTypeFunction && b.isAggregateFunction(col.Expr.Function) {
+					val := b.computeAggregate(col.Expr.Function, col.Expr.Args, groupRows)
+					outputName := col.Alias
+					if outputName == "" {
+						outputName = col.Name
+					}
+					if outputName != "" {
+						row[outputName] = val
+					}
+				}
+			}
+			groupedRows = append(groupedRows, row)
+		}
+
+		// 处理 HAVING - filter groups after aggregation
+		if stmt.Having != nil {
+			filteredGroups := make([]domain.Row, 0)
+			i := 0
+			for _, groupRows := range groups {
+				if i >= len(groupedRows) {
+					break
+				}
+				if b.evaluateHavingExpression(stmt.Having, groupRows) {
+					filteredGroups = append(filteredGroups, groupedRows[i])
+				}
+				i++
+			}
+			groupedRows = filteredGroups
+		}
+
+		result.Rows = groupedRows
+		result.Total = int64(len(groupedRows))
+
+		// Build column info for the result
+		newColumns := make([]domain.ColumnInfo, 0)
+		for _, gbCol := range stmt.GroupBy {
+			newColumns = append(newColumns, domain.ColumnInfo{Name: gbCol, Type: "text", Nullable: true})
+		}
+		for _, col := range stmt.Columns {
+			if col.Expr != nil && col.Expr.Type == ExprTypeFunction && b.isAggregateFunction(col.Expr.Function) {
+				outputName := col.Alias
+				if outputName == "" {
+					outputName = col.Name
+				}
+				if outputName != "" {
+					newColumns = append(newColumns, domain.ColumnInfo{Name: outputName, Type: "float64", Nullable: true})
+				}
+			}
+		}
+		result.Columns = newColumns
+
+		return result, nil
+	}
+
+	// 处理聚合函数（无 GROUP BY 的情况）
+	if hasAggregates {
+		aggRow := make(domain.Row)
+		for _, col := range stmt.Columns {
+			if col.Expr != nil && col.Expr.Type == ExprTypeFunction && b.isAggregateFunction(col.Expr.Function) {
+				val := b.computeAggregate(col.Expr.Function, col.Expr.Args, result.Rows)
+				outputName := col.Alias
+				if outputName == "" {
+					outputName = col.Name
+				}
+				if outputName != "" {
+					aggRow[outputName] = val
+				}
+			}
+		}
+
+		newColumns := make([]domain.ColumnInfo, 0)
+		for _, col := range stmt.Columns {
+			if col.Expr != nil && col.Expr.Type == ExprTypeFunction && b.isAggregateFunction(col.Expr.Function) {
+				outputName := col.Alias
+				if outputName == "" {
+					outputName = col.Name
+				}
+				if outputName != "" {
+					newColumns = append(newColumns, domain.ColumnInfo{Name: outputName, Type: "float64", Nullable: true})
+				}
+			}
+		}
+
+		return &domain.QueryResult{
+			Columns: newColumns,
+			Rows:    []domain.Row{aggRow},
+			Total:   1,
+		}, nil
+	}
+
+	// =========================================================================
+	// Column selection (non-aggregate, non-group-by case)
+	// =========================================================================
+
 	// 如果是 select *，需要确保返回的行数据不包含隐藏字段
 	if isSelectAll {
-		// 数据源层已经过滤了 _ttl 字段，这里再次确保
-		// 构建新的行数据，只包含列定义中的字段
 		filteredRows := make([]domain.Row, 0, len(result.Rows))
 		for _, row := range result.Rows {
 			filteredRow := make(domain.Row)
@@ -140,24 +329,19 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 
 	// 如果不是 select *，则需要根据 SELECT 的列来过滤结果
 	if len(stmt.Columns) > 0 {
-		// 构建列名列表
 		selectedColumns := make([]string, 0, len(stmt.Columns))
 		for _, col := range stmt.Columns {
-			// 跳过空列名
 			if len(col.Name) > 0 {
 				selectedColumns = append(selectedColumns, col.Name)
 			}
 		}
 
-		// 如果没有有效的列名，则使用数据源返回的列
 		if len(selectedColumns) == 0 {
 			return result, nil
 		}
 
-		// 构建新的列定义
 		newColumns := make([]domain.ColumnInfo, 0, len(selectedColumns))
 		for _, colName := range selectedColumns {
-			// 查找对应的列定义
 			found := false
 			for _, col := range result.Columns {
 				if col.Name == colName {
@@ -166,7 +350,6 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 					break
 				}
 			}
-			// 如果没有找到列定义（比如 _ttl 这种隐藏字段），则创建一个基本的列定义
 			if !found {
 				newColumns = append(newColumns, domain.ColumnInfo{
 					Name:     colName,
@@ -177,7 +360,6 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 			}
 		}
 
-		// 过滤行数据，只保留选择的列
 		filteredRows := make([]domain.Row, 0, len(result.Rows))
 		for _, row := range result.Rows {
 			filteredRow := make(domain.Row)
@@ -189,17 +371,492 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 			filteredRows = append(filteredRows, filteredRow)
 		}
 
-		// 更新结果
 		result.Columns = newColumns
 		result.Rows = filteredRows
 	}
 
-	// TODO: 处理 JOIN
-	// TODO: 处理聚合函数
-	// TODO: 处理 GROUP BY
-	// TODO: 处理 HAVING
-
 	return result, nil
+}
+
+// =============================================================================
+// JOIN helper methods
+// =============================================================================
+
+// performJoin merges left and right row sets based on join type and condition
+func (b *QueryBuilder) performJoin(leftRows []domain.Row, rightRows []domain.Row, join JoinInfo, joinTableName, joinAlias string, rightColumns []domain.ColumnInfo) []domain.Row {
+	switch join.Type {
+	case JoinTypeCross:
+		return b.performCrossJoin(leftRows, rightRows)
+	case JoinTypeInner:
+		return b.performInnerJoin(leftRows, rightRows, join.Condition)
+	case JoinTypeLeft:
+		return b.performLeftJoin(leftRows, rightRows, join.Condition, joinTableName, joinAlias, rightColumns)
+	case JoinTypeRight:
+		return b.performRightJoin(leftRows, rightRows, join.Condition, joinTableName, joinAlias, rightColumns)
+	case JoinTypeFull:
+		left := b.performLeftJoin(leftRows, rightRows, join.Condition, joinTableName, joinAlias, rightColumns)
+		rightUnmatched := b.getUnmatchedRightRows(leftRows, rightRows, join.Condition)
+		return append(left, rightUnmatched...)
+	default:
+		return b.performInnerJoin(leftRows, rightRows, join.Condition)
+	}
+}
+
+// performCrossJoin returns the Cartesian product of left and right rows
+func (b *QueryBuilder) performCrossJoin(leftRows, rightRows []domain.Row) []domain.Row {
+	result := make([]domain.Row, 0, len(leftRows)*len(rightRows))
+	for _, left := range leftRows {
+		for _, right := range rightRows {
+			result = append(result, b.mergeRows(left, right))
+		}
+	}
+	return result
+}
+
+// performInnerJoin returns rows where the join condition matches
+func (b *QueryBuilder) performInnerJoin(leftRows, rightRows []domain.Row, condition *Expression) []domain.Row {
+	result := make([]domain.Row, 0)
+	for _, left := range leftRows {
+		for _, right := range rightRows {
+			merged := b.mergeRows(left, right)
+			if b.evaluateJoinCondition(merged, condition) {
+				result = append(result, merged)
+			}
+		}
+	}
+	return result
+}
+
+// performLeftJoin returns all left rows with matching right rows; unmatched left rows get null right columns
+func (b *QueryBuilder) performLeftJoin(leftRows, rightRows []domain.Row, condition *Expression, joinTableName, joinAlias string, rightColumns []domain.ColumnInfo) []domain.Row {
+	result := make([]domain.Row, 0, len(leftRows))
+	for _, left := range leftRows {
+		matched := false
+		for _, right := range rightRows {
+			merged := b.mergeRows(left, right)
+			if b.evaluateJoinCondition(merged, condition) {
+				result = append(result, merged)
+				matched = true
+			}
+		}
+		if !matched {
+			nullRow := b.mergeRowWithNulls(left, rightColumns, joinTableName, joinAlias)
+			result = append(result, nullRow)
+		}
+	}
+	return result
+}
+
+// performRightJoin returns all right rows with matching left rows; unmatched right rows get null left columns
+func (b *QueryBuilder) performRightJoin(leftRows, rightRows []domain.Row, condition *Expression, joinTableName, joinAlias string, rightColumns []domain.ColumnInfo) []domain.Row {
+	result := make([]domain.Row, 0, len(rightRows))
+	for _, right := range rightRows {
+		matched := false
+		for _, left := range leftRows {
+			merged := b.mergeRows(left, right)
+			if b.evaluateJoinCondition(merged, condition) {
+				result = append(result, merged)
+				matched = true
+			}
+		}
+		if !matched {
+			result = append(result, right)
+		}
+	}
+	return result
+}
+
+// getUnmatchedRightRows returns right rows that don't match any left row (for FULL JOIN)
+func (b *QueryBuilder) getUnmatchedRightRows(leftRows, rightRows []domain.Row, condition *Expression) []domain.Row {
+	result := make([]domain.Row, 0)
+	for _, right := range rightRows {
+		matched := false
+		for _, left := range leftRows {
+			merged := b.mergeRows(left, right)
+			if b.evaluateJoinCondition(merged, condition) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			result = append(result, right)
+		}
+	}
+	return result
+}
+
+// mergeRows merges two rows into one, with right overwriting on conflict
+func (b *QueryBuilder) mergeRows(left, right domain.Row) domain.Row {
+	merged := make(domain.Row, len(left)+len(right))
+	for k, v := range left {
+		merged[k] = v
+	}
+	for k, v := range right {
+		merged[k] = v
+	}
+	return merged
+}
+
+// mergeRowWithNulls creates a merged row with left data and nil for right table columns
+func (b *QueryBuilder) mergeRowWithNulls(left domain.Row, rightColumns []domain.ColumnInfo, joinTableName, joinAlias string) domain.Row {
+	merged := make(domain.Row, len(left)+len(rightColumns)*2)
+	for k, v := range left {
+		merged[k] = v
+	}
+	for _, col := range rightColumns {
+		merged[joinTableName+"."+col.Name] = nil
+		if joinAlias != joinTableName {
+			merged[joinAlias+"."+col.Name] = nil
+		}
+	}
+	return merged
+}
+
+// evaluateJoinCondition evaluates a join condition expression against a merged row
+func (b *QueryBuilder) evaluateJoinCondition(row domain.Row, condition *Expression) bool {
+	if condition == nil {
+		return true
+	}
+
+	switch condition.Type {
+	case ExprTypeOperator:
+		op := strings.ToLower(condition.Operator)
+
+		if op == "and" {
+			return b.evaluateJoinCondition(row, condition.Left) && b.evaluateJoinCondition(row, condition.Right)
+		}
+		if op == "or" {
+			return b.evaluateJoinCondition(row, condition.Left) || b.evaluateJoinCondition(row, condition.Right)
+		}
+
+		if condition.Left == nil || condition.Right == nil {
+			return false
+		}
+
+		leftVal := b.resolveExprValue(row, condition.Left)
+		rightVal := b.resolveExprValue(row, condition.Right)
+
+		sqlOp := b.convertOperator(op)
+		result, err := utils.CompareValues(leftVal, rightVal, sqlOp)
+		if err != nil {
+			return false
+		}
+		return result
+
+	default:
+		return true
+	}
+}
+
+// resolveExprValue resolves an expression to a concrete value from a row
+func (b *QueryBuilder) resolveExprValue(row domain.Row, expr *Expression) interface{} {
+	if expr == nil {
+		return nil
+	}
+	switch expr.Type {
+	case ExprTypeColumn:
+		if val, exists := row[expr.Column]; exists {
+			return val
+		}
+		return nil
+	case ExprTypeValue:
+		return expr.Value
+	default:
+		return nil
+	}
+}
+
+// getColumnValue resolves a column name from a row, trying both direct and prefixed matches
+func (b *QueryBuilder) getColumnValue(row domain.Row, colName string) interface{} {
+	if val, exists := row[colName]; exists {
+		return val
+	}
+	suffix := "." + colName
+	for k, v := range row {
+		if strings.HasSuffix(k, suffix) {
+			return v
+		}
+	}
+	return nil
+}
+
+// =============================================================================
+// Aggregation helper methods
+// =============================================================================
+
+// hasAggregateFunctions checks if any select column contains an aggregate function
+func (b *QueryBuilder) hasAggregateFunctions(columns []SelectColumn) bool {
+	for _, col := range columns {
+		if col.Expr != nil && col.Expr.Type == ExprTypeFunction && b.isAggregateFunction(col.Expr.Function) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAggregateFunction checks if a function name is an aggregate function
+func (b *QueryBuilder) isAggregateFunction(funcName string) bool {
+	switch strings.ToUpper(funcName) {
+	case "COUNT", "SUM", "AVG", "MIN", "MAX":
+		return true
+	default:
+		return false
+	}
+}
+
+// computeAggregate computes an aggregate function value over a set of rows
+func (b *QueryBuilder) computeAggregate(funcName string, args []Expression, rows []domain.Row) interface{} {
+	switch strings.ToUpper(funcName) {
+	case "COUNT":
+		return b.computeCount(args, rows)
+	case "SUM":
+		return b.computeSum(args, rows)
+	case "AVG":
+		return b.computeAvg(args, rows)
+	case "MIN":
+		return b.computeMin(args, rows)
+	case "MAX":
+		return b.computeMax(args, rows)
+	default:
+		return nil
+	}
+}
+
+// computeCount computes COUNT(*) or COUNT(column)
+func (b *QueryBuilder) computeCount(args []Expression, rows []domain.Row) int64 {
+	if len(args) == 0 || args[0].Type == ExprTypeValue {
+		return int64(len(rows))
+	}
+	if args[0].Type == ExprTypeColumn {
+		colName := args[0].Column
+		count := int64(0)
+		for _, row := range rows {
+			if b.getColumnValue(row, colName) != nil {
+				count++
+			}
+		}
+		return count
+	}
+	return int64(len(rows))
+}
+
+// computeSum computes SUM(column)
+func (b *QueryBuilder) computeSum(args []Expression, rows []domain.Row) float64 {
+	if len(args) == 0 || args[0].Type != ExprTypeColumn {
+		return 0
+	}
+	colName := args[0].Column
+	sum := float64(0)
+	for _, row := range rows {
+		if val := b.getColumnValue(row, colName); val != nil {
+			if f, err := utils.ToFloat64(val); err == nil {
+				sum += f
+			}
+		}
+	}
+	return sum
+}
+
+// computeAvg computes AVG(column)
+func (b *QueryBuilder) computeAvg(args []Expression, rows []domain.Row) float64 {
+	if len(args) == 0 || args[0].Type != ExprTypeColumn || len(rows) == 0 {
+		return 0
+	}
+	colName := args[0].Column
+	sum := float64(0)
+	count := 0
+	for _, row := range rows {
+		if val := b.getColumnValue(row, colName); val != nil {
+			if f, err := utils.ToFloat64(val); err == nil {
+				sum += f
+				count++
+			}
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return sum / float64(count)
+}
+
+// computeMin computes MIN(column)
+func (b *QueryBuilder) computeMin(args []Expression, rows []domain.Row) interface{} {
+	if len(args) == 0 || args[0].Type != ExprTypeColumn || len(rows) == 0 {
+		return nil
+	}
+	colName := args[0].Column
+	var minVal interface{}
+	minFloat := math.MaxFloat64
+	hasValue := false
+	for _, row := range rows {
+		if val := b.getColumnValue(row, colName); val != nil {
+			if f, err := utils.ToFloat64(val); err == nil {
+				if !hasValue || f < minFloat {
+					minFloat = f
+					minVal = val
+					hasValue = true
+				}
+			}
+		}
+	}
+	if !hasValue {
+		return nil
+	}
+	return minVal
+}
+
+// computeMax computes MAX(column)
+func (b *QueryBuilder) computeMax(args []Expression, rows []domain.Row) interface{} {
+	if len(args) == 0 || args[0].Type != ExprTypeColumn || len(rows) == 0 {
+		return nil
+	}
+	colName := args[0].Column
+	var maxVal interface{}
+	maxFloat := -math.MaxFloat64
+	hasValue := false
+	for _, row := range rows {
+		if val := b.getColumnValue(row, colName); val != nil {
+			if f, err := utils.ToFloat64(val); err == nil {
+				if !hasValue || f > maxFloat {
+					maxFloat = f
+					maxVal = val
+					hasValue = true
+				}
+			}
+		}
+	}
+	if !hasValue {
+		return nil
+	}
+	return maxVal
+}
+
+// =============================================================================
+// GROUP BY helper methods
+// =============================================================================
+
+// groupRows groups rows by the specified columns, preserving insertion order
+func (b *QueryBuilder) groupRows(rows []domain.Row, groupByCols []string) [][]domain.Row {
+	type groupEntry struct {
+		key  string
+		rows []domain.Row
+	}
+	groupMap := make(map[string]*groupEntry)
+	var orderedKeys []string
+
+	for _, row := range rows {
+		key := b.buildGroupKey(row, groupByCols)
+		entry, exists := groupMap[key]
+		if !exists {
+			entry = &groupEntry{key: key, rows: make([]domain.Row, 0)}
+			groupMap[key] = entry
+			orderedKeys = append(orderedKeys, key)
+		}
+		entry.rows = append(entry.rows, row)
+	}
+
+	result := make([][]domain.Row, 0, len(orderedKeys))
+	for _, key := range orderedKeys {
+		result = append(result, groupMap[key].rows)
+	}
+	return result
+}
+
+// buildGroupKey builds a string key for grouping by concatenating column values
+func (b *QueryBuilder) buildGroupKey(row domain.Row, groupByCols []string) string {
+	parts := make([]string, len(groupByCols))
+	for i, col := range groupByCols {
+		val := b.getColumnValue(row, col)
+		parts[i] = fmt.Sprintf("%v", val)
+	}
+	return strings.Join(parts, "\x00")
+}
+
+// =============================================================================
+// HAVING helper methods
+// =============================================================================
+
+// evaluateHavingExpression evaluates a HAVING expression against a group of rows
+func (b *QueryBuilder) evaluateHavingExpression(expr *Expression, groupRows []domain.Row) bool {
+	if expr == nil {
+		return true
+	}
+
+	switch expr.Type {
+	case ExprTypeOperator:
+		op := strings.ToLower(expr.Operator)
+
+		if op == "and" {
+			return b.evaluateHavingExpression(expr.Left, groupRows) && b.evaluateHavingExpression(expr.Right, groupRows)
+		}
+		if op == "or" {
+			return b.evaluateHavingExpression(expr.Left, groupRows) || b.evaluateHavingExpression(expr.Right, groupRows)
+		}
+
+		leftVal := b.resolveHavingExprValue(expr.Left, groupRows)
+		rightVal := b.resolveHavingExprValue(expr.Right, groupRows)
+
+		sqlOp := b.convertOperator(op)
+		result, err := utils.CompareValues(leftVal, rightVal, sqlOp)
+		if err != nil {
+			return false
+		}
+		return result
+
+	case ExprTypeFunction:
+		if b.isAggregateFunction(expr.Function) {
+			val := b.computeAggregate(expr.Function, expr.Args, groupRows)
+			return b.isTruthyValue(val)
+		}
+		return true
+
+	default:
+		return true
+	}
+}
+
+// resolveHavingExprValue resolves a HAVING expression to a value, computing aggregates as needed
+func (b *QueryBuilder) resolveHavingExprValue(expr *Expression, groupRows []domain.Row) interface{} {
+	if expr == nil {
+		return nil
+	}
+	switch expr.Type {
+	case ExprTypeFunction:
+		if b.isAggregateFunction(expr.Function) {
+			return b.computeAggregate(expr.Function, expr.Args, groupRows)
+		}
+		return nil
+	case ExprTypeColumn:
+		if len(groupRows) > 0 {
+			return b.getColumnValue(groupRows[0], expr.Column)
+		}
+		return nil
+	case ExprTypeValue:
+		return expr.Value
+	default:
+		return nil
+	}
+}
+
+// isTruthyValue checks if a value is truthy
+func (b *QueryBuilder) isTruthyValue(val interface{}) bool {
+	if val == nil {
+		return false
+	}
+	switch v := val.(type) {
+	case bool:
+		return v
+	case int64:
+		return v != 0
+	case int:
+		return v != 0
+	case float64:
+		return v != 0
+	case string:
+		return v != ""
+	default:
+		return true
+	}
 }
 
 // executeInsert 执行 INSERT
@@ -392,12 +1049,12 @@ func (b *QueryBuilder) executeCreate(ctx context.Context, stmt *CreateStatement)
 
 		for _, col := range stmt.Columns {
 			tableInfo.Columns = append(tableInfo.Columns, domain.ColumnInfo{
-				Name:         col.Name,
-				Type:         col.Type,
-				Nullable:     col.Nullable,
-				Primary:      col.Primary,
-				Default:      fmt.Sprintf("%v", col.Default),
-				Unique:       col.Unique,
+				Name:          col.Name,
+				Type:          col.Type,
+				Nullable:      col.Nullable,
+				Primary:       col.Primary,
+				Default:       fmt.Sprintf("%v", col.Default),
+				Unique:        col.Unique,
 				AutoIncrement: col.AutoInc,
 				// Generated column support
 				IsGenerated:      col.IsGenerated,
@@ -538,12 +1195,12 @@ func (b *QueryBuilder) executeCreateVectorIndex(ctx context.Context, stmt *Creat
 		if !ok {
 			return nil, fmt.Errorf("data source does not support CREATE VECTOR INDEX")
 		}
-		
+
 		// 转换参数
 		metricType := convertToVectorMetricType(stmt.VectorMetric)
 		indexType := convertToVectorIndexType(stmt.VectorIndexType)
 		dimension := stmt.VectorDim
-		
+
 		// 合并参数
 		params := make(map[string]interface{})
 		if stmt.VectorParams != nil {
@@ -551,7 +1208,7 @@ func (b *QueryBuilder) executeCreateVectorIndex(ctx context.Context, stmt *Creat
 				params[k] = v
 			}
 		}
-		
+
 		// 调用向量索引创建方法
 		if len(stmt.Columns) == 0 {
 			return nil, fmt.Errorf("vector index requires at least one column")
@@ -919,10 +1576,10 @@ func (b *QueryBuilder) executeCreateView(ctx context.Context, stmt *CreateViewSt
 
 	// Create table info for the view
 	tableInfo := domain.TableInfo{
-		Name:      stmt.Name,
-		Schema:    "", // Use default schema
-		Columns:   []domain.ColumnInfo{},
-		Atts:      map[string]interface{}{
+		Name:    stmt.Name,
+		Schema:  "", // Use default schema
+		Columns: []domain.ColumnInfo{},
+		Atts: map[string]interface{}{
 			domain.ViewMetaKey: viewInfo,
 		},
 	}
@@ -958,13 +1615,13 @@ func (b *QueryBuilder) executeCreateView(ctx context.Context, stmt *CreateViewSt
 			return nil, fmt.Errorf("failed to create view: %w", err)
 		}
 	}
-	
+
 	return &domain.QueryResult{
 		Columns: []domain.ColumnInfo{
 			{Name: "result", Type: "text", Nullable: true},
 		},
-		Rows:    []domain.Row{{"result": "OK"}},
-		Total:   1,
+		Rows:  []domain.Row{{"result": "OK"}},
+		Total: 1,
 	}, nil
 }
 
@@ -974,7 +1631,7 @@ func (b *QueryBuilder) executeDropView(ctx context.Context, stmt *DropViewStatem
 	if !b.dataSource.IsWritable() {
 		return nil, fmt.Errorf("data source is not writable")
 	}
-	
+
 	// Drop each view
 	results := make([]domain.Row, 0)
 	for _, viewName := range stmt.Views {
@@ -986,22 +1643,22 @@ func (b *QueryBuilder) executeDropView(ctx context.Context, stmt *DropViewStatem
 			// IF EXISTS specified, continue to next view
 		} else {
 			results = append(results, domain.Row{
-				"view": viewName,
+				"view":   viewName,
 				"status": "dropped",
 			})
 		}
 	}
-	
+
 	if len(results) == 0 {
 		return &domain.QueryResult{
 			Columns: []domain.ColumnInfo{
 				{Name: "result", Type: "text", Nullable: true},
 			},
-			Rows:    []domain.Row{},
-			Total:   0,
+			Rows:  []domain.Row{},
+			Total: 0,
 		}, nil
 	}
-	
+
 	return &domain.QueryResult{
 		Columns: []domain.ColumnInfo{
 			{Name: "view", Type: "text", Nullable: true},
@@ -1020,7 +1677,7 @@ func (b *QueryBuilder) executeAlterView(ctx context.Context, stmt *AlterViewStat
 	if !b.dataSource.IsWritable() {
 		return nil, fmt.Errorf("data source is not writable")
 	}
-	
+
 	// For simplicity, ALTER VIEW is implemented as DROP + CREATE
 	// 1. Check if view exists
 	_, err := b.dataSource.GetTableInfo(ctx, stmt.Name)
@@ -1033,7 +1690,7 @@ func (b *QueryBuilder) executeAlterView(ctx context.Context, stmt *AlterViewStat
 	if err != nil {
 		return nil, fmt.Errorf("failed to drop view for ALTER: %w", err)
 	}
-	
+
 	// 3. Create the new view
 	createStmt := &CreateViewStatement{
 		Name:        stmt.Name,
@@ -1044,7 +1701,7 @@ func (b *QueryBuilder) executeAlterView(ctx context.Context, stmt *AlterViewStat
 		Security:     stmt.Security,
 		CheckOption:  stmt.CheckOption,
 	}
-	
+
 	return b.executeCreateView(ctx, createStmt)
 }
 */

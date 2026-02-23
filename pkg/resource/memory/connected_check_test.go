@@ -21,7 +21,7 @@ func TestQuery_ReturnsNotConnectedError(t *testing.T) {
 
 	// Create a table while connected
 	ds.CreateTable(ctx, &domain.TableInfo{
-		Name: "users",
+		Name:    "users",
 		Columns: []domain.ColumnInfo{{Name: "id", Type: "INTEGER"}},
 	})
 	ds.Insert(ctx, "users", []domain.Row{{"id": int64(1)}}, nil)
@@ -50,7 +50,7 @@ func TestFilter_ReturnsNotConnectedError(t *testing.T) {
 	ds.Connect(ctx)
 
 	ds.CreateTable(ctx, &domain.TableInfo{
-		Name: "users",
+		Name:    "users",
 		Columns: []domain.ColumnInfo{{Name: "id", Type: "INTEGER"}},
 	})
 

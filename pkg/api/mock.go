@@ -8,8 +8,8 @@ import (
 
 // Mock datasource for testing
 type mockDataSource struct {
-	closed    bool
-	tables    map[string]*domain.TableInfo
+	closed       bool
+	tables       map[string]*domain.TableInfo
 	transactions int
 }
 
@@ -135,8 +135,8 @@ func (m *mockDataSource) BeginTransaction(ctx context.Context, options *domain.T
 
 // Mock transaction for testing
 type mockTransaction struct {
-	ds         *mockDataSource
-	id         int
+	ds          *mockDataSource
+	id          int
 	commitErr   error
 	rollbackErr error
 }

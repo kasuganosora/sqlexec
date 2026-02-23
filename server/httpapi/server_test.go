@@ -333,16 +333,16 @@ func TestClientStore(t *testing.T) {
 
 	clients := []config_schema.APIClient{
 		{
-			Name:    "active",
-			APIKey:  "key-active",
+			Name:      "active",
+			APIKey:    "key-active",
 			APISecret: "secret-active",
-			Enabled: true,
+			Enabled:   true,
 		},
 		{
-			Name:    "disabled",
-			APIKey:  "key-disabled",
+			Name:      "disabled",
+			APIKey:    "key-disabled",
 			APISecret: "secret-disabled",
-			Enabled: false,
+			Enabled:   false,
 		},
 	}
 

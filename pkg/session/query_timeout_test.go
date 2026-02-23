@@ -68,7 +68,7 @@ func TestQueryKill(t *testing.T) {
 	// 注册测试查询
 	queryID := GenerateQueryID(123)
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	qc := &QueryContext{
 		QueryID:    queryID,
 		ThreadID:   123,

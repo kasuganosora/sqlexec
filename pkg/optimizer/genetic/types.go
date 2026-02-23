@@ -1,6 +1,5 @@
 package genetic
 
-
 // Individual 个体（候选解）
 type Individual struct {
 	Genes   []bool  // 每个基因对应一个候选索引，true=选中

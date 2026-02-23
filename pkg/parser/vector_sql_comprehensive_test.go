@@ -12,14 +12,14 @@ func TestVectorTypeParsingComprehensive(t *testing.T) {
 		name      string
 		sql       string
 		tableName string
-		columns  int
+		columns   int
 		checkFunc func(*CreateStatement) bool
 	}{
 		{
 			name:      "basic_vector_column",
 			sql:       "CREATE TABLE articles (id INT, embedding VECTOR(768))",
 			tableName: "articles",
-			columns:  2,
+			columns:   2,
 			checkFunc: func(stmt *CreateStatement) bool {
 				return stmt.Columns[1].Name == "embedding" && stmt.Columns[1].VectorDim == 768
 			},
@@ -28,7 +28,7 @@ func TestVectorTypeParsingComprehensive(t *testing.T) {
 			name:      "vector_with_primary_key",
 			sql:       "CREATE TABLE items (id INT PRIMARY KEY, vec VECTOR(128))",
 			tableName: "items",
-			columns:  2,
+			columns:   2,
 			checkFunc: func(stmt *CreateStatement) bool {
 				return stmt.Columns[1].Name == "vec" && stmt.Columns[1].VectorDim == 128
 			},
@@ -37,10 +37,10 @@ func TestVectorTypeParsingComprehensive(t *testing.T) {
 			name:      "vector_with_varchar",
 			sql:       "CREATE TABLE docs (id INT, title VARCHAR(255), embedding VECTOR(512))",
 			tableName: "docs",
-			columns:  3,
+			columns:   3,
 			checkFunc: func(stmt *CreateStatement) bool {
-				return len(stmt.Columns) == 3 && 
-					stmt.Columns[2].Name == "embedding" && 
+				return len(stmt.Columns) == 3 &&
+					stmt.Columns[2].Name == "embedding" &&
 					stmt.Columns[2].VectorDim == 512
 			},
 		},
@@ -48,7 +48,7 @@ func TestVectorTypeParsingComprehensive(t *testing.T) {
 			name:      "small_dimension",
 			sql:       "CREATE TABLE vec (id INT, v VECTOR(16))",
 			tableName: "vec",
-			columns:  2,
+			columns:   2,
 			checkFunc: func(stmt *CreateStatement) bool {
 				return stmt.Columns[1].Name == "v" && stmt.Columns[1].VectorDim == 16
 			},
@@ -57,7 +57,7 @@ func TestVectorTypeParsingComprehensive(t *testing.T) {
 			name:      "large_dimension",
 			sql:       "CREATE TABLE big (id INT, v VECTOR(4096))",
 			tableName: "big",
-			columns:  2,
+			columns:   2,
 			checkFunc: func(stmt *CreateStatement) bool {
 				return stmt.Columns[1].Name == "v" && stmt.Columns[1].VectorDim == 4096
 			},
@@ -68,20 +68,20 @@ func TestVectorTypeParsingComprehensive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			adapter := NewSQLAdapter()
 			result, err := adapter.Parse(tc.sql)
-			
+
 			require.NoError(t, err, "解析SQL应该成功: %s", tc.sql)
 			require.NotNil(t, result)
 			require.True(t, result.Success, "解析应该成功")
 			require.NotNil(t, result.Statement.Create)
-			
+
 			stmt := result.Statement.Create
 			require.Equal(t, tc.tableName, stmt.Name, "表名不匹配")
 			require.Len(t, stmt.Columns, tc.columns, "列数不匹配")
-			
+
 			if tc.checkFunc != nil {
 				require.True(t, tc.checkFunc(stmt), "自定义检查失败")
 			}
-			
+
 			t.Logf("✅ 解析成功: 表=%s, 列=%d", stmt.Name, len(stmt.Columns))
 			for _, col := range stmt.Columns {
 				if col.VectorDim > 0 {
@@ -109,9 +109,9 @@ func TestVectorIndexParsingComprehensive(t *testing.T) {
 			tableName: "articles",
 			column:    "embedding",
 			checkFunc: func(stmt *CreateIndexStatement) bool {
-				return stmt.IsVectorIndex && 
-					stmt.VectorIndexType == "hnsw" && 
-					stmt.VectorMetric == "cosine" && 
+				return stmt.IsVectorIndex &&
+					stmt.VectorIndexType == "hnsw" &&
+					stmt.VectorMetric == "cosine" &&
 					stmt.VectorDim == 768
 			},
 		},
@@ -122,9 +122,9 @@ func TestVectorIndexParsingComprehensive(t *testing.T) {
 			tableName: "products",
 			column:    "features",
 			checkFunc: func(stmt *CreateIndexStatement) bool {
-				return stmt.IsVectorIndex && 
-					stmt.VectorIndexType == "hnsw" && 
-					stmt.VectorMetric == "l2" && 
+				return stmt.IsVectorIndex &&
+					stmt.VectorIndexType == "hnsw" &&
+					stmt.VectorMetric == "l2" &&
 					stmt.VectorDim == 128
 			},
 		},
@@ -135,8 +135,8 @@ func TestVectorIndexParsingComprehensive(t *testing.T) {
 			tableName: "items",
 			column:    "vec",
 			checkFunc: func(stmt *CreateIndexStatement) bool {
-				return stmt.IsVectorIndex && 
-					stmt.VectorMetric == "inner_product" && 
+				return stmt.IsVectorIndex &&
+					stmt.VectorMetric == "inner_product" &&
 					stmt.VectorDim == 256
 			},
 		},
@@ -161,22 +161,22 @@ func TestVectorIndexParsingComprehensive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			adapter := NewSQLAdapter()
 			result, err := adapter.Parse(tc.sql)
-			
+
 			require.NoError(t, err, "解析SQL应该成功: %s", tc.sql)
 			require.NotNil(t, result)
 			require.True(t, result.Success, "解析应该成功")
 			require.NotNil(t, result.Statement.CreateIndex)
-			
+
 			stmt := result.Statement.CreateIndex
 			require.Equal(t, tc.indexName, stmt.IndexName, "索引名不匹配")
 			require.Equal(t, tc.tableName, stmt.TableName, "表名不匹配")
 			require.Equal(t, []string{tc.column}, stmt.Columns, "列名不匹配")
-			
+
 			if tc.checkFunc != nil {
 				require.True(t, tc.checkFunc(stmt), "自定义检查失败")
 			}
-			
-			t.Logf("✅ 解析成功: 索引=%s, 表=%s, 列=%v", 
+
+			t.Logf("✅ 解析成功: 索引=%s, 表=%s, 列=%v",
 				stmt.IndexName, stmt.TableName, stmt.Columns)
 			t.Logf("  - 类型=%s, 度量=%s, 维度=%d, 向量索引=%v",
 				stmt.IndexType, stmt.VectorMetric, stmt.VectorDim, stmt.IsVectorIndex)
@@ -190,8 +190,8 @@ func TestVectorIndexParsingComprehensive(t *testing.T) {
 // TestVectorDistanceInOrderBy 全面测试 ORDER BY 向量距离函数解析
 func TestVectorDistanceInOrderBy(t *testing.T) {
 	testCases := []struct {
-		name    string
-		sql     string
+		name      string
+		sql       string
 		checkFunc func(*SelectStatement) bool
 	}{
 		{
@@ -219,7 +219,7 @@ func TestVectorDistanceInOrderBy(t *testing.T) {
 			name: "distance_with_filter",
 			sql:  "SELECT * FROM articles WHERE category='tech' ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2]') LIMIT 10",
 			checkFunc: func(stmt *SelectStatement) bool {
-				return len(stmt.OrderBy) > 0 && 
+				return len(stmt.OrderBy) > 0 &&
 					stringContains(stmt.OrderBy[0].Column, "vec_cosine_distance") &&
 					stmt.Where != nil
 			},
@@ -228,7 +228,7 @@ func TestVectorDistanceInOrderBy(t *testing.T) {
 			name: "distance_with_projection",
 			sql:  "SELECT id, title FROM articles ORDER BY vec_cosine_distance(embedding, '[0.1, 0.2]') LIMIT 10",
 			checkFunc: func(stmt *SelectStatement) bool {
-				return len(stmt.OrderBy) > 0 && 
+				return len(stmt.OrderBy) > 0 &&
 					stringContains(stmt.OrderBy[0].Column, "vec_cosine_distance") &&
 					len(stmt.Columns) == 2
 			},
@@ -239,22 +239,22 @@ func TestVectorDistanceInOrderBy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			adapter := NewSQLAdapter()
 			result, err := adapter.Parse(tc.sql)
-			
+
 			require.NoError(t, err, "解析SQL应该成功: %s", tc.sql)
 			require.NotNil(t, result)
 			require.True(t, result.Success, "解析应该成功")
 			require.NotNil(t, result.Statement.Select)
-			
+
 			stmt := result.Statement.Select
-			
+
 			if tc.checkFunc != nil {
 				require.True(t, tc.checkFunc(stmt), "自定义检查失败")
 			}
-			
-			t.Logf("✅ 解析成功: FROM=%s, ORDER BY=%v", 
+
+			t.Logf("✅ 解析成功: FROM=%s, ORDER BY=%v",
 				stmt.From, stmt.OrderBy)
 			if len(stmt.OrderBy) > 0 {
-				t.Logf("  - 距离函数: %s, 方向: %s", 
+				t.Logf("  - 距离函数: %s, 方向: %s",
 					stmt.OrderBy[0].Column, stmt.OrderBy[0].Direction)
 			}
 			if stmt.Where != nil {
@@ -267,9 +267,9 @@ func TestVectorDistanceInOrderBy(t *testing.T) {
 // TestCompleteVectorSearchSQLWorkflow 测试完整的向量搜索 SQL 工作流
 func TestCompleteVectorSearchSQLWorkflow(t *testing.T) {
 	workflow := []struct {
-		step   string
-		sql    string
-		desc   string
+		step string
+		sql  string
+		desc string
 	}{
 		{
 			step: "1",
@@ -304,12 +304,12 @@ func TestCompleteVectorSearchSQLWorkflow(t *testing.T) {
 		t.Run("Step_"+step.step, func(t *testing.T) {
 			t.Logf("执行步骤 %s: %s", step.step, step.desc)
 			t.Logf("SQL: %s", step.sql)
-			
+
 			result, err := adapter.Parse(step.sql)
 			require.NoError(t, err, "解析SQL应该成功")
 			require.NotNil(t, result)
 			require.True(t, result.Success, "解析应该成功")
-			
+
 			t.Logf("✅ 步骤 %s 完成", step.step)
 		})
 	}

@@ -213,6 +213,41 @@ func TestBug5_ClosedCheck_Race(t *testing.T) {
 }
 
 // ==========================================================================
+// Bug 7 (P0): GetSessions copies Session struct including sync.Mutex
+// sessCopy := *session copies sequenceMu, which is undefined behavior.
+// Fix: return original pointers (RLock protects the map iteration).
+// ==========================================================================
+
+func TestBug7_GetSessions_NoCopyLock(t *testing.T) {
+	ctx := context.Background()
+	driver := NewMemoryDriver()
+
+	sess := &Session{
+		ID:         "sess_lock_test",
+		RemoteIP:   "127.0.0.1",
+		RemotePort: "3306",
+		Created:    time.Now(),
+		LastUsed:   time.Now(),
+	}
+
+	err := driver.CreateSession(ctx, sess)
+	require.NoError(t, err)
+
+	sessions, err := driver.GetSessions(ctx)
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+
+	// Advance sequence on the returned session
+	sessions[0].GetNextSequenceID() // -> 1
+
+	// If GetSessions returned a struct copy, the original's SequenceID is still 0.
+	// If it returns the original pointer, original's SequenceID is now 1.
+	seq := sess.GetNextSequenceID() // original: should be 2 if shared, 1 if copied
+	assert.Equal(t, uint8(2), seq,
+		"GetSessions should return original pointers, not struct copies (copying sync.Mutex is UB)")
+}
+
+// ==========================================================================
 // Bug 6 (P2): GetThreadId unnecessary 5ms sleep
 // ==========================================================================
 

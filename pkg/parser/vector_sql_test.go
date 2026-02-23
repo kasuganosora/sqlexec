@@ -12,34 +12,34 @@ import (
 // TestVectorTypeParsing 测试 VECTOR 类型解析
 func TestVectorTypeParsing(t *testing.T) {
 	testCases := []struct {
-		name        string
-		sql         string
+		name         string
+		sql          string
 		expectVector bool
-		expectDim   int
+		expectDim    int
 	}{
 		{
-			name:        "VECTOR with dimension",
-			sql:         "CREATE TABLE articles (id INT PRIMARY KEY, embedding VECTOR(768))",
+			name:         "VECTOR with dimension",
+			sql:          "CREATE TABLE articles (id INT PRIMARY KEY, embedding VECTOR(768))",
 			expectVector: true,
-			expectDim:   768,
+			expectDim:    768,
 		},
 		{
-			name:        "VECTOR 128 dim",
-			sql:         "CREATE TABLE products (id INT, features VECTOR(128))",
+			name:         "VECTOR 128 dim",
+			sql:          "CREATE TABLE products (id INT, features VECTOR(128))",
 			expectVector: true,
-			expectDim:   128,
+			expectDim:    128,
 		},
 		{
-			name:        "Multiple VECTOR columns",
-			sql:         "CREATE TABLE items (id INT, vec1 VECTOR(256), vec2 VECTOR(512))",
+			name:         "Multiple VECTOR columns",
+			sql:          "CREATE TABLE items (id INT, vec1 VECTOR(256), vec2 VECTOR(512))",
 			expectVector: true,
-			expectDim:   256, // 第一列的维度
+			expectDim:    256, // 第一列的维度
 		},
 		{
-			name:        "Regular types",
-			sql:         "CREATE TABLE users (id INT, name VARCHAR(255))",
+			name:         "Regular types",
+			sql:          "CREATE TABLE users (id INT, name VARCHAR(255))",
 			expectVector: false,
-			expectDim:   0,
+			expectDim:    0,
 		},
 	}
 
@@ -79,44 +79,44 @@ func TestVectorTypeParsing(t *testing.T) {
 // TestVectorIndexParsing tests CREATE VECTOR INDEX parsing
 func TestVectorIndexParsing(t *testing.T) {
 	testCases := []struct {
-		name           string
-		sql            string
-		expectVector   bool
+		name            string
+		sql             string
+		expectVector    bool
 		expectIndexType string
-		expectMetric   string
-		expectDim      int
+		expectMetric    string
+		expectDim       int
 	}{
 		{
-			name:           "CREATE VECTOR INDEX with USING HNSW",
-			sql:            "CREATE VECTOR INDEX idx_embedding ON articles(embedding) USING HNSW WITH (metric='cosine', dim=768)",
-			expectVector:   true,
+			name:            "CREATE VECTOR INDEX with USING HNSW",
+			sql:             "CREATE VECTOR INDEX idx_embedding ON articles(embedding) USING HNSW WITH (metric='cosine', dim=768)",
+			expectVector:    true,
 			expectIndexType: "hnsw",
-			expectMetric:   "cosine",
-			expectDim:      768,
+			expectMetric:    "cosine",
+			expectDim:       768,
 		},
 		{
-			name:           "CREATE VECTOR INDEX with USING HNSW and l2 metric",
-			sql:            "CREATE VECTOR INDEX idx_vec ON products(features) USING HNSW WITH (metric='l2', dim=128)",
-			expectVector:   true,
+			name:            "CREATE VECTOR INDEX with USING HNSW and l2 metric",
+			sql:             "CREATE VECTOR INDEX idx_vec ON products(features) USING HNSW WITH (metric='l2', dim=128)",
+			expectVector:    true,
 			expectIndexType: "hnsw",
-			expectMetric:   "l2",
-			expectDim:      128,
+			expectMetric:    "l2",
+			expectDim:       128,
 		},
 		{
-			name:           "CREATE VECTOR INDEX with inner_product",
-			sql:            "CREATE VECTOR INDEX idx_ip ON items(vec) USING HNSW WITH (metric='inner_product', dim=256)",
-			expectVector:   true,
+			name:            "CREATE VECTOR INDEX with inner_product",
+			sql:             "CREATE VECTOR INDEX idx_ip ON items(vec) USING HNSW WITH (metric='inner_product', dim=256)",
+			expectVector:    true,
 			expectIndexType: "hnsw",
-			expectMetric:   "inner_product",
-			expectDim:      256,
+			expectMetric:    "inner_product",
+			expectDim:       256,
 		},
 		{
-			name:           "Regular index",
-			sql:            "CREATE INDEX idx_name ON users(name) USING BTREE",
-			expectVector:   false,
+			name:            "Regular index",
+			sql:             "CREATE INDEX idx_name ON users(name) USING BTREE",
+			expectVector:    false,
 			expectIndexType: "",
-			expectMetric:   "",
-			expectDim:      0,
+			expectMetric:    "",
+			expectDim:       0,
 		},
 	}
 
@@ -132,7 +132,7 @@ func TestVectorIndexParsing(t *testing.T) {
 
 			createIndexStmt := result.Statement.CreateIndex
 			require.Equal(t, tc.expectVector, createIndexStmt.IsVectorIndex)
-			
+
 			if tc.expectVector {
 				require.Equal(t, tc.expectIndexType, createIndexStmt.VectorIndexType)
 				require.Equal(t, tc.expectMetric, createIndexStmt.VectorMetric)
@@ -188,7 +188,7 @@ func TestParseWithClause(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := parseWithClause(tc.input)
 			require.Equal(t, len(tc.expect), len(result))
-			
+
 			for k, expectedVal := range tc.expect {
 				actualVal, exists := result[k]
 				require.True(t, exists, "Key %s should exist", k)
@@ -205,7 +205,7 @@ func TestVectorIndexCreationIntegration(t *testing.T) {
 	// 1. 解析 SQL
 	sql := "CREATE VECTOR INDEX idx_embedding ON articles(embedding) USING HNSW WITH (metric='cosine', dim=768, M=16, ef=200)"
 	adapter := NewSQLAdapter()
-	
+
 	result, err := adapter.Parse(sql)
 	require.NoError(t, err)
 	require.True(t, result.Success)
@@ -254,7 +254,7 @@ func TestConvertToVectorMetricType(t *testing.T) {
 		{"euclidean", memory.VectorMetricL2},
 		{"inner_product", memory.VectorMetricIP},
 		{"ip", memory.VectorMetricIP},
-		{"INNER", memory.VectorMetricIP}, // inner_product alias
+		{"INNER", memory.VectorMetricIP},       // inner_product alias
 		{"unknown", memory.VectorMetricCosine}, // default
 	}
 

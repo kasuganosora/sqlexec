@@ -51,12 +51,12 @@ type ErrorInfo struct {
 
 // RecoveryStrategy 恢复策略
 type RecoveryStrategy struct {
-	MaxRetries      int
-	RetryInterval   time.Duration
-	BackoffFactor   float64
-	Action          RecoveryAction
-	OnError         func(*ErrorInfo)
-	OnSuccess       func()
+	MaxRetries    int
+	RetryInterval time.Duration
+	BackoffFactor float64
+	Action        RecoveryAction
+	OnError       func(*ErrorInfo)
+	OnSuccess     func()
 }
 
 // ErrorRecoveryManager 错误恢复管理器

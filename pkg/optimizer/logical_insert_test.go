@@ -61,8 +61,8 @@ func TestLogicalInsert_Explain(t *testing.T) {
 		contains []string
 	}{
 		{
-			name: "Simple insert",
-			insert: NewLogicalInsert("users", nil, nil),
+			name:     "Simple insert",
+			insert:   NewLogicalInsert("users", nil, nil),
 			contains: []string{"Insert(users)"},
 		},
 		{

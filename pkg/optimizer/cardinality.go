@@ -10,20 +10,20 @@ import (
 
 // TableStatistics 表统计信息
 type TableStatistics struct {
-	Name       string
-	RowCount   int64
+	Name        string
+	RowCount    int64
 	ColumnStats map[string]*ColumnStatistics
 }
 
 // ColumnStatistics 列统计信息
 type ColumnStatistics struct {
 	Name          string
-	DataType       string
-	DistinctCount  int64  // NDV (Number of Distinct Values)
-	NullCount      int64
-	MinValue       interface{}
-	MaxValue       interface{}
-	NullFraction   float64
+	DataType      string
+	DistinctCount int64 // NDV (Number of Distinct Values)
+	NullCount     int64
+	MinValue      interface{}
+	MaxValue      interface{}
+	NullFraction  float64
 	AvgWidth      float64 // 平均字符串长度
 }
 
@@ -343,8 +343,8 @@ func (e *SimpleCardinalityEstimator) estimateRowCount(plan LogicalPlan) int64 {
 			for i, cond := range conditions {
 				filters[i] = domain.Filter{
 					Field:    expressionToString(cond),
-					Operator:  "=",
-					Value:     cond.Value,
+					Operator: "=",
+					Value:    cond.Value,
 				}
 			}
 			return e.EstimateFilter(tableName, filters)
@@ -409,8 +409,8 @@ func CollectStatistics(dataSource domain.DataSource, tableName string) (*TableSt
 	}
 
 	stats := &TableStatistics{
-		Name:       tableName,
-		RowCount:   result.Total,
+		Name:        tableName,
+		RowCount:    result.Total,
 		ColumnStats: make(map[string]*ColumnStatistics),
 	}
 
@@ -425,7 +425,7 @@ func CollectStatistics(dataSource domain.DataSource, tableName string) (*TableSt
 // collectColumnStatistics 收集列的统计信息
 func collectColumnStatistics(rows []domain.Row, columnName, columnType string) *ColumnStatistics {
 	stats := &ColumnStatistics{
-		Name:    columnName,
+		Name:     columnName,
 		DataType: columnType,
 	}
 

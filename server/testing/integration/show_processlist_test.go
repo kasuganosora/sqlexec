@@ -150,14 +150,14 @@ func TestShowProcessListFields(t *testing.T) {
 	// Verify field types
 	columns := result.Columns()
 	expectedFields := map[string]string{
-		"Id":     "BIGINT UNSIGNED",
-		"User":   "VARCHAR",
-		"Host":   "VARCHAR",
-		"db":     "VARCHAR",
+		"Id":      "BIGINT UNSIGNED",
+		"User":    "VARCHAR",
+		"Host":    "VARCHAR",
+		"db":      "VARCHAR",
 		"Command": "VARCHAR",
-		"Time":   "BIGINT UNSIGNED",
-		"State":  "VARCHAR",
-		"Info":   "TEXT",
+		"Time":    "BIGINT UNSIGNED",
+		"State":   "VARCHAR",
+		"Info":    "TEXT",
 	}
 
 	for _, col := range columns {

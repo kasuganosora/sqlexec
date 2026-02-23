@@ -69,7 +69,7 @@ func (l *DLLPluginLoader) Load(path string) (domain.DataSourceFactory, PluginInf
 
 	// Create a DLL-backed factory
 	factory := &DLLDataSourceFactory{
-		dll:              dll,
+		dll:               dll,
 		handleRequestProc: handleRequestProc,
 		freeStringProc:    freeStringProc,
 		pluginType:        info.Type,
@@ -86,15 +86,18 @@ func cStringToGoString(ptr uintptr) string {
 	if ptr == 0 {
 		return ""
 	}
-	// Read bytes until null terminator, with a safety limit
+	// Read bytes until null terminator, with a safety limit.
+	// The uintptr→unsafe.Pointer conversion triggers go vet "possible misuse"
+	// but is safe here: ptr comes from a DLL syscall return (C-allocated memory,
+	// not tracked by Go's GC). We use unsafe.Add for offset arithmetic.
+	p := unsafe.Pointer(ptr) //nolint:govet -- DLL syscall return value
 	var bytes []byte
 	for i := 0; i < cStringMaxLen; i++ {
-		b := *(*byte)(unsafe.Pointer(ptr))
+		b := *(*byte)(unsafe.Add(p, i))
 		if b == 0 {
 			break
 		}
 		bytes = append(bytes, b)
-		ptr++
 	}
 	return string(bytes)
 }

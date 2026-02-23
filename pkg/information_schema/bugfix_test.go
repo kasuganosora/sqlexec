@@ -36,12 +36,12 @@ func TestBug8_TablesTable_NoDebugOutput(t *testing.T) {
 // mockDSManagerForFK creates a DataSourceManager with a table that has a FK
 type mockDSForFK struct{}
 
-func (m *mockDSForFK) Connect(_ context.Context) error                 { return nil }
-func (m *mockDSForFK) Close(_ context.Context) error                   { return nil }
-func (m *mockDSForFK) IsConnected() bool                               { return true }
-func (m *mockDSForFK) IsWritable() bool                                { return true }
-func (m *mockDSForFK) GetConfig() *domain.DataSourceConfig             { return &domain.DataSourceConfig{} }
-func (m *mockDSForFK) GetTables(_ context.Context) ([]string, error)   { return []string{"orders"}, nil }
+func (m *mockDSForFK) Connect(_ context.Context) error               { return nil }
+func (m *mockDSForFK) Close(_ context.Context) error                 { return nil }
+func (m *mockDSForFK) IsConnected() bool                             { return true }
+func (m *mockDSForFK) IsWritable() bool                              { return true }
+func (m *mockDSForFK) GetConfig() *domain.DataSourceConfig           { return &domain.DataSourceConfig{} }
+func (m *mockDSForFK) GetTables(_ context.Context) ([]string, error) { return []string{"orders"}, nil }
 func (m *mockDSForFK) GetTableInfo(_ context.Context, tableName string) (*domain.TableInfo, error) {
 	if tableName == "orders" {
 		return &domain.TableInfo{

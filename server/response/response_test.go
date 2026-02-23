@@ -179,14 +179,14 @@ func TestBuildColumnCountPacket(t *testing.T) {
 		count      uint64
 		wantLen    int // total packet length = 4 (header) + encoded length
 	}{
-		{"zero", 0, 0, 5},        // 1-byte encoding
-		{"one", 1, 1, 5},         // 1-byte encoding
-		{"250", 2, 250, 5},       // 1-byte encoding (max for single byte)
-		{"251", 3, 251, 7},       // 0xfc + 2 bytes
-		{"65535", 4, 65535, 7},   // 0xfc + 2 bytes (max for 2-byte)
-		{"65536", 5, 65536, 8},   // 0xfd + 3 bytes
+		{"zero", 0, 0, 5},         // 1-byte encoding
+		{"one", 1, 1, 5},          // 1-byte encoding
+		{"250", 2, 250, 5},        // 1-byte encoding (max for single byte)
+		{"251", 3, 251, 7},        // 0xfc + 2 bytes
+		{"65535", 4, 65535, 7},    // 0xfc + 2 bytes (max for 2-byte)
+		{"65536", 5, 65536, 8},    // 0xfd + 3 bytes
 		{"16M-1", 6, 16777215, 8}, // 0xfd + 3 bytes (max for 3-byte)
-		{"16M", 7, 16777216, 13}, // 0xfe + 8 bytes
+		{"16M", 7, 16777216, 13},  // 0xfe + 8 bytes
 	}
 
 	for _, tt := range tests {

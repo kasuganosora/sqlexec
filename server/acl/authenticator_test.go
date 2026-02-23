@@ -17,33 +17,33 @@ func TestGeneratePasswordHash(t *testing.T) {
 	salt := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
 
 	tests := []struct {
-		name     string
-		password string
-		salt     []byte
+		name      string
+		password  string
+		salt      []byte
 		wantEmpty bool
 	}{
 		{
-			name:       "Empty password",
-			password:   "",
-			salt:       salt,
+			name:      "Empty password",
+			password:  "",
+			salt:      salt,
 			wantEmpty: true,
 		},
 		{
-			name:       "Non-empty password",
-			password:   "test123",
-			salt:       salt,
+			name:      "Non-empty password",
+			password:  "test123",
+			salt:      salt,
 			wantEmpty: false,
 		},
 		{
-			name:       "Password with special chars",
-			password:   "p@ssw0rd!",
-			salt:       salt,
+			name:      "Password with special chars",
+			password:  "p@ssw0rd!",
+			salt:      salt,
 			wantEmpty: false,
 		},
 		{
-			name:       "Long password",
-			password:   "verylongpasswordwithmanycharacters123456789",
-			salt:       salt,
+			name:      "Long password",
+			password:  "verylongpasswordwithmanycharacters123456789",
+			salt:      salt,
 			wantEmpty: false,
 		},
 	}
@@ -122,8 +122,8 @@ func TestGenerateHashedPassword(t *testing.T) {
 			if tt.wantPrefix == "" && result != "" {
 				t.Errorf("GenerateHashedPassword() = %v, want empty", result)
 			}
-		if tt.wantPrefix != "" && len(result) > 0 && result[0] != '*' {
-			t.Errorf("GenerateHashedPassword() = %v, want prefix '%s'", result, tt.wantPrefix)
+			if tt.wantPrefix != "" && len(result) > 0 && result[0] != '*' {
+				t.Errorf("GenerateHashedPassword() = %v, want prefix '%s'", result, tt.wantPrefix)
 			}
 		})
 	}
@@ -145,40 +145,40 @@ func TestVerifyPasswordWithHash(t *testing.T) {
 	auth := NewAuthenticator()
 
 	tests := []struct {
-		name        string
-		storedHash  string
-		password    string
-		want        bool
+		name       string
+		storedHash string
+		password   string
+		want       bool
 	}{
 		{
-			name:        "Correct password",
-			storedHash:  auth.GenerateHashedPassword("test123"),
-			password:    "test123",
-			want:        true,
+			name:       "Correct password",
+			storedHash: auth.GenerateHashedPassword("test123"),
+			password:   "test123",
+			want:       true,
 		},
 		{
-			name:        "Wrong password",
-			storedHash:  auth.GenerateHashedPassword("test123"),
-			password:    "wrongpassword",
-			want:        false,
+			name:       "Wrong password",
+			storedHash: auth.GenerateHashedPassword("test123"),
+			password:   "wrongpassword",
+			want:       false,
 		},
 		{
-			name:        "Empty password with empty hash",
-			storedHash:  "",
-			password:    "",
-			want:        true,
+			name:       "Empty password with empty hash",
+			storedHash: "",
+			password:   "",
+			want:       true,
 		},
 		{
-			name:        "Non-empty password with empty hash",
-			storedHash:  "",
-			password:    "test123",
-			want:        false,
+			name:       "Non-empty password with empty hash",
+			storedHash: "",
+			password:   "test123",
+			want:       false,
 		},
 		{
-			name:        "Empty password with non-empty hash",
-			storedHash:  auth.GenerateHashedPassword("test123"),
-			password:    "",
-			want:        false,
+			name:       "Empty password with non-empty hash",
+			storedHash: auth.GenerateHashedPassword("test123"),
+			password:   "",
+			want:       false,
 		},
 	}
 
@@ -301,8 +301,8 @@ func TestHashedPasswordFormat(t *testing.T) {
 	hash := auth.GenerateHashedPassword(password)
 
 	// Hash should start with *
-		if len(hash) == 0 || hash[0] != '*' {
-			t.Errorf("GenerateHashedPassword() should start with *, got %v", hash)
+	if len(hash) == 0 || hash[0] != '*' {
+		t.Errorf("GenerateHashedPassword() should start with *, got %v", hash)
 	}
 
 	// Hash should contain only hex characters after *

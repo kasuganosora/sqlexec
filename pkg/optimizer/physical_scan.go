@@ -11,17 +11,17 @@ import (
 // PhysicalTableScan 物理表扫描（已重构到pkg/optimizer/physical包）
 // 在重构完成前，暂时保留原始实现
 type PhysicalTableScan struct {
-	TableName             string
-	Columns               []ColumnInfo
-	TableInfo             *domain.TableInfo
-	cost                  float64
-	children              []PhysicalPlan
-	dataSource            domain.DataSource
-	filters               []domain.Filter // 下推的过滤条件
-	limitInfo             *LimitInfo      // 下推的Limit信息
-	parallelScanner       *OptimizedParallelScanner // 并行扫描器
-	enableParallelScan    bool           // 是否启用并行扫描
-	minParallelScanRows   int64          // 启用并行扫描的最小行数
+	TableName           string
+	Columns             []ColumnInfo
+	TableInfo           *domain.TableInfo
+	cost                float64
+	children            []PhysicalPlan
+	dataSource          domain.DataSource
+	filters             []domain.Filter           // 下推的过滤条件
+	limitInfo           *LimitInfo                // 下推的Limit信息
+	parallelScanner     *OptimizedParallelScanner // 并行扫描器
+	enableParallelScan  bool                      // 是否启用并行扫描
+	minParallelScanRows int64                     // 启用并行扫描的最小行数
 }
 
 // NewPhysicalTableScan 创建物理表扫描
@@ -169,7 +169,7 @@ type PhysicalHashJoin struct {
 
 // NewPhysicalHashJoin 创建物理哈希连接
 func NewPhysicalHashJoin(joinType JoinType, left, right PhysicalPlan, conditions []*JoinCondition) *PhysicalHashJoin {
-	leftRows := int64(1000) // 假设
+	leftRows := int64(1000)  // 假设
 	rightRows := int64(1000) // 假设
 
 	// Hash Join 成本 = 构建哈希表 + 探测
@@ -368,7 +368,7 @@ func (p *PhysicalTableScan) Cost() float64 {
 // PhysicalHashAggregate 物理哈希聚合
 // 在重构完成前，暂时保留原始实现
 type PhysicalHashAggregate struct {
-	AggFuncs   []*AggregationItem
+	AggFuncs    []*AggregationItem
 	GroupByCols []string
 	cost        float64
 	children    []PhysicalPlan
@@ -384,7 +384,7 @@ func NewPhysicalHashAggregate(aggFuncs []*AggregationItem, groupByCols []string,
 	cost := child.Cost() + groupCost + aggCost
 
 	return &PhysicalHashAggregate{
-		AggFuncs:   aggFuncs,
+		AggFuncs:    aggFuncs,
 		GroupByCols: groupByCols,
 		cost:        cost,
 		children:    []PhysicalPlan{child},

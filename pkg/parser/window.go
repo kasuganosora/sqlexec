@@ -6,26 +6,26 @@ import (
 
 // WindowSpec 窗口规范
 type WindowSpec struct {
-	Name       string          // 窗口名称(如果有)
-	PartitionBy []Expression   // PARTITION BY表达式
-	OrderBy     []OrderItem     // ORDER BY表达式
-	Frame       *WindowFrame     // 窗口帧定义
+	Name        string       // 窗口名称(如果有)
+	PartitionBy []Expression // PARTITION BY表达式
+	OrderBy     []OrderItem  // ORDER BY表达式
+	Frame       *WindowFrame // 窗口帧定义
 }
 
 // WindowFrame 窗口帧
 type WindowFrame struct {
-	Mode      FrameMode       // 帧模式(ROWS/RANGE)
-	Start      FrameBound      // 起始边界
-	End        *FrameBound     // 结束边界(可为空)
+	Mode  FrameMode   // 帧模式(ROWS/RANGE)
+	Start FrameBound  // 起始边界
+	End   *FrameBound // 结束边界(可为空)
 }
 
 // FrameMode 帧模式
 type FrameMode int
 
 const (
-	FrameModeRows  FrameMode = iota // ROWS
-	FrameModeRange                  // RANGE
-	FrameModeGroups                 // GROUPS(暂不支持)
+	FrameModeRows   FrameMode = iota // ROWS
+	FrameModeRange                   // RANGE
+	FrameModeGroups                  // GROUPS(暂不支持)
 )
 
 // FrameBound 帧边界
@@ -39,18 +39,18 @@ type BoundType int
 
 const (
 	BoundUnboundedPreceding BoundType = iota // UNBOUNDED PRECEDING
-	BoundPreceding                        // n PRECEDING
-	BoundCurrentRow                      // CURRENT ROW
-	BoundFollowing                        // n FOLLOWING
-	BoundUnboundedFollowing               // UNBOUNDED FOLLOWING
+	BoundPreceding                           // n PRECEDING
+	BoundCurrentRow                          // CURRENT ROW
+	BoundFollowing                           // n FOLLOWING
+	BoundUnboundedFollowing                  // UNBOUNDED FOLLOWING
 )
 
 // WindowExpression 窗口函数表达式
 type WindowExpression struct {
-	FuncName  string       // 函数名
-	Args      []Expression // 函数参数
-	Spec      *WindowSpec  // 窗口规范
-	Distinct  bool         // DISTINCT标记
+	FuncName string       // 函数名
+	Args     []Expression // 函数参数
+	Spec     *WindowSpec  // 窗口规范
+	Distinct bool         // DISTINCT标记
 }
 
 // OrderItem 排序项
@@ -63,34 +63,34 @@ type OrderItem struct {
 // 支持的窗口函数
 var SupportedWindowFunctions = map[string]bool{
 	// 排名函数
-	"ROW_NUMBER":  true,
-	"RANK":       true,
-	"DENSE_RANK":  true,
+	"ROW_NUMBER":   true,
+	"RANK":         true,
+	"DENSE_RANK":   true,
 	"PERCENT_RANK": true,
-	"CUME_DIST":   true,
-	"NTILE":       true,
-	
+	"CUME_DIST":    true,
+	"NTILE":        true,
+
 	// 偏移函数
-	"LAG":    true,
-	"LEAD":   true,
+	"LAG":         true,
+	"LEAD":        true,
 	"FIRST_VALUE": true,
 	"LAST_VALUE":  true,
 	"NTH_VALUE":   true,
-	
+
 	// 聚合窗口函数
-	"COUNT":   true,
-	"SUM":     true,
-	"AVG":     true,
-	"MIN":     true,
-	"MAX":     true,
-	"STDDEV":  true,
-	"VAR":     true,
+	"COUNT":  true,
+	"SUM":    true,
+	"AVG":    true,
+	"MIN":    true,
+	"MAX":    true,
+	"STDDEV": true,
+	"VAR":    true,
 }
 
 // ParseWindowSpec 解析窗口规范
 func ParseWindowSpec(windowName string, partitionBy []Expression, orderBy []OrderItem, frame *WindowFrame) *WindowSpec {
 	return &WindowSpec{
-		Name:       windowName,
+		Name:        windowName,
 		PartitionBy: partitionBy,
 		OrderBy:     orderBy,
 		Frame:       frame,
@@ -106,12 +106,12 @@ func ParseWindowFrame(mode FrameMode, start BoundType, startValue Expression, en
 			Value: startValue,
 		},
 	}
-	
+
 	frame.End = &FrameBound{
 		Type:  end,
 		Value: endValue,
 	}
-	
+
 	return frame
 }
 
@@ -120,7 +120,7 @@ func NewWindowExpression(funcName string, args []Expression, spec *WindowSpec) (
 	if !SupportedWindowFunctions[funcName] {
 		return nil, fmt.Errorf("unsupported window function: %s", funcName)
 	}
-	
+
 	return &WindowExpression{
 		FuncName: funcName,
 		Args:     args,
@@ -138,10 +138,10 @@ func IsWindowFunction(funcName string) bool {
 type WindowType int
 
 const (
-	WindowTypeRanking     WindowType = iota // 排名函数
-	WindowTypeOffset                         // 偏移函数
-	WindowTypeAggregate                      // 聚合函数
-	WindowTypeValue                          // 值函数
+	WindowTypeRanking   WindowType = iota // 排名函数
+	WindowTypeOffset                      // 偏移函数
+	WindowTypeAggregate                   // 聚合函数
+	WindowTypeValue                       // 值函数
 )
 
 // GetWindowType 获取窗口函数类型
@@ -198,15 +198,15 @@ func CreateOffsetWindow(funcName string, args []Expression, partitionBy []Expres
 		PartitionBy: partitionBy,
 		OrderBy:     orderBy,
 	}
-	
+
 	// LAG/LEAD默认为UNBOUNDED PRECEDING
 	defaultFrame := &WindowFrame{
 		Mode:  FrameModeRows,
-		Start:  FrameBound{Type: BoundUnboundedPreceding},
-		End:    &FrameBound{Type: BoundCurrentRow},
+		Start: FrameBound{Type: BoundUnboundedPreceding},
+		End:   &FrameBound{Type: BoundCurrentRow},
 	}
 	spec.Frame = defaultFrame
-	
+
 	return &WindowExpression{
 		FuncName: funcName,
 		Args:     args,
@@ -221,16 +221,16 @@ func CreateAggregateWindow(funcName string, args []Expression, partitionBy []Exp
 		OrderBy:     orderBy,
 		Frame:       frame,
 	}
-	
+
 	// 聚合函数默认为UNBOUNDED PRECEDING TO UNBOUNDED FOLLOWING
 	if frame == nil {
 		spec.Frame = &WindowFrame{
 			Mode:  FrameModeRows,
-			Start:  FrameBound{Type: BoundUnboundedPreceding},
-			End:    &FrameBound{Type: BoundUnboundedFollowing},
+			Start: FrameBound{Type: BoundUnboundedPreceding},
+			End:   &FrameBound{Type: BoundUnboundedFollowing},
 		}
 	}
-	
+
 	return &WindowExpression{
 		FuncName: funcName,
 		Args:     args,
@@ -246,7 +246,7 @@ func ValidateWindowExpression(we *WindowExpression) error {
 	if !IsWindowFunction(we.FuncName) {
 		return fmt.Errorf("unsupported window function: %s", we.FuncName)
 	}
-	
+
 	// 检查参数数量
 	switch we.FuncName {
 	case "ROW_NUMBER", "RANK", "DENSE_RANK":
@@ -266,12 +266,12 @@ func ValidateWindowExpression(we *WindowExpression) error {
 			return fmt.Errorf("%s() requires 1 argument", we.FuncName)
 		}
 	}
-	
+
 	// 检查窗口规范
 	if we.Spec == nil {
 		return fmt.Errorf("window function requires OVER clause")
 	}
-	
+
 	// 检查ORDER BY
 	if we.Spec.OrderBy == nil || len(we.Spec.OrderBy) == 0 {
 		// 排名函数和偏移函数需要ORDER BY
@@ -279,7 +279,7 @@ func ValidateWindowExpression(we *WindowExpression) error {
 			return fmt.Errorf("%s() requires ORDER BY in OVER clause", we.FuncName)
 		}
 	}
-	
+
 	// 检查帧定义
 	if we.Spec.Frame != nil {
 		// ROWS模式需要ORDER BY
@@ -287,7 +287,7 @@ func ValidateWindowExpression(we *WindowExpression) error {
 			return fmt.Errorf("ROWS frame requires ORDER BY")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -295,25 +295,25 @@ func ValidateWindowExpression(we *WindowExpression) error {
 func (we *WindowExpression) Clone() *WindowExpression {
 	clonedArgs := make([]Expression, len(we.Args))
 	copy(clonedArgs, we.Args)
-	
+
 	var clonedSpec *WindowSpec
 	if we.Spec != nil {
 		clonedPartitionBy := make([]Expression, len(we.Spec.PartitionBy))
 		copy(clonedPartitionBy, we.Spec.PartitionBy)
-		
+
 		clonedOrderBy := make([]OrderItem, len(we.Spec.OrderBy))
 		copy(clonedOrderBy, we.Spec.OrderBy)
-		
+
 		clonedSpec = &WindowSpec{
-			Name:       we.Spec.Name,
+			Name:        we.Spec.Name,
 			PartitionBy: clonedPartitionBy,
 			OrderBy:     clonedOrderBy,
 		}
-		
+
 		if we.Spec.Frame != nil {
 			clonedSpec.Frame = &WindowFrame{
 				Mode:  we.Spec.Frame.Mode,
-				Start:  we.Spec.Frame.Start,
+				Start: we.Spec.Frame.Start,
 			}
 			if we.Spec.Frame.End != nil {
 				clonedSpec.Frame.End = &FrameBound{
@@ -323,7 +323,7 @@ func (we *WindowExpression) Clone() *WindowExpression {
 			}
 		}
 	}
-	
+
 	return &WindowExpression{
 		FuncName: we.FuncName,
 		Args:     clonedArgs,

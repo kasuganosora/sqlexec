@@ -11,24 +11,24 @@ import (
 // IncrementalStatisticsCollector 增量统计收集器
 // 支持增量更新表统计信息，避免全表扫描
 type IncrementalStatisticsCollector struct {
-	baseCollector     StatisticsCollector
-	deltaBuffers      map[string]*DeltaBuffer // 表名 -> Delta缓冲区
-	bufferThreshold   int64                  // Delta缓冲区阈值
-	collectInterval   time.Duration          // 统计收集间隔
-	lastCollectTime   map[string]time.Time   // 最后收集时间
-	mu                sync.RWMutex
+	baseCollector   StatisticsCollector
+	deltaBuffers    map[string]*DeltaBuffer // 表名 -> Delta缓冲区
+	bufferThreshold int64                   // Delta缓冲区阈值
+	collectInterval time.Duration           // 统计收集间隔
+	lastCollectTime map[string]time.Time    // 最后收集时间
+	mu              sync.RWMutex
 }
 
 // DeltaBuffer Delta缓冲区
 // 记录自上次统计收集以来的变化
 type DeltaBuffer struct {
-	TableName      string
-	InsertCount    int64
-	UpdateCount    int64
-	DeleteCount    int64
-	ModifiedRows   map[string]int64 // 列名 -> 修改的行数
-	LastUpdated    time.Time
-	BufferSize     int64 // 总变化量
+	TableName    string
+	InsertCount  int64
+	UpdateCount  int64
+	DeleteCount  int64
+	ModifiedRows map[string]int64 // 列名 -> 修改的行数
+	LastUpdated  time.Time
+	BufferSize   int64 // 总变化量
 }
 
 // StatisticsCollector 基础统计收集器接口
@@ -55,9 +55,9 @@ func (isc *IncrementalStatisticsCollector) RecordInsert(tableName string, rowCou
 	buffer, exists := isc.deltaBuffers[tableName]
 	if !exists {
 		buffer = &DeltaBuffer{
-			TableName:     tableName,
-			ModifiedRows:  make(map[string]int64),
-			LastUpdated:   time.Now(),
+			TableName:    tableName,
+			ModifiedRows: make(map[string]int64),
+			LastUpdated:  time.Now(),
 		}
 		isc.deltaBuffers[tableName] = buffer
 	}
@@ -75,9 +75,9 @@ func (isc *IncrementalStatisticsCollector) RecordUpdate(tableName string, rowCou
 	buffer, exists := isc.deltaBuffers[tableName]
 	if !exists {
 		buffer = &DeltaBuffer{
-			TableName:     tableName,
-			ModifiedRows:  make(map[string]int64),
-			LastUpdated:   time.Now(),
+			TableName:    tableName,
+			ModifiedRows: make(map[string]int64),
+			LastUpdated:  time.Now(),
 		}
 		isc.deltaBuffers[tableName] = buffer
 	}
@@ -100,9 +100,9 @@ func (isc *IncrementalStatisticsCollector) RecordDelete(tableName string, rowCou
 	buffer, exists := isc.deltaBuffers[tableName]
 	if !exists {
 		buffer = &DeltaBuffer{
-			TableName:     tableName,
-			ModifiedRows:  make(map[string]int64),
-			LastUpdated:   time.Now(),
+			TableName:    tableName,
+			ModifiedRows: make(map[string]int64),
+			LastUpdated:  time.Now(),
 		}
 		isc.deltaBuffers[tableName] = buffer
 	}
@@ -165,8 +165,8 @@ func (isc *IncrementalStatisticsCollector) collectIncrementalStats(ctx context.C
 
 	// 应用增量变化
 	incrementalStats := &TableStatistics{
-		Name:       baseStats.Name,
-		RowCount:   baseStats.RowCount + buffer.InsertCount - buffer.DeleteCount,
+		Name:        baseStats.Name,
+		RowCount:    baseStats.RowCount + buffer.InsertCount - buffer.DeleteCount,
 		ColumnStats: make(map[string]*ColumnStatistics),
 	}
 
@@ -305,22 +305,22 @@ func (isc *IncrementalStatisticsCollector) EstimateStatisticsAccuracy(tableName 
 // AdaptiveStatisticsCollector 自适应统计收集器
 // 根据表的更新频率和大小动态调整收集策略
 type AdaptiveStatisticsCollector struct {
-	baseCollector       *IncrementalStatisticsCollector
-	tableProfiles       map[string]*TableProfile // 表配置文件
-	updateFrequencies   map[string]float64       // 更新频率（次/秒）
-	mu                  sync.RWMutex
+	baseCollector     *IncrementalStatisticsCollector
+	tableProfiles     map[string]*TableProfile // 表配置文件
+	updateFrequencies map[string]float64       // 更新频率（次/秒）
+	mu                sync.RWMutex
 }
 
 // TableProfile 表配置文件
 type TableProfile struct {
-	TableName           string
-	RowCount            int64
-	IsHot               bool      // 是否为热表
-	IsStatic            bool      // 是否为静态表
-	AccessFrequency     float64   // 访问频率
-	UpdateFrequency     float64   // 更新频率
-	LastProfileTime     time.Time
-	SuggestedInterval   time.Duration // 建议的收集间隔
+	TableName         string
+	RowCount          int64
+	IsHot             bool    // 是否为热表
+	IsStatic          bool    // 是否为静态表
+	AccessFrequency   float64 // 访问频率
+	UpdateFrequency   float64 // 更新频率
+	LastProfileTime   time.Time
+	SuggestedInterval time.Duration // 建议的收集间隔
 }
 
 // NewAdaptiveStatisticsCollector 创建自适应统计收集器
@@ -491,7 +491,7 @@ func EstimateSampleSize(totalRows int64, confidenceLevel float64, marginOfError 
 	e := marginOfError
 
 	// 基础样本大小
-	sampleSize := (math.Pow(zScore, 2) * p * (1-p)) / math.Pow(e, 2)
+	sampleSize := (math.Pow(zScore, 2) * p * (1 - p)) / math.Pow(e, 2)
 
 	// 有限总体校正
 	if totalRows > 0 {

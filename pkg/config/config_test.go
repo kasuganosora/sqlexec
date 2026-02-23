@@ -144,7 +144,7 @@ func TestLoadConfig_InvalidPoolConfig(t *testing.T) {
 		errMsg    string
 	}{
 		{
-			name: "invalid max workers",
+			name:      "invalid max workers",
 			configKey: "pool",
 			configVal: map[string]interface{}{
 				"goroutine_pool": map[string]interface{}{
@@ -154,7 +154,7 @@ func TestLoadConfig_InvalidPoolConfig(t *testing.T) {
 			errMsg: "Goroutine池最大工作线程数必须大于0",
 		},
 		{
-			name: "invalid queue size",
+			name:      "invalid queue size",
 			configKey: "pool",
 			configVal: map[string]interface{}{
 				"goroutine_pool": map[string]interface{}{
@@ -164,7 +164,7 @@ func TestLoadConfig_InvalidPoolConfig(t *testing.T) {
 			errMsg: "Goroutine池队列大小必须大于0",
 		},
 		{
-			name: "invalid object pool max size",
+			name:      "invalid object pool max size",
 			configKey: "pool",
 			configVal: map[string]interface{}{
 				"object_pool": map[string]interface{}{
@@ -174,7 +174,7 @@ func TestLoadConfig_InvalidPoolConfig(t *testing.T) {
 			errMsg: "对象池最大大小必须大于0",
 		},
 		{
-			name: "invalid object pool min idle",
+			name:      "invalid object pool min idle",
 			configKey: "pool",
 			configVal: map[string]interface{}{
 				"object_pool": map[string]interface{}{
@@ -184,7 +184,7 @@ func TestLoadConfig_InvalidPoolConfig(t *testing.T) {
 			errMsg: "对象池最小空闲数不能为负数",
 		},
 		{
-			name: "invalid object pool max idle",
+			name:      "invalid object pool max idle",
 			configKey: "pool",
 			configVal: map[string]interface{}{
 				"object_pool": map[string]interface{}{
@@ -270,8 +270,8 @@ func TestLoadConfig_ValidConfig(t *testing.T) {
 
 	configData := map[string]interface{}{
 		"server": map[string]interface{}{
-			"host":  "127.0.0.1",
-			"port":  5432,
+			"host": "127.0.0.1",
+			"port": 5432,
 		},
 		"database": map[string]interface{}{
 			"max_connections": 200,

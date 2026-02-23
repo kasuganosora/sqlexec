@@ -362,7 +362,7 @@ func (e *EnhancedCardinalityEstimator) estimateEquijoinSelectivity(leftTable, ri
 
 	// 假设连接列的NDV相似
 	// 选择性 = 1 / NDV
-	avgNDV := float64(leftStats.RowCount + rightStats.RowCount) / 2.0
+	avgNDV := float64(leftStats.RowCount+rightStats.RowCount) / 2.0
 	if avgNDV > 0 {
 		return 1.0 / math.Min(100.0, avgNDV)
 	}
@@ -449,6 +449,3 @@ func getTableName(plan interface{}) string {
 	_ = plan
 	return ""
 }
-
-
-

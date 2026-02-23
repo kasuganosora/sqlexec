@@ -35,8 +35,8 @@ type IVFRabitQIndex struct {
 	// 参数
 	nlist int
 
-	mu   sync.RWMutex
-	rng  *rand.Rand
+	mu  sync.RWMutex
+	rng *rand.Rand
 }
 
 // IVFRabitQParams IVF-RaBitQ 参数
@@ -76,18 +76,18 @@ func NewIVFRabitQIndex(columnName string, config *VectorIndexConfig) (*IVFRabitQ
 	}
 
 	return &IVFRabitQIndex{
-		columnName:        columnName,
-		config:            config,
-		distFunc:          distFunc,
-		vectors:           make(map[int64][]float32),
-		quantizedVectors:  make(map[int64][]uint64),
-		projectionMatrix:  projectionMatrix,
-		centroids:         make([][]float32, nlist),
-		vectorsByCluster:  make(map[int][]VectorRecord, nlist),
-		assignments:       make(map[int64]int),
-		clusterCounts:     make([]int, nlist),
-		nlist:             nlist,
-		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
+		columnName:       columnName,
+		config:           config,
+		distFunc:         distFunc,
+		vectors:          make(map[int64][]float32),
+		quantizedVectors: make(map[int64][]uint64),
+		projectionMatrix: projectionMatrix,
+		centroids:        make([][]float32, nlist),
+		vectorsByCluster: make(map[int][]VectorRecord, nlist),
+		assignments:      make(map[int64]int),
+		clusterCounts:    make([]int, nlist),
+		nlist:            nlist,
+		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -460,7 +460,7 @@ func (i *IVFRabitQIndex) Stats() VectorIndexStats {
 	}
 
 	// 投影矩阵
-	memorySize += int64(len(i.projectionMatrix) * len(i.projectionMatrix[0])) * 4
+	memorySize += int64(len(i.projectionMatrix)*len(i.projectionMatrix[0])) * 4
 
 	// 聚类中心
 	for _, centroid := range i.centroids {

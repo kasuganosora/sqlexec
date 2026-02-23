@@ -12,9 +12,9 @@ import (
 // MemoryTestHelper 内存数据源测试辅助器
 // 提供快速创建内存数据源、表和数据的能力
 type MemoryTestHelper struct {
-	ds          domain.DataSource
-	factory     *memory.MemoryFactory
-	ctx         context.Context
+	ds      domain.DataSource
+	factory *memory.MemoryFactory
+	ctx     context.Context
 }
 
 // NewMemoryTestHelper 创建内存测试辅助器

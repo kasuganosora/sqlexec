@@ -21,14 +21,14 @@ type OptimizedAggregate struct {
 
 // NewOptimizedAggregate 创建优化的聚合算子
 func NewOptimizedAggregate(aggFuncs []*AggregationItem, groupByCols []string, child PhysicalPlan) *OptimizedAggregate {
-	inputRows := int64(1000) // 假设
+	inputRows := int64(1000)                                           // 假设
 	groupCost := float64(inputRows) * float64(len(groupByCols)) * 0.02 // 降低成本估计
 	aggCost := float64(inputRows) * float64(len(aggFuncs)) * 0.01
 	cost := child.Cost() + groupCost + aggCost
 
 	return &OptimizedAggregate{
 		AggFuncs:    aggFuncs,
-		GroupByCols:  groupByCols,
+		GroupByCols: groupByCols,
 		cost:        cost,
 		children:    []PhysicalPlan{child},
 	}
@@ -470,10 +470,10 @@ type perAggState struct {
 
 // aggregateState 聚合状态（不存储所有行）
 type aggregateState struct {
-	key       interface{}      // Perfect Hash 时的单列键
-	keyValues []interface{}    // 多列键值
-	count     int64            // COUNT
-	perAgg    []perAggState    // 每个聚合函数独立的状态
+	key       interface{}   // Perfect Hash 时的单列键
+	keyValues []interface{} // 多列键值
+	count     int64         // COUNT
+	perAgg    []perAggState // 每个聚合函数独立的状态
 }
 
 // Explain 返回计划说明

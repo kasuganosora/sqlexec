@@ -220,9 +220,9 @@ func TestUnicode(t *testing.T) {
 // TestTranslate tests the translate function
 func TestTranslate(t *testing.T) {
 	tests := []struct {
-		name       string
+		name        string
 		s, from, to string
-		want       string
+		want        string
 	}{
 		{"basic", "hello", "el", "ip", "hippo"},
 		{"no-match", "hello", "xyz", "abc", "hello"},

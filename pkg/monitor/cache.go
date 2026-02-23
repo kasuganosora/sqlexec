@@ -8,12 +8,12 @@ import (
 
 // CacheEntry 缓存条目
 type CacheEntry struct {
-	Key        string
-	Value      interface{}
-	Expiration time.Time
-	CreatedAt  time.Time
+	Key         string
+	Value       interface{}
+	Expiration  time.Time
+	CreatedAt   time.Time
 	AccessCount int64
-	LastAccess time.Time
+	LastAccess  time.Time
 }
 
 // IsExpired 检查是否过期
@@ -26,13 +26,13 @@ func (e *CacheEntry) IsExpired() bool {
 
 // QueryCache 查询缓存
 type QueryCache struct {
-	mu         sync.RWMutex
-	entries    map[string]*CacheEntry
-	maxSize    int
-	maxTTL     time.Duration
-	hits       int64
-	misses     int64
-	evictions  int64
+	mu        sync.RWMutex
+	entries   map[string]*CacheEntry
+	maxSize   int
+	maxTTL    time.Duration
+	hits      int64
+	misses    int64
+	evictions int64
 }
 
 // NewQueryCache 创建查询缓存
@@ -92,12 +92,12 @@ func (c *QueryCache) Set(key string, value interface{}, ttl time.Duration) {
 	}
 
 	c.entries[key] = &CacheEntry{
-		Key:        key,
-		Value:      value,
-		Expiration: expiration,
-		CreatedAt:  time.Now(),
+		Key:         key,
+		Value:       value,
+		Expiration:  expiration,
+		CreatedAt:   time.Now(),
 		AccessCount: 1,
-		LastAccess: time.Now(),
+		LastAccess:  time.Now(),
 	}
 }
 
@@ -161,13 +161,13 @@ func (c *QueryCache) GetStats() *CacheStats {
 	}
 
 	return &CacheStats{
-		Size:     len(c.entries),
-		Hits:     c.hits,
-		Misses:   c.misses,
-		HitRate:  hitRate,
+		Size:      len(c.entries),
+		Hits:      c.hits,
+		Misses:    c.misses,
+		HitRate:   hitRate,
 		Evictions: c.evictions,
-		MaxSize:  c.maxSize,
-		MaxTTL:   c.maxTTL,
+		MaxSize:   c.maxSize,
+		MaxTTL:    c.maxTTL,
 	}
 }
 
@@ -184,9 +184,9 @@ type CacheStats struct {
 
 // CacheManager 缓存管理器
 type CacheManager struct {
-	queryCache   *QueryCache
-	resultCache  *QueryCache
-	schemaCache  *QueryCache
+	queryCache  *QueryCache
+	resultCache *QueryCache
+	schemaCache *QueryCache
 }
 
 // NewCacheManager 创建缓存管理器
@@ -224,10 +224,10 @@ func (cm *CacheManager) GetStats() map[string]*CacheStats {
 
 // CacheKey 生成缓存键
 type CacheKey struct {
-	SQL        string
-	Params     []interface{}
-	Database   string
-	User       string
+	SQL      string
+	Params   []interface{}
+	Database string
+	User     string
 }
 
 // GenerateKey 生成缓存键

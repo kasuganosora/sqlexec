@@ -12,36 +12,36 @@ import (
 
 // DB is the main database object for managing datasources and creating sessions
 type DB struct {
-	mu           sync.RWMutex
-	dataSources  map[string]domain.DataSource
-	defaultDS    string
-	dsManager    *application.DataSourceManager
-	cache        *QueryCache
-	logger       Logger
-	config       *DBConfig
+	mu          sync.RWMutex
+	dataSources map[string]domain.DataSource
+	defaultDS   string
+	dsManager   *application.DataSourceManager
+	cache       *QueryCache
+	logger      Logger
+	config      *DBConfig
 }
 
 // DBConfig contains configuration options for the DB object
 type DBConfig struct {
-	CacheEnabled          bool
-	CacheSize           int
-	CacheTTL            int // seconds
-	DefaultLogger       Logger
-	DebugMode           bool
-	QueryTimeout        time.Duration // 全局查询超时, 0表示不限制
-	UseEnhancedOptimizer bool         // 是否使用增强优化器（默认true）
-	DatabaseDir          string       // 持久化存储根目录，默认 "./database"
+	CacheEnabled         bool
+	CacheSize            int
+	CacheTTL             int // seconds
+	DefaultLogger        Logger
+	DebugMode            bool
+	QueryTimeout         time.Duration // 全局查询超时, 0表示不限制
+	UseEnhancedOptimizer bool          // 是否使用增强优化器（默认true）
+	DatabaseDir          string        // 持久化存储根目录，默认 "./database"
 }
 
 // NewDB creates a new DB object with the given configuration
 func NewDB(config *DBConfig) (*DB, error) {
 	if config == nil {
 		config = &DBConfig{
-			CacheEnabled:          true,
-			CacheSize:           1000,
-			CacheTTL:            300, // 5 minutes
-			DefaultLogger:       NewDefaultLogger(LogInfo),
-			DebugMode:           false,
+			CacheEnabled:         true,
+			CacheSize:            1000,
+			CacheTTL:             300, // 5 minutes
+			DefaultLogger:        NewDefaultLogger(LogInfo),
+			DebugMode:            false,
 			UseEnhancedOptimizer: true, // 默认启用增强优化器
 		}
 	}
@@ -55,9 +55,9 @@ func NewDB(config *DBConfig) (*DB, error) {
 	// Callers providing their own DBConfig should set UseEnhancedOptimizer explicitly.
 
 	cache := NewQueryCache(CacheConfig{
-		Enabled:  config.CacheEnabled,
-		TTL:      time.Duration(config.CacheTTL) * time.Second,
-		MaxSize:  config.CacheSize,
+		Enabled: config.CacheEnabled,
+		TTL:     time.Duration(config.CacheTTL) * time.Second,
+		MaxSize: config.CacheSize,
 	})
 
 	dsManager := application.NewDataSourceManager()
@@ -211,9 +211,9 @@ func (db *DB) SessionWithOptions(opts *SessionOptions) *Session {
 
 	apiSession := &Session{
 		db:           db,
-		coreSession:   coreSession,
+		coreSession:  coreSession,
 		options:      opts,
-		cacheEnabled:  opts.CacheEnabled,
+		cacheEnabled: opts.CacheEnabled,
 		logger:       db.logger,
 	}
 

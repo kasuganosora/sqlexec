@@ -63,9 +63,9 @@ func (q *TermQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	termID := hashString(q.Term)
 	queryVector := bm25.NewSparseVector()
 	queryVector.Set(termID, 1.0*q.boost)
-	
+
 	idxResults := idx.Search(queryVector)
-	
+
 	// 转换为本地类型并应用权重
 	results := make([]SearchResult, len(idxResults))
 	for i, r := range idxResults {
@@ -75,7 +75,7 @@ func (q *TermQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			Doc:   r.Doc,
 		}
 	}
-	
+
 	return results
 }
 
@@ -109,9 +109,9 @@ func (q *PhraseQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			Position: i,
 		}
 	}
-	
+
 	idxResults := idx.SearchPhrase(tokens, q.Slop)
-	
+
 	// 转换为本地类型并应用权重
 	results := make([]SearchResult, len(idxResults))
 	for i, r := range idxResults {
@@ -121,7 +121,7 @@ func (q *PhraseQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			Doc:   r.Doc,
 		}
 	}
-	
+
 	return results
 }
 
@@ -354,10 +354,10 @@ func NewRangeQuery(field string, min, max interface{}, includeMin, includeMax bo
 // Execute 执行查询
 func (q *RangeQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	var results []SearchResult
-	
+
 	// 遍历所有文档，检查字段值是否在范围内
 	allDocIDs := idx.GetAllDocIDs()
-	
+
 	for _, docID := range allDocIDs {
 		doc := idx.GetDocument(docID)
 		if doc == nil {
@@ -374,7 +374,7 @@ func (q *RangeQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 		if q.isInRange(fieldValue) {
 			// 计算分数
 			score := 1.0 * q.boost
-			
+
 			results = append(results, SearchResult{
 				DocID: docID,
 				Score: score,
@@ -582,11 +582,11 @@ func (q *FuzzyQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	if q.Distance <= 0 {
 		q.Distance = 2 // 默认编辑距离
 	}
-	
+
 	// 直接遍历所有文档，找到匹配的文档
 	var results []SearchResult
 	allDocIDs := idx.GetAllDocIDs()
-	
+
 	for _, docID := range allDocIDs {
 		doc := idx.GetDocument(docID)
 		if doc == nil {
@@ -602,11 +602,11 @@ func (q *FuzzyQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 		// 提取词并检查是否有匹配的词
 		terms := simpleTokenize(fieldValue)
 		maxSimilarity := 0.0
-		
+
 		for _, term := range terms {
 			// 计算编辑距离
 			distance := levenshteinDistance(q.Term, term)
-			
+
 			if distance <= q.Distance {
 				// 计算相似度分数
 				maxLen := utils.MaxInt(len(q.Term), len(term))
@@ -618,7 +618,7 @@ func (q *FuzzyQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 				}
 			}
 		}
-		
+
 		// 如果有匹配的词，添加结果
 		if maxSimilarity > 0 {
 			results = append(results, SearchResult{
@@ -645,7 +645,7 @@ func simpleTokenize(value interface{}) []string {
 	// 简单的空格分词
 	var terms []string
 	var current strings.Builder
-	
+
 	for _, r := range text {
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 			if current.Len() > 0 {
@@ -656,11 +656,11 @@ func simpleTokenize(value interface{}) []string {
 			current.WriteRune(r)
 		}
 	}
-	
+
 	if current.Len() > 0 {
 		terms = append(terms, current.String())
 	}
-	
+
 	return terms
 }
 

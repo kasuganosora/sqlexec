@@ -249,10 +249,10 @@ func (fts *FullTextIndexSupport) EstimateFullTextIndexStats(
 
 	stats := &HypotheticalIndexStats{
 		NDV:           ndv,
-		Selectivity:    selectivity,
+		Selectivity:   selectivity,
 		EstimatedSize: invertedIndexSize,
-		NullFraction:   nullFraction,
-		Correlation:    correlation,
+		NullFraction:  nullFraction,
+		Correlation:   correlation,
 	}
 
 	return stats

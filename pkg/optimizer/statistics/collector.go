@@ -16,7 +16,7 @@ type SamplingCollector struct {
 	dataSource domain.DataSource
 	sampleRate float64 // 采样率 (0.01-0.05 = 1%-5%)
 	maxRows    int64   // 最大采样行数
-	rand        *rand.Rand
+	rand       *rand.Rand
 }
 
 // NewSamplingCollector 创建采样收集器
@@ -25,7 +25,7 @@ func NewSamplingCollector(dataSource domain.DataSource, sampleRate float64) *Sam
 		dataSource: dataSource,
 		sampleRate: sampleRate,
 		maxRows:    10000, // 默认最多采样10000行
-		rand:        rand.New(rand.NewSource(time.Now().UnixNano())),
+		rand:       rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -127,7 +127,7 @@ func (sc *SamplingCollector) sampleRows(ctx context.Context, tableName string, s
 // calculateStatisticsFromSample 从样本计算统计信息
 func (sc *SamplingCollector) calculateStatisticsFromSample(tableName string, sampleRows []domain.Row, totalRowCount int64) *TableStatistics {
 	sampleCount := int64(len(sampleRows))
-	
+
 	// 计算采样比例
 	sampleRatio := 1.0
 	if totalRowCount > 0 {
@@ -156,21 +156,21 @@ func (sc *SamplingCollector) calculateStatisticsFromSample(tableName string, sam
 		// 为每列构建统计信息和直方图
 		var wg sync.WaitGroup
 		var mu sync.Mutex
-		
+
 		for _, colName := range colNames {
 			wg.Add(1)
 			go func(name string) {
 				defer wg.Done()
-				
+
 				colStats, histogram := sc.collectColumnStats(sampleRows, name)
-				
+
 				mu.Lock()
 				stats.ColumnStats[name] = colStats
 				stats.Histograms[name] = histogram
 				mu.Unlock()
 			}(colName)
 		}
-		
+
 		wg.Wait()
 	}
 
@@ -180,7 +180,7 @@ func (sc *SamplingCollector) calculateStatisticsFromSample(tableName string, sam
 // collectColumnStats 收集单个列的统计信息
 func (sc *SamplingCollector) collectColumnStats(rows []domain.Row, colName string) (*ColumnStatistics, *Histogram) {
 	colStats := &ColumnStatistics{
-		Name:    colName,
+		Name:     colName,
 		DataType: inferDataType(rows, colName),
 	}
 
@@ -223,7 +223,7 @@ func (sc *SamplingCollector) collectColumnStats(rows []domain.Row, colName strin
 				colStats.MaxValue = val
 			}
 		}
-		
+
 		// 计算平均宽度
 		if len(values)-int(nullCount) > 0 {
 			colStats.AvgWidth = totalWidth / float64(len(values)-int(nullCount))
@@ -244,7 +244,7 @@ func inferDataType(rows []domain.Row, colName string) string {
 		if val == nil {
 			continue
 		}
-		
+
 		switch val.(type) {
 		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 			return "integer"
@@ -297,4 +297,3 @@ func compareValues(a, b interface{}) int {
 	}
 	return 0
 }
-

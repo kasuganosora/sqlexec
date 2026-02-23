@@ -202,9 +202,9 @@ func TestParseAggregationFunction(t *testing.T) {
 	optimizer := NewOptimizer(nil)
 
 	tests := []struct {
-		name     string
-		expr     *parser.Expression
-		wantNil  bool
+		name    string
+		expr    *parser.Expression
+		wantNil bool
 	}{
 		{
 			name:    "nil expression",

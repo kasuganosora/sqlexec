@@ -16,32 +16,32 @@ type Pool interface {
 
 // PoolStats 池统计信息
 type PoolStats struct {
-	TotalCreated   int64
-	TotalAcquired  int64
-	TotalReleased  int64
-	CurrentSize    int
-	MaxSize        int
-	IdleCount      int
-	ActiveCount    int
-	WaitCount      int64
-	WaitDuration   time.Duration
+	TotalCreated  int64
+	TotalAcquired int64
+	TotalReleased int64
+	CurrentSize   int
+	MaxSize       int
+	IdleCount     int
+	ActiveCount   int
+	WaitCount     int64
+	WaitDuration  time.Duration
 }
 
 // ObjectPool 对象池实现
 type ObjectPool struct {
-	factory     func() (interface{}, error)
-	destroy     func(interface{}) error
-	idle        []interface{}
-	active      map[interface{}]struct{}
-	mu          sync.RWMutex
-	maxSize     int
-	minIdle     int
-	maxIdle     int
-	createCount int64
+	factory      func() (interface{}, error)
+	destroy      func(interface{}) error
+	idle         []interface{}
+	active       map[interface{}]struct{}
+	mu           sync.RWMutex
+	maxSize      int
+	minIdle      int
+	maxIdle      int
+	createCount  int64
 	acquireCount int64
 	releaseCount int64
-	waitCount   int64
-	closed      bool
+	waitCount    int64
+	closed       bool
 }
 
 // NewObjectPool 创建对象池
@@ -258,7 +258,7 @@ func (p *GoroutinePool) worker(id int) {
 // Stats 获取池统计
 func (p *GoroutinePool) Stats() PoolStats {
 	return PoolStats{
-		MaxSize:    p.maxWorkers,
+		MaxSize:     p.maxWorkers,
 		ActiveCount: p.workerCount,
 	}
 }
@@ -326,7 +326,7 @@ func (p *RetryPool) Execute(ctx context.Context, task func() error) error {
 // 错误定义
 var (
 	ErrPoolClosed = &PoolError{Message: "pool is closed"}
-	ErrPoolEmpty = &PoolError{Message: "pool is empty"}
+	ErrPoolEmpty  = &PoolError{Message: "pool is empty"}
 )
 
 // PoolError 池错误
@@ -337,5 +337,3 @@ type PoolError struct {
 func (e *PoolError) Error() string {
 	return e.Message
 }
-
-

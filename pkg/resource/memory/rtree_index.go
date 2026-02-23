@@ -25,8 +25,8 @@ type RTreeIndex struct {
 
 type rtreeNode struct {
 	bbox     builtin.BoundingBox
-	children []*rtreeNode  // non-nil for internal nodes
-	entries  []rtreeEntry  // non-nil for leaf nodes
+	children []*rtreeNode // non-nil for internal nodes
+	entries  []rtreeEntry // non-nil for leaf nodes
 	isLeaf   bool
 }
 

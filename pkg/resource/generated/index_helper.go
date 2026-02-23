@@ -2,9 +2,32 @@ package generated
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
+
+// nonDeterministicFunctions lists SQL functions that produce non-deterministic
+// results and therefore cannot be used in indexable generated column expressions.
+var nonDeterministicFunctions = []string{
+	"RAND(",
+	"NOW(",
+	"UUID(",
+	"CURRENT_TIMESTAMP(",
+	"CURRENT_DATE(",
+	"CURRENT_TIME(",
+	"SYSDATE(",
+	"UNIX_TIMESTAMP(",
+	"CONNECTION_ID(",
+	"LAST_INSERT_ID(",
+	"UUID_SHORT(",
+	"SLEEP(",
+	"BENCHMARK(",
+	"GET_LOCK(",
+	"RELEASE_LOCK(",
+	"ROW_COUNT(",
+	"FOUND_ROWS(",
+}
 
 // IndexHelper 生成列索引辅助器
 // 负责处理 STORED 和 VIRTUAL 生成列的索引创建和维护
@@ -112,41 +135,93 @@ func (h *IndexHelper) GetIndexableGeneratedColumns(
 	schema *domain.TableInfo,
 ) []string {
 	indexable := make([]string, 0)
-	
+
 	for _, col := range schema.Columns {
 		if !col.IsGenerated {
 			continue
 		}
-		
+
 		canIndex, _ := h.CanIndexGeneratedColumn(&col)
 		if canIndex {
 			indexable = append(indexable, col.Name)
 		}
 	}
-	
+
 	return indexable
 }
 
-// isIndexableExpression 检查表达式是否可索引
-// 简化实现：检查表达式复杂度和依赖
+// isIndexableExpression checks whether a generated column expression can be
+// indexed. It performs string-based detection of patterns that would make an
+// expression non-indexable:
+//  1. Non-deterministic functions (RAND(), NOW(), UUID(), etc.)
+//  2. Subqueries (presence of SELECT keyword)
+//  3. Expression length exceeding the complexity threshold
 func (h *IndexHelper) isIndexableExpression(expr string) bool {
 	if expr == "" {
 		return false
 	}
 
-	// 简单判断：表达式长度不超过一定限制
-	// 实际应该解析 AST 并分析节点类型
+	// Reject expressions that are too long (complexity threshold)
 	if len(expr) > 1000 {
 		return false
 	}
 
-	// TODO: 更复杂的表达式分析
-	// 1. 检查是否包含不确定性函数（如 RAND(), NOW()）
-	// 2. 检查是否包含子查询
-	// 3. 检查是否包含用户自定义函数（非确定性）
-	// 4. 检查依赖列是否可索引（如 TEXT, BLOB 类型）
+	upper := strings.ToUpper(expr)
+
+	// 1. Check for non-deterministic functions
+	for _, fn := range nonDeterministicFunctions {
+		if strings.Contains(upper, fn) {
+			return false
+		}
+	}
+
+	// 2. Check for subqueries (SELECT keyword presence indicates a subquery)
+	// Use word-boundary-aware check: look for SELECT preceded by start-of-string
+	// or a non-alphanumeric character to avoid false positives on column names
+	// like "user_select".
+	if h.containsKeyword(upper, "SELECT") {
+		return false
+	}
 
 	return true
+}
+
+// containsKeyword checks if the expression contains a SQL keyword as a whole
+// word (not part of an identifier). It looks for the keyword preceded by a
+// non-alphanumeric character (or start of string) and followed by a
+// non-alphanumeric character (or end of string).
+func (h *IndexHelper) containsKeyword(upperExpr, keyword string) bool {
+	idx := 0
+	for {
+		pos := strings.Index(upperExpr[idx:], keyword)
+		if pos < 0 {
+			return false
+		}
+		absPos := idx + pos
+		// Check character before the keyword
+		if absPos > 0 {
+			before := upperExpr[absPos-1]
+			if isAlphaNumeric(before) {
+				idx = absPos + len(keyword)
+				continue
+			}
+		}
+		// Check character after the keyword
+		afterPos := absPos + len(keyword)
+		if afterPos < len(upperExpr) {
+			after := upperExpr[afterPos]
+			if isAlphaNumeric(after) {
+				idx = absPos + len(keyword)
+				continue
+			}
+		}
+		return true
+	}
+}
+
+// isAlphaNumeric returns true if the byte is a letter, digit, or underscore.
+func isAlphaNumeric(b byte) bool {
+	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '_'
 }
 
 // getColumnInfo 获取列信息

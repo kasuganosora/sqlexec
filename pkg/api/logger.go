@@ -137,8 +137,8 @@ func NewNoOpLogger() *NoOpLogger {
 }
 
 func (l *NoOpLogger) Debug(format string, args ...interface{}) {}
-func (l *NoOpLogger) Info(format string, args ...interface{}) {}
-func (l *NoOpLogger) Warn(format string, args ...interface{}) {}
+func (l *NoOpLogger) Info(format string, args ...interface{})  {}
+func (l *NoOpLogger) Warn(format string, args ...interface{})  {}
 func (l *NoOpLogger) Error(format string, args ...interface{}) {}
-func (l *NoOpLogger) SetLevel(level LogLevel)                {}
+func (l *NoOpLogger) SetLevel(level LogLevel)                  {}
 func (l *NoOpLogger) GetLevel() LogLevel                       { return LogInfo }

@@ -42,9 +42,9 @@ func TestPriorityQueueOrdering(t *testing.T) {
 
 	// Add nodes with different costs and priorities
 	node1 := &PlanNode{Plan: "plan1", Cost: 100.0, Priority: 1}
-	node2 := &PlanNode{Plan: "plan2", Cost: 50.0, Priority: 2}  // Higher priority
-	node3 := &PlanNode{Plan: "plan3", Cost: 75.0, Priority: 2}  // Same priority, higher cost
-	node4 := &PlanNode{Plan: "plan4", Cost: 25.0, Priority: 3}  // Highest priority
+	node2 := &PlanNode{Plan: "plan2", Cost: 50.0, Priority: 2} // Higher priority
+	node3 := &PlanNode{Plan: "plan3", Cost: 75.0, Priority: 2} // Same priority, higher cost
+	node4 := &PlanNode{Plan: "plan4", Cost: 25.0, Priority: 3} // Highest priority
 
 	heap.Push(pq, node1)
 	heap.Push(pq, node2)

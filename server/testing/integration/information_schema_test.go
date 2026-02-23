@@ -263,4 +263,3 @@ func querySingleColumn(conn *sql.DB, query string) ([]string, error) {
 	}
 	return results, nil
 }
-

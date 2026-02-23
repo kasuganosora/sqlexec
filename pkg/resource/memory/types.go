@@ -44,22 +44,22 @@ func (td *TableData) RowCount() int {
 // COWTableSnapshot represents a copy-on-write snapshot of a table
 type COWTableSnapshot struct {
 	tableName     string
-	snapshotVer   int64               // table version pinned at transaction start (for snapshot isolation)
-	copied        bool                // whether a modified copy has been created
-	baseData      *TableData          // base data reference (when not modified)
-	modifiedData  *TableData          // modified data
-	rowLocks      map[int64]bool      // row-level locks: track which rows are modified
+	snapshotVer   int64                // table version pinned at transaction start (for snapshot isolation)
+	copied        bool                 // whether a modified copy has been created
+	baseData      *TableData           // base data reference (when not modified)
+	modifiedData  *TableData           // modified data
+	rowLocks      map[int64]bool       // row-level locks: track which rows are modified
 	rowCopies     map[int64]domain.Row // row-level copies: store modified rows
-	deletedRows   map[int64]bool      // row-level deletion: mark deleted rows
-	insertedCount int64               // number of rows inserted in this transaction
+	deletedRows   map[int64]bool       // row-level deletion: mark deleted rows
+	insertedCount int64                // number of rows inserted in this transaction
 	mu            sync.RWMutex
 }
 
 // Snapshot represents a transaction snapshot (copy-on-write)
 type Snapshot struct {
-	txnID         int64
-	startVer      int64
-	createdAt     time.Time
+	txnID          int64
+	startVer       int64
+	createdAt      time.Time
 	tableSnapshots map[string]*COWTableSnapshot // COW snapshot per table
 }
 

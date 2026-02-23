@@ -22,14 +22,14 @@ type InsertRequest struct {
 
 // UpdateRequest 更新请求
 type UpdateRequest struct {
-	Filters []domain.Filter      `json:"filters,omitempty"`
-	Updates domain.Row           `json:"updates"`
+	Filters []domain.Filter       `json:"filters,omitempty"`
+	Updates domain.Row            `json:"updates"`
 	Options *domain.UpdateOptions `json:"options,omitempty"`
 }
 
 // DeleteRequest 删除请求
 type DeleteRequest struct {
-	Filters []domain.Filter      `json:"filters,omitempty"`
+	Filters []domain.Filter       `json:"filters,omitempty"`
 	Options *domain.DeleteOptions `json:"options,omitempty"`
 }
 

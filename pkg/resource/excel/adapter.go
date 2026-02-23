@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xuri/excelize/v2"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
+	"github.com/xuri/excelize/v2"
 )
 
 // ExcelAdapter Excel文件数据源适配器
@@ -293,7 +293,7 @@ func (a *ExcelAdapter) inferColumnTypes(headers []string, rows [][]string) []dom
 		}
 
 		columns[j] = domain.ColumnInfo{
-			Name:     headers[j],  // 使用实际的header名称
+			Name:     headers[j], // 使用实际的header名称
 			Type:     bestType,
 			Nullable: true,
 		}

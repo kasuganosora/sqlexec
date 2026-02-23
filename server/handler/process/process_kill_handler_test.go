@@ -82,4 +82,3 @@ func TestProcessKillHandler_Handle_NonexistentThread(t *testing.T) {
 		t.Errorf("expected error header 0xFF, got 0x%02x", written[0][4])
 	}
 }
-

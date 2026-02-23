@@ -23,13 +23,13 @@ type IndexManager struct {
 
 // Index 索引定义
 type Index struct {
-	Name       string
-	TableName  string
-	Columns    []string
-	Unique     bool
-	Primary    bool
+	Name        string
+	TableName   string
+	Columns     []string
+	Unique      bool
+	Primary     bool
 	Cardinality int64 // 基数
-	IndexType  IndexType
+	IndexType   IndexType
 }
 
 // IndexType 索引类型
@@ -71,7 +71,7 @@ func (is *IndexSelector) SelectBestIndex(tableName string, filters []domain.Filt
 
 	// 评估每个索引
 	bestIndex := is.evaluateIndexes(tableName, filters, requiredCols, indices)
-	
+
 	return bestIndex
 }
 
@@ -84,7 +84,7 @@ func (is *IndexSelector) evaluateIndexes(tableName string, filters []domain.Filt
 
 	for _, idx := range indices {
 		evaluation := is.evaluateIndex(tableName, filters, requiredCols, idx)
-		
+
 		if evaluation.Cost < bestIndex.Cost {
 			bestIndex = evaluation
 		}
@@ -109,7 +109,7 @@ func (is *IndexSelector) evaluateIndex(tableName string, filters []domain.Filter
 
 	// 3. 检查索引覆盖性
 	isCovering := is.isCoveringIndex(requiredCols, idx)
-	
+
 	// 4. 计算总成本
 	totalCost := scanCost
 	if !isCovering {
@@ -122,10 +122,10 @@ func (is *IndexSelector) evaluateIndex(tableName string, filters []domain.Filter
 
 	return &IndexSelection{
 		SelectedIndex: idx,
-		IsCovering:     isCovering,
-		EstimatedRows:    is.estimateIndexRows(tableName, filters, idx),
-		Cost:            totalCost,
-		Reason:           reason,
+		IsCovering:    isCovering,
+		EstimatedRows: is.estimateIndexRows(tableName, filters, idx),
+		Cost:          totalCost,
+		Reason:        reason,
 	}
 }
 
@@ -264,13 +264,13 @@ func (is *IndexSelector) estimateIndexHeight(idx *Index, stats *statistics.Table
 // generateSelectionReason 生成索引选择理由
 func (is *IndexSelector) generateSelectionReason(idx *Index, filters []domain.Filter, isCovering bool, scanCost float64) string {
 	reason := fmt.Sprintf("Selected index '%s'", idx.Name)
-	
+
 	if isCovering {
 		reason += " (covering index)"
 	}
 
 	reason += fmt.Sprintf(" with estimated cost %.2f", scanCost)
-	
+
 	if len(filters) > 0 {
 		reason += fmt.Sprintf(" for %d filter condition(s)", len(filters))
 	}
@@ -310,11 +310,11 @@ func (im *IndexManager) FindIndexByName(tableName, indexName string) *Index {
 
 // IndexSelection 索引选择结果
 type IndexSelection struct {
-	SelectedIndex  *Index
+	SelectedIndex *Index
 	IsCovering    bool
 	EstimatedRows float64
-	Cost           float64
-	Reason         string
+	Cost          float64
+	Reason        string
 }
 
 // String 返回选择的字符串表示
@@ -329,18 +329,18 @@ func (is *IndexSelection) String() string {
 // Explain 返回详细的索引选择说明
 func (is *IndexSelector) Explain(tableName string, filters []domain.Filter, requiredCols []string) string {
 	selection := is.SelectBestIndex(tableName, filters, requiredCols)
-	
+
 	var explanation strings.Builder
 	explanation.WriteString(fmt.Sprintf("=== Index Selection for '%s' ===\n", tableName))
 	explanation.WriteString(fmt.Sprintf("Required Columns: %v\n", requiredCols))
 	explanation.WriteString(fmt.Sprintf("Filters: %d\n\n", len(filters)))
-	
+
 	for i, filter := range filters {
 		explanation.WriteString(fmt.Sprintf("  Filter %d: %s %s %v\n", i+1, filter.Field, filter.Operator, filter.Value))
 	}
-	
+
 	explanation.WriteString(fmt.Sprintf("\nSelected: %s\n", selection.String()))
 	explanation.WriteString(fmt.Sprintf("Estimated Rows: %.0f\n", selection.EstimatedRows))
-	
+
 	return explanation.String()
 }

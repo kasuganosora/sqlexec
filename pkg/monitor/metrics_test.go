@@ -178,7 +178,7 @@ func TestMetricsCollectorGetSlowQueryCount(t *testing.T) {
 	}{
 		{"Initial", 0},
 		{"After one record", 1},
-		{"After multiple records", 2},  // 只记录两次
+		{"After multiple records", 2}, // 只记录两次
 	}
 
 	for i, tt := range tests {
@@ -487,7 +487,7 @@ func TestZeroDuration(t *testing.T) {
 	collector := NewMetricsCollector()
 
 	collector.RecordQuery(0, true, "users")
-	
+
 	avg := collector.GetAvgDuration()
 	if avg != 0 {
 		t.Errorf("AvgDuration with zero duration = %v, want 0", avg)

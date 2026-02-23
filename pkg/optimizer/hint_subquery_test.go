@@ -264,5 +264,3 @@ func TestHintAwareSubqueryRule_MultipleHints(t *testing.T) {
 		t.Error("Plan should not be nil")
 	}
 }
-
-

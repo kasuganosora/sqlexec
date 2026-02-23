@@ -481,7 +481,7 @@ func TestPruneRows(t *testing.T) {
 				{"id": 1, "name": "Alice", "age": int64(20)},
 				{"id": 2, "name": "Bob", "age": int64(30)},
 			},
-			columns:  []string{},
+			columns: []string{},
 			expected: []domain.Row{
 				{"id": 1, "name": "Alice", "age": int64(20)},
 				{"id": 2, "name": "Bob", "age": int64(30)},

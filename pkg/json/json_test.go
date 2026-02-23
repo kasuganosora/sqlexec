@@ -41,8 +41,6 @@ func TestParseJSON(t *testing.T) {
 	}
 }
 
-
-
 func TestBinaryJSON_Type(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -73,8 +71,6 @@ func TestBinaryJSON_Type(t *testing.T) {
 		})
 	}
 }
-
-
 
 func TestBinaryJSON_Extract(t *testing.T) {
 	tests := []struct {
@@ -294,7 +290,6 @@ func TestBinaryJSON_RemoveMultiple(t *testing.T) {
 	}
 }
 
-
 func TestBinaryJSON_Merge(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -368,9 +363,9 @@ func TestBinaryJSON_Patch(t *testing.T) {
 
 func TestLength(t *testing.T) {
 	tests := []struct {
-		name  string
-		json  string
-		want  int
+		name    string
+		json    string
+		want    int
 		wantErr bool
 	}{
 		{"array length", `[1, 2, 3]`, 3, false},
@@ -587,10 +582,10 @@ func TestArrayInsert(t *testing.T) {
 
 func TestContains(t *testing.T) {
 	tests := []struct {
-		name  string
+		name   string
 		source interface{}
 		target interface{}
-		want  bool
+		want   bool
 	}{
 		{"array contains element", `[1, 2, 3]`, `2`, true},
 		{"array not contains", `[1, 2, 3]`, `4`, false},
@@ -616,11 +611,11 @@ func TestContains(t *testing.T) {
 
 func TestContainsPath(t *testing.T) {
 	tests := []struct {
-		name      string
-		json      string
-		oneOrAll  string
-		paths     []string
-		want      bool
+		name     string
+		json     string
+		oneOrAll string
+		paths    []string
+		want     bool
 	}{
 		{"one path exists", `{"a": 1}`, "one", []string{"$.a"}, true},
 		{"one path not exists", `{"a": 1}`, "one", []string{"$.b"}, false},
@@ -706,9 +701,9 @@ func TestOverlaps(t *testing.T) {
 
 func TestQuote(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		input string
-		want string
+		want  string
 	}{
 		{"simple string", "hello", `"hello"`},
 		{"with quote", `"hello"`, `"\"hello\""`},

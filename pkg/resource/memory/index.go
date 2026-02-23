@@ -48,9 +48,9 @@ func (t IndexType) IsVectorIndex() bool {
 type VectorMetricType string
 
 const (
-	VectorMetricCosine     VectorMetricType = "cosine"
-	VectorMetricL2         VectorMetricType = "l2"
-	VectorMetricIP         VectorMetricType = "inner_product"
+	VectorMetricCosine VectorMetricType = "cosine"
+	VectorMetricL2     VectorMetricType = "l2"
+	VectorMetricIP     VectorMetricType = "inner_product"
 )
 
 // VectorIndexConfig 向量索引配置
@@ -82,7 +82,7 @@ type Index interface {
 type IndexInfo struct {
 	Name      string    `json:"name"`
 	TableName string    `json:"table_name"`
-	Columns   []string  `json:"columns"`     // Support composite index (multi-column)
+	Columns   []string  `json:"columns"` // Support composite index (multi-column)
 	Type      IndexType `json:"type"`
 	Unique    bool      `json:"unique"`
 }
@@ -220,9 +220,9 @@ func (idx *BTreeIndex) GetIndexInfo() *IndexInfo {
 
 // HashIndex 哈希索引
 type HashIndex struct {
-	info  *IndexInfo
-	data  map[interface{}][]int64
-	mu    sync.RWMutex
+	info   *IndexInfo
+	data   map[interface{}][]int64
+	mu     sync.RWMutex
 	unique bool
 }
 
@@ -236,7 +236,7 @@ func NewHashIndex(tableName, columnName string, unique bool) *HashIndex {
 			Type:      IndexTypeHash,
 			Unique:    unique,
 		},
-		data:  make(map[interface{}][]int64),
+		data:   make(map[interface{}][]int64),
 		unique: unique,
 	}
 }
@@ -252,7 +252,7 @@ func NewHashIndexComposite(tableName string, columnNames []string, unique bool) 
 			Type:      IndexTypeHash,
 			Unique:    unique,
 		},
-		data:  make(map[interface{}][]int64),
+		data:   make(map[interface{}][]int64),
 		unique: unique,
 	}
 }
@@ -443,17 +443,17 @@ func tokenize(text string) []string {
 	text = strings.ToLower(text)
 	text = strings.ReplaceAll(text, "\t", " ")
 	text = strings.ReplaceAll(text, "\n", " ")
-	
+
 	parts := strings.Split(text, " ")
 	tokens := make([]string, 0, len(parts))
-	
+
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if part != "" {
 			tokens = append(tokens, part)
 		}
 	}
-	
+
 	return tokens
 }
 

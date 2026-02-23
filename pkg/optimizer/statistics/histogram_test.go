@@ -132,8 +132,8 @@ func TestBuildFrequencyHistogram(t *testing.T) {
 			name: "skewed distribution",
 			values: []interface{}{
 				1, 1, 1, 1, 1, // many 1s
-				2, 2, 2,        // some 2s
-				3,              // few 3s
+				2, 2, 2, // some 2s
+				3, // few 3s
 			},
 			bucketCount: 3,
 			check: func(t *testing.T, hist *Histogram) {
@@ -156,10 +156,10 @@ func TestBuildFrequencyHistogram(t *testing.T) {
 
 func TestHistogram_EstimateSelectivity(t *testing.T) {
 	tests := []struct {
-		name        string
-		histogram   *Histogram
-		filter      domain.Filter
-		check       func(t *testing.T, selectivity float64)
+		name      string
+		histogram *Histogram
+		filter    domain.Filter
+		check     func(t *testing.T, selectivity float64)
 	}{
 		{
 			name:      "nil histogram",
@@ -278,10 +278,10 @@ func TestHistogram_EstimateSelectivity(t *testing.T) {
 
 func TestHistogram_EstimateEqualitySelectivity(t *testing.T) {
 	tests := []struct {
-		name       string
-		histogram  *Histogram
-		value      interface{}
-		wantZero   bool
+		name         string
+		histogram    *Histogram
+		value        interface{}
+		wantZero     bool
 		wantPositive bool
 	}{
 		{
@@ -292,8 +292,8 @@ func TestHistogram_EstimateEqualitySelectivity(t *testing.T) {
 				},
 				NDV: 10,
 			},
-			value:      int64(5),
-			wantZero:   false,
+			value:        int64(5),
+			wantZero:     false,
 			wantPositive: true,
 		},
 		{
@@ -304,8 +304,8 @@ func TestHistogram_EstimateEqualitySelectivity(t *testing.T) {
 				},
 				NDV: 10,
 			},
-			value:      int64(20),
-			wantZero:   true,
+			value:        int64(20),
+			wantZero:     true,
 			wantPositive: false,
 		},
 		{
@@ -315,8 +315,8 @@ func TestHistogram_EstimateEqualitySelectivity(t *testing.T) {
 					{LowerBound: int64(1), UpperBound: int64(10), Count: 10},
 				},
 			},
-			value:      nil,
-			wantZero:   true,
+			value:        nil,
+			wantZero:     true,
 			wantPositive: false,
 		},
 	}
@@ -347,10 +347,10 @@ func TestHistogram_EstimateRangeSelectivity(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		operator   string
-		value      interface{}
-		wantValid  bool
+		name      string
+		operator  string
+		value     interface{}
+		wantValid bool
 	}{
 		{
 			name:      "greater than mid",
@@ -514,7 +514,7 @@ func TestHistogram_TotalCount(t *testing.T) {
 		expected int64
 	}{
 		{
-			name:     "with buckets and nulls",
+			name: "with buckets and nulls",
 			hist: &Histogram{
 				Buckets: []*HistogramBucket{
 					{Count: 10},
@@ -525,7 +525,7 @@ func TestHistogram_TotalCount(t *testing.T) {
 			expected: 30, // totalCount excludes NullCount
 		},
 		{
-			name:     "only buckets",
+			name: "only buckets",
 			hist: &Histogram{
 				Buckets: []*HistogramBucket{
 					{Count: 10},
@@ -535,17 +535,17 @@ func TestHistogram_TotalCount(t *testing.T) {
 			expected: 10,
 		},
 		{
-			name:     "only nulls",
+			name: "only nulls",
 			hist: &Histogram{
-				Buckets:  []*HistogramBucket{},
+				Buckets:   []*HistogramBucket{},
 				NullCount: 100,
 			},
 			expected: 0, // totalCount excludes NullCount
 		},
 		{
-			name:     "empty",
+			name: "empty",
 			hist: &Histogram{
-				Buckets:  []*HistogramBucket{},
+				Buckets:   []*HistogramBucket{},
 				NullCount: 0,
 			},
 			expected: 0,
@@ -574,8 +574,8 @@ func TestHistogram_Explain(t *testing.T) {
 		{
 			name: "equi width histogram",
 			hist: &Histogram{
-				Type:       EquiWidthHistogram,
-				Buckets:    []*HistogramBucket{{Count: 10}},
+				Type:        EquiWidthHistogram,
+				Buckets:     []*HistogramBucket{{Count: 10}},
 				BucketCount: 10,
 				NDV:         100,
 				MinValue:    int64(1),
@@ -586,8 +586,8 @@ func TestHistogram_Explain(t *testing.T) {
 		{
 			name: "frequency histogram",
 			hist: &Histogram{
-				Type:       FrequencyHistogram,
-				Buckets:    []*HistogramBucket{{Count: 10}},
+				Type:        FrequencyHistogram,
+				Buckets:     []*HistogramBucket{{Count: 10}},
 				BucketCount: 10,
 				NDV:         100,
 			},

@@ -9,9 +9,9 @@ import (
 
 // VirtualDatabaseEntry 虚拟数据库注册条目
 type VirtualDatabaseEntry struct {
-	Name     string              // 数据库名，如 "config"
+	Name     string               // 数据库名，如 "config"
 	Provider VirtualTableProvider // 提供表名和 schema 信息
-	Writable bool                // 是否支持写操作 (INSERT/UPDATE/DELETE)
+	Writable bool                 // 是否支持写操作 (INSERT/UPDATE/DELETE)
 }
 
 // VirtualDatabaseRegistry 虚拟数据库注册表

@@ -68,7 +68,7 @@ func DefaultDataSourceConfig(dataDir string) *DataSourceConfig {
 // IndexInfo index metadata
 type IndexInfo struct {
 	TableName string    `json:"table_name"`
-	Columns   []string  `json:"columns"`     // Support composite index (multi-column)
+	Columns   []string  `json:"columns"` // Support composite index (multi-column)
 	Unique    bool      `json:"unique"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -87,15 +87,15 @@ type Stats struct {
 	TableCount int `json:"table_count"`
 
 	// Badger stats
-	LSMSize    int64 `json:"lsm_size"`
-	VLogSize   int64 `json:"vlog_size"`
-	KeyCount   int64 `json:"key_count"`
+	LSMSize  int64 `json:"lsm_size"`
+	VLogSize int64 `json:"vlog_size"`
+	KeyCount int64 `json:"key_count"`
 
 	// Performance stats
-	TotalReads    int64 `json:"total_reads"`
-	TotalWrites   int64 `json:"total_writes"`
-	CacheHits     int64 `json:"cache_hits"`
-	CacheMisses   int64 `json:"cache_misses"`
+	TotalReads  int64 `json:"total_reads"`
+	TotalWrites int64 `json:"total_writes"`
+	CacheHits   int64 `json:"cache_hits"`
+	CacheMisses int64 `json:"cache_misses"`
 
 	// Last updated
 	UpdatedAt time.Time `json:"updated_at"`

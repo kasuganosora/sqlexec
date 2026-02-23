@@ -2,7 +2,7 @@ package index
 
 import (
 	"time"
-	
+
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 

@@ -23,8 +23,8 @@ func TestEnhancedCardinalityEstimator_UpdateStatistics(t *testing.T) {
 	estimator := NewEnhancedCardinalityEstimator(cache)
 
 	stats := &TableStatistics{
-		Name:       "test_table",
-		RowCount:   1000,
+		Name:        "test_table",
+		RowCount:    1000,
 		ColumnStats: make(map[string]*ColumnStatistics),
 		Histograms:  make(map[string]*Histogram),
 	}
@@ -47,8 +47,8 @@ func TestEnhancedCardinalityEstimator_GetStatistics(t *testing.T) {
 	estimator := NewEnhancedCardinalityEstimator(cache)
 
 	stats := &TableStatistics{
-		Name:       "test_table",
-		RowCount:   1000,
+		Name:        "test_table",
+		RowCount:    1000,
 		ColumnStats: make(map[string]*ColumnStatistics),
 		Histograms:  make(map[string]*Histogram),
 	}
@@ -70,8 +70,8 @@ func TestEnhancedCardinalityEstimator_GetStatistics_FromCache(t *testing.T) {
 	estimator := NewEnhancedCardinalityEstimator(cache)
 
 	stats := &TableStatistics{
-		Name:       "test_table",
-		RowCount:   1000,
+		Name:        "test_table",
+		RowCount:    1000,
 		ColumnStats: make(map[string]*ColumnStatistics),
 		Histograms:  make(map[string]*Histogram),
 	}
@@ -115,10 +115,10 @@ func TestEnhancedCardinalityEstimator_EstimateTableScan(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setupStats {
 				stats := &TableStatistics{
-					Name:            tt.tableName,
-					RowCount:        tt.expected,
-					ColumnStats:     make(map[string]*ColumnStatistics),
-					Histograms:      make(map[string]*Histogram),
+					Name:              tt.tableName,
+					RowCount:          tt.expected,
+					ColumnStats:       make(map[string]*ColumnStatistics),
+					Histograms:        make(map[string]*Histogram),
 					EstimatedRowCount: tt.expected,
 				}
 				estimator.UpdateStatistics(tt.tableName, stats)
@@ -135,8 +135,8 @@ func TestEnhancedCardinalityEstimator_EstimateTableScan_EstimatedRowCount(t *tes
 	estimator := NewEnhancedCardinalityEstimator(cache)
 
 	stats := &TableStatistics{
-		Name:             "test_table",
-		RowCount:         1000,
+		Name:              "test_table",
+		RowCount:          1000,
 		ColumnStats:       make(map[string]*ColumnStatistics),
 		Histograms:        make(map[string]*Histogram),
 		EstimatedRowCount: 5000, // different from actual RowCount
@@ -152,8 +152,8 @@ func TestEnhancedCardinalityEstimator_EstimateFilter_NoFilters(t *testing.T) {
 	estimator := NewEnhancedCardinalityEstimator(cache)
 
 	stats := &TableStatistics{
-		Name:       "test_table",
-		RowCount:   1000,
+		Name:        "test_table",
+		RowCount:    1000,
 		ColumnStats: make(map[string]*ColumnStatistics),
 		Histograms:  make(map[string]*Histogram),
 	}
@@ -168,7 +168,7 @@ func TestEnhancedCardinalityEstimator_EstimateFilter_WithFilters(t *testing.T) {
 	estimator := NewEnhancedCardinalityEstimator(cache)
 
 	stats := &TableStatistics{
-		Name: "test_table",
+		Name:     "test_table",
 		RowCount: 10000,
 		ColumnStats: map[string]*ColumnStatistics{
 			"age": {
@@ -211,7 +211,7 @@ func TestEnhancedCardinalityEstimator_EstimateFilter_MultipleFilters(t *testing.
 	estimator := NewEnhancedCardinalityEstimator(cache)
 
 	stats := &TableStatistics{
-		Name: "test_table",
+		Name:     "test_table",
 		RowCount: 10000,
 		ColumnStats: map[string]*ColumnStatistics{
 			"age": {
@@ -239,8 +239,8 @@ func TestEnhancedCardinalityEstimator_EstimateFilter_LogicOp(t *testing.T) {
 	estimator := NewEnhancedCardinalityEstimator(cache)
 
 	stats := &TableStatistics{
-		Name:       "test_table",
-		RowCount:   10000,
+		Name:        "test_table",
+		RowCount:    10000,
 		ColumnStats: make(map[string]*ColumnStatistics),
 		Histograms:  make(map[string]*Histogram),
 	}
@@ -345,7 +345,7 @@ func TestEnhancedCardinalityEstimator_EstimateDistinct(t *testing.T) {
 	estimator := NewEnhancedCardinalityEstimator(cache)
 
 	stats := &TableStatistics{
-		Name: "test_table",
+		Name:     "test_table",
 		RowCount: 10000,
 		ColumnStats: map[string]*ColumnStatistics{
 			"id": {
@@ -364,33 +364,33 @@ func TestEnhancedCardinalityEstimator_EstimateDistinct(t *testing.T) {
 	estimator.UpdateStatistics("test_table", stats)
 
 	tests := []struct {
-		name        string
-		columns     []string
-		wantNonNeg  bool
+		name         string
+		columns      []string
+		wantNonNeg   bool
 		wantLessThan int64
 	}{
 		{
-			name:        "single column",
-			columns:     []string{"id"},
-			wantNonNeg:  true,
+			name:         "single column",
+			columns:      []string{"id"},
+			wantNonNeg:   true,
 			wantLessThan: 10001,
 		},
 		{
-			name:        "multiple columns",
-			columns:     []string{"id", "age"},
-			wantNonNeg:  true,
+			name:         "multiple columns",
+			columns:      []string{"id", "age"},
+			wantNonNeg:   true,
 			wantLessThan: 10001,
 		},
 		{
-			name:        "empty columns",
-			columns:     []string{},
-			wantNonNeg:  true,
+			name:         "empty columns",
+			columns:      []string{},
+			wantNonNeg:   true,
 			wantLessThan: 10001,
 		},
 		{
-			name:        "non-existent table",
-			columns:     []string{"id"},
-			wantNonNeg:  true,
+			name:         "non-existent table",
+			columns:      []string{"id"},
+			wantNonNeg:   true,
 			wantLessThan: 5001, // default table/2
 		},
 	}
@@ -631,16 +631,16 @@ func TestEnhancedCardinalityEstimator_EstimateEquijoinSelectivity(t *testing.T) 
 
 	// Setup stats for both tables
 	leftStats := &TableStatistics{
-		Name:       "left_table",
-		RowCount:   1000,
+		Name:        "left_table",
+		RowCount:    1000,
 		ColumnStats: make(map[string]*ColumnStatistics),
 		Histograms:  make(map[string]*Histogram),
 	}
 	estimator.UpdateStatistics("left_table", leftStats)
 
 	rightStats := &TableStatistics{
-		Name:       "right_table",
-		RowCount:   2000,
+		Name:        "right_table",
+		RowCount:    2000,
 		ColumnStats: make(map[string]*ColumnStatistics),
 		Histograms:  make(map[string]*Histogram),
 	}
@@ -781,8 +781,8 @@ func BenchmarkEnhancedCardinalityEstimator_EstimateTableScan(b *testing.B) {
 	cache := NewStatisticsCache(time.Hour)
 	estimator := NewEnhancedCardinalityEstimator(cache)
 	stats := &TableStatistics{
-		Name:       "test_table",
-		RowCount:   1000,
+		Name:        "test_table",
+		RowCount:    1000,
 		ColumnStats: make(map[string]*ColumnStatistics),
 		Histograms:  make(map[string]*Histogram),
 	}
@@ -798,8 +798,8 @@ func BenchmarkEnhancedCardinalityEstimator_EstimateFilter(b *testing.B) {
 	cache := NewStatisticsCache(time.Hour)
 	estimator := NewEnhancedCardinalityEstimator(cache)
 	stats := &TableStatistics{
-		Name:       "test_table",
-		RowCount:   10000,
+		Name:     "test_table",
+		RowCount: 10000,
 		ColumnStats: map[string]*ColumnStatistics{
 			"age": {
 				Name:          "age",

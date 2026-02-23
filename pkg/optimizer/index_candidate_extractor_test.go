@@ -182,12 +182,12 @@ func TestExtractFromJoins(t *testing.T) {
 	// 简单 JOIN
 	joins1 := []parser.JoinInfo{
 		{
-			Type:      parser.JoinTypeInner,
-			Table:     "orders",
+			Type:  parser.JoinTypeInner,
+			Table: "orders",
 			Condition: &parser.Expression{
-				Left: &parser.Expression{Column: "users.id"},
+				Left:     &parser.Expression{Column: "users.id"},
 				Operator: "=",
-				Right: &parser.Expression{Column: "orders.user_id"},
+				Right:    &parser.Expression{Column: "orders.user_id"},
 			},
 		},
 	}
@@ -213,9 +213,9 @@ func TestExtractFromSQL(t *testing.T) {
 			Columns: []parser.SelectColumn{{Name: "*"}},
 			From:    "users",
 			Where: &parser.Expression{
-				Column:  "id",
+				Column:   "id",
 				Operator: "=",
-				Value:   1,
+				Value:    1,
 			},
 		},
 	}
@@ -235,14 +235,14 @@ func TestExtractFromSQL(t *testing.T) {
 			Where: &parser.Expression{
 				Operator: "AND",
 				Left: &parser.Expression{
-					Column:  "age",
+					Column:   "age",
 					Operator: ">",
-					Value:   18,
+					Value:    18,
 				},
 				Right: &parser.Expression{
-					Column:  "status",
+					Column:   "status",
 					Operator: "=",
-					Value:   "active",
+					Value:    "active",
 				},
 			},
 			OrderBy: []parser.OrderByItem{
@@ -272,7 +272,7 @@ func TestDeduplicateCandidates(t *testing.T) {
 
 	candidates := []*IndexCandidate{
 		{Columns: []string{"id"}, Priority: 4, Source: "WHERE"},
-		{Columns: []string{"id"}, Priority: 3, Source: "JOIN"},  // 重复
+		{Columns: []string{"id"}, Priority: 3, Source: "JOIN"}, // 重复
 		{Columns: []string{"name"}, Priority: 2, Source: "GROUP"},
 	}
 
@@ -323,7 +323,7 @@ func TestExtractForTable(t *testing.T) {
 
 	// 提取 users 表的候选
 	usersCandidates := extractor.ExtractForTable(candidates, "users")
-	if len(usersCandidates) != 2 {  // "users.id" 和 "id"
+	if len(usersCandidates) != 2 { // "users.id" 和 "id"
 		t.Errorf("Expected 2 candidates for 'users' table, got %d", len(usersCandidates))
 	}
 }
@@ -333,8 +333,8 @@ func TestIsIndexableComparison(t *testing.T) {
 	extractor := NewIndexCandidateExtractor()
 
 	testCases := []struct {
-		operator  string
-		expected  bool
+		operator string
+		expected bool
 	}{
 		{"=", true},
 		{"!=", true},

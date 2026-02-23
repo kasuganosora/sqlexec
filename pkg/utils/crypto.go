@@ -55,6 +55,7 @@ func GenerateHashedPassword(password string) string {
 //   - password: 待验证的明文密码
 //   - authResponse: 客户端发送的认证响应
 //   - salt: salt数据
+//
 // 返回: 密码是否匹配
 func VerifyPassword(storedHash string, password string, authResponse []byte, salt []byte) bool {
 	// Check if password is empty (no password)

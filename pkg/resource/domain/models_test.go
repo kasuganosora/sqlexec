@@ -41,7 +41,7 @@ func TestDataSourceConfig_Create(t *testing.T) {
 		Username: "user",
 		Password: "pass",
 		Database: "testdb",
-		Writable:  true,
+		Writable: true,
 		Options:  map[string]interface{}{"key": "value"},
 	}
 
@@ -66,10 +66,10 @@ func TestTableInfo_Create(t *testing.T) {
 		Schema: "public",
 		Columns: []ColumnInfo{
 			{
-				Name:         "id",
-				Type:         "int64",
-				Nullable:     false,
-				Primary:      true,
+				Name:          "id",
+				Type:          "int64",
+				Nullable:      false,
+				Primary:       true,
 				AutoIncrement: true,
 			},
 			{
@@ -206,9 +206,9 @@ func TestFilter_CreateSimple(t *testing.T) {
 // TestFilter_CreateWithSubFilters 测试带子过滤器的Filter
 func TestFilter_CreateWithSubFilters(t *testing.T) {
 	filter := Filter{
-		Field:   "",
+		Field:    "",
 		Operator: "",
-		LogicOp: "AND",
+		LogicOp:  "AND",
 		SubFilters: []Filter{
 			{Field: "age", Operator: ">", Value: 18},
 			{Field: "age", Operator: "<", Value: 65},
@@ -229,11 +229,11 @@ func TestQueryOptions_Create(t *testing.T) {
 		Filters: []Filter{
 			{Field: "status", Operator: "=", Value: "active"},
 		},
-		OrderBy:   "created_at",
-		Order:     "DESC",
-		Limit:     10,
-		Offset:    0,
-		SelectAll: false,
+		OrderBy:       "created_at",
+		Order:         "DESC",
+		Limit:         10,
+		Offset:        0,
+		SelectAll:     false,
 		SelectColumns: []string{"id", "name", "status"},
 	}
 
@@ -347,11 +347,11 @@ func TestIndexType_Constants(t *testing.T) {
 // TestConstraint_Create 测试Constraint创建
 func TestConstraint_Create(t *testing.T) {
 	constraint := &Constraint{
-		Name:     "unique_email",
-		Type:     ConstraintTypeUnique,
-		Columns:  []string{"email"},
-		Table:    "users",
-		Enabled:  true,
+		Name:    "unique_email",
+		Type:    ConstraintTypeUnique,
+		Columns: []string{"email"},
+		Table:   "users",
+		Enabled: true,
 	}
 
 	if constraint.Name != "unique_email" {

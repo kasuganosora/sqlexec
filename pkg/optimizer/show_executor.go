@@ -13,8 +13,8 @@ import (
 
 // ShowExecutor SHOW 语句执行器
 type ShowExecutor struct {
-	currentDB  string
-	dsManager  interface{} // 实际类型为 *application.DataSourceManager
+	currentDB          string
+	dsManager          interface{} // 实际类型为 *application.DataSourceManager
 	executeWithBuilder func(ctx context.Context, stmt *parser.SelectStatement) (*domain.QueryResult, error)
 }
 

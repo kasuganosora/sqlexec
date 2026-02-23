@@ -10,37 +10,37 @@ import (
 // TestDBConfig_QueryTimeout 测试DBConfig的超时配置
 func TestDBConfig_QueryTimeout(t *testing.T) {
 	tests := []struct {
-		name          string
-		config        *DBConfig
-		expectedTime  time.Duration
+		name         string
+		config       *DBConfig
+		expectedTime time.Duration
 	}{
 		{
 			name: "默认配置",
 			config: &DBConfig{
-				CacheEnabled:  true,
-				CacheSize:     1000,
-				CacheTTL:      300,
-				DebugMode:     false,
+				CacheEnabled: true,
+				CacheSize:    1000,
+				CacheTTL:     300,
+				DebugMode:    false,
 			},
 			expectedTime: 0, // 默认不限制
 		},
 		{
 			name: "设置超时30秒",
 			config: &DBConfig{
-				CacheEnabled:  true,
-				CacheSize:     1000,
-				CacheTTL:      300,
-				QueryTimeout:  30 * time.Second,
+				CacheEnabled: true,
+				CacheSize:    1000,
+				CacheTTL:     300,
+				QueryTimeout: 30 * time.Second,
 			},
 			expectedTime: 30 * time.Second,
 		},
 		{
 			name: "设置超时5分钟",
 			config: &DBConfig{
-				CacheEnabled:  true,
-				CacheSize:     1000,
-				CacheTTL:      300,
-				QueryTimeout:  5 * time.Minute,
+				CacheEnabled: true,
+				CacheSize:    1000,
+				CacheTTL:     300,
+				QueryTimeout: 5 * time.Minute,
 			},
 			expectedTime: 5 * time.Minute,
 		},
@@ -56,9 +56,9 @@ func TestDBConfig_QueryTimeout(t *testing.T) {
 // TestSessionOptions_QueryTimeout 测试SessionOptions的超时配置
 func TestSessionOptions_QueryTimeout(t *testing.T) {
 	tests := []struct {
-		name          string
-		options       *SessionOptions
-		expectedTime  time.Duration
+		name         string
+		options      *SessionOptions
+		expectedTime time.Duration
 	}{
 		{
 			name: "默认Session配置",
@@ -104,8 +104,8 @@ func TestSessionOptions_QueryTimeout(t *testing.T) {
 // TestSession_ThreadID 测试Session的ThreadID功能
 func TestSession_ThreadID(t *testing.T) {
 	tests := []struct {
-		name      string
-		threadID  uint32
+		name     string
+		threadID uint32
 	}{
 		{"ThreadID=0", 0},
 		{"ThreadID=1", 1},
@@ -130,47 +130,47 @@ func TestSession_ThreadID(t *testing.T) {
 // TestNewDBWithQueryTimeout 测试创建带超时的DB
 func TestNewDBWithQueryTimeout(t *testing.T) {
 	tests := []struct {
-		name         string
-		config       *DBConfig
-		expectError  bool
+		name        string
+		config      *DBConfig
+		expectError bool
 	}{
 		{
 			name: "有效配置-不限制超时",
 			config: &DBConfig{
-				CacheEnabled:  true,
-				CacheSize:     1000,
-				CacheTTL:      300,
-				QueryTimeout:  0,
+				CacheEnabled: true,
+				CacheSize:    1000,
+				CacheTTL:     300,
+				QueryTimeout: 0,
 			},
 			expectError: false,
 		},
 		{
 			name: "有效配置-限制超时",
 			config: &DBConfig{
-				CacheEnabled:  true,
-				CacheSize:     1000,
-				CacheTTL:      300,
-				QueryTimeout:  30 * time.Second,
+				CacheEnabled: true,
+				CacheSize:    1000,
+				CacheTTL:     300,
+				QueryTimeout: 30 * time.Second,
 			},
 			expectError: false,
 		},
 		{
 			name: "有效配置-短超时",
 			config: &DBConfig{
-				CacheEnabled:  true,
-				CacheSize:     1000,
-				CacheTTL:      300,
-				QueryTimeout:  100 * time.Millisecond,
+				CacheEnabled: true,
+				CacheSize:    1000,
+				CacheTTL:     300,
+				QueryTimeout: 100 * time.Millisecond,
 			},
 			expectError: false,
 		},
 		{
 			name: "有效配置-长超时",
 			config: &DBConfig{
-				CacheEnabled:  true,
-				CacheSize:     1000,
-				CacheTTL:      300,
-				QueryTimeout:  1 * time.Hour,
+				CacheEnabled: true,
+				CacheSize:    1000,
+				CacheTTL:     300,
+				QueryTimeout: 1 * time.Hour,
 			},
 			expectError: false,
 		},
@@ -193,9 +193,9 @@ func TestNewDBWithQueryTimeout(t *testing.T) {
 // TestErrorCode_Timeout 测试超时错误码
 func TestErrorCode_Timeout(t *testing.T) {
 	tests := []struct {
-		name      string
-		code      ErrorCode
-		errMsg    string
+		name   string
+		code   ErrorCode
+		errMsg string
 	}{
 		{"超时错误", ErrCodeTimeout, "TIMEOUT"},
 		{"查询被Kill错误", ErrCodeQueryKilled, "QUERY_KILLED"},
@@ -214,8 +214,8 @@ func TestErrorCode_Timeout(t *testing.T) {
 func TestSession_QueryTimeoutOverride(t *testing.T) {
 	// 创建DB(设置超时60秒)
 	db, err := NewDB(&DBConfig{
-		CacheEnabled:  false,
-		QueryTimeout:  60 * time.Second,
+		CacheEnabled: false,
+		QueryTimeout: 60 * time.Second,
 	})
 	assert.NoError(t, err)
 
@@ -263,31 +263,31 @@ func TestSessionWithoutTimeout(t *testing.T) {
 // TestSession_QueryTimeoutPriority 测试Session超时优先级
 func TestSession_QueryTimeoutPriority(t *testing.T) {
 	tests := []struct {
-		name               string
-		dbTimeout         time.Duration
-		sessionTimeout    time.Duration
-		expectedTimeout   time.Duration
+		name            string
+		dbTimeout       time.Duration
+		sessionTimeout  time.Duration
+		expectedTimeout time.Duration
 	}{
 		{
-			name:             "DB和Session都设置,优先Session",
+			name:            "DB和Session都设置,优先Session",
 			dbTimeout:       30 * time.Second,
 			sessionTimeout:  10 * time.Second,
 			expectedTimeout: 10 * time.Second,
 		},
 		{
-			name:             "DB设置,Session不设置,使用DB",
+			name:            "DB设置,Session不设置,使用DB",
 			dbTimeout:       30 * time.Second,
 			sessionTimeout:  0,
 			expectedTimeout: 30 * time.Second,
 		},
 		{
-			name:             "DB和Session都不设置,不限制",
+			name:            "DB和Session都不设置,不限制",
 			dbTimeout:       0,
 			sessionTimeout:  0,
 			expectedTimeout: 0,
 		},
 		{
-			name:             "DB不设置,Session设置,使用Session",
+			name:            "DB不设置,Session设置,使用Session",
 			dbTimeout:       0,
 			sessionTimeout:  15 * time.Second,
 			expectedTimeout: 15 * time.Second,
@@ -298,10 +298,10 @@ func TestSession_QueryTimeoutPriority(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// 创建DB
 			db, err := NewDB(&DBConfig{
-				CacheEnabled:  true,
-				CacheSize:     1000,
-				CacheTTL:      300,
-				QueryTimeout:  tt.dbTimeout,
+				CacheEnabled: true,
+				CacheSize:    1000,
+				CacheTTL:     300,
+				QueryTimeout: tt.dbTimeout,
 			})
 			assert.NoError(t, err)
 

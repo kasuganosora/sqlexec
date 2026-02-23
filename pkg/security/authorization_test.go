@@ -126,10 +126,10 @@ func TestHasPermission(t *testing.T) {
 	am.CreateUser("guest", "password", []Role{RoleGuest})
 
 	tests := []struct {
-		username     string
-		permission   Permission
-		table        string
-		expected     bool
+		username   string
+		permission Permission
+		table      string
+		expected   bool
 	}{
 		{"admin", PermissionRead, "users", true},
 		{"admin", PermissionWrite, "users", true},
@@ -306,24 +306,24 @@ func TestListUsers(t *testing.T) {
 
 func TestUserTimestamps(t *testing.T) {
 	am := NewAuthorizationManager()
-	
+
 	beforeCreation := time.Now()
 	am.CreateUser("testuser", "password", []Role{RoleUser})
 	user, _ := am.GetUser("testuser")
-	
+
 	if user.CreatedAt.Before(beforeCreation) {
 		t.Error("CreatedAt should be after creation time")
 	}
-	
+
 	if user.UpdatedAt.Before(user.CreatedAt) {
 		t.Error("UpdatedAt should not be before CreatedAt")
 	}
-	
+
 	// 更新用户并检查UpdatedAt
 	beforeUpdate := time.Now()
 	am.AssignRole("testuser", RoleModerator)
 	user, _ = am.GetUser("testuser")
-	
+
 	if user.UpdatedAt.Before(beforeUpdate) {
 		t.Error("UpdatedAt should be after update")
 	}
@@ -342,7 +342,7 @@ func TestPermissionConstants(t *testing.T) {
 		PermissionGrant:  64,
 		PermissionAll:    0xFF,
 	}
-	
+
 	for perm, expectedVal := range expected {
 		if int(perm) != expectedVal {
 			t.Errorf("Permission %d = %d, want %d", perm, int(perm), expectedVal)
@@ -372,10 +372,10 @@ func TestRoleConstants(t *testing.T) {
 func TestInactiveUserHasPermission(t *testing.T) {
 	am := NewAuthorizationManager()
 	am.CreateUser("testuser", "password", []Role{RoleAdmin})
-	
+
 	// 停用用户
 	am.DeactivateUser("testuser")
-	
+
 	// 不活跃用户不应该有权限
 	if am.HasPermission("testuser", PermissionRead, "users") {
 		t.Error("Inactive user should not have permissions")
@@ -385,10 +385,10 @@ func TestInactiveUserHasPermission(t *testing.T) {
 func TestTableLevelPermissionPriority(t *testing.T) {
 	am := NewAuthorizationManager()
 	am.CreateUser("testuser", "password", []Role{RoleReadOnly})
-	
+
 	// 授予表级别的写权限
 	am.GrantPermission("testuser", PermissionWrite, "users")
-	
+
 	// 应该有表级别权限
 	if !am.HasPermission("testuser", PermissionWrite, "users") {
 		t.Error("Should have table-level Write permission")

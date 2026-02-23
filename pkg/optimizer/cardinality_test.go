@@ -310,8 +310,8 @@ func TestSimpleCardinalityEstimatorEstimateLogicSelectivity(t *testing.T) {
 
 	t.Run("empty subfilters", func(t *testing.T) {
 		filter := domain.Filter{
-			LogicOp:     "AND",
-			SubFilters:  []domain.Filter{},
+			LogicOp:    "AND",
+			SubFilters: []domain.Filter{},
 		}
 		sel := estimator.estimateLogicSelectivity("test_table", filter)
 		if sel != 1.0 {
@@ -494,8 +494,8 @@ func TestSimpleCardinalityEstimatorEstimateDistinct(t *testing.T) {
 
 	t.Run("without columns", func(t *testing.T) {
 		stats := &TableStatistics{
-			Name:     "test_table",
-			RowCount: 1000,
+			Name:        "test_table",
+			RowCount:    1000,
 			ColumnStats: map[string]*ColumnStatistics{},
 		}
 		estimator.UpdateStatistics("test_table", stats)
@@ -517,8 +517,8 @@ func TestSimpleCardinalityEstimatorEstimateDistinct(t *testing.T) {
 
 	t.Run("column without statistics", func(t *testing.T) {
 		stats := &TableStatistics{
-			Name:       "test_table",
-			RowCount:   1000,
+			Name:        "test_table",
+			RowCount:    1000,
 			ColumnStats: map[string]*ColumnStatistics{},
 		}
 		estimator.UpdateStatistics("test_table", stats)

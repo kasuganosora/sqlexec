@@ -16,24 +16,24 @@ type HNSWIndexImproved struct {
 	columnName string
 	config     *VectorIndexConfig
 	distFunc   DistanceFunc
-	
+
 	// 向量存储
 	vectors map[int64][]float32
-	
+
 	// HNSW 图结构
 	layers    []map[int64]*hnswNode // 每层的节点
-	nodeLevel map[int64]int          // 节点所在的最高层
-	
+	nodeLevel map[int64]int         // 节点所在的最高层
+
 	// 动态连接策略
-	mu sync.RWMutex
+	mu  sync.RWMutex
 	rng *rand.Rand
 }
 
 // hnswNode HNSW 节点
 type hnswNode struct {
-	id       int64
-	vector   []float32
-	level    int
+	id        int64
+	vector    []float32
+	level     int
 	neighbors map[int64]*hnswNode // 每层的邻居（使用指针避免重复计算）
 }
 
@@ -47,10 +47,10 @@ type HNSWParamsImproved struct {
 
 // DefaultHNSWParamsImproved 默认参数（优化召回率）
 var DefaultHNSWParamsImproved = HNSWParamsImproved{
-	M:              32,      // 增加邻居数提高召回率
+	M:              32, // 增加邻居数提高召回率
 	EFConstruction: 200,
-	EFSearch:       128,     // 增加搜索宽度
-	ML:             0.25,     // 标准层数因子
+	EFSearch:       128,  // 增加搜索宽度
+	ML:             0.25, // 标准层数因子
 }
 
 // NewHNSWIndexImproved 创建改进的 HNSW 索引
@@ -59,7 +59,7 @@ func NewHNSWIndexImproved(columnName string, config *VectorIndexConfig) (*HNSWIn
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &HNSWIndexImproved{
 		columnName: columnName,
 		config:     config,
@@ -77,10 +77,10 @@ func (h *HNSWIndexImproved) Build(ctx context.Context, loader VectorDataLoader) 
 	if err != nil {
 		return err
 	}
-	
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	// 插入所有向量
 	for _, rec := range records {
 		vec := make([]float32, len(rec.Vector))
@@ -88,7 +88,7 @@ func (h *HNSWIndexImproved) Build(ctx context.Context, loader VectorDataLoader) 
 		h.vectors[rec.ID] = vec
 		h.insertNode(rec.ID, vec)
 	}
-	
+
 	return nil
 }
 
@@ -105,9 +105,9 @@ func (h *HNSWIndexImproved) insertNode(id int64, vector []float32) {
 
 	// 创建节点
 	node := &hnswNode{
-		id:       id,
-		vector:   vector,
-		level:    level,
+		id:        id,
+		vector:    vector,
+		level:     level,
 		neighbors: make(map[int64]*hnswNode),
 	}
 
@@ -162,11 +162,11 @@ func (h *HNSWIndexImproved) findEntryPoint(level int) *hnswNode {
 			candidates = append(candidates, node)
 		}
 	}
-	
+
 	if len(candidates) == 0 {
 		return nil
 	}
-	
+
 	// 选择一个作为入口点
 	return candidates[h.rng.Intn(len(candidates))]
 }
@@ -176,22 +176,22 @@ func (h *HNSWIndexImproved) getOrCreateNode(id int64, level int) *hnswNode {
 	if level >= len(h.layers) {
 		return nil
 	}
-	
+
 	layer := h.layers[level]
 	if node, exists := layer[id]; exists {
 		return node
 	}
-	
+
 	// 创建空节点
 	vec, exists := h.vectors[id]
 	if !exists {
 		return nil
 	}
-	
+
 	node := &hnswNode{
-		id:       id,
-		vector:   vec,
-		level:    0, // 简化
+		id:        id,
+		vector:    vec,
+		level:     0, // 简化
 		neighbors: make(map[int64]*hnswNode),
 	}
 	layer[id] = node
@@ -203,26 +203,26 @@ func (h *HNSWIndexImproved) searchLayerGreedy(query []float32, level int, entryP
 	if entryPoint == nil || entryPoint.level < level {
 		return nil
 	}
-	
+
 	// 使用优先队列（最小堆）
 	pq := &minHeap{}
 	heap.Init(pq)
-	
+
 	// 初始化访问集合
 	visited := make(map[int64]bool)
-	
+
 	// 从入口点开始
 	heap.Push(pq, &heapNode{
 		node:     entryPoint,
 		distance: h.distFunc.Compute(query, entryPoint.vector),
 	})
 	visited[entryPoint.id] = true
-	
+
 	// 贪心搜索
 	for pq.Len() > 0 {
 		current := heap.Pop(pq).(*heapNode)
-		
-			// 探索邻居
+
+		// 探索邻居
 		for _, neighbor := range current.node.neighbors {
 			if !visited[neighbor.id] {
 				dist := h.distFunc.Compute(query, neighbor.vector)
@@ -233,19 +233,19 @@ func (h *HNSWIndexImproved) searchLayerGreedy(query []float32, level int, entryP
 				visited[neighbor.id] = true
 			}
 		}
-		
+
 		// 收集结果
 		if pq.Len() >= ef {
 			break
 		}
 	}
-	
+
 	// 返回按距离排序的节点
 	result := make([]*hnswNode, 0)
 	for pq.Len() > 0 {
 		result = append(result, heap.Pop(pq).(*heapNode).node)
 	}
-	
+
 	return result
 }
 
@@ -428,27 +428,27 @@ func (h *HNSWIndexImproved) getNode(id int64) *hnswNode {
 	vec, exists := h.vectors[id]
 	if !exists {
 		return &hnswNode{
-			id:       id,
-			vector:   nil,
-			level:    0,
+			id:        id,
+			vector:    nil,
+			level:     0,
 			neighbors: make(map[int64]*hnswNode),
 		}
 	}
-	
+
 	level, exists := h.nodeLevel[id]
 	if !exists {
 		return &hnswNode{
-			id:       id,
-			vector:   vec,
-			level:    0,
+			id:        id,
+			vector:    vec,
+			level:     0,
 			neighbors: make(map[int64]*hnswNode),
 		}
 	}
-	
+
 	return &hnswNode{
-		id:       id,
-		vector:   vec,
-		level:    level,
+		id:        id,
+		vector:    vec,
+		level:     level,
 		neighbors: make(map[int64]*hnswNode),
 	}
 }
@@ -458,16 +458,16 @@ func (h *HNSWIndexImproved) Insert(id int64, vector []float32) error {
 	if len(vector) != h.config.Dimension {
 		return fmt.Errorf("vector dimension mismatch: expected %d, got %d", h.config.Dimension, len(vector))
 	}
-	
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	vec := make([]float32, len(vector))
 	copy(vec, vector)
 	h.vectors[id] = vec
-	
+
 	h.insertNode(id, vec)
-	
+
 	return nil
 }
 
@@ -475,19 +475,19 @@ func (h *HNSWIndexImproved) Insert(id int64, vector []float32) error {
 func (h *HNSWIndexImproved) Delete(id int64) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	delete(h.vectors, id)
 	delete(h.nodeLevel, id)
-	
+
 	for level := range h.layers {
 		delete(h.layers[level], id)
-		
+
 		// 从邻居中移除
 		for _, node := range h.layers[level] {
 			delete(node.neighbors, id)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -500,14 +500,14 @@ func (h *HNSWIndexImproved) GetConfig() *VectorIndexConfig {
 func (h *HNSWIndexImproved) Stats() VectorIndexStats {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	var memorySize int64
-	
+
 	// 向量数据
 	for _, vec := range h.vectors {
 		memorySize += int64(len(vec) * 4)
 	}
-	
+
 	// 图结构
 	for _, layer := range h.layers {
 		memorySize += int64(len(layer) * 8) // map overhead
@@ -515,7 +515,7 @@ func (h *HNSWIndexImproved) Stats() VectorIndexStats {
 			memorySize += int64(8 + len(node.vector)*4 + len(node.neighbors)*8)
 		}
 	}
-	
+
 	return VectorIndexStats{
 		Type:       IndexTypeVectorHNSW,
 		Metric:     h.config.MetricType,
@@ -529,11 +529,11 @@ func (h *HNSWIndexImproved) Stats() VectorIndexStats {
 func (h *HNSWIndexImproved) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	h.vectors = make(map[int64][]float32)
 	h.layers = make([]map[int64]*hnswNode, 0)
 	h.nodeLevel = make(map[int64]int)
-	
+
 	return nil
 }
 
@@ -567,9 +567,9 @@ type heapNode struct {
 // minHeap 最小堆实现
 type minHeap []*heapNode
 
-func (h minHeap) Len() int           { return len(h) }
-func (h minHeap) Less(i, j int) bool { return h[i].distance < h[j].distance }
-func (h minHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h minHeap) Len() int            { return len(h) }
+func (h minHeap) Less(i, j int) bool  { return h[i].distance < h[j].distance }
+func (h minHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
 func (h *minHeap) Push(x interface{}) { *h = append(*h, x.(*heapNode)) }
 func (h *minHeap) Pop() interface{} {
 	old := *h

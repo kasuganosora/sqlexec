@@ -185,7 +185,7 @@ func TestGenerateRecommendations(t *testing.T) {
 
 	benefits := map[string]float64{
 		"t1(a,b)": 0.8,
-		"t1(c)":    0.4,
+		"t1(c)":   0.4,
 	}
 
 	recommendations := advisor.generateRecommendations(selected, benefits, "test query")

@@ -244,8 +244,8 @@ func TestInitializePopulation(t *testing.T) {
 	}
 
 	benefits := map[string]float64{
-		"users(id)":      10.0,
-		"users(name)":    5.0,
+		"users(id)":       10.0,
+		"users(name)":     5.0,
 		"orders(user_id)": 8.0,
 	}
 
@@ -362,8 +362,8 @@ func TestCalculateFitness(t *testing.T) {
 	}
 
 	benefits := map[string]float64{
-		"users(id)":      10.0,
-		"users(name)":    5.0,
+		"users(id)":       10.0,
+		"users(name)":     5.0,
 		"orders(user_id)": 8.0,
 	}
 
@@ -437,7 +437,7 @@ func TestCheckConstraints(t *testing.T) {
 
 	candidates := []*IndexCandidate{
 		{TableName: "users", Columns: []string{"id"}, Priority: 1},
-		{TableName: "users", Columns: []string{"name", "email"}, Priority: 2}, // 2 columns
+		{TableName: "users", Columns: []string{"name", "email"}, Priority: 2},              // 2 columns
 		{TableName: "orders", Columns: []string{"user_id", "date", "status"}, Priority: 3}, // 3 columns, exceeds MaxColumns
 		{TableName: "products", Columns: []string{"category"}, Priority: 4},
 	}
@@ -848,8 +848,8 @@ func TestRun(t *testing.T) {
 	}
 
 	benefits := map[string]float64{
-		"users(id)":      10.0,
-		"users(name)":    5.0,
+		"users(id)":       10.0,
+		"users(name)":     5.0,
 		"orders(user_id)": 8.0,
 	}
 

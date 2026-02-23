@@ -13,24 +13,24 @@ import (
 
 // UDFMetadata 用户自定义函数元数据
 type UDFMetadata struct {
-	Name        string            // 函数名称
-	Parameters  []UDFParameter    // 参数列表
-	ReturnType  string            // 返回类型
-	Body        string            // 函数体（SQL表达式或计算逻辑）
-	Determinism bool              // 是否确定性的（相同输入总是产生相同输出）
-	Description string            // 函数描述
-	CreatedAt   time.Time         // 创建时间
-	ModifiedAt  time.Time         // 修改时间
-	Author      string            // 创建者
-	Language    string            // 语言（SQL, GO等）
+	Name        string         // 函数名称
+	Parameters  []UDFParameter // 参数列表
+	ReturnType  string         // 返回类型
+	Body        string         // 函数体（SQL表达式或计算逻辑）
+	Determinism bool           // 是否确定性的（相同输入总是产生相同输出）
+	Description string         // 函数描述
+	CreatedAt   time.Time      // 创建时间
+	ModifiedAt  time.Time      // 修改时间
+	Author      string         // 创建者
+	Language    string         // 语言（SQL, GO等）
 }
 
 // UDFParameter UDF参数定义
 type UDFParameter struct {
-	Name     string // 参数名称
-	Type     string // 参数类型
-	Optional bool   // 是否可选
-	Required bool   // 是否必需（默认false）
+	Name     string      // 参数名称
+	Type     string      // 参数类型
+	Optional bool        // 是否可选
+	Required bool        // 是否必需（默认false）
 	Default  interface{} // 默认值
 }
 
@@ -163,7 +163,7 @@ func (m *UDFManager) compileUDF(meta *UDFMetadata) (UDFHandler, error) {
 func (m *UDFManager) compileSQLExpression(meta *UDFMetadata) (UDFHandler, error) {
 	// 解析SQL表达式，检查语法
 	expr := strings.TrimSpace(meta.Body)
-	
+
 	// 简单表达式：直接返回值
 	if m.isSimpleExpression(expr) {
 		return func(args []interface{}) (interface{}, error) {
@@ -192,7 +192,7 @@ func (m *UDFManager) compileGoExpression(meta *UDFMetadata) (UDFHandler, error) 
 	// 这里可以实现更复杂的Go代码编译
 	// 目前仅支持简单的算术表达式
 	expr := strings.TrimSpace(meta.Body)
-	
+
 	return func(args []interface{}) (interface{}, error) {
 		return m.evaluateArithmeticExpression(expr, args, meta.Parameters)
 	}, nil
@@ -248,7 +248,7 @@ func (m *UDFManager) isArithmeticExpression(expr string) bool {
 	if m.isFunctionCall(expr) {
 		return false
 	}
-	
+
 	operators := []string{"+", "-", "*", "/", "%", "^"}
 	for _, op := range operators {
 		if strings.Contains(expr, op) {
@@ -263,7 +263,7 @@ func (m *UDFManager) evaluateSimpleExpression(expr string, args []interface{}, p
 	// 移除前缀
 	expr = strings.TrimPrefix(expr, "@")
 	expr = strings.TrimPrefix(expr, ":")
-	
+
 	// 查找参数
 	for i, param := range params {
 		if strings.EqualFold(param.Name, expr) {
@@ -276,7 +276,7 @@ func (m *UDFManager) evaluateSimpleExpression(expr string, args []interface{}, p
 			return nil, fmt.Errorf("parameter '%s' not provided and no default value", expr)
 		}
 	}
-	
+
 	return nil, fmt.Errorf("parameter '%s' not found", expr)
 }
 
@@ -291,7 +291,7 @@ func (m *UDFManager) compileFunctionCall(expr string, meta *UDFMetadata) (UDFHan
 
 	funcName := matches[1]
 	argsExpr := matches[2]
-	
+
 	return func(args []interface{}) (interface{}, error) {
 		// 检查是否是内置函数
 		if info, exists := GetGlobal(funcName); exists {
@@ -305,7 +305,7 @@ func (m *UDFManager) compileFunctionCall(expr string, meta *UDFMetadata) (UDFHan
 
 		// 检查是否是其他UDF
 		// 这里暂不实现UDF递归调用
-		
+
 		return nil, fmt.Errorf("function '%s' not found", funcName)
 	}, nil
 }
@@ -322,7 +322,7 @@ func (m *UDFManager) parseFunctionArgs(argsExpr string, udfArgs []interface{}, p
 
 	for _, arg := range args {
 		arg = strings.TrimSpace(arg)
-		
+
 		// 检查是否是参数引用
 		if m.isSimpleExpression(arg) {
 			val, err := m.evaluateSimpleExpression(arg, udfArgs, params)
@@ -343,9 +343,9 @@ func (m *UDFManager) parseFunctionArgs(argsExpr string, udfArgs []interface{}, p
 func (m *UDFManager) evaluateArithmeticExpression(expr string, args []interface{}, params []UDFParameter) (interface{}, error) {
 	// 简单实现：替换参数，然后求值
 	// 实际应该使用表达式解析器
-	
+
 	result := expr
-	
+
 	// 替换参数
 	for i, param := range params {
 		if i >= len(args) {
@@ -355,7 +355,7 @@ func (m *UDFManager) evaluateArithmeticExpression(expr string, args []interface{
 		result = strings.ReplaceAll(result, "@"+param.Name, fmt.Sprintf("%v", args[i]))
 		result = strings.ReplaceAll(result, ":"+param.Name, fmt.Sprintf("%v", args[i]))
 	}
-	
+
 	// 简单的算术求值（仅支持基础运算）
 	// 实际应该使用表达式求值器
 	if strings.Contains(result, "+") {
@@ -368,7 +368,7 @@ func (m *UDFManager) evaluateArithmeticExpression(expr string, args []interface{
 			}
 		}
 	}
-	
+
 	if strings.Contains(result, "-") {
 		parts := strings.Split(result, "-")
 		if len(parts) == 2 {
@@ -379,7 +379,7 @@ func (m *UDFManager) evaluateArithmeticExpression(expr string, args []interface{
 			}
 		}
 	}
-	
+
 	if strings.Contains(result, "*") {
 		parts := strings.Split(result, "*")
 		if len(parts) == 2 {
@@ -390,7 +390,7 @@ func (m *UDFManager) evaluateArithmeticExpression(expr string, args []interface{
 			}
 		}
 	}
-	
+
 	if strings.Contains(result, "/") {
 		parts := strings.Split(result, "/")
 		if len(parts) == 2 {
@@ -410,7 +410,7 @@ func (m *UDFManager) evaluateArithmeticExpression(expr string, args []interface{
 
 var (
 	globalUDFManager *UDFManager
-	udfOnce         sync.Once
+	udfOnce          sync.Once
 )
 
 // GetGlobalUDFManager 获取全局UDF管理器

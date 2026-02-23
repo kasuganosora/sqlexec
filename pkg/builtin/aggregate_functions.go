@@ -11,19 +11,19 @@ import (
 
 // AggregateContext 聚合函数上下文
 type AggregateContext struct {
-	Count      int64
-	Sum        float64
-	Min        interface{}
-	Max        interface{}
-	AvgSum     float64
-	Values     []float64     // 用于标准差等
-	Strings    []string      // for GROUP_CONCAT
-	AllValues  []interface{} // for ARRAY_AGG, MEDIAN, MODE
-	BoolAnd    *bool         // for BOOL_AND
-	BoolOr     *bool         // for BOOL_OR
-	Separator  string        // for GROUP_CONCAT separator
-	ProductVal float64       // for PRODUCT, init to 1.0
-	ProductInit bool         // for PRODUCT
+	Count       int64
+	Sum         float64
+	Min         interface{}
+	Max         interface{}
+	AvgSum      float64
+	Values      []float64     // 用于标准差等
+	Strings     []string      // for GROUP_CONCAT
+	AllValues   []interface{} // for ARRAY_AGG, MEDIAN, MODE
+	BoolAnd     *bool         // for BOOL_AND
+	BoolOr      *bool         // for BOOL_OR
+	Separator   string        // for GROUP_CONCAT separator
+	ProductVal  float64       // for PRODUCT, init to 1.0
+	ProductInit bool          // for PRODUCT
 }
 
 // NewAggregateContext 创建聚合上下文
@@ -292,7 +292,7 @@ func aggCount(ctx *AggregateContext, args []interface{}) error {
 		ctx.Count++
 		return nil
 	}
-	
+
 	// COUNT(column) - 忽略NULL
 	for _, arg := range args {
 		if arg != nil {
@@ -357,7 +357,7 @@ func aggMin(ctx *AggregateContext, args []interface{}) error {
 	if len(args) == 0 {
 		return nil
 	}
-	
+
 	for _, arg := range args {
 		if arg == nil {
 			continue
@@ -379,7 +379,7 @@ func aggMax(ctx *AggregateContext, args []interface{}) error {
 	if len(args) == 0 {
 		return nil
 	}
-	
+
 	for _, arg := range args {
 		if arg == nil {
 			continue
@@ -419,15 +419,15 @@ func aggStdDevResult(ctx *AggregateContext) (interface{}, error) {
 	if len(ctx.Values) == 0 {
 		return nil, nil
 	}
-	
+
 	mean := ctx.AvgSum / float64(len(ctx.Values))
 	sumSquares := 0.0
-	
+
 	for _, val := range ctx.Values {
 		diff := val - mean
 		sumSquares += diff * diff
 	}
-	
+
 	variance := sumSquares / float64(len(ctx.Values))
 	return math.Sqrt(variance), nil
 }

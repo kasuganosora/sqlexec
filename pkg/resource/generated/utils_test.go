@@ -352,10 +352,10 @@ func TestCastToString_MoreTypes(t *testing.T) {
 // TestCastToType_MoreVariants 测试更多类型变体
 func TestCastToType_MoreVariants(t *testing.T) {
 	tests := []struct {
-		name      string
-		value     interface{}
+		name       string
+		value      interface{}
 		targetType string
-		expectErr bool
+		expectErr  bool
 	}{
 		{"TINYINT", 123, "TINYINT", false},
 		{"SMALLINT", 123, "SMALLINT", false},

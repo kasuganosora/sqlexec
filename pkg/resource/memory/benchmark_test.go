@@ -17,13 +17,13 @@ func generateTestData(rowCount int) []domain.Row {
 	rows := make([]domain.Row, rowCount)
 	for i := 0; i < rowCount; i++ {
 		rows[i] = domain.Row{
-			"id":       int64(i + 1),
-			"name":     fmt.Sprintf("user_%d", i+1),
-			"email":    fmt.Sprintf("user_%d@example.com", i+1),
-			"age":      int64(20 + rand.Intn(60)),
-			"balance":  int64(rand.Intn(100000)),
-			"status":   rand.Intn(3),
-			"created":  time.Now().Add(-time.Duration(rand.Intn(365*24)) * time.Hour).Unix(),
+			"id":      int64(i + 1),
+			"name":    fmt.Sprintf("user_%d", i+1),
+			"email":   fmt.Sprintf("user_%d@example.com", i+1),
+			"age":     int64(20 + rand.Intn(60)),
+			"balance": int64(rand.Intn(100000)),
+			"status":  rand.Intn(3),
+			"created": time.Now().Add(-time.Duration(rand.Intn(365*24)) * time.Hour).Unix(),
 		}
 	}
 	return rows
@@ -48,9 +48,9 @@ func createTestSchema() *domain.TableInfo {
 
 // 性能测试用例配置
 type benchConfig struct {
-	name        string
-	rowCount    int
-	iterations  int // 迭代次数，计算平均值
+	name       string
+	rowCount   int
+	iterations int // 迭代次数，计算平均值
 }
 
 var benchCases = []benchConfig{

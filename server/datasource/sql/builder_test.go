@@ -15,9 +15,9 @@ func (d *testDialect) BuildDSN(dsCfg *domain.DataSourceConfig, sqlCfg *SQLConfig
 	return "", nil
 }
 func (d *testDialect) QuoteIdentifier(name string) string { return "`" + name + "`" }
-func (d *testDialect) Placeholder(n int) string            { return "?" }
-func (d *testDialect) GetTablesQuery() string              { return "" }
-func (d *testDialect) GetTableInfoQuery() string           { return "" }
+func (d *testDialect) Placeholder(n int) string           { return "?" }
+func (d *testDialect) GetTablesQuery() string             { return "" }
+func (d *testDialect) GetTableInfoQuery() string          { return "" }
 func (d *testDialect) MapColumnType(dbTypeName string, scanType *sql.ColumnType) string {
 	return "string"
 }

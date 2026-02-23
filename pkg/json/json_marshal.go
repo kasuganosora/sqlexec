@@ -13,4 +13,3 @@ func unmarshalJSON(data []byte, value *interface{}) error {
 func marshalJSON(value interface{}) ([]byte, error) {
 	return json.Marshal(value)
 }
-

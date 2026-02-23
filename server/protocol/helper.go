@@ -12,10 +12,10 @@ func NewHandshakePacket() *HandshakeV10Packet {
 		Packet: Packet{
 			SequenceID: 0,
 		},
-		ProtocolVersion:    10,
-		ServerVersion:      "5.5.5-10.3.12-MariaDB",
-		ThreadID:           uint32(time.Now().Unix()),
-		AuthPluginDataPart: []byte{0x4a, 0x73, 0x29, 0x6c, 0x66, 0x3e, 0x41, 0x68},
+		ProtocolVersion:     10,
+		ServerVersion:       "5.5.5-10.3.12-MariaDB",
+		ThreadID:            uint32(time.Now().Unix()),
+		AuthPluginDataPart:  []byte{0x4a, 0x73, 0x29, 0x6c, 0x66, 0x3e, 0x41, 0x68},
 		Filter:              0,
 		CapabilityFlags1:    0xf7fe,
 		CharacterSet:        8,
@@ -63,11 +63,11 @@ func SendError(conn net.Conn, err error) error {
 			SequenceID: 1,
 		},
 		ErrorInPacket: ErrorInPacket{
-			Header:       0xFF,
-			ErrorCode:    1045,
+			Header:         0xFF,
+			ErrorCode:      1045,
 			SqlStateMarker: "#",
-			SqlState:     "28000",
-			ErrorMessage: err.Error(),
+			SqlState:       "28000",
+			ErrorMessage:   err.Error(),
 		},
 	}
 	return errorPacket.Send(conn)

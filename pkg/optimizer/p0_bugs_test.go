@@ -432,10 +432,10 @@ type mockPhysicalPlan struct {
 	cost float64
 }
 
-func (m *mockPhysicalPlan) Children() []PhysicalPlan               { return nil }
-func (m *mockPhysicalPlan) SetChildren(children ...PhysicalPlan)    {}
-func (m *mockPhysicalPlan) Schema() []ColumnInfo                    { return nil }
-func (m *mockPhysicalPlan) Cost() float64                           { return m.cost }
+func (m *mockPhysicalPlan) Children() []PhysicalPlan             { return nil }
+func (m *mockPhysicalPlan) SetChildren(children ...PhysicalPlan) {}
+func (m *mockPhysicalPlan) Schema() []ColumnInfo                 { return nil }
+func (m *mockPhysicalPlan) Cost() float64                        { return m.cost }
 func (m *mockPhysicalPlan) Execute(ctx context.Context) (*domain.QueryResult, error) {
 	return nil, nil
 }

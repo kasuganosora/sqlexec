@@ -237,15 +237,15 @@ func (s *SlowQueryAnalyzer) AnalyzeSlowQueries() *SlowQueryAnalysis {
 	}
 
 	analysis := &SlowQueryAnalysis{
-		TotalQueries:      len(s.slowQueries),
-		TableStats:        make(map[string]*TableSlowQueryStats),
-		ErrorCount:        0,
-		AvgDuration:       0,
-		MaxDuration:       s.slowQueries[0].Duration,
-		MinDuration:       s.slowQueries[0].Duration,
-		TotalDuration:     0,
-		AvgRowCount:       0,
-		TotalRowCount:     0,
+		TotalQueries:  len(s.slowQueries),
+		TableStats:    make(map[string]*TableSlowQueryStats),
+		ErrorCount:    0,
+		AvgDuration:   0,
+		MaxDuration:   s.slowQueries[0].Duration,
+		MinDuration:   s.slowQueries[0].Duration,
+		TotalDuration: 0,
+		AvgRowCount:   0,
+		TotalRowCount: 0,
 	}
 
 	totalDuration := time.Duration(0)
@@ -305,15 +305,15 @@ func (s *SlowQueryAnalyzer) AnalyzeSlowQueries() *SlowQueryAnalysis {
 
 // SlowQueryAnalysis 慢查询分析结果
 type SlowQueryAnalysis struct {
-	TotalQueries   int
-	AvgDuration    time.Duration
-	MaxDuration    time.Duration
-	MinDuration    time.Duration
-	TotalDuration  time.Duration
-	AvgRowCount    int64
-	TotalRowCount  int64
-	ErrorCount     int
-	TableStats     map[string]*TableSlowQueryStats
+	TotalQueries  int
+	AvgDuration   time.Duration
+	MaxDuration   time.Duration
+	MinDuration   time.Duration
+	TotalDuration time.Duration
+	AvgRowCount   int64
+	TotalRowCount int64
+	ErrorCount    int
+	TableStats    map[string]*TableSlowQueryStats
 }
 
 // TableSlowQueryStats 表级别慢查询统计
@@ -365,13 +365,13 @@ func (s *SlowQueryAnalyzer) GetRecommendations() []string {
 
 // MonitorContext 监控上下文
 type MonitorContext struct {
-	Metrics      *MetricsCollector
-	SlowQuery    *SlowQueryAnalyzer
-	Ctx          context.Context
-	QueryID      int64
-	StartTime    time.Time
-	TableName    string
-	SQL          string
+	Metrics   *MetricsCollector
+	SlowQuery *SlowQueryAnalyzer
+	Ctx       context.Context
+	QueryID   int64
+	StartTime time.Time
+	TableName string
+	SQL       string
 }
 
 // NewMonitorContext 创建监控上下文

@@ -58,10 +58,10 @@ func (t *UserPrivilegesTable) Query(ctx context.Context, filters []domain.Filter
 		for privType, granted := range user.Privileges {
 			if granted && privType != "GRANT OPTION" {
 				row := domain.Row{
-					"GRANTEE":       fmt.Sprintf("'%s'@'%s'", user.User, user.Host),
+					"GRANTEE":        fmt.Sprintf("'%s'@'%s'", user.User, user.Host),
 					"TABLE_CATALOG":  "def",
 					"PRIVILEGE_TYPE": privType,
-					"IS_GRANTABLE":  boolToYN(t.hasGrantOption(*user)),
+					"IS_GRANTABLE":   boolToYN(t.hasGrantOption(*user)),
 				}
 				rows = append(rows, row)
 			}

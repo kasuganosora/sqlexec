@@ -262,11 +262,11 @@ func TestHasPrivilege(t *testing.T) {
 	um := NewUserManager()
 	passwordHash := ""
 	privileges := map[string]bool{
-		"SELECT":   true,
-		"INSERT":   true,
-		"UPDATE":   false,
-		"DELETE":   false,
-		"CREATE":   true,
+		"SELECT": true,
+		"INSERT": true,
+		"UPDATE": false,
+		"DELETE": false,
+		"CREATE": true,
 	}
 
 	err := um.CreateUser("%", "testuser", passwordHash, privileges)

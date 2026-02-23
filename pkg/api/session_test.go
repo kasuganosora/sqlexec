@@ -51,9 +51,9 @@ func TestSession_GetDB(t *testing.T) {
 func TestSession_Query_CacheDisabled(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:            db,
-		cacheEnabled:  false,
-		logger:        NewNoOpLogger(),
+		db:           db,
+		cacheEnabled: false,
+		logger:       NewNoOpLogger(),
 	}
 
 	// Cache disabled should not cache
@@ -88,9 +88,9 @@ func TestSession_QueryAll_Success(t *testing.T) {
 	// QueryAll with session error should return error
 	t.Run("with error", func(t *testing.T) {
 		session := &Session{
-			db:  db,
+			db:     db,
 			logger: NewNoOpLogger(),
-			err: NewError(ErrCodeInternal, "session error", nil),
+			err:    NewError(ErrCodeInternal, "session error", nil),
 		}
 
 		rows, err := session.QueryAll("SELECT * FROM users")
@@ -234,9 +234,9 @@ func TestSession_QueryOne_Success(t *testing.T) {
 	// QueryOne with session error should return error
 	t.Run("with error", func(t *testing.T) {
 		session := &Session{
-			db:  db,
+			db:     db,
 			logger: NewNoOpLogger(),
-			err: NewError(ErrCodeInternal, "session error", nil),
+			err:    NewError(ErrCodeInternal, "session error", nil),
 		}
 
 		row, err := session.QueryOne("SELECT * FROM users WHERE id = 1")
@@ -305,8 +305,8 @@ func TestSession_QueryOne_Success(t *testing.T) {
 				{Name: "id", Type: "int64"},
 				{Name: "name", Type: "string"},
 			},
-			Rows:    []domain.Row{}, // Empty result
-			Total:   0,
+			Rows:  []domain.Row{}, // Empty result
+			Total: 0,
 		}
 
 		query := NewQuery(session, mockResult, "SELECT * FROM users", nil)
@@ -366,7 +366,7 @@ func TestSession_Begin_NestedTransaction(t *testing.T) {
 func TestSession_QueryAll(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:          db,
+		db:           db,
 		cacheEnabled: false,
 	}
 
@@ -390,7 +390,7 @@ func TestSession_QueryAll(t *testing.T) {
 func TestSession_QueryOne(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:          db,
+		db:           db,
 		cacheEnabled: false,
 	}
 
@@ -413,7 +413,7 @@ func TestSession_QueryOne(t *testing.T) {
 func TestSession_Execute(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:          db,
+		db:           db,
 		cacheEnabled: false,
 	}
 
@@ -436,7 +436,7 @@ func TestSession_Execute(t *testing.T) {
 func TestSession_Begin(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:          db,
+		db:           db,
 		cacheEnabled: false,
 	}
 
@@ -460,7 +460,7 @@ func TestSession_InTransaction(t *testing.T) {
 	db, _ := NewDB(nil)
 	ds := newMockDataSource()
 	db.RegisterDataSource("test", ds)
-	
+
 	session := db.Session()
 	defer session.Close()
 
@@ -471,7 +471,7 @@ func TestSession_InTransaction(t *testing.T) {
 func TestSession_IsolationLevel(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:      db,
+		db: db,
 		options: &SessionOptions{
 			Isolation: IsolationSerializable,
 		},
@@ -483,8 +483,8 @@ func TestSession_IsolationLevel(t *testing.T) {
 func TestSession_SetIsolationLevel(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:      db,
-		logger:  NewDefaultLogger(LogError),
+		db:     db,
+		logger: NewDefaultLogger(LogError),
 		options: &SessionOptions{
 			Isolation: IsolationSerializable,
 		},
@@ -499,7 +499,7 @@ func TestSession_SetIsolationLevel(t *testing.T) {
 func TestSession_CreateTempTable(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:          db,
+		db:           db,
 		cacheEnabled: false,
 	}
 
@@ -510,7 +510,7 @@ func TestSession_CreateTempTable(t *testing.T) {
 func TestSession_CreateTempTableErrors(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:          db,
+		db:           db,
 		cacheEnabled: false,
 	}
 
@@ -572,9 +572,9 @@ func TestSession_CreateTempTableErrors(t *testing.T) {
 func TestSession_Close(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:          db,
+		db:           db,
 		cacheEnabled: false,
-		logger:      NewNoOpLogger(),
+		logger:       NewNoOpLogger(),
 	}
 
 	// Close with nil coreSession should not error
@@ -677,9 +677,9 @@ func TestSession_Begin_Error(t *testing.T) {
 func TestSession_Close_AlreadyClosed(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:      db,
+		db:          db,
 		coreSession: nil,
-		logger:  NewNoOpLogger(),
+		logger:      NewNoOpLogger(),
 	}
 
 	// Close with nil coreSession should not error
@@ -724,8 +724,8 @@ func TestSession_Execute_UnsupportedStatement(t *testing.T) {
 func TestSession_Close_TempTables(t *testing.T) {
 	db, _ := NewDB(nil)
 	session := &Session{
-		db:          db,
-		logger:      NewNoOpLogger(),
+		db:     db,
+		logger: NewNoOpLogger(),
 	}
 
 	// Close should clean up temp tables
@@ -758,7 +758,6 @@ func TestSession_String(t *testing.T) {
 		assert.NotEmpty(t, str)
 	}
 }
-
 
 func TestSession_QueryAll_MultipleRows(t *testing.T) {
 	db, _ := NewDB(nil)

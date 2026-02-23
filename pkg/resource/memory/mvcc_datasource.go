@@ -113,4 +113,3 @@ func (m *MVCCDataSource) gcOldVersions() {
 		tableVer.mu.Unlock()
 	}
 }
-

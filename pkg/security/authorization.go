@@ -25,22 +25,22 @@ const (
 type Role string
 
 const (
-	RoleAdmin      Role = "admin"
-	RoleModerator  Role = "moderator"
-	RoleUser       Role = "user"
-	RoleReadOnly   Role = "readonly"
-	RoleGuest      Role = "guest"
+	RoleAdmin     Role = "admin"
+	RoleModerator Role = "moderator"
+	RoleUser      Role = "user"
+	RoleReadOnly  Role = "readonly"
+	RoleGuest     Role = "guest"
 )
 
 // User 用户
 type User struct {
-	Username    string
+	Username     string
 	PasswordHash string
-	Roles       []Role
-	Permissions map[string]Permission // table -> permission
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	IsActive    bool
+	Roles        []Role
+	Permissions  map[string]Permission // table -> permission
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	IsActive     bool
 }
 
 // AuthorizationManager 授权管理器
@@ -53,8 +53,8 @@ type AuthorizationManager struct {
 // NewAuthorizationManager 创建授权管理器
 func NewAuthorizationManager() *AuthorizationManager {
 	am := &AuthorizationManager{
-		users:  make(map[string]*User),
-		roles:  make(map[Role][]Permission),
+		users: make(map[string]*User),
+		roles: make(map[Role][]Permission),
 	}
 
 	// 初始化默认角色权限
@@ -109,13 +109,13 @@ func (am *AuthorizationManager) CreateUser(username, passwordHash string, roles 
 	}
 
 	am.users[username] = &User{
-		Username:    username,
+		Username:     username,
 		PasswordHash: passwordHash,
-		Roles:       roles,
-		Permissions: make(map[string]Permission),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-		IsActive:    true,
+		Roles:        roles,
+		Permissions:  make(map[string]Permission),
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+		IsActive:     true,
 	}
 
 	return nil

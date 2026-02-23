@@ -265,7 +265,7 @@ func (g *HypotheticalStatsGenerator) generateDefaultStats(tableName string, colu
 // estimateDefaultSize 估算默认索引大小
 func (g *HypotheticalStatsGenerator) estimateDefaultSize(rowCount int64, columns []string) int64 {
 	avgColSize := int64(len(columns) * 8) // 每列 8 字节
-	entrySize := avgColSize + 8            // 加上行指针
+	entrySize := avgColSize + 8           // 加上行指针
 	fillFactor := 0.75
 
 	totalSize := float64(rowCount*entrySize) / fillFactor

@@ -45,10 +45,10 @@ func (m *MVCCDataSource) BeginTx(ctx context.Context, readOnly bool) (int64, err
 		tableVer.mu.RUnlock()
 
 		tableSnapshots[tableName] = &COWTableSnapshot{
-			tableName:   tableName,
-			snapshotVer: pinnedVer,
-			copied:      false,
-			baseData:    nil, // Lazy load on access
+			tableName:    tableName,
+			snapshotVer:  pinnedVer,
+			copied:       false,
+			baseData:     nil, // Lazy load on access
 			modifiedData: nil,
 		}
 	}
@@ -297,9 +297,9 @@ func (s *COWTableSnapshot) ensureCopied(tableVer *TableVersions) error {
 	}
 
 	// Initialize row-level tracking structures
-	s.rowLocks = make(map[int64]bool)       // Track modified rows
+	s.rowLocks = make(map[int64]bool)        // Track modified rows
 	s.rowCopies = make(map[int64]domain.Row) // Store modified rows
-	s.deletedRows = make(map[int64]bool)    // Mark deleted rows
+	s.deletedRows = make(map[int64]bool)     // Mark deleted rows
 
 	s.baseData = baseData
 	s.copied = true

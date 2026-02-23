@@ -13,14 +13,14 @@ import (
 // 基于两路归并排序的连接算法，适合有序数据
 type PhysicalMergeJoin struct {
 	JoinType   JoinType
-	Conditions  []*JoinCondition
-	cost        float64
-	children    []PhysicalPlan
+	Conditions []*JoinCondition
+	cost       float64
+	children   []PhysicalPlan
 }
 
 // NewPhysicalMergeJoin 创建物理归并连接
 func NewPhysicalMergeJoin(joinType JoinType, left, right PhysicalPlan, conditions []*JoinCondition) *PhysicalMergeJoin {
-	leftRows := int64(1000) // 假设
+	leftRows := int64(1000)  // 假设
 	rightRows := int64(1000) // 假设
 
 	// Merge Join 成本 = 合并两个有序序列
@@ -31,10 +31,10 @@ func NewPhysicalMergeJoin(joinType JoinType, left, right PhysicalPlan, condition
 	cost := leftCost + rightCost + mergeCost
 
 	return &PhysicalMergeJoin{
-		JoinType:  joinType,
-		Conditions:  conditions,
+		JoinType:   joinType,
+		Conditions: conditions,
 		cost:       cost,
-		children:    []PhysicalPlan{left, right},
+		children:   []PhysicalPlan{left, right},
 	}
 }
 

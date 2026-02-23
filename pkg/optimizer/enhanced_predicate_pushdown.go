@@ -178,7 +178,7 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownAcrossJoin(selection *Logical
 
 		// 检查是否可以下推
 		pushDecision := r.analyzePushability(cond, condTables, joinTables, joinConditions)
-		
+
 		switch pushDecision {
 		case PushLeft:
 			leftPushable = append(leftPushable, cond)
@@ -196,7 +196,7 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownAcrossJoin(selection *Logical
 	if len(children) != 2 {
 		return false
 	}
-	
+
 	leftChild := children[0]
 	rightChild := children[1]
 	pushed := false
@@ -213,7 +213,7 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownAcrossJoin(selection *Logical
 		children = join.Children()
 		leftChild = children[0]
 		rightChild = children[1]
-		
+
 		rightSelection := r.createOrMergeSelection(rightChild, rightPushable)
 		join.SetChildren(leftChild, rightSelection)
 		pushed = true
@@ -414,7 +414,7 @@ func (r *EnhancedPredicatePushdownRule) referencesOnlyTables(expr *parser.Expres
 	}
 
 	exprTables := r.extractTablesFromCondition(expr)
-	
+
 	// 检查exprTables是否是tables的子集
 	tablesMap := make(map[string]bool)
 	for _, t := range tables {

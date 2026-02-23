@@ -144,9 +144,9 @@ func TestGenerateStatsWithoutTableStats(t *testing.T) {
 // TestEstimateSelectivity 测试选择性估算
 func TestEstimateSelectivity(t *testing.T) {
 	testCases := []struct {
-		name         string
-		ndv          int64
-		rowCount     int64
+		name           string
+		ndv            int64
+		rowCount       int64
 		minSelectivity float64
 		maxSelectivity float64
 	}{
@@ -189,10 +189,10 @@ func TestEstimateIndexSizeForStats(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name      string
-		columns   []string
-		minSize   int64
-		maxSize   int64
+		name    string
+		columns []string
+		minSize int64
+		maxSize int64
 	}{
 		{"Single int column", []string{"id"}, 200000, 400000},
 		{"Single varchar column", []string{"name"}, 400000, 800000},
@@ -243,14 +243,14 @@ func TestCompareWithFullScan(t *testing.T) {
 	generator := NewHypotheticalStatsGenerator(estimator)
 
 	testCases := []struct {
-		name              string
-		selectivity       float64
-		ndv               int64
-		expectedBenefit  bool
+		name            string
+		selectivity     float64
+		ndv             int64
+		expectedBenefit bool
 	}{
 		{"Highly selective", 0.001, 1000, true},
-		{"Medium selective", 0.1, 1000, true},  // 10% 选择性，1000 NDV，索引仍有显著收益
-		{"Low selective", 0.8, 10, false},      // 80% 选择性，索引无收益
+		{"Medium selective", 0.1, 1000, true}, // 10% 选择性，1000 NDV，索引仍有显著收益
+		{"Low selective", 0.8, 10, false},     // 80% 选择性，索引无收益
 	}
 
 	rowCount := int64(10000)
@@ -298,8 +298,8 @@ func TestHeuristicNDV(t *testing.T) {
 	generator := NewHypotheticalStatsGenerator(estimator)
 
 	testCases := []struct {
-		rowCount  int64
-		expected  int64
+		rowCount int64
+		expected int64
 	}{
 		{500, 500},       // 小表
 		{5000, 500},      // 中等表
@@ -348,7 +348,7 @@ func TestUpdateTableInfo(t *testing.T) {
 	generator := NewHypotheticalStatsGenerator(estimator)
 
 	tableInfo := &domain.TableInfo{
-		Name:   "test_table",
+		Name:    "test_table",
 		Columns: []domain.ColumnInfo{{Name: "id", Type: "INT"}},
 	}
 
@@ -391,10 +391,10 @@ func (m *mockCardinalityEstimator) GetStatistics(tableName string) (*statistics.
 // createMockTableStats 创建模拟表统计信息
 func createMockTableStats(tableName string, rowCount int64, colStats map[string]*statistics.ColumnStatistics) *statistics.TableStatistics {
 	return &statistics.TableStatistics{
-		Name:             tableName,
-		RowCount:         rowCount,
-		ColumnStats:      colStats,
-		Histograms:       make(map[string]*statistics.Histogram),
+		Name:              tableName,
+		RowCount:          rowCount,
+		ColumnStats:       colStats,
+		Histograms:        make(map[string]*statistics.Histogram),
 		EstimatedRowCount: rowCount,
 	}
 }

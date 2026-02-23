@@ -325,10 +325,10 @@ func (sis *SpatialIndexSupport) EstimateSpatialIndexStats(
 
 	stats := &HypotheticalIndexStats{
 		NDV:           ndv,
-		Selectivity:    selectivity,
+		Selectivity:   selectivity,
 		EstimatedSize: estimatedSize,
-		NullFraction:   nullFraction,
-		Correlation:    correlation,
+		NullFraction:  nullFraction,
+		Correlation:   correlation,
 	}
 
 	return stats
@@ -506,15 +506,15 @@ func (sis *SpatialIndexSupport) ValidateSpatialFunction(funcName string, args []
 	// 验证函数名是否有效
 	validFunctions := map[string]int{
 		SpatialFuncContains:   2,
-		SpatialFuncIntersects:  2,
-		SpatialFuncWithin:      2,
-		SpatialFuncOverlaps:    2,
-		SpatialFuncTouches:     2,
-		SpatialFuncCrosses:     2,
-		SpatialFuncDistance:    2,
-		SpatialFuncArea:        1,
-		SpatialFuncLength:      1,
-		SpatialFuncBuffer:      2,
+		SpatialFuncIntersects: 2,
+		SpatialFuncWithin:     2,
+		SpatialFuncOverlaps:   2,
+		SpatialFuncTouches:    2,
+		SpatialFuncCrosses:    2,
+		SpatialFuncDistance:   2,
+		SpatialFuncArea:       1,
+		SpatialFuncLength:     1,
+		SpatialFuncBuffer:     2,
 	}
 
 	expectedArgs, exists := validFunctions[funcName]

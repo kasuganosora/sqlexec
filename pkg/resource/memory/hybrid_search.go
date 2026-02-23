@@ -57,32 +57,32 @@ func (hs *HybridSearcher) Search(
 	var ftResults []fulltext.SearchResult
 	var vecResult *VectorSearchResult
 	var ftErr, vecErr error
-	
+
 	var wg sync.WaitGroup
 	wg.Add(2)
-	
+
 	// 全文搜索
 	go func() {
 		defer wg.Done()
 		ftResults, ftErr = hs.fulltextIndex.SearchBM25(textQuery, topK*2)
 	}()
-	
+
 	// 向量搜索
 	go func() {
 		defer wg.Done()
 		ctx := context.Background()
 		vecResult, vecErr = hs.vectorIndex.Search(ctx, vectorQuery, topK*2, nil)
 	}()
-	
+
 	wg.Wait()
-	
+
 	if ftErr != nil {
 		return nil, ftErr
 	}
 	if vecErr != nil {
 		return nil, vecErr
 	}
-	
+
 	// 使用RRF融合结果
 	return hs.fuseWithRRF(ftResults, vecResult, topK)
 }
@@ -97,30 +97,30 @@ func (hs *HybridSearcher) SearchWithWeightedFusion(
 	var ftResults []fulltext.SearchResult
 	var vecResult *VectorSearchResult
 	var ftErr, vecErr error
-	
+
 	var wg sync.WaitGroup
 	wg.Add(2)
-	
+
 	go func() {
 		defer wg.Done()
 		ftResults, ftErr = hs.fulltextIndex.SearchBM25(textQuery, topK*2)
 	}()
-	
+
 	go func() {
 		defer wg.Done()
 		ctx := context.Background()
 		vecResult, vecErr = hs.vectorIndex.Search(ctx, vectorQuery, topK*2, nil)
 	}()
-	
+
 	wg.Wait()
-	
+
 	if ftErr != nil {
 		return nil, ftErr
 	}
 	if vecErr != nil {
 		return nil, vecErr
 	}
-	
+
 	return hs.fuseWithWeighted(ftResults, vecResult, topK)
 }
 
@@ -132,7 +132,7 @@ func (hs *HybridSearcher) fuseWithRRF(
 ) ([]HybridResult, error) {
 	scores := make(map[int64]*HybridResult)
 	k := float64(hs.rrfK)
-	
+
 	// 融合全文搜索结果
 	for rank, result := range ftResults {
 		docID := result.DocID
@@ -145,7 +145,7 @@ func (hs *HybridSearcher) fuseWithRRF(
 		}
 		scores[docID].RRFScore += 1.0 / (k + float64(rank+1))
 	}
-	
+
 	// 融合向量搜索结果
 	if vecResult != nil {
 		for rank, docID := range vecResult.IDs {
@@ -161,23 +161,23 @@ func (hs *HybridSearcher) fuseWithRRF(
 			scores[docID].RRFScore += 1.0 / (k + float64(rank+1))
 		}
 	}
-	
+
 	// 转换为结果列表
 	results := make([]HybridResult, 0, len(scores))
 	for _, result := range scores {
 		results = append(results, *result)
 	}
-	
+
 	// 按RRF分数降序排序
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].RRFScore > results[j].RRFScore
 	})
-	
+
 	// 限制结果数量
 	if len(results) > topK {
 		results = results[:topK]
 	}
-	
+
 	return results, nil
 }
 
@@ -188,17 +188,17 @@ func (hs *HybridSearcher) fuseWithWeighted(
 	topK int,
 ) ([]HybridResult, error) {
 	scores := make(map[int64]*HybridResult)
-	
+
 	// 归一化分数
 	var ftMaxScore, vecMaxScore float64
-	
+
 	if len(ftResults) > 0 {
 		ftMaxScore = ftResults[0].Score
 	}
 	if vecResult != nil && len(vecResult.Distances) > 0 {
 		vecMaxScore = float64(vecResult.Distances[0])
 	}
-	
+
 	// 融合全文搜索结果
 	for _, result := range ftResults {
 		docID := result.DocID
@@ -206,7 +206,7 @@ func (hs *HybridSearcher) fuseWithWeighted(
 		if ftMaxScore > 0 {
 			normalizedScore = result.Score / ftMaxScore
 		}
-		
+
 		if _, exists := scores[docID]; !exists {
 			scores[docID] = &HybridResult{
 				DocID:     docID,
@@ -216,7 +216,7 @@ func (hs *HybridSearcher) fuseWithWeighted(
 		}
 		scores[docID].BM25Score = normalizedScore
 	}
-	
+
 	// 融合向量搜索结果
 	if vecResult != nil {
 		for i, docID := range vecResult.IDs {
@@ -225,7 +225,7 @@ func (hs *HybridSearcher) fuseWithWeighted(
 				// 向量距离需要反转（越小越好 -> 越大越好）
 				normalizedScore = 1.0 - (float64(vecResult.Distances[i]) / vecMaxScore)
 			}
-			
+
 			if _, exists := scores[docID]; !exists {
 				scores[docID] = &HybridResult{
 					DocID: docID,
@@ -234,24 +234,24 @@ func (hs *HybridSearcher) fuseWithWeighted(
 			scores[docID].VectorScore = normalizedScore
 		}
 	}
-	
+
 	// 计算加权分数
 	results := make([]HybridResult, 0, len(scores))
 	for _, result := range scores {
 		result.WeightedScore = result.BM25Score*hs.ftWeight + result.VectorScore*hs.vecWeight
 		results = append(results, *result)
 	}
-	
+
 	// 按加权分数降序排序
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].WeightedScore > results[j].WeightedScore
 	})
-	
+
 	// 限制结果数量
 	if len(results) > topK {
 		results = results[:topK]
 	}
-	
+
 	return results, nil
 }
 

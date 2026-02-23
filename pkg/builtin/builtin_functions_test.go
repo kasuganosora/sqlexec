@@ -123,9 +123,9 @@ func TestBuiltinMathAbs(t *testing.T) {
 
 func TestBuiltinMathRound(t *testing.T) {
 	tests := []struct {
-		name  string
-		args  []interface{}
-		want  float64
+		name string
+		args []interface{}
+		want float64
 	}{
 		{"3.14", []interface{}{3.14}, 3},
 		{"3.5", []interface{}{3.5}, 4},
@@ -348,8 +348,8 @@ func TestBuiltinFunctionRegistry(t *testing.T) {
 	}
 
 	info := &FunctionInfo{
-		Name: "test_func",
-		Type: FunctionTypeScalar,
+		Name:        "test_func",
+		Type:        FunctionTypeScalar,
 		Description: "Test function",
 		Handler: func(args []interface{}) (interface{}, error) {
 			return "test", nil
@@ -482,10 +482,10 @@ func TestBuiltinMod(t *testing.T) {
 
 func TestBuiltinStringReplace(t *testing.T) {
 	tests := []struct {
-		str    string
-		old    string
-		new    string
-		want   string
+		str  string
+		old  string
+		new  string
+		want string
 	}{
 		{"hello world", "world", "there", "hello there"},
 		{"aaaa", "a", "b", "bbbb"},

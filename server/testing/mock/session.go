@@ -8,14 +8,14 @@ import (
 
 // MockSession implements pkg/session.Session interface for testing
 type MockSession struct {
-	mu           sync.Mutex
-	ID           string
-	ThreadID     uint32
-	User         string
-	SequenceID   uint8
-	apiSession   interface{}
-	data         map[string]interface{}
-	closed       bool
+	mu         sync.Mutex
+	ID         string
+	ThreadID   uint32
+	User       string
+	SequenceID uint8
+	apiSession interface{}
+	data       map[string]interface{}
+	closed     bool
 }
 
 // NewMockSession creates a new mock session

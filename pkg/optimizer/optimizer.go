@@ -47,7 +47,7 @@ func (o *Optimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (*p
 	debugln("  [DEBUG] Optimize: 步骤2 - 应用优化规则")
 	optCtx := &OptimizationContext{
 		DataSource: o.dataSource,
-		TableInfo: make(map[string]*domain.TableInfo),
+		TableInfo:  make(map[string]*domain.TableInfo),
 		Stats:      make(map[string]*Statistics),
 		CostModel:  o.costModel,
 	}
@@ -119,7 +119,7 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 			for i, item := range stmt.OrderBy {
 				sortItems[i] = parser.OrderItem{
 					Expr: parser.Expression{
-						Type: parser.ExprTypeColumn,
+						Type:   parser.ExprTypeColumn,
 						Column: item.Column,
 					},
 					Direction: item.Direction,
@@ -176,7 +176,7 @@ func (o *Optimizer) convertSelect(stmt *parser.SelectStatement) (LogicalPlan, er
 		for i, item := range stmt.OrderBy {
 			sortItems[i] = parser.OrderItem{
 				Expr: parser.Expression{
-					Type: parser.ExprTypeColumn,
+					Type:   parser.ExprTypeColumn,
 					Column: item.Column,
 				},
 				Direction: item.Direction,
@@ -352,7 +352,7 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 		// 获取下推的Limit
 		limitInfo := p.GetPushedDownLimit()
 		debugf("  [DEBUG] convertToPlan: DataSource(%s), 下推谓词数量: %d, 下推Limit: %v\n", p.TableName, len(filters), limitInfo != nil)
-		
+
 		// 构建列信息
 		columns := make([]types.ColumnInfo, 0, len(p.TableInfo.Columns))
 		for _, col := range p.TableInfo.Columns {
@@ -362,12 +362,12 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 				Nullable: col.Nullable,
 			})
 		}
-		
+
 		return &plan.Plan{
-			ID:   fmt.Sprintf("scan_%s", p.TableName),
-			Type: plan.TypeTableScan,
+			ID:           fmt.Sprintf("scan_%s", p.TableName),
+			Type:         plan.TypeTableScan,
 			OutputSchema: columns,
-			Children: []*plan.Plan{},
+			Children:     []*plan.Plan{},
 			Config: &plan.TableScanConfig{
 				TableName:       p.TableName,
 				Columns:         columns,
@@ -388,10 +388,10 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 			return nil, fmt.Errorf("selection has no conditions")
 		}
 		return &plan.Plan{
-			ID:   fmt.Sprintf("sel_%d", len(conditions)),
-			Type: plan.TypeSelection,
+			ID:           fmt.Sprintf("sel_%d", len(conditions)),
+			Type:         plan.TypeSelection,
 			OutputSchema: child.OutputSchema,
-			Children: []*plan.Plan{child},
+			Children:     []*plan.Plan{child},
 			Config: &plan.SelectionConfig{
 				Condition: conditions[0],
 			},
@@ -404,12 +404,12 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 		exprs := p.GetExprs()
 		aliases := p.GetAliases()
 		debugf("  [DEBUG] convertToPlan: Projection, 表达式数量: %d, 别名数量: %d\n", len(exprs), len(aliases))
-		
+
 		return &plan.Plan{
-			ID:   fmt.Sprintf("proj_%d", len(exprs)),
-			Type: plan.TypeProjection,
+			ID:           fmt.Sprintf("proj_%d", len(exprs)),
+			Type:         plan.TypeProjection,
 			OutputSchema: child.OutputSchema,
-			Children: []*plan.Plan{child},
+			Children:     []*plan.Plan{child},
 			Config: &plan.ProjectionConfig{
 				Expressions: exprs,
 				Aliases:     aliases,
@@ -421,10 +421,10 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 			return nil, err
 		}
 		return &plan.Plan{
-			ID:   fmt.Sprintf("limit_%d_%d", p.GetLimit(), p.GetOffset()),
-			Type: plan.TypeLimit,
+			ID:           fmt.Sprintf("limit_%d_%d", p.GetLimit(), p.GetOffset()),
+			Type:         plan.TypeLimit,
 			OutputSchema: child.OutputSchema,
-			Children: []*plan.Plan{child},
+			Children:     []*plan.Plan{child},
 			Config: &plan.LimitConfig{
 				Limit:  p.GetLimit(),
 				Offset: p.GetOffset(),
@@ -438,10 +438,10 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 		if err != nil {
 			return nil, err
 		}
-		
+
 		// 直接使用 parser.OrderItem
 		orderItems := p.GetOrderBy()
-		
+
 		return &plan.Plan{
 			ID:           fmt.Sprintf("sort_%d", len(orderItems)),
 			Type:         plan.TypeSort,
@@ -461,24 +461,24 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 			return nil, err
 		}
 		joinConditions := p.GetJoinConditions()
-	// 转换JoinCondition
-	convertedConditions := make([]*types.JoinCondition, len(joinConditions))
-	for i, cond := range joinConditions {
-		convertedConditions[i] = &types.JoinCondition{
-			Left:     convertToTypesExpr(cond.Left),
-			Right:    convertToTypesExpr(cond.Right),
-			Operator: cond.Operator,
+		// 转换JoinCondition
+		convertedConditions := make([]*types.JoinCondition, len(joinConditions))
+		for i, cond := range joinConditions {
+			convertedConditions[i] = &types.JoinCondition{
+				Left:     convertToTypesExpr(cond.Left),
+				Right:    convertToTypesExpr(cond.Right),
+				Operator: cond.Operator,
+			}
 		}
-	}
 
 		if len(joinConditions) == 0 {
 			return nil, fmt.Errorf("join has no conditions")
 		}
 		return &plan.Plan{
-			ID:   fmt.Sprintf("join_%s", joinConditions[0].Operator),
-			Type: plan.TypeHashJoin,
+			ID:           fmt.Sprintf("join_%s", joinConditions[0].Operator),
+			Type:         plan.TypeHashJoin,
 			OutputSchema: left.OutputSchema,
-			Children: []*plan.Plan{left, right},
+			Children:     []*plan.Plan{left, right},
 			Config: &plan.HashJoinConfig{
 				JoinType:  types.JoinType(p.GetJoinType()),
 				LeftCond:  convertedConditions[0],
@@ -492,28 +492,28 @@ func (o *Optimizer) convertToPlan(ctx context.Context, logicalPlan LogicalPlan, 
 			return nil, err
 		}
 		// 转换aggFuncs到types.AggregationItem
-	aggFuncs := p.GetAggFuncs()
-	convertedAggFuncs := make([]*types.AggregationItem, len(aggFuncs))
-	for i, agg := range aggFuncs {
-		convertedAggFuncs[i] = &types.AggregationItem{
-			Type:     types.AggregationType(agg.Type),
-			Expr:     convertToTypesExpr(agg.Expr),
-			Alias:    agg.Alias,
-			Distinct: agg.Distinct,
+		aggFuncs := p.GetAggFuncs()
+		convertedAggFuncs := make([]*types.AggregationItem, len(aggFuncs))
+		for i, agg := range aggFuncs {
+			convertedAggFuncs[i] = &types.AggregationItem{
+				Type:     types.AggregationType(agg.Type),
+				Expr:     convertToTypesExpr(agg.Expr),
+				Alias:    agg.Alias,
+				Distinct: agg.Distinct,
+			}
 		}
-	}
 
-	return &plan.Plan{
-		ID:   fmt.Sprintf("agg_%d", len(p.GetGroupByCols())),
-		Type: plan.TypeAggregate,
-		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
-		Config: &plan.AggregateConfig{
-			AggFuncs:   convertedAggFuncs,
-			GroupByCols: p.GetGroupByCols(),
-		},
-	}, nil
-default:
+		return &plan.Plan{
+			ID:           fmt.Sprintf("agg_%d", len(p.GetGroupByCols())),
+			Type:         plan.TypeAggregate,
+			OutputSchema: child.OutputSchema,
+			Children:     []*plan.Plan{child},
+			Config: &plan.AggregateConfig{
+				AggFuncs:    convertedAggFuncs,
+				GroupByCols: p.GetGroupByCols(),
+			},
+		}, nil
+	default:
 		return nil, fmt.Errorf("unsupported logical plan type: %T", p)
 	}
 }
@@ -528,5 +528,3 @@ func convertToTypesLimitInfo(limitInfo *LimitInfo) *types.LimitInfo {
 		Offset: limitInfo.Offset,
 	}
 }
-
-

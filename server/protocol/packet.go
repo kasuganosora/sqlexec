@@ -17,8 +17,8 @@ const NULLValueMarker = "___SQL_EXEC_NULL___"
 type Packet struct {
 	PayloadLength uint32 `mysql:"int<3>"`
 	SequenceID    uint8  `mysql:"int<1>"`
-	rawData      []byte // 保存原始数据
-	Payload      []byte // 保存载荷数据
+	rawData       []byte // 保存原始数据
+	Payload       []byte // 保存载荷数据
 }
 
 func (p *Packet) Unmarshal(r io.Reader) (err error) {
@@ -236,14 +236,14 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 	}
 	// 使用Payload中的数据创建reader，统一使用bufio.Reader
 	reader := bufio.NewReader(bytes.NewReader(p.Payload))
-	
+
 	// 辅助函数：读取指定字节数
 	readBytes := func(n int) ([]byte, error) {
 		buf := make([]byte, n)
 		_, err := io.ReadFull(reader, buf)
 		return buf, err
 	}
-	
+
 	// 1. ClientCapabilities (2字节)
 	buf, _ := readBytes(2)
 	p.ClientCapabilities = binary.LittleEndian.Uint16(buf)
@@ -932,7 +932,7 @@ type FieldMeta struct {
 	Decimals                  uint8   `mysql:"int<1>"`
 	Reserved                  string  `mysql:"string<2>"`
 	DefaultValue              *string `mysql:"string<lenenc>,omitempty"` // 如果为 NULL 这个为 0xFB
-	ExtendedMetadata          string  `mysql:"string<lenenc>,optional"` // MariaDB扩展元数据（如'point', 'json'）
+	ExtendedMetadata          string  `mysql:"string<lenenc>,optional"`  // MariaDB扩展元数据（如'point', 'json'）
 }
 
 type ComPacket struct {
@@ -957,7 +957,7 @@ func (p *ComInitDBPacket) Unmarshal(r io.Reader) (err error) {
 	if len(p.Packet.Payload) > 1 {
 		// 跳过第一个字节（命令字节）
 		schemaBytes := p.Packet.Payload[1:]
-		
+
 		// 检查是否有 null 终止符
 		if nullIndex := bytes.IndexByte(schemaBytes, 0); nullIndex >= 0 {
 			// 找到 null 终止符，取前面的部分
@@ -1021,7 +1021,7 @@ func (p *ComSetOptionPacket) Marshal() ([]byte, error) {
 type ColumnCountPacket struct {
 	Packet
 	ColumnCount     uint64 `mysql:"int<lenenc>"`
-	MetadataFollows *uint8  `mysql:"int<1>,omitempty"` // MARIADB_CLIENT_CACHE_METADATA能力
+	MetadataFollows *uint8 `mysql:"int<1>,omitempty"` // MARIADB_CLIENT_CACHE_METADATA能力
 }
 
 func (p *ColumnCountPacket) Unmarshal(r io.Reader, capabilities uint32) error {
@@ -1115,30 +1115,30 @@ func (p *FieldMetaPacket) Unmarshal(r io.Reader, capabilities uint32) error {
 
 	// 读取扩展元数据（如果支持）
 	if capabilities&MARIADB_CLIENT_EXTENDED_METADATA != 0 {
-	// 检查是否有扩展元数据
-	peekBytes, err := reader.Peek(1)
-	if err == nil && len(peekBytes) > 0 {
-		// 扩展元数据格式: int<1> data_type + string value
-		for {
-			// 读取数据类型
-			_, err := reader.ReadByte()
-			if err != nil {
-				break
-			}
+		// 检查是否有扩展元数据
+		peekBytes, err := reader.Peek(1)
+		if err == nil && len(peekBytes) > 0 {
+			// 扩展元数据格式: int<1> data_type + string value
+			for {
+				// 读取数据类型
+				_, err := reader.ReadByte()
+				if err != nil {
+					break
+				}
 
-			// 读取值
-			value, err := ReadStringByLenencFromReader[uint8](reader)
-			if err != nil {
-				break
-			}
+				// 读取值
+				value, err := ReadStringByLenencFromReader[uint8](reader)
+				if err != nil {
+					break
+				}
 
-			// 0x00: type, 0x01: format
-			// 这里简单存储扩展元数据,实际使用时可能需要更详细的解析
-			if p.ExtendedMetadata == "" {
-				p.ExtendedMetadata = value
+				// 0x00: type, 0x01: format
+				// 这里简单存储扩展元数据,实际使用时可能需要更详细的解析
+				if p.ExtendedMetadata == "" {
+					p.ExtendedMetadata = value
+				}
 			}
 		}
-	}
 	}
 
 	// 读取默认值（可选）
@@ -1482,7 +1482,7 @@ func (p *ComStmtExecutePacket) Unmarshal(r io.Reader) error {
 			// 第n列对应位位置为 (n + 2)
 			byteIdx := (i + 2) / 8
 			bitIdx := uint((i + 2) % 8)
-			isNull := (len(p.NullBitmap) > byteIdx) && (p.NullBitmap[byteIdx] & (1 << bitIdx)) != 0
+			isNull := (len(p.NullBitmap) > byteIdx) && (p.NullBitmap[byteIdx]&(1<<bitIdx)) != 0
 
 			if isNull {
 				p.ParamValues = append(p.ParamValues, nil)
@@ -1622,7 +1622,7 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 			// 第n列对应位位置为 (n + 2)
 			byteIdx := (i + 2) / 8
 			bitIdx := uint((i + 2) % 8)
-			if len(p.NullBitmap) > byteIdx && (p.NullBitmap[byteIdx] & (1 << bitIdx)) != 0 {
+			if len(p.NullBitmap) > byteIdx && (p.NullBitmap[byteIdx]&(1<<bitIdx)) != 0 {
 				continue
 			}
 
@@ -1696,13 +1696,13 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 // https://mariadb.com/docs/server/reference/clientserver-protocol/3-binary-protocol-prepared-statements/com_stmt_prepare
 type StmtPrepareResponsePacket struct {
 	Packet
-	StatementID   uint32    `mysql:"int<4>"`
-	ColumnCount   uint16    `mysql:"int<2>"`
-	ParamCount    uint16    `mysql:"int<2>"`
-	Reserved      uint8     `mysql:"int<1>"`
-	WarningCount  uint16    `mysql:"int<2>"`
-	Params        []FieldMeta `mysql:"array,omitempty"` // 参数元数据
-	Columns       []FieldMeta `mysql:"array,omitempty"` // 列元数据
+	StatementID  uint32      `mysql:"int<4>"`
+	ColumnCount  uint16      `mysql:"int<2>"`
+	ParamCount   uint16      `mysql:"int<2>"`
+	Reserved     uint8       `mysql:"int<1>"`
+	WarningCount uint16      `mysql:"int<2>"`
+	Params       []FieldMeta `mysql:"array,omitempty"` // 参数元数据
+	Columns      []FieldMeta `mysql:"array,omitempty"` // 列元数据
 }
 
 func (p *StmtPrepareResponsePacket) Unmarshal(r io.Reader) error {
@@ -1821,7 +1821,7 @@ func (p *StmtPrepareResponsePacket) Marshal() ([]byte, error) {
 	// 写入参数结束包（如果存在参数）
 	if p.ParamCount > 0 {
 		eofBuf := new(bytes.Buffer)
-		eofBuf.WriteByte(0x00) // OK header
+		eofBuf.WriteByte(0x00)       // OK header
 		WriteLenencNumber(eofBuf, 0) // affected rows
 		WriteLenencNumber(eofBuf, 0) // last insert id
 		WriteNumber(eofBuf, 0, 2)    // status flags
@@ -1849,7 +1849,7 @@ func (p *StmtPrepareResponsePacket) Marshal() ([]byte, error) {
 	// 写入列结束包（如果存在列）
 	if p.ColumnCount > 0 {
 		eofBuf := new(bytes.Buffer)
-		eofBuf.WriteByte(0x00) // OK header
+		eofBuf.WriteByte(0x00)       // OK header
 		WriteLenencNumber(eofBuf, 0) // affected rows
 		WriteLenencNumber(eofBuf, 0) // last insert id
 		WriteNumber(eofBuf, 0, 2)    // status flags
@@ -1874,13 +1874,13 @@ func (p *StmtPrepareResponsePacket) Marshal() ([]byte, error) {
 // https://mariadb.com/docs/server/reference/clientserver-protocol/3-binary-protocol-prepared-statements/com_stmt_execute
 type BinaryResultSetPacket struct {
 	Packet
-	ColumnCount     uint64      `mysql:"int<lenenc>,omitempty"`
-	FieldsMeta      []FieldMeta `mysql:"array,omitempty"`
-	EofFieldsMeta   EofInPacket `mysql:"object,omitempty"`
-	RowData         []*BinaryRowDataPacket `mysql:"array,omitempty"`
-	Error           *ErrorInPacket `mysql:"object,omitempty"`
-	Ok              *OkInPacket    `mysql:"object,omitempty"`
-	Eof             *EofInPacket   `mysql:"object,omitempty"`
+	ColumnCount   uint64                 `mysql:"int<lenenc>,omitempty"`
+	FieldsMeta    []FieldMeta            `mysql:"array,omitempty"`
+	EofFieldsMeta EofInPacket            `mysql:"object,omitempty"`
+	RowData       []*BinaryRowDataPacket `mysql:"array,omitempty"`
+	Error         *ErrorInPacket         `mysql:"object,omitempty"`
+	Ok            *OkInPacket            `mysql:"object,omitempty"`
+	Eof           *EofInPacket           `mysql:"object,omitempty"`
 }
 
 // BinaryRowDataPacket - 二进制格式数据行包
@@ -1888,7 +1888,7 @@ type BinaryResultSetPacket struct {
 type BinaryRowDataPacket struct {
 	Packet
 	NullBitmap []byte // NULL值位图
-	Values     []any   // 列值
+	Values     []any  // 列值
 }
 
 // UnmarshalBinaryRowData 解析二进制格式的行数据
@@ -1897,7 +1897,7 @@ type BinaryRowDataPacket struct {
 func (p *BinaryRowDataPacket) Unmarshal(r io.Reader, columnCount uint64, columnTypes []uint8) error {
 	// 注意：调用此函数时，reader 应该已经去掉了MySQL协议包头（4字节）
 	// 所以这里直接从 reader 读取数据，而不是调用 p.Packet.Unmarshal
-	
+
 	// 从 reader 中读取所有数据到 Payload
 	var err error
 	p.Payload, err = io.ReadAll(r)
@@ -1938,11 +1938,11 @@ func (p *BinaryRowDataPacket) Unmarshal(r io.Reader, columnCount uint64, columnT
 		// 第n列对应位位置为 (n + 2)
 		byteIdx := (i + 2) / 8
 		bitIdx := (i + 2) % 8
-		if (len(p.NullBitmap) > int(byteIdx)) && (p.NullBitmap[byteIdx] & (1 << bitIdx)) != 0 {
+		if (len(p.NullBitmap) > int(byteIdx)) && (p.NullBitmap[byteIdx]&(1<<bitIdx)) != 0 {
 			p.Values = append(p.Values, nil)
 			continue
 		}
-		
+
 		// 根据列类型读取值
 		if i < uint64(len(columnTypes)) {
 			value, err := p.readValueByType(reader, columnTypes[i])
@@ -1956,7 +1956,7 @@ func (p *BinaryRowDataPacket) Unmarshal(r io.Reader, columnCount uint64, columnT
 			p.Values = append(p.Values, strValue)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1969,28 +1969,28 @@ func (p *BinaryRowDataPacket) readValueByType(reader *bufio.Reader, columnType u
 			return nil, err
 		}
 		return int8(val), nil
-		
+
 	case 0x02: // MYSQL_TYPE_SHORT
 		val, err := ReadNumber[uint16](reader, 2)
 		if err != nil {
 			return nil, err
 		}
 		return int16(val), nil
-		
+
 	case 0x03: // MYSQL_TYPE_LONG
 		val, err := ReadNumber[uint32](reader, 4)
 		if err != nil {
 			return nil, err
 		}
 		return int32(val), nil
-		
+
 	case 0x08: // MYSQL_TYPE_LONGLONG
 		val, err := ReadNumber[uint64](reader, 8)
 		if err != nil {
 			return nil, err
 		}
 		return int64(val), nil
-		
+
 	case 0x04: // MYSQL_TYPE_FLOAT
 		var val float32
 		err := binary.Read(reader, binary.LittleEndian, &val)
@@ -1998,7 +1998,7 @@ func (p *BinaryRowDataPacket) readValueByType(reader *bufio.Reader, columnType u
 			return nil, err
 		}
 		return val, nil
-		
+
 	case 0x05: // MYSQL_TYPE_DOUBLE
 		var val float64
 		err := binary.Read(reader, binary.LittleEndian, &val)
@@ -2006,16 +2006,16 @@ func (p *BinaryRowDataPacket) readValueByType(reader *bufio.Reader, columnType u
 			return nil, err
 		}
 		return val, nil
-		
+
 	case 0x06: // MYSQL_TYPE_DATE, MYSQL_TYPE_NEWDATE
 		return p.readBinaryDate(reader)
-		
+
 	case 0x07: // MYSQL_TYPE_TIME
 		return p.readBinaryTime(reader)
-		
+
 	case 0x0c: // MYSQL_TYPE_DATETIME
 		return p.readBinaryDateTime(reader)
-		
+
 	case 0x0f: // MYSQL_TYPE_VARCHAR
 		return ReadStringByLenencFromReader[uint8](reader)
 
@@ -2056,7 +2056,7 @@ func (p *BinaryRowDataPacket) readValueByType(reader *bufio.Reader, columnType u
 		// 需要根据字段长度判断是SET还是BIT
 		// 简化处理:先尝试作为BIT
 		return p.readBinaryBit(reader)
-		
+
 	default:
 		// 默认作为字符串处理
 		return ReadStringByLenencFromReader[uint8](reader)
@@ -2069,15 +2069,15 @@ func (p *BinaryRowDataPacket) readBinaryDate(reader *bufio.Reader) (string, erro
 	if err != nil {
 		return "", err
 	}
-	
+
 	if length == 0 {
 		return "0000-00-00", nil
 	}
-	
+
 	year, _ := ReadNumber[uint16](reader, 2)
 	month, _ := reader.ReadByte()
 	day, _ := reader.ReadByte()
-	
+
 	return fmt.Sprintf("%04d-%02d-%02d", year, month, day), nil
 }
 
@@ -2146,23 +2146,23 @@ func (p *BinaryRowDataPacket) readBinaryDateTime2(reader *bufio.Reader) (string,
 	if err != nil {
 		return "", err
 	}
-	
+
 	if length == 0 {
 		return "0000-00-00 00:00:00", nil
 	}
-	
+
 	year, _ := ReadNumber[uint16](reader, 2)
 	month, _ := reader.ReadByte()
 	day, _ := reader.ReadByte()
 	hours, _ := reader.ReadByte()
 	minutes, _ := reader.ReadByte()
 	seconds, _ := reader.ReadByte()
-	
+
 	var microseconds uint32
 	if length > 7 {
 		microseconds, _ = ReadNumber[uint32](reader, 4)
 	}
-	
+
 	if microseconds > 0 {
 		return fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d.%06d", year, month, day, hours, minutes, seconds, microseconds), nil
 	}
@@ -2175,17 +2175,17 @@ func (p *BinaryRowDataPacket) readBinaryTime2(reader *bufio.Reader) (string, err
 	if err != nil {
 		return "", err
 	}
-	
+
 	if length == 0 {
 		return "00:00:00", nil
 	}
-	
+
 	neg, _ := reader.ReadByte()
 	days, _ := ReadNumber[uint32](reader, 4)
 	hours, _ := reader.ReadByte()
 	minutes, _ := reader.ReadByte()
 	seconds, _ := reader.ReadByte()
-	
+
 	var microseconds uint32
 	if length > 8 {
 		microseconds, _ = ReadNumber[uint32](reader, 4)
@@ -2206,7 +2206,7 @@ func (p *BinaryRowDataPacket) readBinaryTimestamp(reader *bufio.Reader) (string,
 	if err != nil {
 		return "", err
 	}
-	
+
 	// 简单返回时间戳值，实际应用中可以转换为可读格式
 	return fmt.Sprintf("%d", val), nil
 }
@@ -2226,7 +2226,7 @@ func (p *BinaryRowDataPacket) readBinaryBlob(reader *bufio.Reader, lengthBytes i
 		data := make([]byte, length)
 		_, err = io.ReadFull(reader, data)
 		return data, err
-		
+
 	case 3:
 		lengthBytesData := make([]byte, 3)
 		_, readErr := io.ReadFull(reader, lengthBytesData)
@@ -2241,7 +2241,7 @@ func (p *BinaryRowDataPacket) readBinaryBlob(reader *bufio.Reader, lengthBytes i
 		data := make([]byte, length)
 		_, readErr = io.ReadFull(reader, data)
 		return data, readErr
-		
+
 	case 4:
 		length, err := ReadNumber[uint32](reader, 4)
 		if err != nil {
@@ -2250,7 +2250,7 @@ func (p *BinaryRowDataPacket) readBinaryBlob(reader *bufio.Reader, lengthBytes i
 		data := make([]byte, length)
 		_, err = io.ReadFull(reader, data)
 		return data, err
-		
+
 	default:
 		return nil, fmt.Errorf("unsupported blob length bytes: %d", lengthBytes)
 	}
@@ -2291,10 +2291,10 @@ func (p *BinaryRowDataPacket) readBinaryBit(reader *bufio.Reader) (string, error
 // Marshal 序列化二进制行数据
 func (p *BinaryRowDataPacket) Marshal(columnCount uint64, columnTypes []uint8) ([]byte, error) {
 	buf := new(bytes.Buffer)
-	
+
 	// 1. 写入包头（0x00）
 	buf.WriteByte(0x00)
-	
+
 	// 2. 写入NULL位图 (MySQL protocol: NULL bitmap has columnCount+2 bits, first 2 reserved)
 	nullBitmapSize := (columnCount + 2 + 7) / 8
 	nullBitmap := make([]byte, nullBitmapSize)
@@ -2308,13 +2308,13 @@ func (p *BinaryRowDataPacket) Marshal(columnCount uint64, columnTypes []uint8) (
 		}
 	}
 	buf.Write(nullBitmap)
-	
+
 	// 3. 写入列值
 	for i, value := range p.Values {
 		if value == nil {
 			continue
 		}
-		
+
 		if i < len(columnTypes) {
 			err := p.writeValueByType(buf, value, columnTypes[i])
 			if err != nil {
@@ -2327,7 +2327,7 @@ func (p *BinaryRowDataPacket) Marshal(columnCount uint64, columnTypes []uint8) (
 			}
 		}
 	}
-	
+
 	// 只返回 Payload，不包含包头
 	return buf.Bytes(), nil
 }
@@ -2339,37 +2339,37 @@ func (p *BinaryRowDataPacket) writeValueByType(buf *bytes.Buffer, value any, col
 		if val, ok := value.(int8); ok {
 			buf.WriteByte(byte(val))
 		}
-		
+
 	case 0x02: // MYSQL_TYPE_SHORT
 		if val, ok := value.(int16); ok {
 			binary.Write(buf, binary.LittleEndian, val)
 		}
-		
+
 	case 0x03: // MYSQL_TYPE_LONG
 		if val, ok := value.(int32); ok {
 			binary.Write(buf, binary.LittleEndian, val)
 		}
-		
+
 	case 0x08: // MYSQL_TYPE_LONGLONG
 		if val, ok := value.(int64); ok {
 			binary.Write(buf, binary.LittleEndian, val)
 		}
-		
+
 	case 0x04: // MYSQL_TYPE_FLOAT
 		if val, ok := value.(float32); ok {
 			binary.Write(buf, binary.LittleEndian, val)
 		}
-		
+
 	case 0x05: // MYSQL_TYPE_DOUBLE
 		if val, ok := value.(float64); ok {
 			binary.Write(buf, binary.LittleEndian, val)
 		}
-		
+
 	case 0x0f, 0xfd, 0xfe: // VARCHAR, VAR_STRING, STRING
 		if val, ok := value.(string); ok {
 			WriteStringByLenenc(buf, val)
 		}
-		
+
 	default:
 		// 默认作为字符串处理
 		if val, ok := value.(string); ok {
@@ -3246,7 +3246,7 @@ func (p *ComErrorPacket) Marshal() ([]byte, error) {
 // https://mariadb.com/docs/server/reference/clientserver-protocol/4-server-response-packets/packet_local_infile
 type LocalInfilePacket struct {
 	Packet
-	Header   uint8  `mysql:"int<1>"` // 固定值 0xFB
+	Header   uint8  `mysql:"int<1>"`      // 固定值 0xFB
 	Filename string `mysql:"string<NUL>"` // 服务器要求客户端发送的文件路径
 }
 
@@ -3287,11 +3287,11 @@ func (p *LocalInfilePacket) Marshal() ([]byte, error) {
 // 当Error Code == 0xFFFF时，ERR_Packet变为进度报告
 type ProgressReportPacket struct {
 	Packet
-	Header    uint8  `mysql:"int<1>"`   // 固定值 0xFF
-	ErrorCode uint16 `mysql:"int<2>"`   // 0xFFFF 表示进度报告
-	Stage     uint8  `mysql:"int<1>"`   // 当前阶段
-	MaxStage  uint8  `mysql:"int<1>"`   // 最大阶段数
-	Progress  uint32 `mysql:"int<3>"`   // 进度值
+	Header    uint8  `mysql:"int<1>"`      // 固定值 0xFF
+	ErrorCode uint16 `mysql:"int<2>"`      // 0xFFFF 表示进度报告
+	Stage     uint8  `mysql:"int<1>"`      // 当前阶段
+	MaxStage  uint8  `mysql:"int<1>"`      // 最大阶段数
+	Progress  uint32 `mysql:"int<3>"`      // 进度值
 	Info      string `mysql:"string<NUL>"` // 进度信息
 }
 
@@ -3314,7 +3314,7 @@ func (p *ProgressReportPacket) Unmarshal(r io.Reader) error {
 	p.MaxStage, _ = ReadNumber[uint8](reader, 1)
 	p.Progress, _ = ReadNumber[uint32](reader, 4)
 	p.Info, _ = ReadStringByNullEndFromReader(reader)
-	
+
 	return nil
 }
 

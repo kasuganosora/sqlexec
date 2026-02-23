@@ -4,9 +4,9 @@ import (
 	"context"
 	"net"
 
+	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 	"github.com/kasuganosora/sqlexec/pkg/utils"
 	"github.com/kasuganosora/sqlexec/server/protocol"
-	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 )
 
 // Logger 日志接口（支持 Mock）
@@ -65,11 +65,11 @@ type DBAccessor interface {
 // NewHandlerContext 创建处理器上下文
 func NewHandlerContext(sess *pkg_session.Session, conn net.Conn, command uint8, logger Logger, auditLogger AuditLogger) *HandlerContext {
 	return &HandlerContext{
-		Session:      sess,
-		Connection:   conn,
-		Command:      command,
-		Logger:       logger,
-		AuditLogger:  auditLogger,
+		Session:     sess,
+		Connection:  conn,
+		Command:     command,
+		Logger:      logger,
+		AuditLogger: auditLogger,
 	}
 }
 

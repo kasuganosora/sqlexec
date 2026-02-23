@@ -28,13 +28,13 @@ func TestBackupFull(t *testing.T) {
 	// Test data
 	testData := map[string]interface{}{
 		"users": []interface{}{
-				map[string]string{"name": "John", "email": "john@example.com"},
-				map[string]string{"name": "Jane", "email": "jane@example.com"},
-			},
+			map[string]string{"name": "John", "email": "john@example.com"},
+			map[string]string{"name": "Jane", "email": "jane@example.com"},
+		},
 		"metadata": map[string]interface{}{
-				"version":  "1.0",
-				"backup_date": "2026-01-28",
-			},
+			"version":     "1.0",
+			"backup_date": "2026-01-28",
+		},
 	}
 
 	backupID, err := bm.Backup(BackupTypeFull, []string{"users", "metadata"}, testData)

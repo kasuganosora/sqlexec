@@ -8,9 +8,9 @@ import (
 
 // MockACLManager is a mock implementation of ACLManager for testing
 type MockACLManager struct {
-	users     []*MockUser
-	mu        sync.RWMutex
-	isLoaded   bool
+	users    []*MockUser
+	mu       sync.RWMutex
+	isLoaded bool
 }
 
 // MockUser is a mock user for testing
@@ -24,7 +24,7 @@ type MockUser struct {
 // NewMockACLManager creates a new mock ACL manager
 func NewMockACLManager() *MockACLManager {
 	return &MockACLManager{
-		users:   make([]*MockUser, 0),
+		users:    make([]*MockUser, 0),
 		isLoaded: true,
 	}
 }

@@ -156,20 +156,20 @@ func TestAdaptersExist(t *testing.T) {
 	container := NewContainer(dataSource)
 
 	tests := []struct {
-		name        string
-		adapter     interface{}
+		name    string
+		adapter interface{}
 	}{
 		{
-			name:        "costCardinalityAdapter",
-			adapter:     &costCardinalityAdapter{estimator: container.MustGet("estimator.enhanced")},
+			name:    "costCardinalityAdapter",
+			adapter: &costCardinalityAdapter{estimator: container.MustGet("estimator.enhanced")},
 		},
 		{
-			name:        "joinCostAdapter",
-			adapter:     &joinCostAdapter{costModel: container.MustGet("cost.model.adaptive")},
+			name:    "joinCostAdapter",
+			adapter: &joinCostAdapter{costModel: container.MustGet("cost.model.adaptive")},
 		},
 		{
-			name:        "joinCardinalityAdapter",
-			adapter:     &joinCardinalityAdapter{estimator: container.MustGet("estimator.enhanced")},
+			name:    "joinCardinalityAdapter",
+			adapter: &joinCardinalityAdapter{estimator: container.MustGet("estimator.enhanced")},
 		},
 	}
 

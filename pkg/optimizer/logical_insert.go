@@ -9,11 +9,11 @@ import (
 
 // LogicalInsert 逻辑插入计划
 type LogicalInsert struct {
-	TableName    string
-	Columns      []string              // 指定列（为空时使用表的所有列）
-	Values       [][]parser.Expression // 要插入的值（表达式）
-	OnDuplicate  *LogicalUpdate        // ON DUPLICATE KEY UPDATE
-	children     []LogicalPlan         // 子节点（INSERT ... SELECT）
+	TableName   string
+	Columns     []string              // 指定列（为空时使用表的所有列）
+	Values      [][]parser.Expression // 要插入的值（表达式）
+	OnDuplicate *LogicalUpdate        // ON DUPLICATE KEY UPDATE
+	children    []LogicalPlan         // 子节点（INSERT ... SELECT）
 }
 
 // NewLogicalInsert 创建逻辑插入计划
@@ -66,7 +66,7 @@ func (p *LogicalInsert) Schema() []ColumnInfo {
 func (p *LogicalInsert) Explain() string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Insert(%s", p.TableName))
-	
+
 	if len(p.Columns) > 0 {
 		sb.WriteString("(")
 		for i, col := range p.Columns {
@@ -77,19 +77,19 @@ func (p *LogicalInsert) Explain() string {
 		}
 		sb.WriteString(")")
 	}
-	
+
 	if len(p.Values) > 0 {
 		sb.WriteString(fmt.Sprintf(" - %d rows", len(p.Values)))
 	}
-	
+
 	if len(p.children) > 0 {
 		sb.WriteString(" - SELECT")
 	}
-	
+
 	if p.OnDuplicate != nil {
 		sb.WriteString(" ON DUPLICATE KEY UPDATE")
 	}
-	
+
 	sb.WriteString(")")
 	return sb.String()
 }

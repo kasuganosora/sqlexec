@@ -62,4 +62,3 @@ type Expression struct {
 	Left     *Expression
 	Right    *Expression
 }
-

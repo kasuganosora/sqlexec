@@ -129,33 +129,33 @@ func (c *defaultContainer) BuildOptimizer() interface{} {
 func (c *defaultContainer) BuildEnhancedOptimizer(parallelism int) interface{} {
 	// Use the builder pattern from optimizer package
 	// This creates an EnhancedOptimizer with dependencies from the container
-	
+
 	// Get required dependencies
 	costModel, ok := c.Get("cost.model.adaptive")
 	if !ok {
 		panic("cost.model.adaptive not found in container")
 	}
-	
+
 	indexSelector, ok := c.Get("index.selector")
 	if !ok {
 		panic("index.selector not found in container")
 	}
-	
+
 	statsCache, ok := c.Get("stats.cache.auto_refresh")
 	if !ok {
 		panic("stats.cache.auto_refresh not found in container")
 	}
-	
+
 	estimator, ok := c.Get("estimator.enhanced")
 	if !ok {
 		panic("estimator.enhanced not found in container")
 	}
-	
+
 	// Get optional dependencies
 	var dpJoinReorder interface{}
 	var bushyTree interface{}
 	var hintsParser interface{}
-	
+
 	if jr, ok := c.Get("join.reorder.dp"); ok {
 		dpJoinReorder = jr
 	}
@@ -167,35 +167,35 @@ func (c *defaultContainer) BuildEnhancedOptimizer(parallelism int) interface{} {
 	} else {
 		hintsParser = nil // Will use default
 	}
-	
+
 	// Create a map with all dependencies for the optimizer
 	// The actual EnhancedOptimizer construction is done in the optimizer package
 	// This returns a DIConfig that can be used by the optimizer builder
 	return &EnhancedOptimizerConfig{
-		DataSource:      c.dataSource,
-		Parallelism:     parallelism,
-		CostModel:       costModel,
-		IndexSelector:   indexSelector,
-		StatsCache:      statsCache,
-		Estimator:       estimator,
-		DPJoinReorder:   dpJoinReorder,
-		BushyTree:       bushyTree,
-		HintsParser:     hintsParser,
+		DataSource:    c.dataSource,
+		Parallelism:   parallelism,
+		CostModel:     costModel,
+		IndexSelector: indexSelector,
+		StatsCache:    statsCache,
+		Estimator:     estimator,
+		DPJoinReorder: dpJoinReorder,
+		BushyTree:     bushyTree,
+		HintsParser:   hintsParser,
 	}
 }
 
 // EnhancedOptimizerConfig holds the configuration for building an EnhancedOptimizer
 // This is used to pass dependencies from the container to the optimizer package
 type EnhancedOptimizerConfig struct {
-	DataSource      domain.DataSource
-	Parallelism     int
-	CostModel       interface{}
-	IndexSelector   interface{}
-	StatsCache      interface{}
-	Estimator       interface{}
-	DPJoinReorder   interface{}
-	BushyTree       interface{}
-	HintsParser     interface{}
+	DataSource    domain.DataSource
+	Parallelism   int
+	CostModel     interface{}
+	IndexSelector interface{}
+	StatsCache    interface{}
+	Estimator     interface{}
+	DPJoinReorder interface{}
+	BushyTree     interface{}
+	HintsParser   interface{}
 }
 
 // BuildExecutor builds a plan executor using services from the container.
@@ -244,7 +244,9 @@ func (a *costCardinalityAdapter) EstimateTableScan(tableName string) int64 {
 }
 
 func (a *costCardinalityAdapter) EstimateFilter(tableName string, filters []domain.Filter) int64 {
-	if est, ok := a.estimator.(interface{ EstimateFilter(string, []domain.Filter) int64 }); ok {
+	if est, ok := a.estimator.(interface {
+		EstimateFilter(string, []domain.Filter) int64
+	}); ok {
 		return est.EstimateFilter(tableName, filters)
 	}
 	return 1000 // default
@@ -255,7 +257,9 @@ type joinCostAdapter struct {
 }
 
 func (a *joinCostAdapter) ScanCost(tableName string, rowCount int64, useIndex bool) float64 {
-	if cm, ok := a.costModel.(interface{ ScanCost(string, int64, bool) float64 }); ok {
+	if cm, ok := a.costModel.(interface {
+		ScanCost(string, int64, bool) float64
+	}); ok {
 		return cm.ScanCost(tableName, rowCount, useIndex)
 	}
 	return 0.0

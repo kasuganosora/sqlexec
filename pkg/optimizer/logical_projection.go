@@ -10,7 +10,7 @@ import (
 
 // LogicalProjection 逻辑投影
 type LogicalProjection struct {
-	Exprs        []*parser.Expression
+	Exprs         []*parser.Expression
 	columnAliases []string
 	Columns       []ColumnInfo
 	children      []LogicalPlan
@@ -39,8 +39,8 @@ func NewLogicalProjection(exprs []*parser.Expression, aliases []string, child Lo
 	}
 
 	return &LogicalProjection{
-		Exprs:        exprs,
-		columnAliases:  aliases,
+		Exprs:         exprs,
+		columnAliases: aliases,
 		Columns:       columns,
 		children:      []LogicalPlan{child},
 	}

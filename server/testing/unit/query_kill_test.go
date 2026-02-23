@@ -328,8 +328,8 @@ func TestServer_KillNonExistentQuery(t *testing.T) {
 func TestServer_SessionThreadIDAssociation(t *testing.T) {
 	// 测试Session的ThreadID设置
 	tests := []struct {
-		name      string
-		threadID  uint32
+		name     string
+		threadID uint32
 	}{
 		{"ThreadID=1", 1},
 		{"ThreadID=100", 100},
@@ -504,8 +504,8 @@ func cleanupTestQuery(t *testing.T, threadID uint32) {
 // TestServer_ComProcessKillPacket 测试COM_PROCESS_KILL包序列化
 func TestServer_ComProcessKillPacket(t *testing.T) {
 	tests := []struct {
-		name      string
-		threadID  uint32
+		name     string
+		threadID uint32
 	}{
 		{
 			name:     "ThreadID=1",

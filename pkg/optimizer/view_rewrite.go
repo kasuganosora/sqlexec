@@ -176,7 +176,7 @@ func (vr *ViewRewriter) mapColumnsByViewDefinition(outerCols []parser.SelectColu
 					Name:  viewColName,
 					Alias: outerCol.Alias,
 					Table: outerCol.Table,
-					Expr:  &parser.Expression{
+					Expr: &parser.Expression{
 						Type:   parser.ExprTypeColumn,
 						Column: viewColName,
 					},
@@ -322,4 +322,3 @@ func IsUpdatable(viewInfo *domain.ViewInfo) bool {
 
 	return true
 }
-

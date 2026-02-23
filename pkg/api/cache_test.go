@@ -188,7 +188,7 @@ func TestQueryCache_Stats(t *testing.T) {
 
 	// Get once (should be a cache hit)
 	cache.Get("SELECT * FROM users", nil)
-	
+
 	// Get again (another cache hit)
 	cache.Get("SELECT * FROM users", nil)
 
@@ -285,6 +285,96 @@ func TestCacheConfig(t *testing.T) {
 	assert.True(t, config.Enabled)
 	assert.Equal(t, 600*time.Second, config.TTL)
 	assert.Equal(t, 1000, config.MaxSize)
+}
+
+func TestQueryCache_MemoryLimit(t *testing.T) {
+	// Use a very small memory limit (1 KB) to force memory-based eviction
+	cache := NewQueryCache(CacheConfig{
+		Enabled:     true,
+		TTL:         300 * time.Second,
+		MaxSize:     1000, // high entry limit
+		MaxMemoryMB: 0,    // will set maxMemBytes directly below
+	})
+	cache.maxMemBytes = 1024 // 1 KB
+
+	// Insert rows that are ~200+ bytes each
+	for i := 0; i < 20; i++ {
+		result := &domain.QueryResult{
+			Columns: []domain.ColumnInfo{{Name: "data", Type: "string"}},
+			Rows:    []domain.Row{{"data": "this is a moderately long string value for testing memory limits in the cache"}},
+			Total:   1,
+		}
+		cache.Set("SELECT * FROM t WHERE id = ?", []interface{}{i}, result)
+	}
+
+	stats := cache.Stats()
+	// Memory should be tracked and stay under the limit
+	assert.Greater(t, stats.MemoryBytes, int64(0), "memory should be tracked")
+	assert.LessOrEqual(t, stats.MemoryBytes, int64(1024)+500, "memory should be near the limit")
+	// Should have fewer entries than 20 due to memory eviction
+	assert.Less(t, stats.Size, 20, "entries should be evicted due to memory limit")
+}
+
+func TestQueryCache_MemoryTracking_ClearResets(t *testing.T) {
+	cache := NewQueryCache(CacheConfig{
+		Enabled:     true,
+		TTL:         300 * time.Second,
+		MaxSize:     100,
+		MaxMemoryMB: 256,
+	})
+
+	result := &domain.QueryResult{
+		Columns: []domain.ColumnInfo{{Name: "id", Type: "int64"}},
+		Rows:    []domain.Row{{"id": int64(1)}, {"id": int64(2)}},
+		Total:   2,
+	}
+	cache.Set("SELECT * FROM users", nil, result)
+
+	stats := cache.Stats()
+	assert.Greater(t, stats.MemoryBytes, int64(0))
+
+	cache.Clear()
+
+	stats = cache.Stats()
+	assert.Equal(t, int64(0), stats.MemoryBytes, "Clear should reset memory tracking")
+	assert.Equal(t, 0, stats.Size)
+}
+
+func TestEstimateResultSize(t *testing.T) {
+	// nil result
+	assert.Equal(t, int64(0), estimateResultSize(nil))
+
+	// empty result
+	size := estimateResultSize(&domain.QueryResult{})
+	assert.Greater(t, size, int64(0), "even empty result has base overhead")
+
+	// result with rows
+	small := &domain.QueryResult{
+		Columns: []domain.ColumnInfo{{Name: "id", Type: "int64"}},
+		Rows:    []domain.Row{{"id": int64(1)}},
+	}
+	large := &domain.QueryResult{
+		Columns: []domain.ColumnInfo{{Name: "id", Type: "int64"}, {Name: "name", Type: "string"}},
+		Rows: []domain.Row{
+			{"id": int64(1), "name": "Alice"},
+			{"id": int64(2), "name": "Bob"},
+			{"id": int64(3), "name": "Charlie"},
+		},
+	}
+	assert.Greater(t, estimateResultSize(large), estimateResultSize(small),
+		"larger result should have larger estimated size")
+}
+
+func TestEstimateValueSize(t *testing.T) {
+	assert.Equal(t, int64(8), estimateValueSize(nil))
+	assert.Equal(t, int64(8), estimateValueSize(int64(42)))
+	assert.Equal(t, int64(8), estimateValueSize(float64(3.14)))
+	assert.Equal(t, int64(8), estimateValueSize(true))
+	assert.Equal(t, int64(16), estimateValueSize(""))                // len(0) + 16
+	assert.Equal(t, int64(21), estimateValueSize("hello"))           // len(5) + 16
+	assert.Equal(t, int64(24), estimateValueSize([]byte{}))          // len(0) + 24
+	assert.Equal(t, int64(27), estimateValueSize([]byte("abc")))     // len(3) + 24
+	assert.Equal(t, int64(32), estimateValueSize(struct{ X int }{})) // unknown type
 }
 
 func ExampleQueryCache() {

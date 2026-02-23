@@ -3,10 +3,10 @@ package process
 import (
 	"fmt"
 
+	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 	"github.com/kasuganosora/sqlexec/server/handler"
 	"github.com/kasuganosora/sqlexec/server/protocol"
 	"github.com/kasuganosora/sqlexec/server/response"
-	pkg_session "github.com/kasuganosora/sqlexec/pkg/session"
 )
 
 // ProcessKillHandler PROCESS_KILL 命令处理器

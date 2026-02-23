@@ -76,9 +76,9 @@ func TestLogicalAggregate_Schema(t *testing.T) {
 	child := &MockLogicalPlan{}
 
 	tests := []struct {
-		name        string
-		aggFuncs    []*AggregationItem
-		groupByCols []string
+		name         string
+		aggFuncs     []*AggregationItem
+		groupByCols  []string
 		expectedCols int
 	}{
 		{
@@ -91,9 +91,9 @@ func TestLogicalAggregate_Schema(t *testing.T) {
 			expectedCols: 2,
 		},
 		{
-			name: "only group by columns",
-			aggFuncs: []*AggregationItem{},
-			groupByCols: []string{"department", "team"},
+			name:         "only group by columns",
+			aggFuncs:     []*AggregationItem{},
+			groupByCols:  []string{"department", "team"},
 			expectedCols: 2,
 		},
 		{
@@ -101,14 +101,14 @@ func TestLogicalAggregate_Schema(t *testing.T) {
 			aggFuncs: []*AggregationItem{
 				{Type: Count, Expr: &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"}, Alias: "count_id"},
 			},
-			groupByCols: []string{"department"},
+			groupByCols:  []string{"department"},
 			expectedCols: 2,
 		},
 		{
-			name:          "empty aggregate",
-			aggFuncs:      []*AggregationItem{},
-			groupByCols:   []string{},
-			expectedCols:  0,
+			name:         "empty aggregate",
+			aggFuncs:     []*AggregationItem{},
+			groupByCols:  []string{},
+			expectedCols: 0,
 		},
 	}
 
@@ -293,7 +293,7 @@ func TestLogicalAggregate_WithoutAliases(t *testing.T) {
 
 	// Test aggregate functions without aliases
 	aggFuncs := []*AggregationItem{
-		{Type: Count, Expr: &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"}}, // No alias
+		{Type: Count, Expr: &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"}},   // No alias
 		{Type: Sum, Expr: &parser.Expression{Type: parser.ExprTypeColumn, Column: "salary"}}, // No alias
 	}
 

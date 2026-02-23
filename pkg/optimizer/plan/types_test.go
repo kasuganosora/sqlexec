@@ -54,24 +54,24 @@ func TestPlanExplain(t *testing.T) {
 
 func TestPlanCost(t *testing.T) {
 	tests := []struct {
-		name  string
-		cost  float64
-		want  float64
+		name string
+		cost float64
+		want float64
 	}{
 		{
-			name:  "Zero cost",
-			cost:  0.0,
-			want:  0.0,
+			name: "Zero cost",
+			cost: 0.0,
+			want: 0.0,
 		},
 		{
-			name:  "Positive cost",
-			cost:  100.5,
-			want:  100.5,
+			name: "Positive cost",
+			cost: 100.5,
+			want: 100.5,
 		},
 		{
-			name:  "High cost",
-			cost:  999999.99,
-			want:  999999.99,
+			name: "High cost",
+			cost: 999999.99,
+			want: 999999.99,
 		},
 	}
 
@@ -90,9 +90,9 @@ func TestPlanCost(t *testing.T) {
 func TestPlanTypeConstants(t *testing.T) {
 	// Test that all plan type constants are defined correctly
 	tests := []struct {
-		name string
+		name     string
 		planType PlanType
-		want string
+		want     string
 	}{
 		{"TypeTableScan", TypeTableScan, "TableScan"},
 		{"TypeHashJoin", TypeHashJoin, "HashJoin"},
@@ -155,7 +155,7 @@ func TestPlanExplainWithChildren(t *testing.T) {
 		Type: TypeTableScan,
 	}
 	parentPlan.Children = []*Plan{childPlan, child2}
-	
+
 	gotMulti := parentPlan.Explain()
 	wantMulti := "HashJoin[parent_001]"
 	if gotMulti != wantMulti {

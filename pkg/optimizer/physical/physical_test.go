@@ -25,7 +25,7 @@ func TestTableScan(t *testing.T) {
 			{Name: "id", Type: "int"},
 			{Name: "name", Type: "varchar"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -73,7 +73,7 @@ func TestTableScan_SetChildren(t *testing.T) {
 
 	// TableScan should still have no children (SetChildren replaces the list)
 	children := scan.Children()
-	if len(children) != 1 {  // SetChildren replaces, not appends
+	if len(children) != 1 { // SetChildren replaces, not appends
 		t.Errorf("Expected 1 child after SetChildren, got %d", len(children))
 	}
 }
@@ -85,12 +85,12 @@ func TestSelection(t *testing.T) {
 			{Name: "id", Type: "int"},
 			{Name: "age", Type: "int"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
 	selection := &PhysicalSelection{
-		cost: 50.0,
+		cost:     50.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -123,7 +123,7 @@ func TestProjection(t *testing.T) {
 			{Name: "name", Type: "varchar"},
 			{Name: "age", Type: "int"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -132,7 +132,7 @@ func TestProjection(t *testing.T) {
 			{Name: "id", Type: "int"},
 			{Name: "name", Type: "varchar"},
 		},
-		cost: 20.0,
+		cost:     20.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -159,7 +159,7 @@ func TestJoin(t *testing.T) {
 			{Name: "id", Type: "int"},
 			{Name: "name", Type: "varchar"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -169,15 +169,15 @@ func TestJoin(t *testing.T) {
 			{Name: "order_id", Type: "int"},
 			{Name: "user_id", Type: "int"},
 		},
-		cost: 150.0,
+		cost:     150.0,
 		children: []PhysicalOperator{},
 	}
 
 	join := &PhysicalHashJoin{
-		JoinType: optimizer.InnerJoin,
+		JoinType:   optimizer.InnerJoin,
 		Conditions: []*optimizer.JoinCondition{},
-		cost: 250.0,
-		children: []PhysicalOperator{},
+		cost:       250.0,
+		children:   []PhysicalOperator{},
 	}
 
 	join.SetChildren(left, right)
@@ -208,7 +208,7 @@ func TestAggregate(t *testing.T) {
 			{Name: "category", Type: "varchar"},
 			{Name: "amount", Type: "decimal"},
 		},
-		cost: 200.0,
+		cost:     200.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -217,7 +217,7 @@ func TestAggregate(t *testing.T) {
 		AggFuncs: []*optimizer.AggregationItem{
 			{Type: optimizer.Sum, Expr: nil, Alias: "total_amount"},
 		},
-		cost: 80.0,
+		cost:     80.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -242,14 +242,14 @@ func TestLimit(t *testing.T) {
 		Columns: []optimizer.ColumnInfo{
 			{Name: "id", Type: "int"},
 		},
-		cost: 1000.0,
+		cost:     1000.0,
 		children: []PhysicalOperator{},
 	}
 
 	limit := &PhysicalLimit{
-		Limit:  10,
-		Offset: 20,
-		cost:   5.0,
+		Limit:    10,
+		Offset:   20,
+		cost:     5.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -274,7 +274,7 @@ func TestPhysicalOperatorExplain(t *testing.T) {
 		Columns: []optimizer.ColumnInfo{
 			{Name: "id", Type: "int"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -285,7 +285,7 @@ func TestPhysicalOperatorExplain(t *testing.T) {
 
 	// Test Selection Explain
 	selection := &PhysicalSelection{
-		cost: 50.0,
+		cost:     50.0,
 		children: []PhysicalOperator{},
 	}
 	selection.SetChildren(scan)
@@ -305,12 +305,12 @@ func TestOperatorChaining(t *testing.T) {
 			{Name: "name", Type: "varchar"},
 			{Name: "age", Type: "int"},
 		},
-		cost: 1000.0,
+		cost:     1000.0,
 		children: []PhysicalOperator{},
 	}
 
 	selection := &PhysicalSelection{
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 	selection.SetChildren(scan)
@@ -320,15 +320,15 @@ func TestOperatorChaining(t *testing.T) {
 			{Name: "id", Type: "int"},
 			{Name: "name", Type: "varchar"},
 		},
-		cost: 20.0,
+		cost:     20.0,
 		children: []PhysicalOperator{},
 	}
 	projection.SetChildren(selection)
 
 	limit := &PhysicalLimit{
-		Limit: 10,
-		Offset: 0,
-		cost:   5.0,
+		Limit:    10,
+		Offset:   0,
+		cost:     5.0,
 		children: []PhysicalOperator{},
 	}
 	limit.SetChildren(projection)
@@ -375,7 +375,7 @@ func TestNewPhysicalHashAggregate(t *testing.T) {
 			{Name: "category", Type: "varchar"},
 			{Name: "amount", Type: "decimal"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -482,9 +482,9 @@ func TestLimitInfo(t *testing.T) {
 
 func TestPhysicalLimit_NoChild(t *testing.T) {
 	limit := &PhysicalLimit{
-		Limit:  10,
-		Offset: 0,
-		cost:   5.0,
+		Limit:    10,
+		Offset:   0,
+		cost:     5.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -506,7 +506,7 @@ func TestNewPhysicalProjection(t *testing.T) {
 			{Name: "id", Type: "int"},
 			{Name: "name", Type: "varchar"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -576,7 +576,7 @@ func TestNewPhysicalSelection(t *testing.T) {
 			{Name: "id", Type: "int"},
 			{Name: "age", Type: "int"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -884,7 +884,7 @@ func TestPhysicalProjection_MultipleExprs(t *testing.T) {
 			{Name: "b", Type: "int"},
 			{Name: "c", Type: "int"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 
@@ -914,7 +914,7 @@ func TestPhysicalSelection_MultipleConditions(t *testing.T) {
 			{Name: "age", Type: "int"},
 			{Name: "status", Type: "varchar"},
 		},
-		cost: 100.0,
+		cost:     100.0,
 		children: []PhysicalOperator{},
 	}
 

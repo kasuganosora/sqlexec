@@ -12,13 +12,13 @@ import (
 // 这些数据来自真实的 MySQL 服务器抓包
 func TestComStmtExecuteFromRealPcap(t *testing.T) {
 	tests := []struct {
-		name        string
-		packetData  []byte
-		expectedStmtID uint32
-		expectedFlags   uint8
-		expectedIter   uint32
+		name               string
+		packetData         []byte
+		expectedStmtID     uint32
+		expectedFlags      uint8
+		expectedIter       uint32
 		expectedParamCount int
-		description string
+		description        string
 	}{
 		{
 			name: "单参数 INT",
@@ -30,16 +30,16 @@ func TestComStmtExecuteFromRealPcap(t *testing.T) {
 				0x01, 0x00, 0x00, 0x00, // StatementID = 1 (小端)
 				0x00,                   // Flags = 0
 				0x01, 0x00, 0x00, 0x00, // IterationCount = 1
-				0x00,                   // NULL bitmap (1字节，无 NULL)
-				0x01,                   // NewParamsBindFlag = 1
-				0x01, 0x00,           // ParamType: TINYINT, Flag=0
-				0x7b,                   // ParamValue: 123
+				0x00,       // NULL bitmap (1字节，无 NULL)
+				0x01,       // NewParamsBindFlag = 1
+				0x01, 0x00, // ParamType: TINYINT, Flag=0
+				0x7b, // ParamValue: 123
 			},
-			expectedStmtID: 1,
-			expectedFlags:   0,
-			expectedIter:   1,
+			expectedStmtID:     1,
+			expectedFlags:      0,
+			expectedIter:       1,
 			expectedParamCount: 1,
-			description: "单个 TINYINT 参数值为 123",
+			description:        "单个 TINYINT 参数值为 123",
 		},
 		{
 			name: "多参数 INT + STRING",
@@ -51,18 +51,18 @@ func TestComStmtExecuteFromRealPcap(t *testing.T) {
 				0x01, 0x00, 0x00, 0x00, // StatementID = 1
 				0x00,                   // Flags
 				0x01, 0x00, 0x00, 0x00, // IterationCount = 1
-				0x00,                   // NULL bitmap
-				0x01,                   // NewParamsBindFlag = 1
-				0x03, 0x00,           // ParamType 0: INT, Flag=0
-				0xfd, 0x00,           // ParamType 1: VAR_STRING, Flag=0
+				0x00,       // NULL bitmap
+				0x01,       // NewParamsBindFlag = 1
+				0x03, 0x00, // ParamType 0: INT, Flag=0
+				0xfd, 0x00, // ParamType 1: VAR_STRING, Flag=0
 				0xc8, 0x00, 0x00, 0x00, // ParamValue 0: INT 200
 				0x04, 0x74, 0x65, 0x73, 0x74, // ParamValue 1: "test"
 			},
-			expectedStmtID: 1,
-			expectedFlags:   0,
-			expectedIter:   1,
+			expectedStmtID:     1,
+			expectedFlags:      0,
+			expectedIter:       1,
 			expectedParamCount: 2,
-			description: "INT 参数 200 和 STRING 参数 'test'",
+			description:        "INT 参数 200 和 STRING 参数 'test'",
 		},
 		{
 			name: "带 NULL 参数",
@@ -74,16 +74,16 @@ func TestComStmtExecuteFromRealPcap(t *testing.T) {
 				0x01, 0x00, 0x00, 0x00, // StatementID = 1
 				0x00,                   // Flags
 				0x01, 0x00, 0x00, 0x00, // IterationCount = 1
-				0x04,                   // NULL bitmap (位2=1, 表示第1个参数为NULL)
-				0x01,                   // NewParamsBindFlag = 1
-				0xfd, 0x00,           // ParamType: VAR_STRING, Flag=0
+				0x04,       // NULL bitmap (位2=1, 表示第1个参数为NULL)
+				0x01,       // NewParamsBindFlag = 1
+				0xfd, 0x00, // ParamType: VAR_STRING, Flag=0
 				// 无参数值（因为 NULL）
 			},
-			expectedStmtID: 1,
-			expectedFlags:   0,
-			expectedIter:   1,
+			expectedStmtID:     1,
+			expectedFlags:      0,
+			expectedIter:       1,
 			expectedParamCount: 1,
-			description: "单个 NULL 参数 (NULL bitmap=0x04)",
+			description:        "单个 NULL 参数 (NULL bitmap=0x04)",
 		},
 		{
 			name: "9个参数（测试多字节 NULL bitmap）",
@@ -95,20 +95,20 @@ func TestComStmtExecuteFromRealPcap(t *testing.T) {
 				0x01, 0x00, 0x00, 0x00, // StatementID = 1
 				0x00,                   // Flags
 				0x01, 0x00, 0x00, 0x00, // IterationCount = 1
-				0x00, 0x00,           // NULL bitmap (2字节，无 NULL)
+				0x00, 0x00, // NULL bitmap (2字节，无 NULL)
 				// 9个参数需要 (9+7)/8 = 2字节
-				0x01,                   // NewParamsBindFlag = 1
+				0x01, // NewParamsBindFlag = 1
 				// 9个参数类型
 				0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00,
 				0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00,
 				// 9个参数值（都是 TINYINT 1）
 				0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
 			},
-			expectedStmtID: 1,
-			expectedFlags:   0,
-			expectedIter:   1,
+			expectedStmtID:     1,
+			expectedFlags:      0,
+			expectedIter:       1,
 			expectedParamCount: 9,
-			description: "9个参数，测试 NULL bitmap 多字节情况",
+			description:        "9个参数，测试 NULL bitmap 多字节情况",
 		},
 	}
 
@@ -172,7 +172,7 @@ func TestComStmtExecuteFromRealPcap(t *testing.T) {
 // TestComStmtExecuteRoundTrip 测试序列化和反序列化的往返
 func TestComStmtExecuteRoundTrip(t *testing.T) {
 	testCases := []struct {
-		name string
+		name   string
 		packet *ComStmtExecutePacket
 	}{
 		{

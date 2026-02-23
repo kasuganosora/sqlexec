@@ -355,4 +355,3 @@ func TestCircuitState(t *testing.T) {
 	assert.Equal(t, 1, int(StateOpen))
 	assert.Equal(t, 2, int(StateHalfOpen))
 }
-

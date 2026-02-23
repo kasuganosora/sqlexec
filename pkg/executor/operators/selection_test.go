@@ -55,7 +55,7 @@ func TestLikeValues(t *testing.T) {
 
 		// NULL handling - nil is converted to "" by utils.ToString
 		// So nil matches "%" because "" matches "%" pattern
-		{"NULL value", nil, "%", true}, // utils.ToString(nil) = "" and "" matches "%"
+		{"NULL value", nil, "%", true},        // utils.ToString(nil) = "" and "" matches "%"
 		{"NULL pattern", "hello", nil, false}, // utils.ToString(nil) = "" and "hello" doesn't match ""
 
 		// Special characters
@@ -339,10 +339,10 @@ func TestCompareValues(t *testing.T) {
 // TestToInt tests the toInt helper function
 func TestToInt(t *testing.T) {
 	tests := []struct {
-		name      string
-		value     interface{}
-		expected  int
-		expectOk  bool
+		name     string
+		value    interface{}
+		expected int
+		expectOk bool
 	}{
 		{"int", int(42), 42, true},
 		{"int64", int64(100), 100, true},
@@ -538,7 +538,7 @@ func TestGetExpressionValue(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := op.getExpressionValue(tt.row, tt.expr)
 			if result != tt.expected {
-				t.Errorf("getExpressionValue() = %v (%T), expected %v (%T)", 
+				t.Errorf("getExpressionValue() = %v (%T), expected %v (%T)",
 					result, result, tt.expected, tt.expected)
 			}
 		})
@@ -555,7 +555,7 @@ func TestSelectionOperatorIntegration(t *testing.T) {
 // BenchmarkLikeValues benchmarks the LIKE pattern matching
 func BenchmarkLikeValues(b *testing.B) {
 	op := &SelectionOperator{}
-	
+
 	benchmarks := []struct {
 		name    string
 		value   interface{}

@@ -46,11 +46,11 @@ func (m *mockEstimator) setStatistics(tableName string, stats *statistics.TableS
 func createMockTableStatistics() *statistics.TableStatistics {
 	return &statistics.TableStatistics{
 		Name:              "test_table",
-		RowCount:           100000,
-		EstimatedRowCount:  100000,
+		RowCount:          100000,
+		EstimatedRowCount: 100000,
 		ColumnStats: map[string]*statistics.ColumnStatistics{
 			"id": {
-				Name:    "id",
+				Name:          "id",
 				DistinctCount: 100000,
 				NullCount:     0,
 				AvgWidth:      8,
@@ -58,7 +58,7 @@ func createMockTableStatistics() *statistics.TableStatistics {
 				MaxValue:      int64(100000),
 			},
 			"status": {
-				Name:    "status",
+				Name:          "status",
 				DistinctCount: 5,
 				NullCount:     0,
 				AvgWidth:      10,
@@ -66,7 +66,7 @@ func createMockTableStatistics() *statistics.TableStatistics {
 				MaxValue:      "deleted",
 			},
 			"age": {
-				Name:    "age",
+				Name:          "age",
 				DistinctCount: 100,
 				NullCount:     1000,
 				AvgWidth:      4,

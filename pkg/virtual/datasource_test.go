@@ -91,15 +91,15 @@ func TestVirtualDataSourceReadOnly(t *testing.T) {
 
 	// All write operations should return errors
 	ctx := context.Background()
-	
+
 	_, err := ds.Insert(ctx, "test", []domain.Row{{"data": "test"}}, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
-	
+
 	_, err = ds.Update(ctx, "test", []domain.Filter{}, domain.Row{"data": "test"}, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
-	
+
 	_, err = ds.Delete(ctx, "test", []domain.Filter{}, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
@@ -273,4 +273,3 @@ func (m *multiMockTable) GetVirtualTable(name string) (VirtualTable, error) {
 func (m *multiMockTable) HasTable(name string) bool {
 	return name == "table1" || name == "table2"
 }
-

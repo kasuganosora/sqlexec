@@ -7,9 +7,9 @@ import (
 
 func TestGetCharsetName(t *testing.T) {
 	tests := []struct {
-		name       string
-		charsetID  uint8
-		expected   string
+		name      string
+		charsetID uint8
+		expected  string
 	}{
 		// 常用字符集
 		{"UTF8", CharsetUtf8, "utf8_general_ci"},
@@ -107,9 +107,9 @@ func TestGetCharsetName(t *testing.T) {
 
 func TestGetCharsetID(t *testing.T) {
 	tests := []struct {
-		name       string
+		name        string
 		charsetName string
-		expected   uint8
+		expected    uint8
 	}{
 		// 常用字符集
 		{"UTF8", "utf8_general_ci", CharsetUtf8},
@@ -418,4 +418,3 @@ func ExampleGetCharsetID() {
 	// 33
 	// 255
 }
-

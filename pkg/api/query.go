@@ -13,7 +13,7 @@ type Query struct {
 	session  *Session
 	result   *domain.QueryResult
 	sql      string
-	params   []interface{}    // 查询参数（用于缓存键）
+	params   []interface{} // 查询参数（用于缓存键）
 	rowIndex int
 	closed   bool
 	mu       sync.RWMutex

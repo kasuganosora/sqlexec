@@ -34,7 +34,7 @@ func Benchmark_Query_WithIndex(b *testing.B) {
 
 			// 创建表和索引
 			schema := &domain.TableInfo{
-				Name: "users",
+				Name:   "users",
 				Schema: "test",
 				Columns: []domain.ColumnInfo{
 					{Name: "id", Type: "int64", Nullable: false},
@@ -87,7 +87,7 @@ func Benchmark_Query_WithIndex_vs_NoIndex(b *testing.B) {
 
 	// 创建表
 	schema := &domain.TableInfo{
-		Name: "users",
+		Name:   "users",
 		Schema: "test",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "int64", Nullable: false},
@@ -157,7 +157,7 @@ func Benchmark_RangeQuery(b *testing.B) {
 
 	// 创建表
 	schema := &domain.TableInfo{
-		Name: "users",
+		Name:   "users",
 		Schema: "test",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "int64", Nullable: false},
@@ -228,7 +228,7 @@ func Benchmark_Index_Insert(b *testing.B) {
 	_ = ds.Connect(context.Background())
 
 	schema := &domain.TableInfo{
-		Name: "users",
+		Name:   "users",
 		Schema: "test",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "int64", Nullable: false},

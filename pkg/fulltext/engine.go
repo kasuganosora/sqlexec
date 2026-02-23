@@ -53,15 +53,15 @@ func (v *Vocabulary) GetOrCreateID(term string) int64 {
 		return id
 	}
 	v.mu.RUnlock()
-	
+
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	
+
 	// 双重检查
 	if id, exists := v.termToID[term]; exists {
 		return id
 	}
-	
+
 	id := v.nextID
 	v.nextID++
 	v.termToID[term] = id
@@ -82,13 +82,13 @@ func NewEngine(config *Config) *Engine {
 	if config == nil {
 		config = DefaultConfig
 	}
-	
+
 	// 创建分词器
 	tokenizer, err := analyzer.TokenizerFactory(analyzer.TokenizerTypeStandard, nil)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create standard tokenizer: %v", err))
 	}
-	
+
 	// 创建BM25评分器
 	stats := bm25.NewCollectionStats()
 	bm25Params := bm25.Params{
@@ -96,7 +96,7 @@ func NewEngine(config *Config) *Engine {
 		B:  config.BM25Params.B,
 	}
 	scorer := bm25.NewScorer(bm25Params, stats)
-	
+
 	return &Engine{
 		config:      config,
 		tokenizer:   tokenizer,
@@ -117,20 +117,20 @@ func (e *Engine) SetTokenizer(tokenizer analyzer.Tokenizer) {
 func (e *Engine) IndexDocument(doc *Document) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	
+
 	// 分词
 	tokens, err := e.tokenizer.Tokenize(doc.Content)
 	if err != nil {
 		return fmt.Errorf("tokenize failed: %w", err)
 	}
-	
+
 	// 转换为内部文档类型
 	internalDoc := &index.Document{
 		ID:      doc.ID,
 		Content: doc.Content,
 		Fields:  doc.Fields,
 	}
-	
+
 	// 添加到倒排索引
 	return e.invertedIdx.AddDocument(internalDoc, tokens)
 }
@@ -139,7 +139,7 @@ func (e *Engine) IndexDocument(doc *Document) error {
 func (e *Engine) IndexDocumentWithTokens(doc *Document, tokens []Token) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	
+
 	// 转换词为ID
 	idTokens := make([]analyzer.Token, len(tokens))
 	for i, token := range tokens {
@@ -151,14 +151,14 @@ func (e *Engine) IndexDocumentWithTokens(doc *Document, tokens []Token) error {
 			Type:     token.Type,
 		}
 	}
-	
+
 	// 转换为内部文档类型
 	internalDoc := &index.Document{
 		ID:      doc.ID,
 		Content: doc.Content,
 		Fields:  doc.Fields,
 	}
-	
+
 	return e.invertedIdx.AddDocument(internalDoc, idTokens)
 }
 
@@ -203,16 +203,16 @@ func (e *Engine) Search(queryStr string, topK int) ([]SearchResult, error) {
 func (e *Engine) SearchWithQuery(q query.Query, topK int) ([]SearchResult, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	
+
 	queryResults := q.Execute(e.invertedIdx)
-	
+
 	// 转换为引擎结果类型
 	results := convertQueryResults(queryResults)
-	
+
 	if topK > 0 && len(results) > topK {
 		results = results[:topK]
 	}
-	
+
 	return results, nil
 }
 
@@ -220,13 +220,13 @@ func (e *Engine) SearchWithQuery(q query.Query, topK int) ([]SearchResult, error
 func (e *Engine) SearchBM25(queryStr string, topK int) ([]SearchResult, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	
+
 	// 分词查询
 	tokens, err := e.tokenizer.TokenizeForSearch(queryStr)
 	if err != nil {
 		return nil, fmt.Errorf("tokenize failed: %w", err)
 	}
-	
+
 	// 构建查询向量（使用hashString保持与索引一致）
 	queryVector := bm25.NewSparseVector()
 	for _, token := range tokens {
@@ -238,19 +238,19 @@ func (e *Engine) SearchBM25(queryStr string, topK int) ([]SearchResult, error) {
 			queryVector.Set(termID, 1.0)
 		}
 	}
-	
+
 	// 归一化查询向量
 	queryVector.Normalize()
-	
+
 	// 执行搜索
 	idxResults := e.invertedIdx.SearchTopK(queryVector, topK)
 	if topK <= 0 {
 		idxResults = e.invertedIdx.Search(queryVector)
 	}
-	
+
 	// 转换为引擎结果类型
 	results := convertIdxResults(idxResults)
-	
+
 	return results, nil
 }
 
@@ -270,19 +270,19 @@ func (e *Engine) SearchWithHighlight(queryStr string, topK int, preTag, postTag 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	highlighter := &Highlighter{
 		PreTag:  preTag,
 		PostTag: postTag,
 	}
-	
+
 	// 获取查询词
 	tokens, _ := e.tokenizer.Tokenize(queryStr)
 	queryTerms := make([]string, len(tokens))
 	for i, token := range tokens {
 		queryTerms[i] = token.Text
 	}
-	
+
 	resultsWithHighlight := make([]SearchResultWithHighlight, len(results))
 	for i, result := range results {
 		highlights := highlighter.Highlight(result.Doc.Content, queryTerms)
@@ -291,7 +291,7 @@ func (e *Engine) SearchWithHighlight(queryStr string, topK int, preTag, postTag 
 			Highlights:   highlights,
 		}
 	}
-	
+
 	return resultsWithHighlight, nil
 }
 
@@ -341,21 +341,21 @@ func convertQueryResults(queryResults []query.SearchResult) []SearchResult {
 func (e *Engine) SearchPhrase(phrase string, slop int, topK int) ([]SearchResult, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	
+
 	// 分词
 	tokens, err := e.tokenizer.Tokenize(phrase)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 直接使用原始token，不做词ID转换
 	idxResults := e.invertedIdx.SearchPhrase(tokens, slop)
 	results := convertIdxResults(idxResults)
-	
+
 	if topK > 0 && len(results) > topK {
 		results = results[:topK]
 	}
-	
+
 	return results, nil
 }
 
@@ -396,7 +396,7 @@ func (e *Engine) DeleteDocument(docID int64) error {
 func (e *Engine) Clear() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	
+
 	stats := bm25.NewCollectionStats()
 	bm25Params := bm25.Params{
 		K1: e.config.BM25Params.K1,
@@ -428,11 +428,11 @@ func (h *Highlighter) Highlight(text string, queryTerms []string) []string {
 	if h.NumFragments == 0 {
 		h.NumFragments = 3
 	}
-	
+
 	// 查找查询词位置
 	var positions []highlightPos
 	lowerText := strings.ToLower(text)
-	
+
 	for _, term := range queryTerms {
 		term = strings.ToLower(term)
 		start := 0
@@ -449,15 +449,15 @@ func (h *Highlighter) Highlight(text string, queryTerms []string) []string {
 			start = actualIdx + 1
 		}
 	}
-	
+
 	// 按位置排序
 	sort.Slice(positions, func(i, j int) bool {
 		return positions[i].start < positions[j].start
 	})
-	
+
 	// 生成片段
 	fragments := h.extractFragments(text, positions)
-	
+
 	return fragments
 }
 
@@ -470,10 +470,10 @@ func (h *Highlighter) extractFragments(text string, positions []highlightPos) []
 	if len(positions) == 0 {
 		return []string{h.truncate(text, h.FragmentLen)}
 	}
-	
+
 	var fragments []string
 	added := make(map[string]bool)
-	
+
 	for _, pos := range positions {
 		// 计算片段边界
 		fragmentStart := pos.start - h.FragmentLen/2
@@ -484,30 +484,30 @@ func (h *Highlighter) extractFragments(text string, positions []highlightPos) []
 		if fragmentEnd > len(text) {
 			fragmentEnd = len(text)
 		}
-		
+
 		// 提取片段
 		fragment := text[fragmentStart:fragmentEnd]
-		
+
 		// 添加高亮标记
 		localStart := pos.start - fragmentStart
 		localEnd := pos.end - fragmentStart
-		
+
 		if localStart >= 0 && localEnd <= len(fragment) {
 			highlighted := fragment[:localStart] + h.PreTag +
 				fragment[localStart:localEnd] + h.PostTag +
 				fragment[localEnd:]
-			
+
 			if !added[highlighted] {
 				fragments = append(fragments, highlighted)
 				added[highlighted] = true
 			}
 		}
-		
+
 		if len(fragments) >= h.NumFragments {
 			break
 		}
 	}
-	
+
 	return fragments
 }
 

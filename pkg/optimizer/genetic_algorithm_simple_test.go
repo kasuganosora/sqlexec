@@ -3,7 +3,7 @@ package optimizer
 import (
 	"context"
 	"testing"
-	
+
 	"github.com/kasuganosora/sqlexec/pkg/optimizer/genetic"
 )
 
@@ -32,7 +32,7 @@ func TestGeneticAlgorithmSimple(t *testing.T) {
 	// 使用遗传算法运行
 	geneticCandidates := ConvertGeneticCandidates(candidates)
 	result := ga.Run(ctx, geneticCandidates, benefits)
-	
+
 	// 转换结果
 	finalResult := ConvertGeneticResults(result)
 

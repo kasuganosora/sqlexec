@@ -10,7 +10,7 @@ import (
 // DisjunctionMaxQuery 析取最大查询（取多个查询中的最高分）
 type DisjunctionMaxQuery struct {
 	BaseQuery
-	Queries   []Query
+	Queries    []Query
 	TieBreaker float64 // 次高分的权重系数 (0-1)
 }
 
@@ -32,7 +32,7 @@ func NewDisjunctionMaxQuery(queries []Query, tieBreaker float64) *DisjunctionMax
 func (q *DisjunctionMaxQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	// 收集所有子查询的结果
 	docScores := make(map[int64]*disjunctionDoc)
-	
+
 	for _, query := range q.Queries {
 		results := query.Execute(idx)
 		for _, result := range results {
@@ -53,7 +53,7 @@ func (q *DisjunctionMaxQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			}
 		}
 	}
-	
+
 	// 计算最终分数（最高分 + TieBreaker * 次高分）
 	results := make([]SearchResult, 0, len(docScores))
 	for docID, doc := range docScores {
@@ -64,7 +64,7 @@ func (q *DisjunctionMaxQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			Doc:   idx.GetDocument(docID),
 		})
 	}
-	
+
 	return results
 }
 
@@ -95,12 +95,12 @@ func NewConstScoreQuery(query Query, score float64) *ConstScoreQuery {
 // Execute 执行查询
 func (q *ConstScoreQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	results := q.Query.Execute(idx)
-	
+
 	// 替换分数为常数
 	for i := range results {
 		results[i].Score = q.Score * q.boost
 	}
-	
+
 	return results
 }
 
@@ -126,13 +126,13 @@ func NewTermSetQuery(field string, terms []string) *TermSetQuery {
 func (q *TermSetQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	// 使用 OR 逻辑合并多个词项查询
 	boolQuery := NewBooleanQuery()
-	
+
 	for _, term := range q.Terms {
 		boolQuery.AddShould(NewTermQuery(q.Field, term))
 	}
-	
+
 	boolQuery.MinShouldMatch = 1
-	
+
 	return boolQuery.Execute(idx)
 }
 
@@ -186,32 +186,32 @@ func (q *RegexQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	if err != nil {
 		return nil
 	}
-	
+
 	var results []SearchResult
-	
+
 	// 遍历所有文档，检查字段值是否匹配正则
 	allDocIDs := idx.GetAllDocIDs()
-	
+
 	for _, docID := range allDocIDs {
 		doc := idx.GetDocument(docID)
 		if doc == nil {
 			continue
 		}
-		
+
 		// 获取字段值
 		fieldValue, exists := doc.Fields[q.Field]
 		if !exists {
 			continue
 		}
-		
+
 		// 转换为字符串
 		strValue := toStringRegex(fieldValue)
-		
+
 		// 检查是否匹配正则
 		if re.MatchString(strValue) {
 			// 计算分数
 			score := 1.0 * q.boost
-			
+
 			results = append(results, SearchResult{
 				DocID: docID,
 				Score: score,
@@ -219,7 +219,7 @@ func (q *RegexQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 			})
 		}
 	}
-	
+
 	return results
 }
 
@@ -412,14 +412,14 @@ func (q *WildcardQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	pattern = strings.ReplaceAll(pattern, "*", ".*")
 	pattern = strings.ReplaceAll(pattern, "?", ".")
 	pattern = "^" + pattern + "$"
-	
+
 	return NewRegexQuery(q.Field, pattern).Execute(idx)
 }
 
 // FunctionScoreQuery 函数评分查询（根据函数动态计算分数）
 type FunctionScoreQuery struct {
 	BaseQuery
-	Query    Query
+	Query     Query
 	ScoreFunc func(docID int64, baseScore float64) float64
 }
 
@@ -437,12 +437,12 @@ func NewFunctionScoreQuery(query Query, scoreFunc func(docID int64, baseScore fl
 // Execute 执行查询
 func (q *FunctionScoreQuery) Execute(idx *index.InvertedIndex) []SearchResult {
 	results := q.Query.Execute(idx)
-	
+
 	// 应用评分函数
 	for i := range results {
 		results[i].Score = q.ScoreFunc(results[i].DocID, results[i].Score)
 	}
-	
+
 	return results
 }
 

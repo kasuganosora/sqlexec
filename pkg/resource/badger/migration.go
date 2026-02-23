@@ -75,9 +75,9 @@ func (m *MigrationManager) ExportData(ctx context.Context, w io.Writer, config *
 	}
 
 	export := &ExportData{
-		Version:   "1.0",
+		Version:    "1.0",
 		ExportedAt: time.Now(),
-		Tables:    make(map[string]*TableExport),
+		Tables:     make(map[string]*TableExport),
 	}
 
 	// Export each table
@@ -156,10 +156,10 @@ type ExportData struct {
 
 // TableExport represents exported table data
 type TableExport struct {
-	Name     string          `json:"name"`
+	Name     string            `json:"name"`
 	Schema   *domain.TableInfo `json:"schema,omitempty"`
-	Rows     []domain.Row    `json:"rows,omitempty"`
-	RowCount int             `json:"row_count"`
+	Rows     []domain.Row      `json:"rows,omitempty"`
+	RowCount int               `json:"row_count"`
 }
 
 // ImportConfig configuration for import operations

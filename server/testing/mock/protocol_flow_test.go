@@ -76,7 +76,7 @@ func TestProtocol_ErrorFlow(t *testing.T) {
 	assert.Equal(t, byte(0xFF), data[4], "Error packet header should be 0xFF")
 
 	// And: Verify error code in serialized data (little endian)
-	assert.Equal(t, byte(1146 & 0xFF), data[5], "Error code low byte should match")
+	assert.Equal(t, byte(1146&0xFF), data[5], "Error code low byte should match")
 	assert.Equal(t, byte(1146>>8), data[6], "Error code high byte should match")
 }
 

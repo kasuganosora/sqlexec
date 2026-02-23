@@ -2,12 +2,26 @@ package parquet
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 )
+
+// parquetMagic is the Parquet file format magic bytes ("PAR1").
+var parquetMagic = []byte("PAR1")
+
+// parquetSerializedData is the JSON-serialized interchange format used by this
+// adapter to persist and reload table data without requiring an external Parquet
+// library.  Real Parquet files (detected via the PAR1 magic bytes) are not
+// supported and will produce a descriptive error.
+type parquetSerializedData struct {
+	TableName string              `json:"table_name"`
+	Columns   []domain.ColumnInfo `json:"columns"`
+	Rows      []domain.Row        `json:"rows"`
+}
 
 // ParquetAdapter Parquet文件数据源适配器
 // 继承 MVCCDataSource，只负责Parquet格式的加载和写回
@@ -22,7 +36,7 @@ type ParquetAdapter struct {
 // NewParquetAdapter 创建Parquet数据源适配器
 func NewParquetAdapter(config *domain.DataSourceConfig, filePath string) *ParquetAdapter {
 	tableName := "parquet_data"
-	writable := false // Parquet默认只读
+	writable := config.Writable
 
 	// 从配置中读取选项
 	if config.Options != nil {
@@ -38,8 +52,13 @@ func NewParquetAdapter(config *domain.DataSourceConfig, filePath string) *Parque
 		}
 	}
 
+	// Create an internal config copy to ensure Writable is synchronised with
+	// the resolved writable flag (matching the pattern used by JSONAdapter).
+	internalConfig := *config
+	internalConfig.Writable = writable
+
 	return &ParquetAdapter{
-		MVCCDataSource: memory.NewMVCCDataSource(config),
+		MVCCDataSource: memory.NewMVCCDataSource(&internalConfig),
 		filePath:       filePath,
 		tableName:      tableName,
 		writable:       writable,
@@ -53,19 +72,44 @@ func (a *ParquetAdapter) Connect(ctx context.Context) error {
 		return domain.NewErrNotConnected("parquet")
 	}
 
-	// 简化实现：返回固定列结构和数据
-	// TODO: 实际应该使用 Apache Arrow 库读取Parquet元数据
-	columns := []domain.ColumnInfo{
-		{Name: "id", Type: "int64", Nullable: false, Primary: true},
-		{Name: "value", Type: "string", Nullable: true},
+	// Read file contents
+	data, err := os.ReadFile(a.filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file %q: %w", a.filePath, err)
 	}
 
-	// 简化实现：返回固定测试数据
-	// TODO: 实际应该读取Parquet文件
-	rows := []domain.Row{
-		{"id": int64(1), "value": "parquet_data_1"},
-		{"id": int64(2), "value": "parquet_data_2"},
-		{"id": int64(3), "value": "parquet_data_3"},
+	var columns []domain.ColumnInfo
+	var rows []domain.Row
+
+	// Detect real Parquet files by checking the PAR1 magic bytes.
+	if len(data) >= 4 && string(data[:4]) == string(parquetMagic) {
+		return fmt.Errorf("native Parquet format detected (PAR1 magic bytes); " +
+			"reading raw Parquet files requires a dedicated library such as parquet-go; " +
+			"please convert the file to JSON interchange format or use a different adapter")
+	}
+
+	if len(data) == 0 {
+		// Empty file -- use default schema so the adapter is still usable in
+		// writable mode.
+		columns = []domain.ColumnInfo{
+			{Name: "id", Type: "int64", Nullable: false, Primary: true},
+			{Name: "value", Type: "string", Nullable: true},
+		}
+		rows = []domain.Row{}
+	} else {
+		// Attempt to deserialize from JSON interchange format.
+		columns, rows, err = a.readFromJSON(data)
+		if err != nil {
+			// If JSON parsing fails, the file is in an unrecognised format.
+			// Fall back to a default empty schema so the adapter can still
+			// connect (useful for writable mode where data will be written
+			// later).
+			columns = []domain.ColumnInfo{
+				{Name: "id", Type: "int64", Nullable: false, Primary: true},
+				{Name: "value", Type: "string", Nullable: true},
+			}
+			rows = []domain.Row{}
+		}
 	}
 
 	// 创建表信息
@@ -82,6 +126,78 @@ func (a *ParquetAdapter) Connect(ctx context.Context) error {
 
 	// 连接MVCC数据源
 	return a.MVCCDataSource.Connect(ctx)
+}
+
+// readFromJSON attempts to parse the file content as the JSON interchange
+// format used by this adapter.  It supports two layouts:
+//   - A JSON object with "columns" and "rows" fields (parquetSerializedData).
+//   - A plain JSON array of objects -- columns are inferred from the first row.
+func (a *ParquetAdapter) readFromJSON(data []byte) ([]domain.ColumnInfo, []domain.Row, error) {
+	// First try the structured format.
+	var structured parquetSerializedData
+	if err := json.Unmarshal(data, &structured); err == nil && len(structured.Columns) > 0 {
+		// Normalise row value types (JSON numbers decode as float64).
+		rows := normaliseRows(structured.Rows, structured.Columns)
+		return structured.Columns, rows, nil
+	}
+
+	// Fall back to a plain JSON array of objects.
+	var rawRows []map[string]interface{}
+	if err := json.Unmarshal(data, &rawRows); err != nil {
+		return nil, nil, fmt.Errorf("file is not valid JSON: %w", err)
+	}
+
+	if len(rawRows) == 0 {
+		return nil, nil, fmt.Errorf("JSON array is empty")
+	}
+
+	// Infer columns from the first row.
+	columns := a.inferColumns(rawRows[0])
+
+	// Convert to domain.Row slice.
+	rows := make([]domain.Row, 0, len(rawRows))
+	for _, raw := range rawRows {
+		rows = append(rows, domain.Row(raw))
+	}
+	rows = normaliseRows(rows, columns)
+	return columns, rows, nil
+}
+
+// inferColumns builds a column list from a sample row, detecting types with
+// detectType.
+func (a *ParquetAdapter) inferColumns(sample map[string]interface{}) []domain.ColumnInfo {
+	columns := make([]domain.ColumnInfo, 0, len(sample))
+	for key, val := range sample {
+		col := domain.ColumnInfo{
+			Name:     key,
+			Type:     a.detectType(val),
+			Nullable: true,
+		}
+		columns = append(columns, col)
+	}
+	return columns
+}
+
+// normaliseRows converts JSON-decoded float64 values back to int64 where the
+// column schema says "int64".
+func normaliseRows(rows []domain.Row, columns []domain.ColumnInfo) []domain.Row {
+	int64Cols := make(map[string]bool)
+	for _, col := range columns {
+		if col.Type == "int64" {
+			int64Cols[col.Name] = true
+		}
+	}
+	for i, row := range rows {
+		for k, v := range row {
+			if int64Cols[k] {
+				switch fv := v.(type) {
+				case float64:
+					rows[i][k] = int64(fv)
+				}
+			}
+		}
+	}
+	return rows
 }
 
 // Close 关闭连接 - 可选写回Parquet文件
@@ -164,7 +280,8 @@ func (a *ParquetAdapter) Execute(ctx context.Context, sql string) (*domain.Query
 // ==================== 私有方法 ====================
 
 // writeBack 写回Parquet文件
-// 注意: 简化实现，实际应该使用 Apache Arrow 库
+// Data is serialised using the JSON interchange format.  To produce real
+// Parquet files, a dedicated library such as parquet-go would be needed.
 func (a *ParquetAdapter) writeBack() error {
 	// 获取最新数据
 	schema, rows, err := a.GetLatestTableData(a.tableName)
@@ -172,16 +289,20 @@ func (a *ParquetAdapter) writeBack() error {
 		return err
 	}
 
-	// TODO: 实际应该使用 Apache Arrow 库写入Parquet文件
-	// 简化实现：这里只是一个占位符
-	_ = schema
-	_ = rows
-	_ = a.filePath
+	serialized := parquetSerializedData{
+		TableName: a.tableName,
+		Columns:   schema.Columns,
+		Rows:      rows,
+	}
 
-	// 实际实现应该：
-	// 1. 创建 Arrow Schema
-	// 2. 创建 Arrow RecordBatch
-	// 3. 使用 Arrow Parquet Writer 写入文件
+	data, err := json.MarshalIndent(serialized, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to serialise data: %w", err)
+	}
+
+	if err := os.WriteFile(a.filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write file %q: %w", a.filePath, err)
+	}
 
 	return nil
 }

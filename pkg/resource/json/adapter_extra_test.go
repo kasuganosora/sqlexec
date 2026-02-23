@@ -316,18 +316,18 @@ func TestJSONAdapter_DetectType(t *testing.T) {
 	}{
 		{true, "bool"},
 		{false, "bool"},
-		{float64(42), "int64"},       // 整数float64 → int64
-		{float64(3.14), "float64"},   // 小数 → float64
-		{float64(0), "int64"},        // 零 → int64
-		{float64(-1), "int64"},       // 负整数 → int64
-		{math.Inf(1), "float64"},     // +Inf → float64
-		{math.Inf(-1), "float64"},    // -Inf → float64
-		{math.NaN(), "float64"},      // NaN → float64
-		{float64(1e18), "int64"},     // 大整数仍在int64范围 → int64
-		{float64(1e19), "float64"},   // 超出int64范围 → float64
-		{"hello", "string"},          // 字符串
-		{nil, "string"},              // nil
-		{[]interface{}{1}, "string"}, // 数组 → string
+		{float64(42), "int64"},                     // 整数float64 → int64
+		{float64(3.14), "float64"},                 // 小数 → float64
+		{float64(0), "int64"},                      // 零 → int64
+		{float64(-1), "int64"},                     // 负整数 → int64
+		{math.Inf(1), "float64"},                   // +Inf → float64
+		{math.Inf(-1), "float64"},                  // -Inf → float64
+		{math.NaN(), "float64"},                    // NaN → float64
+		{float64(1e18), "int64"},                   // 大整数仍在int64范围 → int64
+		{float64(1e19), "float64"},                 // 超出int64范围 → float64
+		{"hello", "string"},                        // 字符串
+		{nil, "string"},                            // nil
+		{[]interface{}{1}, "string"},               // 数组 → string
 		{map[string]interface{}{"a": 1}, "string"}, // 对象 → string
 	}
 

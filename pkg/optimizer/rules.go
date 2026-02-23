@@ -98,7 +98,7 @@ func (r *ColumnPruningRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 	for _, expr := range projection.Exprs {
 		collectRequiredColumns(expr, requiredCols)
 	}
-	
+
 	// 打印需要的列
 	keys := make([]string, 0, len(requiredCols))
 	for k := range requiredCols {
@@ -121,7 +121,7 @@ func (r *ColumnPruningRule) Apply(ctx context.Context, plan LogicalPlan, optCtx 
 			// 保存下推的谓词和Limit信息
 			predicates := dataSource.GetPushedDownPredicates()
 			limitInfo := dataSource.GetPushedDownLimit()
-			
+
 			newDataSource := NewLogicalDataSource(dataSource.TableName, dataSource.TableInfo)
 			newDataSource.Columns = newColumns
 			newDataSource.PushDownPredicates(predicates)
@@ -522,14 +522,14 @@ func NewRuleExecutor(rules RuleSet) *RuleExecutor {
 // Execute 执行所有规则
 func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *OptimizationContext) (LogicalPlan, error) {
 	debugln("  [DEBUG] RuleExecutor: 开始执行规则, 规则数量:", len(re.rules))
-	
+
 	// 首先递归处理所有子节点（后序遍历，自底向上）
 	children := plan.Children()
 	if len(children) > 0 {
 		debugln("  [DEBUG] RuleExecutor: 处理子节点, 子节点数:", len(children))
 		newChildren := make([]LogicalPlan, len(children))
 		anyChildChanged := false
-		
+
 		for i, child := range children {
 			debugln("  [DEBUG] RuleExecutor: 递归处理子节点", i, "类型:", child.Explain())
 			newChild, err := re.Execute(ctx, child, optCtx)
@@ -542,13 +542,13 @@ func (re *RuleExecutor) Execute(ctx context.Context, plan LogicalPlan, optCtx *O
 				debugln("  [DEBUG] RuleExecutor: 子节点", i, "已更新")
 			}
 		}
-		
+
 		// 如果有子节点发生变化，更新当前节点的子节点
 		if anyChildChanged {
 			plan.SetChildren(newChildren...)
 		}
 	}
-	
+
 	// 然后在处理完的节点上应用规则（避免无限递归）
 	current := plan
 	maxIterations := 10 // 防止无限循环

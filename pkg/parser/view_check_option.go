@@ -8,15 +8,35 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/utils"
 )
 
+// ViewResolver is a function that resolves a table name to its ViewInfo.
+// Returns nil if the table is not a view. This allows the CheckOptionValidator
+// to traverse parent views for CASCADED check option validation.
+type ViewResolver func(tableName string) *domain.ViewInfo
+
+// maxCascadeDepth limits recursion for CASCADED checks to prevent infinite
+// loops caused by circular view references.
+const maxCascadeDepth = 10
+
 // CheckOptionValidator validates INSERT/UPDATE operations against WITH CHECK OPTION
 type CheckOptionValidator struct {
-	viewInfo *domain.ViewInfo
+	viewInfo     *domain.ViewInfo
+	viewResolver ViewResolver
 }
 
 // NewCheckOptionValidator creates a new CHECK OPTION validator
 func NewCheckOptionValidator(viewInfo *domain.ViewInfo) *CheckOptionValidator {
 	return &CheckOptionValidator{
 		viewInfo: viewInfo,
+	}
+}
+
+// NewCheckOptionValidatorWithResolver creates a CHECK OPTION validator with a
+// ViewResolver for cascaded parent view checks. The resolver is called to look
+// up parent views by table name.
+func NewCheckOptionValidatorWithResolver(viewInfo *domain.ViewInfo, resolver ViewResolver) *CheckOptionValidator {
+	return &CheckOptionValidator{
+		viewInfo:     viewInfo,
+		viewResolver: resolver,
 	}
 }
 
@@ -42,10 +62,11 @@ func (cv *CheckOptionValidator) ValidateInsert(row domain.Row) error {
 		return fmt.Errorf("check option failed: row does not satisfy view's WHERE clause")
 	}
 
-	// If CASCADED, also check against parent views (simplified)
+	// If CASCADED, also check against parent views
 	if cv.viewInfo.CheckOption == domain.ViewCheckOptionCascaded {
-		// TODO: Implement cascaded check to parent views
-		// For now, treat same as LOCAL
+		if err := cv.validateCascaded(row, 0); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -78,10 +99,83 @@ func (cv *CheckOptionValidator) ValidateUpdate(row domain.Row, updates domain.Ro
 
 	// If CASCADED, also check against parent views
 	if cv.viewInfo.CheckOption == domain.ViewCheckOptionCascaded {
-		// TODO: Implement cascaded check to parent views
+		if err := cv.validateCascaded(updatedRow, 0); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+// validateCascaded recursively validates a row against parent views'
+// WHERE clauses. It parses the current view's SELECT to extract the FROM
+// table, resolves that table as a view (if it is one via the ViewResolver),
+// and checks its WHERE clause. If the parent view is also CASCADED, it
+// recurses further up the view chain.
+func (cv *CheckOptionValidator) validateCascaded(row domain.Row, depth int) error {
+	if depth >= maxCascadeDepth {
+		// Prevent infinite recursion from circular view references
+		return nil
+	}
+
+	if cv.viewResolver == nil {
+		// No resolver available: cannot look up parent views.
+		// This is expected when the validator is used without DataSource access.
+		return nil
+	}
+
+	// Extract the FROM table name from the current view's SELECT
+	parentTableName := cv.extractFromTableName(cv.viewInfo.SelectStmt)
+	if parentTableName == "" {
+		return nil
+	}
+
+	// Resolve the parent table as a view
+	parentViewInfo := cv.viewResolver(parentTableName)
+	if parentViewInfo == nil {
+		// Parent is a base table, not a view - no further checks needed
+		return nil
+	}
+
+	// Parse the parent view's WHERE clause and validate the row against it
+	parentValidator := &CheckOptionValidator{
+		viewInfo:     parentViewInfo,
+		viewResolver: cv.viewResolver,
+	}
+
+	parentWhere, err := parentValidator.extractViewWhereClause()
+	if err != nil {
+		return fmt.Errorf("failed to extract parent view WHERE clause: %w", err)
+	}
+
+	if parentWhere != nil {
+		if !parentValidator.satisfiesWhereClause(row, parentWhere) {
+			return fmt.Errorf("check option failed: row does not satisfy parent view's WHERE clause")
+		}
+	}
+
+	// If the parent view also uses CASCADED, recurse into its parent
+	if parentViewInfo.CheckOption == domain.ViewCheckOptionCascaded {
+		return parentValidator.validateCascaded(row, depth+1)
+	}
+
+	return nil
+}
+
+// extractFromTableName extracts the FROM table name from a SELECT statement
+// using the parser. Returns empty string if parsing fails or there is no FROM.
+func (cv *CheckOptionValidator) extractFromTableName(selectStmt string) string {
+	if selectStmt == "" {
+		return ""
+	}
+
+	adapter := NewSQLAdapter()
+	parseResult, err := adapter.Parse(selectStmt)
+	if err != nil || !parseResult.Success || parseResult.Statement.Select == nil {
+		return ""
+	}
+
+	return parseResult.Statement.Select.From
 }
 
 // extractViewWhereClause extracts WHERE clause from view's SELECT statement

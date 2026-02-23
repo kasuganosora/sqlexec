@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/application"
-	"github.com/kasuganosora/sqlexec/server/acl"
 	"github.com/kasuganosora/sqlexec/pkg/virtual"
+	"github.com/kasuganosora/sqlexec/server/acl"
 )
 
 // ACLManager interface for ACL operations (to avoid circular dependency)

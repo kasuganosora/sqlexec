@@ -14,9 +14,9 @@ type LogicalWindow struct {
 
 // WindowFunctionItem represents a window function with its specification
 type WindowFunctionItem struct {
-	Func       *parser.Expression
-	Spec       *parser.WindowSpec
-	OrderBy    []*parser.OrderItem
+	Func        *parser.Expression
+	Spec        *parser.WindowSpec
+	OrderBy     []*parser.OrderItem
 	PartitionBy []*parser.Expression
 }
 

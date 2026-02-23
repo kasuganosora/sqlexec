@@ -109,23 +109,23 @@ const (
 // Stats statistics for HybridDataSource
 type Stats struct {
 	// Table stats
-	TotalTableCount   int `json:"total_table_count"`
-	MemoryTableCount  int `json:"memory_table_count"`
-	PersistentCount   int `json:"persistent_table_count"`
+	TotalTableCount  int `json:"total_table_count"`
+	MemoryTableCount int `json:"memory_table_count"`
+	PersistentCount  int `json:"persistent_table_count"`
 
 	// Operation stats
-	TotalReads      int64 `json:"total_reads"`
-	TotalWrites     int64 `json:"total_writes"`
-	MemoryReads     int64 `json:"memory_reads"`
-	MemoryWrites    int64 `json:"memory_writes"`
-	BadgerReads     int64 `json:"badger_reads"`
-	BadgerWrites    int64 `json:"badger_writes"`
-	CacheHits       int64 `json:"cache_hits"`
-	CacheMisses     int64 `json:"cache_misses"`
+	TotalReads   int64 `json:"total_reads"`
+	TotalWrites  int64 `json:"total_writes"`
+	MemoryReads  int64 `json:"memory_reads"`
+	MemoryWrites int64 `json:"memory_writes"`
+	BadgerReads  int64 `json:"badger_reads"`
+	BadgerWrites int64 `json:"badger_writes"`
+	CacheHits    int64 `json:"cache_hits"`
+	CacheMisses  int64 `json:"cache_misses"`
 }
 
 // Ensure interfaces are implemented
 var (
-	_ domain.DataSource = (*HybridDataSource)(nil)
+	_ domain.DataSource              = (*HybridDataSource)(nil)
 	_ domain.TransactionalDataSource = (*HybridDataSource)(nil)
 )

@@ -363,4 +363,3 @@ func TestErrorLogLimit(t *testing.T) {
 	logs := manager.GetErrorLog(0, 2000)
 	assert.LessOrEqual(t, len(logs), 1000)
 }
-

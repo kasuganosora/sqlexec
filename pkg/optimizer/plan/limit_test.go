@@ -93,30 +93,30 @@ func TestLimitConfigWithPlan(t *testing.T) {
 func TestLimitConfigPagination(t *testing.T) {
 	// Test common pagination patterns
 	paginationTests := []struct {
-		name   string
-		page   int
-		perPage int
+		name       string
+		page       int
+		perPage    int
 		wantLimit  int64
 		wantOffset int64
 	}{
 		{
-			name:   "Page 1, 10 per page",
-			page:   1,
-			perPage: 10,
+			name:       "Page 1, 10 per page",
+			page:       1,
+			perPage:    10,
 			wantLimit:  10,
 			wantOffset: 0,
 		},
 		{
-			name:   "Page 2, 10 per page",
-			page:   2,
-			perPage: 10,
+			name:       "Page 2, 10 per page",
+			page:       2,
+			perPage:    10,
 			wantLimit:  10,
 			wantOffset: 10,
 		},
 		{
-			name:   "Page 3, 20 per page",
-			page:   3,
-			perPage: 20,
+			name:       "Page 3, 20 per page",
+			page:       3,
+			perPage:    20,
 			wantLimit:  20,
 			wantOffset: 40,
 		},

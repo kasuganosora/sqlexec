@@ -100,7 +100,7 @@ type Transaction struct {
 
 // ChangeRecord records a change made in transaction
 type ChangeRecord struct {
-	Operation string    // "insert", "update", "delete"
+	Operation string // "insert", "update", "delete"
 	TableName string
 	RowKey    string
 	OldData   domain.Row

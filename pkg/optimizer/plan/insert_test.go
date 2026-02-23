@@ -8,17 +8,17 @@ import (
 
 func TestInsertConfig(t *testing.T) {
 	tests := []struct {
-		name      string
-		tableName string
-		columns   []string
-		values    [][]parser.Expression
+		name        string
+		tableName   string
+		columns     []string
+		values      [][]parser.Expression
 		onDuplicate *map[string]parser.Expression
 	}{
 		{
-			name:      "Simple insert",
-			tableName: "users",
-			columns:   []string{},
-			values:    [][]parser.Expression{},
+			name:        "Simple insert",
+			tableName:   "users",
+			columns:     []string{},
+			values:      [][]parser.Expression{},
 			onDuplicate: nil,
 		},
 		{

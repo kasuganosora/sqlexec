@@ -16,7 +16,7 @@ type ExpressionCache struct {
 type CachedExpression struct {
 	ExprString  string    // 表达式字符串
 	ParsedAt    time.Time // 解析时间
-	AccessCount  int64     // 访问计数（atomic）
+	AccessCount int64     // 访问计数（atomic）
 }
 
 // NewExpressionCache 创建表达式缓存
@@ -45,7 +45,7 @@ func (c *ExpressionCache) Set(tableName, columnName, exprString string) {
 	cached := &CachedExpression{
 		ExprString:  exprString,
 		ParsedAt:    time.Now(),
-		AccessCount:  int64(0),
+		AccessCount: int64(0),
 	}
 	c.cache.Store(key, cached)
 }

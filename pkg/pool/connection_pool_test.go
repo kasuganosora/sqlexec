@@ -119,7 +119,7 @@ func TestConnectionManager_ConcurrentAccess(t *testing.T) {
 	done := make(chan bool)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	for i := 0; i < 10; i++ {
 		go func(i int) {
 			db, err := sql.Open("sqlite", ":memory:")

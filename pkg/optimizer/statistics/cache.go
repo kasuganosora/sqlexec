@@ -11,16 +11,16 @@ import (
 // StatisticsCache 统计信息缓存
 // 避免频繁收集统计信息，提升性能
 type StatisticsCache struct {
-	mu       sync.RWMutex
-	cache     map[string]*CachedStatistics
-	ttl       time.Duration // 缓存过期时间
-	hits      int64       // 缓存命中次数
-	misses    int64       // 缓存未命中次数
+	mu     sync.RWMutex
+	cache  map[string]*CachedStatistics
+	ttl    time.Duration // 缓存过期时间
+	hits   int64         // 缓存命中次数
+	misses int64         // 缓存未命中次数
 }
 
 // CachedStatistics 缓存的统计信息
 type CachedStatistics struct {
-	Statistics    *TableStatistics
+	Statistics   *TableStatistics
 	CollectTime  time.Time
 	LastAccessed time.Time
 	HitCount     int64
@@ -65,7 +65,7 @@ func (sc *StatisticsCache) Set(tableName string, stats *TableStatistics) {
 	defer sc.mu.Unlock()
 
 	sc.cache[tableName] = &CachedStatistics{
-		Statistics:    stats,
+		Statistics:   stats,
 		CollectTime:  time.Now(),
 		LastAccessed: time.Now(),
 		HitCount:     0,
@@ -102,52 +102,52 @@ func (sc *StatisticsCache) Stats() CacheStats {
 	}
 
 	return CacheStats{
-		Size:      len(sc.cache),
-		Hits:      sc.hits,
-		Misses:    sc.misses,
-		HitRate:   hitRate,
-		TTL:        sc.ttl,
+		Size:    len(sc.cache),
+		Hits:    sc.hits,
+		Misses:  sc.misses,
+		HitRate: hitRate,
+		TTL:     sc.ttl,
 	}
 }
 
 // CacheStats 缓存统计信息
 type CacheStats struct {
-	Size     int         // 缓存中的表数量
-	Hits     int64       // 命中次数
-	Misses   int64       // 未命中次数
-	HitRate  float64     // 命中率
-	TTL      time.Duration // 过期时间
+	Size    int           // 缓存中的表数量
+	Hits    int64         // 命中次数
+	Misses  int64         // 未命中次数
+	HitRate float64       // 命中率
+	TTL     time.Duration // 过期时间
 }
 
 // TableStatistics 增强的表统计信息
 type TableStatistics struct {
-	Name             string
-	RowCount         int64
-	SampleCount      int64      // 采样行数
-	SampleRatio      float64    // 采样比例
-	ColumnStats      map[string]*ColumnStatistics
-	Histograms       map[string]*Histogram // 列直方图
-	CollectTimestamp  time.Time  // 收集时间
-	EstimatedRowCount int64      // 估计的行数（可能不同于实际RowCount）
+	Name              string
+	RowCount          int64
+	SampleCount       int64   // 采样行数
+	SampleRatio       float64 // 采样比例
+	ColumnStats       map[string]*ColumnStatistics
+	Histograms        map[string]*Histogram // 列直方图
+	CollectTimestamp  time.Time             // 收集时间
+	EstimatedRowCount int64                 // 估计的行数（可能不同于实际RowCount）
 }
 
 // ColumnStatistics 增强的列统计信息
 type ColumnStatistics struct {
 	Name          string
 	DataType      string
-	DistinctCount int64  // NDV (Number of Distinct Values)
+	DistinctCount int64 // NDV (Number of Distinct Values)
 	NullCount     int64
 	MinValue      interface{}
 	MaxValue      interface{}
 	NullFraction  float64
-	AvgWidth     float64 // 平均字符串长度
+	AvgWidth      float64     // 平均字符串长度
 	MedianValue   interface{} // 中位数（可选）
-	StdDev       float64    // 标准差（可选）
+	StdDev        float64     // 标准差（可选）
 }
 
 // AutoRefreshStatisticsCache 自动刷新的统计信息缓存
 type AutoRefreshStatisticsCache struct {
-	cache       *StatisticsCache
+	cache      *StatisticsCache
 	collector  *SamplingCollector
 	dataSource domain.DataSource
 	refreshOn  map[string]time.Time // 下次刷新时间
@@ -162,8 +162,8 @@ func NewAutoRefreshStatisticsCache(
 ) *AutoRefreshStatisticsCache {
 	return &AutoRefreshStatisticsCache{
 		cache:      NewStatisticsCache(ttl),
-		collector:   collector,
-		dataSource:  dataSource,
+		collector:  collector,
+		dataSource: dataSource,
 		refreshOn:  make(map[string]time.Time),
 	}
 }
@@ -176,7 +176,7 @@ func (arc *AutoRefreshStatisticsCache) Get(tableName string) (*TableStatistics, 
 
 	// 检查是否需要刷新
 	needRefresh := !exists || time.Now().After(nextRefresh)
-	
+
 	if needRefresh {
 		return arc.refresh(tableName)
 	}
@@ -314,4 +314,3 @@ func (arc *AutoRefreshStatisticsCache) refreshExpiredStats() {
 		}
 	}
 }
-

@@ -76,9 +76,9 @@ func (t *TableConstraintsTable) Query(ctx context.Context, filters []domain.Filt
 				row := domain.Row{
 					"constraint_catalog": "def",
 					"constraint_schema":  dsName,
-					"constraint_name":   "PRIMARY",
-					"table_schema":      dsName,
-					"table_name":        tableName,
+					"constraint_name":    "PRIMARY",
+					"table_schema":       dsName,
+					"table_name":         tableName,
 					"constraint_type":    "PRIMARY KEY",
 				}
 				rows = append(rows, row)
@@ -90,9 +90,9 @@ func (t *TableConstraintsTable) Query(ctx context.Context, filters []domain.Filt
 					row := domain.Row{
 						"constraint_catalog": "def",
 						"constraint_schema":  dsName,
-						"constraint_name":   fmt.Sprintf("unique_%s", column.Name),
-						"table_schema":      dsName,
-						"table_name":        tableName,
+						"constraint_name":    fmt.Sprintf("unique_%s", column.Name),
+						"table_schema":       dsName,
+						"table_name":         tableName,
 						"constraint_type":    "UNIQUE",
 					}
 					rows = append(rows, row)

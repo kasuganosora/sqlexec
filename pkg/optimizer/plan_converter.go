@@ -111,10 +111,10 @@ func (pc *PlanConverter) convertDataSource(ctx context.Context, p *LogicalDataSo
 	scanCost := pc.costModel.ScanCost(tableName, 10000, useIndex)
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("scan_%s", tableName),
-		Type: plan.TypeTableScan,
+		ID:           fmt.Sprintf("scan_%s", tableName),
+		Type:         plan.TypeTableScan,
 		OutputSchema: columns,
-		Children: []*plan.Plan{},
+		Children:     []*plan.Plan{},
 		Config: &plan.TableScanConfig{
 			TableName:       tableName,
 			Columns:         columns,
@@ -147,10 +147,10 @@ func (pc *PlanConverter) convertSelection(ctx context.Context, p *LogicalSelecti
 	}
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("sel_%d", len(conditions)),
-		Type: plan.TypeSelection,
+		ID:           fmt.Sprintf("sel_%d", len(conditions)),
+		Type:         plan.TypeSelection,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.SelectionConfig{
 			Condition: conditions[0],
 		},
@@ -176,10 +176,10 @@ func (pc *PlanConverter) convertProjection(ctx context.Context, p *LogicalProjec
 	_ = pc.costModel.ProjectCost(int64(10000), projCols)
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("proj_%d", len(projExprs)),
-		Type: plan.TypeProjection,
+		ID:           fmt.Sprintf("proj_%d", len(projExprs)),
+		Type:         plan.TypeProjection,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.ProjectionConfig{
 			Expressions: projExprs,
 			Aliases:     aliases,
@@ -201,10 +201,10 @@ func (pc *PlanConverter) convertLimit(ctx context.Context, p *LogicalLimit, optC
 	offset := p.GetOffset()
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("limit_%d_%d", limit, offset),
-		Type: plan.TypeLimit,
+		ID:           fmt.Sprintf("limit_%d_%d", limit, offset),
+		Type:         plan.TypeLimit,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.LimitConfig{
 			Limit:  limit,
 			Offset: offset,
@@ -226,10 +226,10 @@ func (pc *PlanConverter) convertSort(ctx context.Context, p *LogicalSort, optCtx
 	orderBy := p.GetOrderBy()
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("sort_%d", len(orderBy)),
-		Type: plan.TypeSort,
+		ID:           fmt.Sprintf("sort_%d", len(orderBy)),
+		Type:         plan.TypeSort,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.SortConfig{
 			OrderByItems: orderBy,
 		},
@@ -278,10 +278,10 @@ func (pc *PlanConverter) convertJoin(ctx context.Context, p *LogicalJoin, optCtx
 
 	joinConditions := p.GetJoinConditions()
 	joinPlan := &plan.Plan{
-		ID:   fmt.Sprintf("join_%d", len(joinConditions)),
-		Type: plan.TypeHashJoin,
+		ID:           fmt.Sprintf("join_%d", len(joinConditions)),
+		Type:         plan.TypeHashJoin,
 		OutputSchema: outputSchema,
-		Children: []*plan.Plan{left, right},
+		Children:     []*plan.Plan{left, right},
 		Config: &plan.HashJoinConfig{
 			JoinType:  types.JoinType(p.GetJoinType()),
 			BuildSide: "left",
@@ -324,10 +324,10 @@ func (pc *PlanConverter) convertAggregate(ctx context.Context, p *LogicalAggrega
 	}
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("agg_%d_%d", len(groupByCols), len(aggFuncs)),
-		Type: plan.TypeAggregate,
+		ID:           fmt.Sprintf("agg_%d_%d", len(groupByCols), len(aggFuncs)),
+		Type:         plan.TypeAggregate,
 		OutputSchema: child.OutputSchema,
-		Children: []*plan.Plan{child},
+		Children:     []*plan.Plan{child},
 		Config: &plan.AggregateConfig{
 			GroupByCols: groupByCols,
 			AggFuncs:    convertedAggFuncs,
@@ -354,10 +354,10 @@ func (pc *PlanConverter) convertUnion(ctx context.Context, p *LogicalUnion, optC
 	outputSchema := children[0].OutputSchema
 
 	return &plan.Plan{
-		ID:   fmt.Sprintf("union_%d", len(children)),
-		Type: plan.TypeUnion,
+		ID:           fmt.Sprintf("union_%d", len(children)),
+		Type:         plan.TypeUnion,
 		OutputSchema: outputSchema,
-		Children: children,
+		Children:     children,
 		Config: &plan.UnionConfig{
 			Distinct: !p.IsAll(),
 		},

@@ -352,10 +352,10 @@ func TestSliceFactory_Create(t *testing.T) {
 
 	config := &domain.DataSourceConfig{
 		Options: map[string]interface{}{
-			"data":          data,
-			"table_name":    "users",
-			"database_name": "testdb",
-			"writable":      true,
+			"data":           data,
+			"table_name":     "users",
+			"database_name":  "testdb",
+			"writable":       true,
 			"mvcc_supported": true,
 		},
 	}

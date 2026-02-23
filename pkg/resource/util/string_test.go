@@ -232,10 +232,10 @@ func TestContainsWord(t *testing.T) {
 		{"both empty", "", "", false},
 		{"word with underscore", "users_items", "users", false},
 		// ContainsWord uses various separators for word boundary detection
-		{"word after comma matched", "products,users,items", "users", true}, // comma is a separator
+		{"word after comma matched", "products,users,items", "users", true},     // comma is a separator
 		{"word after semicolon matched", "products;users;items", "users", true}, // semicolon is a separator
-		{"word in parentheses matched", "(users)", "users", true}, // parentheses are separators
-		{"newline boundaries matched", "products\nusers", "users", true}, // newline is a separator
+		{"word in parentheses matched", "(users)", "users", true},               // parentheses are separators
+		{"newline boundaries matched", "products\nusers", "users", true},        // newline is a separator
 		{"newline before word", "products\n users", "users", true},
 		{"newline after word", "products \nusers", "users", true},
 	}

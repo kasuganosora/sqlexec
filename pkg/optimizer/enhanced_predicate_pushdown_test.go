@@ -239,7 +239,7 @@ func TestEnhancedPredicatePushdown_WithAggregation(t *testing.T) {
 			{Name: "category"},
 			{Name: "COUNT(*)", Alias: "count"},
 		},
-		From:   "sales",
+		From:    "sales",
 		GroupBy: []string{"category"},
 		Where: &parser.Expression{
 			Type:     parser.ExprTypeOperator,

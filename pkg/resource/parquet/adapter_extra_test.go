@@ -71,12 +71,22 @@ func TestParquetAdapter_detectType(t *testing.T) {
 
 // TestParquetAdapter_writeBack 测试写回功能
 func TestParquetAdapter_writeBack(t *testing.T) {
-	// 创建临时文件
+	// 创建临时文件 with valid JSON interchange data
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test_writeback.parquet")
 
-	// 创建一个简单的parquet文件（用空文件代替，实际应用中应该用真正的parquet）
-	if err := os.WriteFile(testFile, []byte("fake parquet data"), 0644); err != nil {
+	initialData := `{
+		"table_name": "parquet_data",
+		"columns": [
+			{"name": "id", "type": "int64", "nullable": false, "primary": true},
+			{"name": "value", "type": "string", "nullable": true}
+		],
+		"rows": [
+			{"id": 1, "value": "parquet_data_1"},
+			{"id": 2, "value": "parquet_data_2"}
+		]
+	}`
+	if err := os.WriteFile(testFile, []byte(initialData), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -102,8 +112,8 @@ func TestParquetAdapter_writeBack(t *testing.T) {
 		t.Fatalf("GetLatestTableData() error = %v", err)
 	}
 
-	if len(rows) == 0 {
-		t.Fatalf("Expected at least 1 row")
+	if len(rows) != 2 {
+		t.Fatalf("Expected 2 rows, got %d", len(rows))
 	}
 
 	// 修改数据 - 先插入新行到MVCCDataSource
@@ -112,27 +122,50 @@ func TestParquetAdapter_writeBack(t *testing.T) {
 		t.Fatalf("Insert() error = %v", err)
 	}
 
-	// 写回（会自动获取最新数据）
-	// 注意：由于Parquet写回需要真正的parquet库，这里只是测试调用路径
+	// 写回（会自动获取最新数据并写入JSON interchange format）
 	if err := adapter.writeBack(); err != nil {
-		// Parquet写回可能失败（因为没有真正的parquet库），这是预期的
-		t.Logf("writeBack() returned error (expected for simplified implementation): %v", err)
+		t.Fatalf("writeBack() error = %v", err)
+	}
+
+	// Verify the written file can be read back
+	written, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("Failed to read written file: %v", err)
+	}
+	if len(written) == 0 {
+		t.Fatal("writeBack produced empty file")
 	}
 
 	// 关闭
 	if err := adapter.Close(ctx); err != nil {
 		t.Errorf("Close() error = %v", err)
 	}
+
+	// Re-open and verify the data survived the round-trip
+	adapter2 := NewParquetAdapter(config, testFile)
+	if err := adapter2.Connect(ctx); err != nil {
+		t.Fatalf("Re-Connect() error = %v", err)
+	}
+	_, rows2, err := adapter2.GetLatestTableData("parquet_data")
+	if err != nil {
+		t.Fatalf("GetLatestTableData() after round-trip error = %v", err)
+	}
+	if len(rows2) != 3 {
+		t.Errorf("Expected 3 rows after round-trip, got %d", len(rows2))
+	}
+	if err := adapter2.Close(ctx); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
 }
 
 // TestParquetAdapter_writeBack_ReadOnly 测试只读模式的写回
 func TestParquetAdapter_writeBack_ReadOnly(t *testing.T) {
-	// 创建临时文件
+	// 创建临时文件with valid JSON data
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test_readonly.parquet")
 
-	// 创建一个简单的parquet文件
-	if err := os.WriteFile(testFile, []byte("fake parquet data"), 0644); err != nil {
+	initialData := `[{"id": 1, "value": "hello"}]`
+	if err := os.WriteFile(testFile, []byte(initialData), 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -150,11 +183,12 @@ func TestParquetAdapter_writeBack_ReadOnly(t *testing.T) {
 		t.Fatalf("Connect() error = %v", err)
 	}
 
-	// 写回（writeBack不检查只读，会尝试写文件）
+	// writeBack writes JSON interchange format -- it should succeed even in
+	// readonly mode since writeBack itself does not check the writable flag
+	// (Close does).
 	err := adapter.writeBack()
 	if err != nil {
-		t.Logf("writeBack() in readonly mode returned error (expected): %v", err)
-		// 这可能会因为权限或文件状态而失败，这是可以接受的
+		t.Logf("writeBack() in readonly mode returned error (may be expected): %v", err)
 	} else {
 		t.Log("writeBack() succeeded in readonly mode")
 	}
@@ -270,9 +304,9 @@ func TestParquetAdapter_Connect_CreateFile(t *testing.T) {
 
 	// 创建适配器
 	adapter := NewParquetAdapter(&domain.DataSourceConfig{
-		Type:     domain.DataSourceTypeParquet,
-		Name:     "test_create",
-		Options:  map[string]interface{}{"writable": true},
+		Type:    domain.DataSourceTypeParquet,
+		Name:    "test_create",
+		Options: map[string]interface{}{"writable": true},
 	}, testFile)
 
 	ctx := t.Context()

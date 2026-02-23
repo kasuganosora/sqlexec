@@ -120,9 +120,9 @@ func VerifyPassword(password, hash string) bool {
 
 // SensitiveFieldsManager 敏感字段管理器
 type SensitiveFieldsManager struct {
-	mu               sync.RWMutex
-	encryptor        *Encryptor
-	sensitiveFields  map[string]bool // table.field -> true
+	mu              sync.RWMutex
+	encryptor       *Encryptor
+	sensitiveFields map[string]bool // table.field -> true
 }
 
 // NewSensitiveFieldsManager 创建敏感字段管理器

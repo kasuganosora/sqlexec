@@ -15,7 +15,7 @@ func TestNewMemoryDriver(t *testing.T) {
 	assert.NotNil(t, driver)
 	assert.NotNil(t, driver.SessionMap)
 	assert.NotNil(t, driver.Values)
-	assert.NotNil(t, driver.Mutex)
+	// driver.Mutex is a sync.RWMutex value type — zero value is valid, no nil check needed
 }
 
 func TestMemoryDriver_CreateSession(t *testing.T) {
@@ -339,8 +339,6 @@ func TestMemoryDriver_Touch_SessionNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "session not found")
 }
-
-
 
 func TestMemoryDriver_GetThreadId(t *testing.T) {
 	ctx := context.Background()

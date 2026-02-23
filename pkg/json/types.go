@@ -9,13 +9,13 @@ import "fmt"
 type TypeCode byte
 
 const (
-	TypeLiteral   TypeCode = iota // Literal values: null, true, false
-	TypeObject                 // JSON object
-	TypeArray                  // JSON array
-	TypeString                 // JSON string
-	TypeInteger                // JSON integer
-	TypeDouble                 // JSON number (double)
-	TypeOpaque                 // Opaque/binary type
+	TypeLiteral TypeCode = iota // Literal values: null, true, false
+	TypeObject                  // JSON object
+	TypeArray                   // JSON array
+	TypeString                  // JSON string
+	TypeInteger                 // JSON integer
+	TypeDouble                  // JSON number (double)
+	TypeOpaque                  // Opaque/binary type
 )
 
 // BinaryJSON represents a JSON value in binary format

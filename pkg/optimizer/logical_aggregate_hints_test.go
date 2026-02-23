@@ -6,9 +6,9 @@ import (
 
 func TestLogicalAggregateAlgorithm(t *testing.T) {
 	tests := []struct {
-		name               string
-		algorithm          AggregationAlgorithm
-		expectedAlgorithm  AggregationAlgorithm
+		name              string
+		algorithm         AggregationAlgorithm
+		expectedAlgorithm AggregationAlgorithm
 	}{
 		{"default algorithm", 0, HashAggAlgorithm},
 		{"hash aggregation", HashAggAlgorithm, HashAggAlgorithm},

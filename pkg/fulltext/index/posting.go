@@ -14,11 +14,11 @@ type Posting struct {
 
 // PostingsList 倒排列表
 type PostingsList struct {
-	TermID      int64
-	Postings    []Posting
-	DocCount    int64
-	MaxScore    float64   // 最大分数（用于MAXSCORE优化）
-	SkipList    *SkipList // 跳表（用于快速跳转）
+	TermID   int64
+	Postings []Posting
+	DocCount int64
+	MaxScore float64   // 最大分数（用于MAXSCORE优化）
+	SkipList *SkipList // 跳表（用于快速跳转）
 }
 
 // NewPostingsList 创建倒排列表
@@ -61,7 +61,7 @@ func (pl *PostingsList) FindPosting(docID int64) *Posting {
 	idx := sort.Search(len(pl.Postings), func(i int) bool {
 		return pl.Postings[i].DocID >= docID
 	})
-	
+
 	if idx < len(pl.Postings) && pl.Postings[idx].DocID == docID {
 		return &pl.Postings[idx]
 	}
@@ -76,7 +76,7 @@ func (pl *PostingsList) FindPostingWithSkip(docID int64) *Posting {
 	if skipIdx >= 0 {
 		startIdx = skipIdx
 	}
-	
+
 	// 线性搜索
 	for i := startIdx; i < len(pl.Postings); i++ {
 		if pl.Postings[i].DocID == docID {
@@ -86,7 +86,7 @@ func (pl *PostingsList) FindPostingWithSkip(docID int64) *Posting {
 			return nil
 		}
 	}
-	
+
 	return nil
 }
 
@@ -197,12 +197,12 @@ func (sl *SkipList) FindNearestSkipPoint(docID int64) int {
 	if len(sl.Points) == 0 {
 		return -1
 	}
-	
+
 	// 二分查找
 	idx := sort.Search(len(sl.Points), func(i int) bool {
 		return sl.Points[i].DocID >= docID
 	})
-	
+
 	if idx > 0 {
 		return sl.Points[idx-1].Index
 	}

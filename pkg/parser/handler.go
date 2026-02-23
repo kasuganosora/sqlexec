@@ -83,7 +83,7 @@ func (h *QueryHandler) Handle(stmt ast.StmtNode) (interface{}, error) {
 	}
 
 	log.Printf("处理 SELECT 语句")
-	
+
 	// 提取查询信息
 	info := ExtractSQLInfo(stmt)
 	log.Printf("涉及表: %v", info.Tables)
@@ -91,10 +91,10 @@ func (h *QueryHandler) Handle(stmt ast.StmtNode) (interface{}, error) {
 
 	// 返回查询结果
 	return &QueryResult{
-		Type:     "SELECT",
-		Tables:   info.Tables,
-		Columns:  info.Columns,
-		Stmt:     selectStmt,
+		Type:    "SELECT",
+		Tables:  info.Tables,
+		Columns: info.Columns,
+		Stmt:    selectStmt,
 	}, nil
 }
 
@@ -127,9 +127,9 @@ func (h *DMLHandler) Handle(stmt ast.StmtNode) (interface{}, error) {
 	log.Printf("涉及列: %v", info.Columns)
 
 	return &DMLResult{
-		Type:    stmtType,
-		Tables:  info.Tables,
-		Columns: info.Columns,
+		Type:     stmtType,
+		Tables:   info.Tables,
+		Columns:  info.Columns,
 		Affected: 1, // 默认影响行数
 	}, nil
 }
@@ -198,7 +198,7 @@ func (h *SetHandler) Handle(stmt ast.StmtNode) (interface{}, error) {
 		if varName == "" {
 			varName = SetNames
 		}
-		
+
 		varValue := ""
 		if variable.Value != nil {
 			varValue = fmt.Sprintf("%v", variable.Value)
@@ -278,7 +278,7 @@ func NewDefaultHandler() *DefaultHandler {
 func (h *DefaultHandler) Handle(stmt ast.StmtNode) (interface{}, error) {
 	stmtType := GetStmtType(stmt)
 	log.Printf("使用默认处理器处理语句: %s", stmtType)
-	
+
 	return &DefaultResult{
 		Type: stmtType,
 		Stmt: stmt,

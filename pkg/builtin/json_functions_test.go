@@ -7,7 +7,6 @@ import (
 	jsonpkg "github.com/kasuganosora/sqlexec/pkg/json"
 )
 
-
 // Test JSON_TYPE function
 func TestJSONType(t *testing.T) {
 	tests := []struct {
@@ -541,8 +540,8 @@ func TestJSONPretty(t *testing.T) {
 // Test JSON_STORAGE_SIZE function
 func TestJSONStorageSize(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
+		name  string
+		input string
 	}{
 		{"simple", `{"a":1}`},
 		{"array", `[1,2,3]`},
@@ -705,13 +704,179 @@ func TestJSONErrorHandling(t *testing.T) {
 	}
 }
 
+// Test JSON_SEARCH function
+func TestJSONSearch(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []interface{}
+		expected interface{}
+		wantErr  bool
+	}{
+		// Basic "one" mode - find first match
+		{
+			name:     "one mode simple match",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "one", "hello"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "one mode no match",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "one", "notfound"},
+			expected: nil,
+			wantErr:  false,
+		},
+		// Basic "all" mode - find all matches
+		{
+			name:     "all mode multiple matches",
+			args:     []interface{}{`{"a": "hello", "b": "hello", "c": "world"}`, "all", "hello"},
+			expected: `["$.a","$.b"]`,
+			wantErr:  false,
+		},
+		{
+			name:     "all mode single match",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "all", "hello"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "all mode no match",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "all", "notfound"},
+			expected: nil,
+			wantErr:  false,
+		},
+		// Nested objects
+		{
+			name:     "nested object match",
+			args:     []interface{}{`{"a": {"b": "target"}}`, "one", "target"},
+			expected: `"$.a.b"`,
+			wantErr:  false,
+		},
+		// Arrays
+		{
+			name:     "array element match",
+			args:     []interface{}{`["hello", "world", "foo"]`, "one", "world"},
+			expected: `"$[1]"`,
+			wantErr:  false,
+		},
+		{
+			name:     "array all matches",
+			args:     []interface{}{`["hello", "world", "hello"]`, "all", "hello"},
+			expected: `["$[0]","$[2]"]`,
+			wantErr:  false,
+		},
+		// Mixed nested structures
+		{
+			name:     "mixed nested structure",
+			args:     []interface{}{`{"a": ["x", "y"], "b": {"c": "y"}}`, "all", "y"},
+			expected: `["$.a[1]","$.b.c"]`,
+			wantErr:  false,
+		},
+		// Wildcard patterns
+		{
+			name:     "percent wildcard prefix",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "one", "%llo"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "percent wildcard suffix",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "one", "hel%"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "percent wildcard middle",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "one", "h%o"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "underscore wildcard",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "one", "hell_"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "percent matches everything",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "all", "%"},
+			expected: `["$.a","$.b"]`,
+			wantErr:  false,
+		},
+		// Non-string values should be skipped
+		{
+			name:     "skip non-string values",
+			args:     []interface{}{`{"a": 1, "b": "hello", "c": true}`, "one", "hello"},
+			expected: `"$.b"`,
+			wantErr:  false,
+		},
+		// Null JSON document
+		{
+			name:     "null json doc",
+			args:     []interface{}{`null`, "one", "hello"},
+			expected: nil,
+			wantErr:  false,
+		},
+		// Error cases
+		{
+			name:    "too few arguments",
+			args:    []interface{}{`{"a": 1}`},
+			wantErr: true,
+		},
+		{
+			name:    "invalid one_or_all",
+			args:    []interface{}{`{"a": "hello"}`, "invalid", "hello"},
+			wantErr: true,
+		},
+		// Custom escape character (4th arg)
+		{
+			name:     "with escape char",
+			args:     []interface{}{`{"a": "10%"}`, "one", "10|%", "|"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		// Deeply nested
+		{
+			name:     "deeply nested match",
+			args:     []interface{}{`{"a": {"b": {"c": {"d": "deep"}}}}`, "one", "deep"},
+			expected: `"$.a.b.c.d"`,
+			wantErr:  false,
+		},
+		// Empty string search
+		{
+			name:     "search empty string",
+			args:     []interface{}{`{"a": "", "b": "hello"}`, "one", ""},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := jsonSearch(tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("jsonSearch() expected error, got result: %v", result)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("jsonSearch() unexpected error: %v", err)
+			}
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("jsonSearch() = %v, want nil", result)
+				}
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("jsonSearch() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 // Test performance with large JSON
 func TestJSONPerformance(t *testing.T) {
-	// Temporarily skip this test as it may have environment-specific issues
-	// TODO: Investigate and fix the JSON extraction/set behavior for large objects
-	t.Skip("Skipping performance test - needs investigation of large JSON handling")
-
-
 	// Create a large JSON object
 	largeJSON := make(map[string]interface{})
 	for i := 0; i < 100; i++ {
@@ -729,8 +894,9 @@ func TestJSONPerformance(t *testing.T) {
 		if err != nil {
 			t.Errorf("Extract failed: %v", err)
 		}
-		if result.GetInterface() != 50.0 {
-			t.Errorf("Extract returned wrong value")
+		// NewBinaryJSON converts int to int64, so the stored value is int64(50)
+		if result.GetInterface() != int64(50) {
+			t.Errorf("Extract returned wrong value: got %v (%T), want int64(50)", result.GetInterface(), result.GetInterface())
 		}
 	})
 
@@ -750,8 +916,422 @@ func TestJSONPerformance(t *testing.T) {
 		if err != nil {
 			t.Errorf("Extract failed: %v", err)
 		}
-		if newResult.GetInterface() != 999.0 {
-			t.Errorf("Set did not update correctly")
+		// NewBinaryJSON converts int to int64, so the stored value is int64(999)
+		if newResult.GetInterface() != int64(999) {
+			t.Errorf("Set did not update correctly: got %v (%T), want int64(999)", newResult.GetInterface(), newResult.GetInterface())
 		}
 	})
+}
+
+// Test JSON_SEARCH edge cases
+func TestJSONSearch_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []interface{}
+		expected interface{}
+		wantErr  bool
+	}{
+		{
+			name:     "null JSON input returns nil",
+			args:     []interface{}{`null`, "one", "anything"},
+			expected: nil,
+			wantErr:  false,
+		},
+		{
+			name:     "no match found returns nil",
+			args:     []interface{}{`{"a": "hello", "b": "world"}`, "one", "nonexistent"},
+			expected: nil,
+			wantErr:  false,
+		},
+		{
+			name:    "invalid second argument returns error",
+			args:    []interface{}{`{"a": "hello"}`, "bogus", "hello"},
+			wantErr: true,
+		},
+		{
+			name:     "custom escape character exclamation mark",
+			args:     []interface{}{`{"a": "100%", "b": "hello"}`, "one", "100!%", "!"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "search in deeply nested structure 4 levels",
+			args:     []interface{}{`{"l1": {"l2": {"l3": {"l4": "found"}}}}`, "one", "found"},
+			expected: `"$.l1.l2.l3.l4"`,
+			wantErr:  false,
+		},
+		{
+			name:     "search in mixed array and object",
+			args:     []interface{}{`[{"name": "alice"}, {"name": "bob"}, "charlie"]`, "one", "bob"},
+			expected: `"$[1].name"`,
+			wantErr:  false,
+		},
+		{
+			name:     "empty search string matches empty string value",
+			args:     []interface{}{`{"a": "", "b": "notempty"}`, "one", ""},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:    "too few arguments returns error",
+			args:    []interface{}{`{"a": 1}`, "one"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := jsonSearch(tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("jsonSearch() expected error, got result: %v", result)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("jsonSearch() unexpected error: %v", err)
+			}
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("jsonSearch() = %v, want nil", result)
+				}
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("jsonSearch() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// Test JSON_SEARCH "all" mode returning multiple matches as a JSON array
+func TestJSONSearch_AllMode_MultipleMatches(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []interface{}
+		expected interface{}
+	}{
+		{
+			name:     "all mode finds multiple matches in object",
+			args:     []interface{}{`{"x": "match", "y": "no", "z": "match"}`, "all", "match"},
+			expected: `["$.x","$.z"]`,
+		},
+		{
+			name:     "all mode with wildcard finds all strings",
+			args:     []interface{}{`{"a": "foo", "b": "bar", "c": "baz"}`, "all", "b%"},
+			expected: `["$.b","$.c"]`,
+		},
+		{
+			name:     "all mode finds matches across nested objects and arrays",
+			args:     []interface{}{`{"arr": ["target", "other"], "obj": {"key": "target"}}`, "all", "target"},
+			expected: `["$.arr[0]","$.obj.key"]`,
+		},
+		{
+			name:     "all mode with contains wildcard",
+			args:     []interface{}{`{"a": "abcdef", "b": "xcdey", "c": "nope"}`, "all", "%cde%"},
+			expected: `["$.a","$.b"]`,
+		},
+		{
+			name:     "all mode single match returns quoted string not array",
+			args:     []interface{}{`{"a": "only", "b": "other"}`, "all", "only"},
+			expected: `"$.a"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := jsonSearch(tt.args)
+			if err != nil {
+				t.Fatalf("jsonSearch() unexpected error: %v", err)
+			}
+			if result != tt.expected {
+				t.Errorf("jsonSearch() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// Test likeMatchDP pattern matching logic via jsonSearch
+func TestLikeMatchDP(t *testing.T) {
+	// We test likeMatchDP indirectly through jsonSearch. Each test case places a
+	// single string value in a JSON object and searches for it with a pattern.
+	tests := []struct {
+		name      string
+		value     string
+		pattern   string
+		expectHit bool
+	}{
+		{
+			name:      "exact match no wildcards",
+			value:     "hello",
+			pattern:   "hello",
+			expectHit: true,
+		},
+		{
+			name:      "exact match mismatch",
+			value:     "hello",
+			pattern:   "world",
+			expectHit: false,
+		},
+		{
+			name:      "percent at start suffix match",
+			value:     "hello",
+			pattern:   "%llo",
+			expectHit: true,
+		},
+		{
+			name:      "percent at start no match",
+			value:     "hello",
+			pattern:   "%xyz",
+			expectHit: false,
+		},
+		{
+			name:      "percent at end prefix match",
+			value:     "hello",
+			pattern:   "hel%",
+			expectHit: true,
+		},
+		{
+			name:      "percent at end no match",
+			value:     "hello",
+			pattern:   "xyz%",
+			expectHit: false,
+		},
+		{
+			name:      "percent on both sides contains match",
+			value:     "hello world",
+			pattern:   "%lo wo%",
+			expectHit: true,
+		},
+		{
+			name:      "percent on both sides no match",
+			value:     "hello world",
+			pattern:   "%xyz%",
+			expectHit: false,
+		},
+		{
+			name:      "underscore single char wildcard",
+			value:     "hat",
+			pattern:   "h_t",
+			expectHit: true,
+		},
+		{
+			name:      "underscore single char no match too long",
+			value:     "hoot",
+			pattern:   "h_t",
+			expectHit: false,
+		},
+		{
+			name:      "multiple underscores",
+			value:     "abcde",
+			pattern:   "a___e",
+			expectHit: true,
+		},
+		{
+			name:      "multiple underscores wrong length",
+			value:     "abcdef",
+			pattern:   "a___e",
+			expectHit: false,
+		},
+		{
+			name:      "percent and underscore combined",
+			value:     "abcdef",
+			pattern:   "a_c%f",
+			expectHit: true,
+		},
+		{
+			name:      "percent and underscore combined no match",
+			value:     "aXYdef",
+			pattern:   "a_c%f",
+			expectHit: false,
+		},
+		{
+			name:      "empty pattern matches empty string",
+			value:     "",
+			pattern:   "",
+			expectHit: true,
+		},
+		{
+			name:      "empty pattern does not match non-empty string",
+			value:     "hello",
+			pattern:   "",
+			expectHit: false,
+		},
+		{
+			name:      "pattern with only percent matches everything",
+			value:     "anything at all",
+			pattern:   "%",
+			expectHit: true,
+		},
+		{
+			name:      "pattern with only percent matches empty string",
+			value:     "",
+			pattern:   "%",
+			expectHit: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build a JSON doc with a single string value
+			jsonDoc := fmt.Sprintf(`{"v": %q}`, tt.value)
+			result, err := jsonSearch([]interface{}{jsonDoc, "one", tt.pattern})
+			if err != nil {
+				t.Fatalf("jsonSearch() unexpected error: %v", err)
+			}
+			if tt.expectHit {
+				if result == nil {
+					t.Errorf("expected match for value=%q pattern=%q, got nil", tt.value, tt.pattern)
+				} else if result != `"$.v"` {
+					t.Errorf("expected path \"$.v\", got %v", result)
+				}
+			} else {
+				if result != nil {
+					t.Errorf("expected no match for value=%q pattern=%q, got %v", tt.value, tt.pattern, result)
+				}
+			}
+		})
+	}
+}
+
+// Test JSON_SEARCH escape character functionality
+func TestJSONSearch_EscapeCharacter(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []interface{}
+		expected interface{}
+		wantErr  bool
+	}{
+		{
+			name:     "default escape backslash matches literal percent",
+			args:     []interface{}{`{"a": "50%", "b": "500"}`, "one", `50\%`},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "custom escape exclamation matches literal percent",
+			args:     []interface{}{`{"a": "50%", "b": "500"}`, "one", "50!%", "!"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "custom escape matches literal underscore",
+			args:     []interface{}{`{"a": "a_b", "b": "axb"}`, "one", "a!_b", "!"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "escape char does not affect normal characters",
+			args:     []interface{}{`{"a": "hello"}`, "one", "hel%", "!"},
+			expected: `"$.a"`,
+			wantErr:  false,
+		},
+		{
+			name:     "escaped percent does not act as wildcard",
+			args:     []interface{}{`{"a": "hello"}`, "all", `h\%o`},
+			expected: nil,
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := jsonSearch(tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("jsonSearch() expected error, got result: %v", result)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("jsonSearch() unexpected error: %v", err)
+			}
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("jsonSearch() = %v, want nil", result)
+				}
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("jsonSearch() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// Test JSON_SEARCH within JSON arrays
+func TestJSONSearch_ArraySearch(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []interface{}
+		expected interface{}
+		wantErr  bool
+	}{
+		{
+			name:     "finds element in flat array",
+			args:     []interface{}{`["alpha", "beta", "gamma"]`, "one", "beta"},
+			expected: `"$[1]"`,
+			wantErr:  false,
+		},
+		{
+			name:     "returns correct array index path for third element",
+			args:     []interface{}{`["a", "b", "target", "d"]`, "one", "target"},
+			expected: `"$[2]"`,
+			wantErr:  false,
+		},
+		{
+			name:     "one mode stops at first match in array",
+			args:     []interface{}{`["dup", "other", "dup"]`, "one", "dup"},
+			expected: `"$[0]"`,
+			wantErr:  false,
+		},
+		{
+			name:     "all mode finds all matches in array",
+			args:     []interface{}{`["dup", "other", "dup", "dup"]`, "all", "dup"},
+			expected: `["$[0]","$[2]","$[3]"]`,
+			wantErr:  false,
+		},
+		{
+			name:     "array with wildcard pattern",
+			args:     []interface{}{`["apple", "apricot", "banana"]`, "all", "ap%"},
+			expected: `["$[0]","$[1]"]`,
+			wantErr:  false,
+		},
+		{
+			name:     "nested array in object search",
+			args:     []interface{}{`{"items": ["red", "green", "blue"]}`, "one", "green"},
+			expected: `"$.items[1]"`,
+			wantErr:  false,
+		},
+		{
+			name:     "all mode in nested array returns correct paths",
+			args:     []interface{}{`{"items": ["red", "green", "red"]}`, "all", "red"},
+			expected: `["$.items[0]","$.items[2]"]`,
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := jsonSearch(tt.args)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("jsonSearch() expected error, got result: %v", result)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("jsonSearch() unexpected error: %v", err)
+			}
+			if tt.expected == nil {
+				if result != nil {
+					t.Errorf("jsonSearch() = %v, want nil", result)
+				}
+				return
+			}
+			if result != tt.expected {
+				t.Errorf("jsonSearch() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
 }

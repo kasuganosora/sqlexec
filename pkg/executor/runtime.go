@@ -10,7 +10,7 @@ import (
 // Runtime 执行运行时
 type Runtime struct {
 	activeQueries map[string]*QueryContext
-	mu           sync.RWMutex
+	mu            sync.RWMutex
 }
 
 // QueryContext 查询上下文

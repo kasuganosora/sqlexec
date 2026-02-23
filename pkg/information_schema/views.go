@@ -45,7 +45,7 @@ func (v *ViewsTable) GetSchema() []domain.ColumnInfo {
 // Query executes a query against VIEWS table
 func (v *ViewsTable) Query(ctx context.Context, filters []domain.Filter, options *domain.QueryOptions) (*domain.QueryResult, error) {
 	rows := make([]domain.Row, 0)
-	
+
 	// Get all data sources
 	dsNames := v.dsManager.List()
 	for _, dsName := range dsNames {
@@ -54,53 +54,53 @@ func (v *ViewsTable) Query(ctx context.Context, filters []domain.Filter, options
 		if err != nil {
 			continue
 		}
-		
+
 		for _, tableName := range tables {
 			// Get table info
 			tableInfo, err := v.dsManager.GetTableInfo(ctx, dsName, tableName)
 			if err != nil {
 				continue
 			}
-			
-		// Check if it's a view (has view metadata in Atts)
-		if tableInfo.Atts == nil {
-			continue
-		}
-		viewData, ok := tableInfo.Atts[domain.ViewMetaKey]
-		if !ok {
-			continue
-		}
 
-		// Handle view metadata - can be either domain.ViewInfo or JSON string
-		var viewInfo domain.ViewInfo
-		switch v := viewData.(type) {
-		case domain.ViewInfo:
-			viewInfo = v
-		case string:
-			if err := json.Unmarshal([]byte(v), &viewInfo); err != nil {
+			// Check if it's a view (has view metadata in Atts)
+			if tableInfo.Atts == nil {
 				continue
 			}
-		default:
-			continue
-		}
-			
+			viewData, ok := tableInfo.Atts[domain.ViewMetaKey]
+			if !ok {
+				continue
+			}
+
+			// Handle view metadata - can be either domain.ViewInfo or JSON string
+			var viewInfo domain.ViewInfo
+			switch v := viewData.(type) {
+			case domain.ViewInfo:
+				viewInfo = v
+			case string:
+				if err := json.Unmarshal([]byte(v), &viewInfo); err != nil {
+					continue
+				}
+			default:
+				continue
+			}
+
 			// Build view row
 			row := domain.Row{
-				"TABLE_CATALOG":       "def",
-				"TABLE_SCHEMA":        dsName,
-				"TABLE_NAME":          tableName,
+				"TABLE_CATALOG":        "def",
+				"TABLE_SCHEMA":         dsName,
+				"TABLE_NAME":           tableName,
 				"VIEW_DEFINITION":      viewInfo.SelectStmt,
-				"CHECK_OPTION":        checkOptionToString(viewInfo.CheckOption),
-				"IS_UPDATABLE":        boolToYN(viewInfo.Updatable),
-				"DEFINER":             viewInfo.Definer,
+				"CHECK_OPTION":         checkOptionToString(viewInfo.CheckOption),
+				"IS_UPDATABLE":         boolToYN(viewInfo.Updatable),
+				"DEFINER":              viewInfo.Definer,
 				"SECURITY_TYPE":        securityTypeToString(viewInfo.Security),
-				"CHARACTER_SET_CLIENT":  viewInfo.Charset,
-				"COLLATION_CONNECTION":  viewInfo.Collate,
+				"CHARACTER_SET_CLIENT": viewInfo.Charset,
+				"COLLATION_CONNECTION": viewInfo.Collate,
 			}
 			rows = append(rows, row)
 		}
 	}
-	
+
 	// Apply filters
 	var err error
 	if len(filters) > 0 {
@@ -109,7 +109,7 @@ func (v *ViewsTable) Query(ctx context.Context, filters []domain.Filter, options
 			return nil, err
 		}
 	}
-	
+
 	// Apply limit/offset
 	if options != nil && options.Limit > 0 {
 		start := options.Offset
@@ -126,7 +126,7 @@ func (v *ViewsTable) Query(ctx context.Context, filters []domain.Filter, options
 			rows = rows[start:end]
 		}
 	}
-	
+
 	return &domain.QueryResult{
 		Columns: v.GetSchema(),
 		Rows:    rows,
@@ -137,7 +137,7 @@ func (v *ViewsTable) Query(ctx context.Context, filters []domain.Filter, options
 // applyViewsFilters applies filters to view rows
 func applyViewsFilters(rows []domain.Row, filters []domain.Filter) ([]domain.Row, error) {
 	filtered := make([]domain.Row, 0, len(rows))
-	
+
 	for _, row := range rows {
 		match := true
 		for _, filter := range filters {
@@ -146,20 +146,20 @@ func applyViewsFilters(rows []domain.Row, filters []domain.Filter) ([]domain.Row
 				match = false
 				break
 			}
-			
+
 			// Simple string comparison for now
 			filterVal, ok := filter.Value.(string)
 			if !ok {
 				match = false
 				break
 			}
-			
+
 			rowVal, ok := val.(string)
 			if !ok {
 				match = false
 				break
 			}
-			
+
 			// Apply operator
 			switch filter.Operator {
 			case "=":
@@ -171,17 +171,17 @@ func applyViewsFilters(rows []domain.Row, filters []domain.Filter) ([]domain.Row
 			default:
 				match = match && rowVal == filterVal
 			}
-			
+
 			if !match {
 				break
 			}
 		}
-		
+
 		if match {
 			filtered = append(filtered, row)
 		}
 	}
-	
+
 	return filtered, nil
 }
 
@@ -215,5 +215,3 @@ func securityTypeToString(sec domain.ViewSecurity) string {
 		return ""
 	}
 }
-
-

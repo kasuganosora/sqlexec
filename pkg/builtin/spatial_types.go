@@ -488,7 +488,7 @@ func (c *GeoCollection) Dimension() int {
 	}
 	return maxDim
 }
-func (c *GeoCollection) SRID() int  { return c.Srid }
+func (c *GeoCollection) SRID() int     { return c.Srid }
 func (c *GeoCollection) IsEmpty() bool { return len(c.Geometries) == 0 }
 
 func (c *GeoCollection) NumPoints() int {

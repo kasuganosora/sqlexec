@@ -34,14 +34,14 @@ type AISAQIndex struct {
 	maxDegree      int
 	searchListSize int
 
-	mu   sync.RWMutex
-	rng  *rand.Rand
+	mu  sync.RWMutex
+	rng *rand.Rand
 }
 
 // vamanaNode Vamana 图节点
 type vamanaNode struct {
-	id       int64
-	vector   []int8
+	id        int64
+	vector    []int8
 	neighbors []int64
 }
 
@@ -75,17 +75,17 @@ func NewAISAQIndex(columnName string, config *VectorIndexConfig) (*AISAQIndex, e
 	}
 
 	return &AISAQIndex{
-		columnName:        columnName,
-		config:            config,
-		distFunc:          distFunc,
-		vectors:           make(map[int64][]float32),
-		quantizedVectors:  make(map[int64][]int8),
-		scale:             make([]float32, config.Dimension),
-		shift:             make([]float32, config.Dimension),
-		graph:             make(map[int64]*vamanaNode),
-		maxDegree:         maxDegree,
-		searchListSize:    searchListSize,
-		rng:               rand.New(rand.NewSource(time.Now().UnixNano())),
+		columnName:       columnName,
+		config:           config,
+		distFunc:         distFunc,
+		vectors:          make(map[int64][]float32),
+		quantizedVectors: make(map[int64][]int8),
+		scale:            make([]float32, config.Dimension),
+		shift:            make([]float32, config.Dimension),
+		graph:            make(map[int64]*vamanaNode),
+		maxDegree:        maxDegree,
+		searchListSize:   searchListSize,
+		rng:              rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
@@ -234,8 +234,8 @@ func (a *AISAQIndex) buildVamanaGraph(records []VectorRecord) error {
 		quantized := a.quantizedVectors[startID]
 
 		a.graph[startID] = &vamanaNode{
-			id:       startID,
-			vector:   quantized,
+			id:        startID,
+			vector:    quantized,
 			neighbors: []int64{},
 		}
 	}
@@ -256,8 +256,8 @@ func (a *AISAQIndex) buildVamanaGraph(records []VectorRecord) error {
 
 		// 创建节点并添加边（双向）
 		node := &vamanaNode{
-			id:       rec.ID,
-			vector:   quantized,
+			id:        rec.ID,
+			vector:    quantized,
 			neighbors: make([]int64, len(neighbors)),
 		}
 		copy(node.neighbors, neighbors)
@@ -479,8 +479,8 @@ func (a *AISAQIndex) Insert(id int64, vector []float32) error {
 
 	// 创建节点
 	node := &vamanaNode{
-		id:       id,
-		vector:   quantized,
+		id:        id,
+		vector:    quantized,
 		neighbors: neighbors,
 	}
 

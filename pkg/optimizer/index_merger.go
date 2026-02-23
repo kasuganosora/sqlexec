@@ -24,12 +24,12 @@ func NewIndexMerger(maxColumns int) *IndexMerger {
 
 // IndexMerge 索引合并结果
 type IndexMerge struct {
-	SourceIndexes []string          // 被合并的索引名称
-	MergedIndex   *MergerIndex      // 合并后的索引
-	Benefit       float64           // 收益（成本降低比例）
-	Reduction     int               // 减少的索引数量
-	SpaceSaved    int64             // 节省的空间（字节）
-	Reason        string            // 合并原因
+	SourceIndexes []string     // 被合并的索引名称
+	MergedIndex   *MergerIndex // 合并后的索引
+	Benefit       float64      // 收益（成本降低比例）
+	Reduction     int          // 减少的索引数量
+	SpaceSaved    int64        // 节省的空间（字节）
+	Reason        string       // 合并原因
 }
 
 // MergerIndex 索引定义（用于合并器）
@@ -61,8 +61,8 @@ func (im *IndexMerger) FindMergeableIndexes(existingIndexes []*Index, candidates
 			TableName: candidate.TableName,
 			Columns:   candidate.Columns,
 			Unique:    candidate.Unique,
-			Name:       fmt.Sprintf("idx_%s", strings.Join(candidate.Columns, "_")),
-			Size:       1024, // 默认大小
+			Name:      fmt.Sprintf("idx_%s", strings.Join(candidate.Columns, "_")),
+			Size:      1024, // 默认大小
 		})
 	}
 

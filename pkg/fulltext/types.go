@@ -27,9 +27,9 @@ type Document struct {
 
 // SearchResult 搜索结果
 type SearchResult struct {
-	DocID   int64
-	Score   float64
-	Doc     *Document
+	DocID int64
+	Score float64
+	Doc   *Document
 }
 
 // SearchResultWithHighlight 带高亮的搜索结果
@@ -73,21 +73,21 @@ var DefaultBM25Params = BM25Params{
 
 // FieldConfig 字段配置
 type FieldConfig struct {
-	Name         string
-	Type         FieldType
-	Tokenizer    TokenizerType
-	Record       RecordType
-	Fast         bool
-	FieldNorms   bool
-	Boost        float64
+	Name       string
+	Type       FieldType
+	Tokenizer  TokenizerType
+	Record     RecordType
+	Fast       bool
+	FieldNorms bool
+	Boost      float64
 }
 
 // Config 全文搜索配置
 type Config struct {
-	BM25Params   BM25Params
-	StopWords    []string
-	MinTokenLen  int
-	MaxTokenLen  int
+	BM25Params  BM25Params
+	StopWords   []string
+	MinTokenLen int
+	MaxTokenLen int
 }
 
 // DefaultConfig 默认配置

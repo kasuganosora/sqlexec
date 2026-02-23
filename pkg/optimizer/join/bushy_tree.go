@@ -9,16 +9,16 @@ import (
 // BushyJoinTreeBuilder Bushy Join Tree构建器
 // 支持非线性（bushy）的JOIN树，提升多表JOIN性能
 type BushyJoinTreeBuilder struct {
-	costModel   *cost.AdaptiveCostModel
-	estimator   interface{} // 使用 interface{} 避免循环导入
-	maxBushiness int       // 最大Bushiness参数
+	costModel    *cost.AdaptiveCostModel
+	estimator    interface{} // 使用 interface{} 避免循环导入
+	maxBushiness int         // 最大Bushiness参数
 }
 
 // NewBushyJoinTreeBuilder 创建Bushy JOIN Tree构建器
 func NewBushyJoinTreeBuilder(costModel *cost.AdaptiveCostModel, estimator interface{}, maxBushiness int) *BushyJoinTreeBuilder {
 	return &BushyJoinTreeBuilder{
-		costModel:   costModel,
-		estimator:   estimator,
+		costModel:    costModel,
+		estimator:    estimator,
 		maxBushiness: maxBushiness,
 	}
 }

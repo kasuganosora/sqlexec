@@ -24,7 +24,7 @@ func NewProjectionOperator(p *plan.Plan, das dataaccess.Service) (*ProjectionOpe
 	}
 
 	base := NewBaseOperator(p, das)
-	
+
 	// 构建子算子
 	buildFn := func(childPlan *plan.Plan) (Operator, error) {
 		return buildOperator(childPlan, das)

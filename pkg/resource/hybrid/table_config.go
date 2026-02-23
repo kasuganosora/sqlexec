@@ -10,8 +10,8 @@ import (
 
 // TableConfigManager manages table-level persistence configuration
 type TableConfigManager struct {
-	mu               sync.RWMutex
-	configs          map[string]*TableConfig // table_name -> config
+	mu                sync.RWMutex
+	configs           map[string]*TableConfig // table_name -> config
 	defaultPersistent bool
 
 	// persistence for configs themselves

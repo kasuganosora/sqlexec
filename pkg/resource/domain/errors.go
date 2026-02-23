@@ -84,8 +84,8 @@ func (e *ErrConnectionFailed) Error() string {
 
 // ErrQueryFailed 查询失败错误
 type ErrQueryFailed struct {
-	Query   string
-	Reason  string
+	Query  string
+	Reason string
 }
 
 func (e *ErrQueryFailed) Error() string {
@@ -94,10 +94,10 @@ func (e *ErrQueryFailed) Error() string {
 
 // ErrTypeConversion 类型转换错误
 type ErrTypeConversion struct {
-	FieldName  string
-	FromType   string
-	ToType     string
-	Value      interface{}
+	FieldName string
+	FromType  string
+	ToType    string
+	Value     interface{}
 }
 
 func (e *ErrTypeConversion) Error() string {

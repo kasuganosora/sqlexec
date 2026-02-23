@@ -458,7 +458,7 @@ func stringConcat(args []interface{}) (interface{}, error) {
 	if len(args) < 1 {
 		return "", nil
 	}
-	
+
 	var result strings.Builder
 	for _, arg := range args {
 		result.WriteString(toString(arg))
@@ -470,12 +470,12 @@ func stringConcatWS(args []interface{}) (interface{}, error) {
 	if len(args) < 1 {
 		return "", nil
 	}
-	
+
 	separator := toString(args[0])
 	if len(args) == 1 {
 		return "", nil
 	}
-	
+
 	var result strings.Builder
 	result.WriteString(toString(args[1]))
 	for i := 2; i < len(args); i++ {
@@ -538,20 +538,20 @@ func stringLeft(args []interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return nil, fmt.Errorf("left() requires exactly 2 arguments")
 	}
-	
+
 	str := toString(args[0])
 	length, err := toInt64(args[1])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if length < 0 {
 		length = 0
 	}
 	if int64(len(str)) < length {
 		length = int64(len(str))
 	}
-	
+
 	return str[:length], nil
 }
 
@@ -559,20 +559,20 @@ func stringRight(args []interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return nil, fmt.Errorf("right() requires exactly 2 arguments")
 	}
-	
+
 	str := toString(args[0])
 	length, err := toInt64(args[1])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if length < 0 {
 		length = 0
 	}
 	if int64(len(str)) < length {
 		length = int64(len(str))
 	}
-	
+
 	return str[len(str)-int(length):], nil
 }
 
@@ -580,13 +580,13 @@ func stringSubstring(args []interface{}) (interface{}, error) {
 	if len(args) < 2 || len(args) > 3 {
 		return nil, fmt.Errorf("substring() requires 2 or 3 arguments")
 	}
-	
+
 	str := toString(args[0])
 	start, err := toInt64(args[1])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	strLen := int64(len(str))
 	if strLen == 0 {
 		return "", nil
@@ -639,11 +639,11 @@ func stringReplace(args []interface{}) (interface{}, error) {
 	if len(args) != 3 {
 		return nil, fmt.Errorf("replace() requires exactly 3 arguments")
 	}
-	
+
 	str := toString(args[0])
 	oldStr := toString(args[1])
 	newStr := toString(args[2])
-	
+
 	return strings.ReplaceAll(str, oldStr, newStr), nil
 }
 
@@ -651,13 +651,13 @@ func stringRepeat(args []interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return nil, fmt.Errorf("repeat() requires exactly 2 arguments")
 	}
-	
+
 	str := toString(args[0])
 	count, err := toInt64(args[1])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if count <= 0 {
 		return "", nil
 	}
@@ -676,14 +676,14 @@ func stringReverse(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("reverse() requires exactly 1 argument")
 	}
-	
+
 	str := toString(args[0])
 	runes := []rune(str)
-	
+
 	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
 		runes[i], runes[j] = runes[j], runes[i]
 	}
-	
+
 	return string(runes), nil
 }
 
@@ -773,15 +773,15 @@ func stringPosition(args []interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return nil, fmt.Errorf("position() requires exactly 2 arguments")
 	}
-	
+
 	substr := toString(args[0])
 	str := toString(args[1])
-	
+
 	index := strings.Index(str, substr)
 	if index == -1 {
 		return int64(0), nil
 	}
-	
+
 	// SQL中位置从1开始
 	return int64(index + 1), nil
 }
@@ -790,15 +790,15 @@ func stringInstr(args []interface{}) (interface{}, error) {
 	if len(args) != 2 {
 		return nil, fmt.Errorf("instr() requires exactly 2 arguments")
 	}
-	
+
 	str := toString(args[0])
 	substr := toString(args[1])
-	
+
 	index := strings.Index(str, substr)
 	if index == -1 {
 		return int64(0), nil
 	}
-	
+
 	// SQL中位置从1开始
 	return int64(index + 1), nil
 }
@@ -807,12 +807,12 @@ func stringASCII(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("ascii() requires exactly 1 argument")
 	}
-	
+
 	str := toString(args[0])
 	if len(str) == 0 {
 		return int64(0), nil
 	}
-	
+
 	return int64(str[0]), nil
 }
 
@@ -820,12 +820,12 @@ func stringSpace(args []interface{}) (interface{}, error) {
 	if len(args) != 1 {
 		return nil, fmt.Errorf("space() requires exactly 1 argument")
 	}
-	
+
 	count, err := toInt64(args[0])
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if count <= 0 {
 		return "", nil
 	}

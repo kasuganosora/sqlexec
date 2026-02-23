@@ -51,10 +51,10 @@ func TestNewDB(t *testing.T) {
 		{
 			name: "custom config",
 			config: &DBConfig{
-				CacheEnabled:  false,
-				CacheSize:     500,
-				CacheTTL:      600,
-				DebugMode:     true,
+				CacheEnabled: false,
+				CacheSize:    500,
+				CacheTTL:     600,
+				DebugMode:    true,
 			},
 			wantNil: false,
 		},
@@ -69,21 +69,21 @@ func TestNewDB(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				assert.NotNil(t, db)
-			if tt.config != nil {
-				assert.False(t, db.config.CacheEnabled)
-				assert.Equal(t, 500, db.config.CacheSize)
-				assert.Equal(t, 600, db.config.CacheTTL)
-				assert.True(t, db.config.DebugMode)
-				assert.Nil(t, db.cache) // cache is nil when disabled
-			} else {
-				assert.True(t, db.config.CacheEnabled)
-				assert.Equal(t, 1000, db.config.CacheSize)
-				assert.Equal(t, 300, db.config.CacheTTL)
-				assert.False(t, db.config.DebugMode)
-				assert.NotNil(t, db.cache)
-			}
-			assert.NotNil(t, db.dataSources)
-			assert.NotNil(t, db.logger)
+				if tt.config != nil {
+					assert.False(t, db.config.CacheEnabled)
+					assert.Equal(t, 500, db.config.CacheSize)
+					assert.Equal(t, 600, db.config.CacheTTL)
+					assert.True(t, db.config.DebugMode)
+					assert.Nil(t, db.cache) // cache is nil when disabled
+				} else {
+					assert.True(t, db.config.CacheEnabled)
+					assert.Equal(t, 1000, db.config.CacheSize)
+					assert.Equal(t, 300, db.config.CacheTTL)
+					assert.False(t, db.config.DebugMode)
+					assert.NotNil(t, db.cache)
+				}
+				assert.NotNil(t, db.dataSources)
+				assert.NotNil(t, db.logger)
 			}
 		})
 	}

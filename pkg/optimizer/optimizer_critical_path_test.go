@@ -108,7 +108,7 @@ func TestOptimizerCriticalPath_Aggregation(t *testing.T) {
 				{Name: "category"},
 				{Name: "COUNT(*)", Alias: "count"},
 			},
-			From: "sales",
+			From:    "sales",
 			GroupBy: []string{"category"},
 		},
 	}
@@ -394,10 +394,10 @@ func TestOptimizerCriticalPath_MultipleOrderBy(t *testing.T) {
 		Select: &parser.SelectStatement{
 			Columns: []parser.SelectColumn{{Name: "*"}},
 			From:    "multi_sort",
-		OrderBy: []parser.OrderByItem{
-			{Column: "category", Direction: "ASC"},
-			{Column: "name", Direction: "DESC"},
-		},
+			OrderBy: []parser.OrderByItem{
+				{Column: "category", Direction: "ASC"},
+				{Column: "name", Direction: "DESC"},
+			},
 		},
 	}
 

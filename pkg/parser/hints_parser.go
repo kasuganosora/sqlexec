@@ -12,36 +12,36 @@ import (
 type HintsParser struct {
 	// Hint patterns
 	hintCommentPattern *regexp.Regexp
-	hintPattern       *regexp.Regexp
-	leadingPattern    *regexp.Regexp
-	tableListPattern  *regexp.Regexp
-	indexListPattern  *regexp.Regexp
-	durationPattern   *regexp.Regexp
-	qbNamePattern     *regexp.Regexp
-	optionPattern     *regexp.Regexp
+	hintPattern        *regexp.Regexp
+	leadingPattern     *regexp.Regexp
+	tableListPattern   *regexp.Regexp
+	indexListPattern   *regexp.Regexp
+	durationPattern    *regexp.Regexp
+	qbNamePattern      *regexp.Regexp
+	optionPattern      *regexp.Regexp
 }
 
 // NewHintsParser 创建 hints 解析器
 func NewHintsParser() *HintsParser {
 	return &HintsParser{
 		hintCommentPattern: regexp.MustCompile(`/\*+(.*?)\*/`),
-		hintPattern:       regexp.MustCompile(`([A-Z_0-9]+)\s*\(\s*(.*?)\s*\)`),
-		leadingPattern:    regexp.MustCompile(`LEADING\s*\((.*?)\)`),
-		tableListPattern:  regexp.MustCompile(`([^,]+)(?:,|$)`),
-		indexListPattern:  regexp.MustCompile(`([^@]+)(?:@([^,]+))?(?:,|$)`),
-		durationPattern:   regexp.MustCompile(`(\d+)\s*(ms|s|m|h)`),
-		qbNamePattern:     regexp.MustCompile(`QB_NAME\s*\(([^)]+)\)`),
-		optionPattern:     regexp.MustCompile(`(\w+)\s*=\s*(\w+)`),
+		hintPattern:        regexp.MustCompile(`([A-Z_0-9]+)\s*\(\s*(.*?)\s*\)`),
+		leadingPattern:     regexp.MustCompile(`LEADING\s*\((.*?)\)`),
+		tableListPattern:   regexp.MustCompile(`([^,]+)(?:,|$)`),
+		indexListPattern:   regexp.MustCompile(`([^@]+)(?:@([^,]+))?(?:,|$)`),
+		durationPattern:    regexp.MustCompile(`(\d+)\s*(ms|s|m|h)`),
+		qbNamePattern:      regexp.MustCompile(`QB_NAME\s*\(([^)]+)\)`),
+		optionPattern:      regexp.MustCompile(`(\w+)\s*=\s*(\w+)`),
 	}
 }
 
 // ParseFromComment 从注释中解析 hints
 func (hp *HintsParser) ParseFromComment(comment string) (*ParsedHints, error) {
 	hints := &ParsedHints{
-		UseIndex:    make(map[string][]string),
-		ForceIndex:  make(map[string][]string),
-		IgnoreIndex: make(map[string][]string),
-		OrderIndex:  make(map[string]string),
+		UseIndex:     make(map[string][]string),
+		ForceIndex:   make(map[string][]string),
+		IgnoreIndex:  make(map[string][]string),
+		OrderIndex:   make(map[string]string),
 		NoOrderIndex: make(map[string]string),
 	}
 
@@ -287,22 +287,22 @@ func (hp *HintsParser) parseDuration(args string) (time.Duration, error) {
 // ParsedHints 解析后的 hints
 type ParsedHints struct {
 	// JOIN hints
-	HashJoinTables    []string
-	MergeJoinTables   []string
-	INLJoinTables     []string
-	INLHashJoinTables []string
+	HashJoinTables     []string
+	MergeJoinTables    []string
+	INLJoinTables      []string
+	INLHashJoinTables  []string
 	INLMergeJoinTables []string
-	NoHashJoinTables  []string
-	NoMergeJoinTables []string
-	NoIndexJoinTables []string
-	LeadingOrder      []string
-	StraightJoin      bool
+	NoHashJoinTables   []string
+	NoMergeJoinTables  []string
+	NoIndexJoinTables  []string
+	LeadingOrder       []string
+	StraightJoin       bool
 
 	// INDEX hints
-	UseIndex    map[string][]string
-	ForceIndex  map[string][]string
-	IgnoreIndex map[string][]string
-	OrderIndex  map[string]string
+	UseIndex     map[string][]string
+	ForceIndex   map[string][]string
+	IgnoreIndex  map[string][]string
+	OrderIndex   map[string]string
 	NoOrderIndex map[string]string
 
 	// AGG hints
@@ -327,10 +327,10 @@ type ParsedHints struct {
 // NewParsedHints 创建空的 ParsedHints
 func (hp *HintsParser) NewParsedHints() *ParsedHints {
 	return &ParsedHints{
-		UseIndex:    make(map[string][]string),
-		ForceIndex:  make(map[string][]string),
-		IgnoreIndex: make(map[string][]string),
-		OrderIndex:  make(map[string]string),
+		UseIndex:     make(map[string][]string),
+		ForceIndex:   make(map[string][]string),
+		IgnoreIndex:  make(map[string][]string),
+		OrderIndex:   make(map[string]string),
 		NoOrderIndex: make(map[string]string),
 	}
 }

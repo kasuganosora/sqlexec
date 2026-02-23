@@ -59,28 +59,28 @@ func TestFilterableDataSource_Interface(t *testing.T) {
 // TestFilterableDataSource_SupportsFiltering 测试SupportsFiltering方法的各种场景
 func TestFilterableDataSource_SupportsFiltering(t *testing.T) {
 	tests := []struct {
-		name             string
+		name              string
 		supportsFiltering bool
-		tableName        string
-		expected         bool
+		tableName         string
+		expected          bool
 	}{
 		{
-			name:             "支持过滤的表",
+			name:              "支持过滤的表",
 			supportsFiltering: true,
-			tableName:        "users",
-			expected:         true,
+			tableName:         "users",
+			expected:          true,
 		},
 		{
-			name:             "不支持过滤的表",
+			name:              "不支持过滤的表",
 			supportsFiltering: false,
-			tableName:        "logs",
-			expected:         false,
+			tableName:         "logs",
+			expected:          false,
 		},
 		{
-			name:             "空表名",
+			name:              "空表名",
 			supportsFiltering: true,
-			tableName:        "",
-			expected:         true, // 由实现决定，这里测试可以调用
+			tableName:         "",
+			expected:          true, // 由实现决定，这里测试可以调用
 		},
 	}
 

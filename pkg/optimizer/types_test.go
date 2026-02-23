@@ -129,9 +129,9 @@ func TestDefaultCostModelFilterCost(t *testing.T) {
 	costModel := NewDefaultCostModel()
 
 	tests := []struct {
-		name         string
-		inputRows    int64
-		selectivity  float64
+		name        string
+		inputRows   int64
+		selectivity float64
 		expectedMin float64
 	}{
 		{"zero rows", 0, 0.5, 0},
@@ -181,8 +181,8 @@ func TestDefaultCostModelAggregateCost(t *testing.T) {
 	costModel := NewDefaultCostModel()
 
 	tests := []struct {
-		name       string
-		inputRows  int64
+		name        string
+		inputRows   int64
 		groupByCols int
 	}{
 		{"no grouping", 1000, 0},
@@ -205,10 +205,10 @@ func TestDefaultCostModelProjectCost(t *testing.T) {
 	costModel := NewDefaultCostModel()
 
 	tests := []struct {
-		name     string
+		name      string
 		inputRows int64
-		projCols int
-		expected float64
+		projCols  int
+		expected  float64
 	}{
 		{"zero rows", 0, 5, 0},
 		{"one column", 1000, 1, 10.0},
@@ -291,7 +291,7 @@ func TestOptimizerHints(t *testing.T) {
 
 func TestIndexTypes(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		indexType string
 	}{
 		{"BTREE", IndexTypeBTree},

@@ -6,17 +6,17 @@ import (
 
 // CTEInfo CTE(公用表表达式)信息
 type CTEInfo struct {
-	Name       string          // CTE名称
-	Alias      string          // CTE别名
-	Subquery   *SelectStatement // CTE子查询
-	Columns    []string        // 列别名(可选)
-	Recursive  bool            // 是否为递归CTE
+	Name      string           // CTE名称
+	Alias     string           // CTE别名
+	Subquery  *SelectStatement // CTE子查询
+	Columns   []string         // 列别名(可选)
+	Recursive bool             // 是否为递归CTE
 }
 
 // WithClause WITH子句(CTE定义)
 type WithClause struct {
 	CTEs        []*CTEInfo // CTE列表
-	IsRecursive bool         // 是否递归
+	IsRecursive bool       // 是否递归
 }
 
 // 解析CTE相关函数
@@ -70,16 +70,16 @@ func (wc *WithClause) GetCTENames() []string {
 func ParseCTEFromTiDB(astNode interface{}) (*WithClause, error) {
 	// 如果TiDB Parser有CTE支持,可以在这里实现
 	// 目前提供手动构建接口
-	
+
 	// 示例: 手动构建CTE
 	/*
 		SELECT * FROM t WHERE id IN (WITH cte AS (SELECT id FROM t2) SELECT * FROM cte)
-	
+
 		构建方式:
 		wc := parser.NewWithClause(false)
 		wc.AddCTE("cte", subqueryStmt)
 	*/
-	
+
 	return nil, fmt.Errorf("CTE parsing from TiDB AST not yet implemented, use manual construction")
 }
 
@@ -87,14 +87,14 @@ func ParseCTEFromTiDB(astNode interface{}) (*WithClause, error) {
 type CTEOptimizer struct {
 	// 优化配置
 	InlineThreshold int  // 内联阈值(行数)
-	CacheEnabled   bool // 是否启用缓存
+	CacheEnabled    bool // 是否启用缓存
 }
 
 // NewCTEOptimizer 创建CTE优化器
 func NewCTEOptimizer() *CTEOptimizer {
 	return &CTEOptimizer{
 		InlineThreshold: 1000,
-		CacheEnabled:   true,
+		CacheEnabled:    true,
 	}
 }
 
@@ -164,7 +164,7 @@ func (opt *CTEOptimizer) collectReferences(stmt *SelectStatement, refCounts map[
 func (opt *CTEOptimizer) inlineCTE(mainStmt *SelectStatement, cte *CTEInfo) {
 	// 将CTE子查询替换到主查询中引用CTE的位置
 	// 这是一个简化的实现
-	
+
 	// 实际实现需要:
 	// 1. 找到所有引用CTE的表引用
 	// 2. 将表引用替换为CTE的子查询
@@ -186,7 +186,7 @@ func (opt *CTEOptimizer) materializeCTE(subquery *SelectStatement) *SelectStatem
 type CTEContext struct {
 	// CTE缓存
 	CTEResults map[string][]map[string]interface{}
-	
+
 	// CTE是否已物化
 	CTEMaterialized map[string]bool
 }
@@ -194,7 +194,7 @@ type CTEContext struct {
 // NewCTEContext 创建CTE执行上下文
 func NewCTEContext() *CTEContext {
 	return &CTEContext{
-		CTEResults:     make(map[string][]map[string]interface{}),
+		CTEResults:      make(map[string][]map[string]interface{}),
 		CTEMaterialized: make(map[string]bool),
 	}
 }

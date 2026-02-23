@@ -166,8 +166,8 @@ func TestHashJoinConfigBuildSideValues(t *testing.T) {
 		t.Run(tt.buildSide, func(t *testing.T) {
 			config := &HashJoinConfig{
 				JoinType:  types.InnerJoin,
-LeftCond:  &types.JoinCondition{Left: &types.Expression{Column: "a"}, Right: &types.Expression{Column: "b"}, Operator: "="},
-			RightCond: &types.JoinCondition{Left: &types.Expression{Column: "b"}, Right: &types.Expression{Column: "a"}, Operator: "="},
+				LeftCond:  &types.JoinCondition{Left: &types.Expression{Column: "a"}, Right: &types.Expression{Column: "b"}, Operator: "="},
+				RightCond: &types.JoinCondition{Left: &types.Expression{Column: "b"}, Right: &types.Expression{Column: "a"}, Operator: "="},
 				BuildSide: tt.buildSide,
 			}
 

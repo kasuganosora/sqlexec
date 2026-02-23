@@ -92,15 +92,15 @@ func TestDataService_Query_Error(t *testing.T) {
 func TestDataService_Query_RouteError(t *testing.T) {
 	ds := &TestDataSource{}
 	service := NewDataService(ds).(*DataService)
-	
+
 	// 不初始化 router 的 manager
 	service.router = NewRouter()
-	
+
 	ctx := context.Background()
 	options := &QueryOptions{
 		SelectColumns: []string{"id"},
 	}
-	
+
 	_, err := service.Query(ctx, "test_table", options)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "route failed")
@@ -109,12 +109,12 @@ func TestDataService_Query_RouteError(t *testing.T) {
 func TestDataService_Insert_Error(t *testing.T) {
 	ds := &ErrorDataSource{}
 	service := NewDataService(ds)
-	
+
 	ctx := context.Background()
 	data := map[string]interface{}{
 		"id": 1,
 	}
-	
+
 	_, err := service.Insert(ctx, "test_table", data)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "insert data failed")
@@ -123,7 +123,7 @@ func TestDataService_Insert_Error(t *testing.T) {
 func TestDataService_Update_Error(t *testing.T) {
 	ds := &ErrorDataSource{}
 	service := NewDataService(ds)
-	
+
 	ctx := context.Background()
 	data := map[string]interface{}{
 		"name": "Updated",
@@ -133,7 +133,7 @@ func TestDataService_Update_Error(t *testing.T) {
 		Operator: "=",
 		Value:    1,
 	}
-	
+
 	err := service.Update(ctx, "test_table", data, where)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "update data failed")
@@ -142,14 +142,14 @@ func TestDataService_Update_Error(t *testing.T) {
 func TestDataService_Delete_Error(t *testing.T) {
 	ds := &ErrorDataSource{}
 	service := NewDataService(ds)
-	
+
 	ctx := context.Background()
 	where := &domain.Filter{
 		Field:    "id",
 		Operator: "=",
 		Value:    1,
 	}
-	
+
 	err := service.Delete(ctx, "test_table", where)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "delete data failed")
@@ -158,14 +158,14 @@ func TestDataService_Delete_Error(t *testing.T) {
 func TestDataService_Filter_Error(t *testing.T) {
 	ds := &ErrorDataSource{}
 	service := NewDataService(ds)
-	
+
 	ctx := context.Background()
 	filter := domain.Filter{
 		Field:    "id",
 		Operator: ">",
 		Value:    0,
 	}
-	
+
 	_, _, err := service.Filter(ctx, "test_table", filter, 0, 10)
 	assert.Error(t, err)
 }
@@ -173,9 +173,9 @@ func TestDataService_Filter_Error(t *testing.T) {
 func TestDataService_GetTableInfo_Error(t *testing.T) {
 	ds := &ErrorDataSource{}
 	service := NewDataService(ds)
-	
+
 	ctx := context.Background()
-	
+
 	_, err := service.GetTableInfo(ctx, "test_table")
 	assert.Error(t, err)
 }

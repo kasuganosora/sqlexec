@@ -701,4 +701,3 @@ func TestSendQueryResult_SingleColumn(t *testing.T) {
 		t.Errorf("expected 7 writes, got %d", len(written))
 	}
 }
-

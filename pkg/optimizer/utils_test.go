@@ -157,7 +157,7 @@ func TestCompareValuesConsistency(t *testing.T) {
 	for _, pair := range pairs {
 		cmpResult := compareValues(pair.v1, pair.v2)
 		equalResult := compareValuesEqual(pair.v1, pair.v2)
-		
+
 		// 如果 compareValues 返回 0，compareValuesEqual 应该返回 true
 		// 如果 compareValues 返回非 0，compareValuesEqual 应该返回 false
 		expectedEqual := (cmpResult == 0)

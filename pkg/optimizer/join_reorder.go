@@ -208,8 +208,8 @@ func (r *JoinReorderRule) rebuildJoinTree(
 			nextDataSource,
 			[]*JoinCondition{
 				{
-					Left:    &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"},
-					Right:   &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"},
+					Left:     &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"},
+					Right:    &parser.Expression{Type: parser.ExprTypeColumn, Column: "id"},
 					Operator: "=",
 				}, // 简化：假设id连接
 			},

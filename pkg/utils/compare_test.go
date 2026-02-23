@@ -395,7 +395,6 @@ func ExampleCompareValues() {
 	// Output: true
 }
 
-
 func TestCompareValuesErrors(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -520,8 +519,8 @@ func TestCompareValuesEdgeCases(t *testing.T) {
 		{"Max float64", 1.7976931348623157e+308, 1.7976931348623157e+308, "=", true, false},
 		{"Min float64", -1.7976931348623157e+308, -1.7976931348623157e+308, "=", true, false},
 		{"NaN comparison", math.NaN(), math.NaN(), "=", false, false}, // NaN != NaN per IEEE 754
-		{"Empty slice", []int{}, []int{}, "=", false, true},          // slices cannot be compared
-		{"Nil slice", ([]int)(nil), ([]int)(nil), "=", false, true},  // slices cannot be compared
+		{"Empty slice", []int{}, []int{}, "=", false, true},           // slices cannot be compared
+		{"Nil slice", ([]int)(nil), ([]int)(nil), "=", false, true},   // slices cannot be compared
 	}
 
 	for _, tt := range tests {

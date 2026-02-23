@@ -17,17 +17,17 @@ type SliceAdapter struct {
 	*memory.MVCCDataSource
 
 	mu            sync.RWMutex
-	syncMu        sync.Mutex // 序列化 CommitTx + SyncToOriginal
-	originalData  interface{}          // 原始数据 []map[string]any 或 []struct
-	tableName     string               // 表名
-	databaseName  string               // 数据库名
-	writable      bool                 // 是否可写
-	mvccSupported bool                 // 是否支持 MVCC
-	isPointer     bool                 // 原始数据是否为指针（用于SyncToOriginal）
-	isMapSlice    bool                 // 是否为 map slice
-	mapSliceType  reflect.Type         // map slice 的类型信息
+	syncMu        sync.Mutex            // 序列化 CommitTx + SyncToOriginal
+	originalData  interface{}           // 原始数据 []map[string]any 或 []struct
+	tableName     string                // 表名
+	databaseName  string                // 数据库名
+	writable      bool                  // 是否可写
+	mvccSupported bool                  // 是否支持 MVCC
+	isPointer     bool                  // 原始数据是否为指针（用于SyncToOriginal）
+	isMapSlice    bool                  // 是否为 map slice
+	mapSliceType  reflect.Type          // map slice 的类型信息
 	structFields  []reflect.StructField // 结构体字段信息
-	fieldMappings []fieldMapping       // struct 字段到列的映射（含 tag 解析结果）
+	fieldMappings []fieldMapping        // struct 字段到列的映射（含 tag 解析结果）
 }
 
 // New 创建 SliceAdapter（推荐的构造方式）

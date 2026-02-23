@@ -330,14 +330,14 @@ func TestOptimizedParallelScannerParallelism(t *testing.T) {
 				t.Errorf("Expected Total=5000, got %d", result.Total)
 			}
 
-		// Verify parallelism (note: values > 8 are capped to 8)
-		expectedParallelism := parallelism
-		if parallelism > 8 {
-			expectedParallelism = 8
-		}
-		if scanner.GetParallelism() != expectedParallelism {
-			t.Errorf("Expected parallelism=%d, got %d", expectedParallelism, scanner.GetParallelism())
-		}
+			// Verify parallelism (note: values > 8 are capped to 8)
+			expectedParallelism := parallelism
+			if parallelism > 8 {
+				expectedParallelism = 8
+			}
+			if scanner.GetParallelism() != expectedParallelism {
+				t.Errorf("Expected parallelism=%d, got %d", expectedParallelism, scanner.GetParallelism())
+			}
 
 			// Verify Query call count should equal parallelism (or less)
 			callCount := dataSource.GetCallCount()
@@ -436,7 +436,6 @@ func parallelismName(p int) string {
 // ============================================================================
 // BenchmarkParallelScan Parallel Scan Performance Benchmark
 // ============================================================================
-
 
 // BenchmarkParallelScan_Small Parallel Scan - Small Dataset
 func BenchmarkParallelScan_Small(b *testing.B) {

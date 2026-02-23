@@ -63,7 +63,7 @@ func TestBug3_ClearExpired_TOCTOU(t *testing.T) {
 func TestBug4_DBSession_NoLock_Race(t *testing.T) {
 	// Run with -race to detect the data race.
 	db, err := NewDB(&DBConfig{
-		CacheEnabled: false,
+		CacheEnabled:  false,
 		DefaultLogger: NewDefaultLogger(LogError),
 	})
 	if err != nil {
@@ -100,12 +100,14 @@ func TestBug4_DBSession_NoLock_Race(t *testing.T) {
 // mockDataSourceForRace is a minimal mock that satisfies domain.DataSource
 type mockDataSourceForRace struct{}
 
-func (m *mockDataSourceForRace) Connect(_ context.Context) error                 { return nil }
-func (m *mockDataSourceForRace) Close(_ context.Context) error                   { return nil }
-func (m *mockDataSourceForRace) IsConnected() bool                               { return true }
-func (m *mockDataSourceForRace) IsWritable() bool                                { return true }
-func (m *mockDataSourceForRace) GetConfig() *domain.DataSourceConfig             { return &domain.DataSourceConfig{} }
-func (m *mockDataSourceForRace) GetTables(_ context.Context) ([]string, error)   { return nil, nil }
+func (m *mockDataSourceForRace) Connect(_ context.Context) error { return nil }
+func (m *mockDataSourceForRace) Close(_ context.Context) error   { return nil }
+func (m *mockDataSourceForRace) IsConnected() bool               { return true }
+func (m *mockDataSourceForRace) IsWritable() bool                { return true }
+func (m *mockDataSourceForRace) GetConfig() *domain.DataSourceConfig {
+	return &domain.DataSourceConfig{}
+}
+func (m *mockDataSourceForRace) GetTables(_ context.Context) ([]string, error) { return nil, nil }
 func (m *mockDataSourceForRace) GetTableInfo(_ context.Context, _ string) (*domain.TableInfo, error) {
 	return nil, nil
 }
