@@ -989,7 +989,70 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 	}
 
 	affected, err := b.dataSource.Insert(ctx, stmt.Table, rows, options)
-	if err != nil {
+	if err != nil && stmt.OnDuplicate != nil {
+		// ON DUPLICATE KEY UPDATE: insert failed (likely duplicate key),
+		// fall back to updating existing rows using the OnDuplicate SET values.
+
+		// Collect the set of columns being updated so we can exclude them from filters.
+		updatingCols := make(map[string]bool, len(stmt.OnDuplicate.Set))
+		for col := range stmt.OnDuplicate.Set {
+			updatingCols[col] = true
+		}
+
+		totalAffected := int64(0)
+		for _, row := range rows {
+			// Resolve ValuesRef: replace with actual values from the INSERT row
+			updateData := make(domain.Row)
+			for col, val := range stmt.OnDuplicate.Set {
+				if ref, ok := val.(ValuesRef); ok {
+					// VALUES(column) references the value from INSERT VALUES
+					updateData[col] = row[ref.Column]
+				} else {
+					updateData[col] = val
+				}
+			}
+
+			// Build filters to identify which existing row to update.
+			// Priority: primary key > unique columns > non-updated inserted columns.
+			filters := make([]domain.Filter, 0)
+			for _, col := range tableInfo.Columns {
+				if col.Primary || col.Unique {
+					if val, ok := row[col.Name]; ok {
+						filters = append(filters, domain.Filter{
+							Field:    col.Name,
+							Operator: "=",
+							Value:    val,
+						})
+					}
+				}
+			}
+			if len(filters) == 0 {
+				// No primary/unique key found via column flags. Use inserted
+				// columns that are NOT being updated as the match key.
+				for _, colName := range stmt.Columns {
+					if updatingCols[colName] {
+						continue // skip columns being SET — they don't identify the row
+					}
+					if val, ok := row[colName]; ok {
+						filters = append(filters, domain.Filter{
+							Field:    colName,
+							Operator: "=",
+							Value:    val,
+						})
+					}
+				}
+			}
+			if len(filters) > 0 {
+				n, updateErr := b.dataSource.Update(ctx, stmt.Table, filters, updateData, nil)
+				if updateErr != nil {
+					return nil, fmt.Errorf("upsert update failed: %w", updateErr)
+				}
+				totalAffected += n
+			}
+		}
+		affected = totalAffected
+		err = nil
+	} else if err != nil {
 		return nil, fmt.Errorf("insert failed: %w", err)
 	}
 

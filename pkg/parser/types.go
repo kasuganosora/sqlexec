@@ -89,6 +89,16 @@ type SelectStatement struct {
 	Hints    string         `json:"hints,omitempty"` // Raw hints string from SQL comment
 }
 
+// ValuesRef is a sentinel value used in ON DUPLICATE KEY UPDATE to reference
+// the value from the INSERT VALUES clause. For example, in:
+//
+//	INSERT INTO t (a, b) VALUES (1, 2) ON DUPLICATE KEY UPDATE b = VALUES(b)
+//
+// The SET map for ON DUPLICATE KEY UPDATE will contain {"b": ValuesRef{Column: "b"}}.
+type ValuesRef struct {
+	Column string `json:"column"`
+}
+
 // InsertStatement INSERT 语句
 type InsertStatement struct {
 	Table       string           `json:"table"`

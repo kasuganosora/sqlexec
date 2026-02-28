@@ -1,10 +1,12 @@
 package parser
 
 import (
+	"sync"
 	"testing"
 
 	_ "github.com/pingcap/tidb/pkg/parser/test_driver"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSimplifyTypeName 测试简化类型名
@@ -154,5 +156,74 @@ func TestParseDecimalString(t *testing.T) {
 		result, err := parseDecimalString(tc.input)
 		assert.NoError(t, err)
 		assert.Equal(t, tc.expected, result)
+	}
+}
+
+// TestParseInsertOnDuplicateKeyUpdate tests that ON DUPLICATE KEY UPDATE
+// is properly extracted from the TiDB AST into InsertStatement.OnDuplicate.
+func TestParseInsertOnDuplicateKeyUpdate(t *testing.T) {
+	adapter := NewSQLAdapter()
+
+	sql := "INSERT INTO `char_switches` (`key`,`value`) VALUES (?,?) ON DUPLICATE KEY UPDATE `value`=?"
+	result, err := adapter.Parse(sql)
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.NotNil(t, result.Statement)
+	assert.Equal(t, SQLTypeInsert, result.Statement.Type)
+	require.NotNil(t, result.Statement.Insert)
+
+	insert := result.Statement.Insert
+	assert.Equal(t, "char_switches", insert.Table)
+	assert.Equal(t, []string{"key", "value"}, insert.Columns)
+	require.NotNil(t, insert.OnDuplicate, "OnDuplicate should be populated")
+	assert.Contains(t, insert.OnDuplicate.Set, "value", "OnDuplicate SET should contain 'value' column")
+}
+
+// TestParseInsertWithoutOnDuplicate confirms normal INSERT doesn't set OnDuplicate.
+func TestParseInsertWithoutOnDuplicate(t *testing.T) {
+	adapter := NewSQLAdapter()
+
+	sql := "INSERT INTO `char_switches` (`key`,`value`) VALUES ('k1','v1')"
+	result, err := adapter.Parse(sql)
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	assert.Nil(t, result.Statement.Insert.OnDuplicate, "OnDuplicate should be nil for plain INSERT")
+}
+
+// TestConcurrentParsing ensures the parser mutex prevents data races.
+// Before the fix, concurrent Parse calls would panic with index-out-of-range
+// or type assertion failures in yyParse.
+func TestConcurrentParsing(t *testing.T) {
+	adapter := NewSQLAdapter()
+
+	sqls := []string{
+		"SELECT * FROM users WHERE id = 1",
+		"INSERT INTO users (name, age) VALUES ('alice', 30)",
+		"UPDATE users SET name = 'bob' WHERE id = 1",
+		"DELETE FROM users WHERE id = 2",
+		"SELECT id, name FROM users ORDER BY id LIMIT 10",
+		"INSERT INTO char_switches (`key`, `value`) VALUES ('k1', 'v1') ON DUPLICATE KEY UPDATE `value` = 'v2'",
+	}
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 100)
+
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sql := sqls[i%len(sqls)]
+			_, err := adapter.Parse(sql)
+			if err != nil {
+				errCh <- err
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("concurrent parse failed: %v", err)
 	}
 }

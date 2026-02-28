@@ -5,6 +5,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -12,7 +13,13 @@ import (
 )
 
 // SQLAdapter SQL 解析适配器
+// The TiDB parser is NOT thread-safe. When multiple goroutines call Parse()
+// concurrently (e.g. via sql.DB connection pool sharing a single session),
+// the internal yacc state gets corrupted, causing panics like index-out-of-range,
+// nil pointer dereferences, and type assertion failures in yyParse.
+// The mutex serializes all parser access to prevent these data races.
 type SQLAdapter struct {
+	mu     sync.Mutex
 	parser *parser.Parser
 }
 
@@ -35,6 +42,9 @@ func NewSQLAdapter() *SQLAdapter {
 
 // Parse 解析 SQL 语句
 func (a *SQLAdapter) Parse(sql string) (*ParseResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	// 预处理 SQL：将 WITH 子句转换为 COMMENT 子句
 	preprocessedSQL := preprocessWithClause(sql)
 
@@ -71,6 +81,9 @@ func (a *SQLAdapter) Parse(sql string) (*ParseResult, error) {
 
 // ParseMulti 解析多条 SQL 语句
 func (a *SQLAdapter) ParseMulti(sql string) ([]*ParseResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	stmtNodes, _, err := a.parser.Parse(sql, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("parse SQL failed: %w", err)
@@ -513,6 +526,29 @@ func (a *SQLAdapter) convertInsertStmt(stmt *ast.InsertStmt) (*InsertStatement, 
 			rowValues = append(rowValues, val)
 		}
 		insertStmt.Values = append(insertStmt.Values, rowValues)
+	}
+
+	// 解析 ON DUPLICATE KEY UPDATE 子句
+	if len(stmt.OnDuplicate) > 0 {
+		onDup := &UpdateStatement{
+			Table: tableName,
+			Set:   make(map[string]interface{}),
+		}
+		for _, assign := range stmt.OnDuplicate {
+			col := assign.Column.Name.String()
+			// Check for VALUES(column) reference (MySQL-specific)
+			if valuesExpr, ok := assign.Expr.(*ast.ValuesExpr); ok {
+				refCol := valuesExpr.Column.Name.Name.String()
+				onDup.Set[col] = ValuesRef{Column: refCol}
+				continue
+			}
+			val, err := a.extractValue(assign.Expr)
+			if err != nil {
+				continue
+			}
+			onDup.Set[col] = val
+		}
+		insertStmt.OnDuplicate = onDup
 	}
 
 	return insertStmt, nil

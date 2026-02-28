@@ -12,6 +12,9 @@ import (
 	"gorm.io/gorm/schema"
 )
 
+// ClauseOnConflict is the clause name for ON CONFLICT handling.
+const ClauseOnConflict = "ON CONFLICT"
+
 // Dialector implements gorm.Dialector by routing all SQL through an
 // api.Session. Unlike traditional GORM dialectors that need a network
 // connection, this one works in-process — queries go directly from
@@ -49,10 +52,73 @@ func (d *Dialector) Initialize(db *gorm.DB) error {
 	d.sqlDB = OpenDB(d.Session)
 	db.ConnPool = d.sqlDB
 
+	// Register MySQL-compatible clause builders so GORM generates SQL that
+	// the TiDB parser can handle (e.g. ON DUPLICATE KEY UPDATE instead of
+	// PostgreSQL-style ON CONFLICT ... DO UPDATE SET).
+	for k, v := range d.ClauseBuilders() {
+		db.ClauseBuilders[k] = v
+	}
+
 	// Register default GORM callbacks (Create, Query, Update, Delete, Row, Raw).
 	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{})
 
 	return nil
+}
+
+// ClauseBuilders returns MySQL-compatible clause builders.
+// The critical one is ON CONFLICT which must generate ON DUPLICATE KEY UPDATE
+// syntax instead of PostgreSQL ON CONFLICT ... DO UPDATE SET.
+func (d *Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
+	return map[string]clause.ClauseBuilder{
+		ClauseOnConflict: func(c clause.Clause, builder clause.Builder) {
+			onConflict, ok := c.Expression.(clause.OnConflict)
+			if !ok {
+				return
+			}
+
+			if onConflict.DoNothing {
+				// INSERT IGNORE INTO ... (MySQL way of DO NOTHING)
+				// We need to rewrite the INSERT prefix. Since GORM has
+				// already written "INSERT INTO", we append a dummy ON
+				// DUPLICATE KEY UPDATE that sets the first column to itself.
+				builder.WriteString("ON DUPLICATE KEY UPDATE ")
+				if len(onConflict.DoUpdates) > 0 {
+					for idx, assignment := range onConflict.DoUpdates {
+						if idx > 0 {
+							builder.WriteByte(',')
+						}
+						builder.WriteQuoted(assignment.Column)
+						builder.WriteByte('=')
+						builder.WriteQuoted(assignment.Column)
+					}
+				} else {
+					// Fallback: use a self-referencing no-op update
+					builder.WriteString("`id`=`id`")
+				}
+				return
+			}
+
+			builder.WriteString("ON DUPLICATE KEY UPDATE ")
+			if len(onConflict.DoUpdates) > 0 {
+				for idx, assignment := range onConflict.DoUpdates {
+					if idx > 0 {
+						builder.WriteByte(',')
+					}
+					builder.WriteQuoted(assignment.Column)
+					builder.WriteByte('=')
+					// GORM's AssignmentColumns generates clause.Column{Table:"excluded", Name:col}
+					// which is PostgreSQL syntax. Convert to MySQL's VALUES(col).
+					if col, ok := assignment.Value.(clause.Column); ok && col.Table == "excluded" {
+						builder.WriteString("VALUES(")
+						builder.WriteQuoted(clause.Column{Name: col.Name})
+						builder.WriteByte(')')
+					} else {
+						builder.AddVar(builder, assignment.Value)
+					}
+				}
+			}
+		},
+	}
 }
 
 // Migrator returns the schema migration tool.

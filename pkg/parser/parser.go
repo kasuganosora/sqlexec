@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -10,7 +11,9 @@ import (
 )
 
 // Parser SQL 解析器，封装 TiDB parser
+// The TiDB parser is not thread-safe; mu serializes access.
 type Parser struct {
+	mu     sync.Mutex
 	parser *parser.Parser
 }
 
@@ -23,6 +26,9 @@ func NewParser() *Parser {
 
 // ParseSQL 解析 SQL 语句，返回 AST 节点列表
 func (p *Parser) ParseSQL(sql string) ([]ast.StmtNode, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	// 预处理 SQL：将 WITH 子句转换为 COMMENT 子句
 	preprocessedSQL := preprocessWithClause(sql)
 
