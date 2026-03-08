@@ -9,6 +9,7 @@ import (
 
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/opcode"
 	_ "github.com/pingcap/tidb/pkg/parser/test_driver"
 )
 
@@ -1020,6 +1021,20 @@ func (a *SQLAdapter) convertExpression(node ast.ExprNode) (*Expression, error) {
 		}
 		return innerExpr, nil
 
+	case *ast.UnaryOperationExpr:
+		// Handle unary operations (e.g., -1, NOT x)
+		val, err := a.extractValue(n)
+		if err == nil {
+			expr.Type = ExprTypeValue
+			expr.Value = val
+		} else {
+			// If we can't reduce to a value, represent as operator expression
+			expr.Type = ExprTypeOperator
+			expr.Operator = n.Op.String()
+			inner, _ := a.convertExpression(n.V)
+			expr.Left = inner
+		}
+
 	case *ast.VariableExpr:
 		// 系统变量或会话变量：@@var_name 或 @var_name
 		expr.Type = ExprTypeColumn
@@ -1059,9 +1074,54 @@ func (a *SQLAdapter) extractValue(node ast.ExprNode) (interface{}, error) {
 		return val, nil
 	}
 
+	// Handle unary operations (e.g., -1, +5, NOT x)
+	if unary, ok := node.(*ast.UnaryOperationExpr); ok {
+		inner, err := a.extractValue(unary.V)
+		if err != nil {
+			return nil, fmt.Errorf("cannot extract value from unary operand: %w", err)
+		}
+		return applyUnaryOp(unary.Op, inner)
+	}
+
 	// 如果不是ValueExpr，可能是其他表达式类型
 	// 对于LIMIT，我们可能需要使用不同的方法
 	return nil, fmt.Errorf("not a value expression: %T", node)
+}
+
+// applyUnaryOp applies a unary operator to a value.
+func applyUnaryOp(op opcode.Op, val interface{}) (interface{}, error) {
+	switch op {
+	case opcode.Minus:
+		switch v := val.(type) {
+		case int64:
+			return -v, nil
+		case float64:
+			return -v, nil
+		default:
+			return nil, fmt.Errorf("cannot negate %T", val)
+		}
+	case opcode.Plus:
+		return val, nil
+	case opcode.Not, opcode.Not2:
+		switch v := val.(type) {
+		case int64:
+			if v == 0 {
+				return int64(1), nil
+			}
+			return int64(0), nil
+		case bool:
+			return !v, nil
+		default:
+			return nil, fmt.Errorf("cannot apply NOT to %T", val)
+		}
+	case opcode.BitNeg:
+		if v, ok := val.(int64); ok {
+			return ^v, nil
+		}
+		return nil, fmt.Errorf("cannot apply bitwise negation to %T", val)
+	default:
+		return nil, fmt.Errorf("unsupported unary operator: %s", op)
+	}
 }
 
 // convertTiDBValue 转换TiDB的内部类型为标准Go类型

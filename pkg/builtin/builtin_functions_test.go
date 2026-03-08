@@ -17,7 +17,8 @@ func TestToFloat64(t *testing.T) {
 		{int64(100), 100, true},
 		{int32(50), 50, true},
 		{"string", 0, false},
-		{true, 0, false},
+		{true, 1, true},
+		{false, 0, true},
 	}
 
 	for _, tt := range tests {
@@ -76,7 +77,8 @@ func TestBuiltinToInt64(t *testing.T) {
 		{3.14, 3, true},
 		{float32(3.14), 3, true},
 		{"string", 0, false},
-		{true, 0, false},
+		{true, 1, true},
+		{false, 0, true},
 	}
 
 	for _, tt := range tests {

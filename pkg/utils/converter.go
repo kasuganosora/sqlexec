@@ -62,6 +62,11 @@ func ToInt(arg interface{}) (int, error) {
 	}
 
 	switch v := arg.(type) {
+	case bool:
+		if v {
+			return 1, nil
+		}
+		return 0, nil
 	case int:
 		return v, nil
 	case int8:
@@ -104,6 +109,11 @@ func ToInt64(arg interface{}) (int64, error) {
 	}
 
 	switch v := arg.(type) {
+	case bool:
+		if v {
+			return 1, nil
+		}
+		return 0, nil
 	case int:
 		return int64(v), nil
 	case int8:
@@ -140,6 +150,11 @@ func ToFloat64(arg interface{}) (float64, error) {
 	}
 
 	switch v := arg.(type) {
+	case bool:
+		if v {
+			return 1, nil
+		}
+		return 0, nil
 	case float64:
 		return v, nil
 	case float32:

@@ -249,7 +249,8 @@ func TestConvertToFloat64(t *testing.T) {
 		{"string numeric", "2.5", 2.5, true},
 		{"string not numeric", "abc", 0, false},
 		{"nil", nil, 0, false},
-		{"bool", true, 0, false},
+		{"bool true", true, 1, true},
+		{"bool false", false, 0, true},
 	}
 
 	for _, tt := range tests {

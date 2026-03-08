@@ -114,9 +114,12 @@ func TestToInt64(t *testing.T) {
 		// nil 值
 		{"nil", nil, 0, true},
 
+		// 布尔值
+		{"布尔值true", true, 1, false},
+		{"布尔值false", false, 0, false},
+
 		// 错误情况
 		{"字符串", "10", 0, true},
-		{"布尔值", true, 0, true},
 		{"字节数组", []byte("10"), 0, true},
 		{"结构体", struct{}{}, 0, true},
 		{"slice", []int{}, 0, true},
@@ -179,10 +182,13 @@ func TestToFloat64(t *testing.T) {
 		// nil 值
 		{"nil", nil, 0, true},
 
+		// 布尔值
+		{"布尔值true", true, 1, false},
+		{"布尔值false", false, 0, false},
+
 		// 错误情况
 		{"无效字符串", "abc", 0, true},
 		{"空字符串", "", 0, true},
-		{"布尔值", true, 0, true},
 		{"字节数组", []byte("10"), 0, true},
 		{"结构体", struct{}{}, 0, true},
 		{"slice", []int{}, 0, true},
@@ -499,9 +505,7 @@ func TestTypeConversionErrors(t *testing.T) {
 	}{
 		{"ToInt64 nil", nil, func(v interface{}) (interface{}, error) { return ToInt64(v) }},
 		{"ToInt64 字符串", "hello", func(v interface{}) (interface{}, error) { return ToInt64(v) }},
-		{"ToInt64 布尔", true, func(v interface{}) (interface{}, error) { return ToInt64(v) }},
 		{"ToFloat64 nil", nil, func(v interface{}) (interface{}, error) { return ToFloat64(v) }},
-		{"ToFloat64 布尔", true, func(v interface{}) (interface{}, error) { return ToFloat64(v) }},
 		{"ToFloat64 无效字符串", "hello", func(v interface{}) (interface{}, error) { return ToFloat64(v) }},
 	}
 

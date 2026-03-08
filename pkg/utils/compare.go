@@ -5,10 +5,16 @@ import (
 	"strings"
 )
 
-// asInt64 extracts an int64 from native integer types only (not float).
+// asInt64 extracts an int64 from native integer types and bool (not float).
 // This preserves precision for large int64 values like Unix timestamps.
+// bool is treated as 1 (true) / 0 (false) for MySQL compatibility.
 func asInt64(v interface{}) (int64, bool) {
 	switch val := v.(type) {
+	case bool:
+		if val {
+			return 1, true
+		}
+		return 0, true
 	case int:
 		return int64(val), true
 	case int8:
