@@ -577,6 +577,12 @@ func (a *SQLAdapter) convertUpdateStmt(stmt *ast.UpdateStmt) (*UpdateStatement, 
 		col := assign.Column.Name.String()
 		val, err := a.extractValue(assign.Expr)
 		if err != nil {
+			// extractValue failed — try converting as an expression (e.g. gold = gold - 300)
+			expr, exprErr := a.convertExpression(assign.Expr)
+			if exprErr != nil || expr == nil {
+				continue
+			}
+			updateStmt.Set[col] = expr // store *Expression for per-row evaluation
 			continue
 		}
 		updateStmt.Set[col] = val
@@ -749,6 +755,33 @@ func (a *SQLAdapter) convertCreateTableStmt(stmt *ast.CreateTableStmt) (*CreateS
 		}
 
 		createStmt.Columns = append(createStmt.Columns, colInfo)
+	}
+
+	// Parse table-level constraints (PRIMARY KEY, UNIQUE, etc.)
+	for _, constraint := range stmt.Constraints {
+		switch constraint.Tp {
+		case ast.ConstraintPrimaryKey:
+			for _, key := range constraint.Keys {
+				colName := key.Column.Name.String()
+				for i, col := range createStmt.Columns {
+					if col.Name == colName {
+						createStmt.Columns[i].Primary = true
+						createStmt.Columns[i].Nullable = false
+						break
+					}
+				}
+			}
+		case ast.ConstraintUniq, ast.ConstraintUniqKey, ast.ConstraintUniqIndex:
+			for _, key := range constraint.Keys {
+				colName := key.Column.Name.String()
+				for i, col := range createStmt.Columns {
+					if col.Name == colName {
+						createStmt.Columns[i].Unique = true
+						break
+					}
+				}
+			}
+		}
 	}
 
 	// Parse table options (ENGINE, COMMENT, etc.)

@@ -1013,9 +1013,14 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 			}
 
 			// Build filters to identify which existing row to update.
-			// Priority: primary key > unique columns > non-updated inserted columns.
+			// Priority: unique columns > primary key (non-auto-increment) > non-updated inserted columns.
+			// Skip auto-increment primary keys because the row map contains
+			// the NEW auto-increment value, not the existing row's value.
 			filters := make([]domain.Filter, 0)
 			for _, col := range tableInfo.Columns {
+				if col.AutoIncrement {
+					continue // auto-inc values won't match the existing row
+				}
 				if col.Primary || col.Unique {
 					if val, ok := row[col.Name]; ok {
 						filters = append(filters, domain.Filter{
@@ -1107,13 +1112,26 @@ func (b *QueryBuilder) executeUpdate(ctx context.Context, stmt *UpdateStatement)
 		filters = b.convertExpressionToFilters(stmt.Where)
 	}
 
-	// 转换更新数据，并过滤生成列
-	updates := make(domain.Row)
+	// Separate SET values into simple values and expressions
+	simpleUpdates := make(domain.Row)
+	exprUpdates := make(map[string]*Expression)
 	for col, val := range stmt.Set {
-		updates[col] = val
+		if expr, ok := val.(*Expression); ok {
+			exprUpdates[col] = expr
+		} else {
+			simpleUpdates[col] = val
+		}
 	}
+
+	// If we have expression-based SET clauses (e.g. gold = gold - 300),
+	// use a read-modify-write approach: query affected rows, evaluate
+	// expressions per-row, then update each row individually.
+	if len(exprUpdates) > 0 {
+		return b.executeExprUpdate(ctx, stmt.Table, filters, simpleUpdates, exprUpdates, tableInfo)
+	}
+
 	// 过滤生成列（不允许显式更新）
-	filteredUpdates := generated.FilterGeneratedColumns(updates, tableInfo)
+	filteredUpdates := generated.FilterGeneratedColumns(simpleUpdates, tableInfo)
 
 	// Check if table is a view and validate with CHECK OPTION
 	if viewInfo, isView := b.getViewInfo(tableInfo); isView {
@@ -1146,6 +1164,84 @@ func (b *QueryBuilder) executeUpdate(ctx context.Context, stmt *UpdateStatement)
 
 	return &domain.QueryResult{
 		Total: affected,
+	}, nil
+}
+
+// executeExprUpdate handles UPDATE statements that contain expression-based SET
+// clauses (e.g. "gold = gold - 300"). It queries the affected rows, evaluates
+// each expression against the current row, then applies the computed values.
+func (b *QueryBuilder) executeExprUpdate(
+	ctx context.Context,
+	tableName string,
+	filters []domain.Filter,
+	simpleUpdates domain.Row,
+	exprUpdates map[string]*Expression,
+	tableInfo *domain.TableInfo,
+) (*domain.QueryResult, error) {
+	// Find primary key column(s) for per-row identification
+	var pkCols []string
+	for _, col := range tableInfo.Columns {
+		if col.Primary {
+			pkCols = append(pkCols, col.Name)
+		}
+	}
+	if len(pkCols) == 0 {
+		return nil, fmt.Errorf("expression-based UPDATE requires a primary key")
+	}
+
+	// Query affected rows
+	queryResult, err := b.dataSource.Query(ctx, tableName, &domain.QueryOptions{
+		Filters: filters,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query rows for expression update: %w", err)
+	}
+
+	totalAffected := int64(0)
+	options := &domain.UpdateOptions{Upsert: false}
+
+	for _, row := range queryResult.Rows {
+		// Build per-row updates: start with simple values
+		rowUpdates := make(domain.Row, len(simpleUpdates)+len(exprUpdates))
+		for k, v := range simpleUpdates {
+			rowUpdates[k] = v
+		}
+
+		// Evaluate each expression against the current row
+		evalRow := make(Row, len(row))
+		for k, v := range row {
+			evalRow[k] = v
+		}
+		for col, expr := range exprUpdates {
+			val, err := EvalExpr(expr, evalRow)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate SET expression for column %q: %w", col, err)
+			}
+			rowUpdates[col] = val
+		}
+
+		// Filter generated columns
+		filteredRowUpdates := generated.FilterGeneratedColumns(rowUpdates, tableInfo)
+
+		// Build primary key filter to identify this specific row
+		pkFilters := make([]domain.Filter, 0, len(pkCols))
+		for _, pk := range pkCols {
+			pkFilters = append(pkFilters, domain.Filter{
+				Field:    pk,
+				Operator: "=",
+				Value:    row[pk],
+			})
+		}
+
+		affected, err := b.dataSource.Update(ctx, tableName, pkFilters, filteredRowUpdates, options)
+		if err != nil {
+			return nil, fmt.Errorf("expression update failed: %w", err)
+		}
+		totalAffected += affected
+	}
+
+	return &domain.QueryResult{
+		Total: totalAffected,
 	}, nil
 }
 

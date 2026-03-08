@@ -170,3 +170,43 @@ func TestWhereNegativeValue(t *testing.T) {
 		assert.Equal(t, int64(100), items[0].ItemID)
 	}
 }
+
+// TestGormExprArithmetic verifies gorm.Expr("col - ?", val) works for arithmetic updates.
+func TestGormExprArithmetic(t *testing.T) {
+	gormDB := setupBoolTestDB(t)
+
+	inv := Inventory{CharID: 1, ItemID: 100, Kind: "consumable", Equipped: false, SlotIndex: 0, Quantity: 10}
+	require.NoError(t, gormDB.Create(&inv).Error)
+
+	// Use gorm.Expr to subtract
+	err := gormDB.Model(&Inventory{}).Where("id = ?", inv.ID).
+		Update("quantity", gorm.Expr("quantity - ?", 3)).Error
+	require.NoError(t, err)
+
+	var check Inventory
+	require.NoError(t, gormDB.First(&check, inv.ID).Error)
+	assert.Equal(t, 7, check.Quantity, "quantity should be 10-3=7")
+
+	// Use gorm.Expr to add
+	err = gormDB.Model(&Inventory{}).Where("id = ?", inv.ID).
+		Update("quantity", gorm.Expr("quantity + ?", 5)).Error
+	require.NoError(t, err)
+
+	require.NoError(t, gormDB.First(&check, inv.ID).Error)
+	assert.Equal(t, 12, check.Quantity, "quantity should be 7+5=12")
+
+	// Use gorm.Expr to multiply
+	err = gormDB.Model(&Inventory{}).Where("id = ?", inv.ID).
+		Update("quantity", gorm.Expr("quantity * ?", 2)).Error
+	require.NoError(t, err)
+
+	require.NoError(t, gormDB.First(&check, inv.ID).Error)
+	assert.Equal(t, 24, check.Quantity, "quantity should be 12*2=24")
+
+	// Use raw Exec with arithmetic
+	err = gormDB.Exec("UPDATE inventories SET quantity = quantity - ? WHERE id = ?", 4, inv.ID).Error
+	require.NoError(t, err)
+
+	require.NoError(t, gormDB.First(&check, inv.ID).Error)
+	assert.Equal(t, 20, check.Quantity, "quantity should be 24-4=20")
+}
