@@ -171,6 +171,87 @@ func TestWhereNegativeValue(t *testing.T) {
 	}
 }
 
+// TestBoolScanIntoInt verifies that bool columns can be scanned into int fields via raw SQL.
+func TestBoolScanIntoInt(t *testing.T) {
+	gormDB := setupBoolTestDB(t)
+
+	require.NoError(t, gormDB.Create(&Inventory{CharID: 1, ItemID: 100, Kind: "weapon", Equipped: true, SlotIndex: 1, Quantity: 1}).Error)
+	require.NoError(t, gormDB.Create(&Inventory{CharID: 1, ItemID: 200, Kind: "weapon", Equipped: false, SlotIndex: 0, Quantity: 1}).Error)
+
+	// Scan equipped (bool column) into int field
+	type candidateRow struct {
+		ID       int64
+		Equipped int
+	}
+	var candidates []candidateRow
+	err := gormDB.Raw("SELECT id, equipped FROM inventories ORDER BY id").Scan(&candidates).Error
+	require.NoError(t, err, "scanning bool column into int field should not error")
+	require.Len(t, candidates, 2)
+	assert.Equal(t, 1, candidates[0].Equipped, "equipped=true should scan as 1")
+	assert.Equal(t, 0, candidates[1].Equipped, "equipped=false should scan as 0")
+}
+
+// TestBoolFindMultipleRows verifies that Find() returns correct bool values for multiple rows.
+func TestBoolFindMultipleRows(t *testing.T) {
+	gormDB := setupBoolTestDB(t)
+
+	// Create multiple items with mixed bool values
+	require.NoError(t, gormDB.Create(&Inventory{CharID: 1, ItemID: 100, Equipped: true, SlotIndex: 1, Quantity: 1}).Error)
+	require.NoError(t, gormDB.Create(&Inventory{CharID: 1, ItemID: 200, Equipped: false, SlotIndex: 0, Quantity: 1}).Error)
+	require.NoError(t, gormDB.Create(&Inventory{CharID: 1, ItemID: 300, Equipped: true, SlotIndex: 2, Quantity: 1}).Error)
+
+	// Find all items — verify multi-row results preserve bool values
+	var items []Inventory
+	err := gormDB.Where("char_id = ?", 1).Find(&items).Error
+	require.NoError(t, err)
+	require.Len(t, items, 3)
+	assert.True(t, items[0].Equipped, "item 100 should be equipped=true")
+	assert.False(t, items[1].Equipped, "item 200 should be equipped=false")
+	assert.True(t, items[2].Equipped, "item 300 should be equipped=true")
+
+	// First() then Find() in sequence — verify no state leakage
+	var single Inventory
+	require.NoError(t, gormDB.First(&single, items[1].ID).Error)
+	assert.False(t, single.Equipped, "First() item 200 should be equipped=false")
+
+	var others []Inventory
+	err = gormDB.Where("char_id = ? AND id != ?", 1, items[1].ID).Find(&others).Error
+	require.NoError(t, err)
+	require.Len(t, others, 2)
+	assert.True(t, others[0].Equipped, "Find() after First(): item 100 should be equipped=true")
+	assert.True(t, others[1].Equipped, "Find() after First(): item 300 should be equipped=true")
+}
+
+// TestBoolConsistencyCreateVsExec verifies that Create(bool) and Exec(int) produce identical read behavior.
+func TestBoolConsistencyCreateVsExec(t *testing.T) {
+	gormDB := setupBoolTestDB(t)
+
+	// Create via struct (Go bool)
+	require.NoError(t, gormDB.Create(&Inventory{CharID: 1, ItemID: 100, Equipped: true, Quantity: 1}).Error)
+	// Create via Exec (SQL int)
+	require.NoError(t, gormDB.Exec("INSERT INTO inventories (char_id, item_id, equipped, quantity) VALUES (1, 200, 1, 1)").Error)
+
+	var items []Inventory
+	require.NoError(t, gormDB.Order("item_id").Find(&items).Error)
+	require.Len(t, items, 2)
+
+	// Both should read as equipped=true regardless of how they were written
+	assert.True(t, items[0].Equipped, "Create(bool=true) should read as equipped=true")
+	assert.True(t, items[1].Equipped, "Exec(int=1) should read as equipped=true")
+
+	// Both should also be scannable into int fields
+	type intRow struct {
+		ItemID   int64
+		Equipped int
+	}
+	var intRows []intRow
+	err := gormDB.Raw("SELECT item_id, equipped FROM inventories ORDER BY item_id").Scan(&intRows).Error
+	require.NoError(t, err)
+	require.Len(t, intRows, 2)
+	assert.Equal(t, 1, intRows[0].Equipped, "Create(bool=true) should scan as int 1")
+	assert.Equal(t, 1, intRows[1].Equipped, "Exec(int=1) should scan as int 1")
+}
+
 // TestGormExprArithmetic verifies gorm.Expr("col - ?", val) works for arithmetic updates.
 func TestGormExprArithmetic(t *testing.T) {
 	gormDB := setupBoolTestDB(t)

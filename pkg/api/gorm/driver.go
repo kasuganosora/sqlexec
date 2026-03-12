@@ -266,8 +266,16 @@ func toDriverValue(v interface{}) driver.Value {
 			return t
 		}
 		return val
-	case int64, float64, bool, []byte:
+	case int64, float64, []byte:
 		return val
+	case bool:
+		// Convert bool to int64(0/1) for MySQL compatibility.
+		// MySQL drivers return integers for BOOLEAN/TINYINT columns,
+		// and Go's database/sql cannot implicitly convert bool to int.
+		if val {
+			return int64(1)
+		}
+		return int64(0)
 	case int:
 		return int64(val)
 	case int8:
