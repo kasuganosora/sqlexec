@@ -13,14 +13,14 @@ func TestIndex_CreateIndex(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建表
 	_, err = session.Execute(`
@@ -60,14 +60,14 @@ func TestIndex_CreateUniqueIndex(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建表
 	_, err = session.Execute(`
@@ -90,14 +90,14 @@ func TestIndex_DropIndex(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建表
 	_, err = session.Execute(`
@@ -135,14 +135,14 @@ func TestIndex_IndexWithInsert(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建表
 	_, err = session.Execute(`
@@ -170,7 +170,7 @@ func TestIndex_IndexWithInsert(t *testing.T) {
 	// 查询验证数据
 	query, err := session.Query("SELECT * FROM indexed_users ORDER BY id")
 	assert.NoError(t, err)
-	defer query.Close()
+	defer func() { _ = query.Close() }()
 
 	rows := []map[string]interface{}{}
 	for query.Next() {
@@ -186,14 +186,14 @@ func TestIndex_MultipleIndexes(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建表
 	_, err = session.Execute(`
@@ -228,14 +228,14 @@ func TestIndex_CreateDuplicateIndex(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建表
 	_, err = session.Execute(`
@@ -261,14 +261,14 @@ func TestIndex_IndexOnNonExistentTable(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 在不存在的表上创建索引
 	// 注意：当前实现可能不会报错，这是预期的
@@ -284,7 +284,7 @@ func TestIndex_CacheInvalidation(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
@@ -293,7 +293,7 @@ func TestIndex_CacheInvalidation(t *testing.T) {
 	session := db.SessionWithOptions(&SessionOptions{
 		CacheEnabled: true,
 	})
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建表
 	_, err = session.Execute(`

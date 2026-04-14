@@ -1,6 +1,7 @@
 package optimizer
 
 import (
+	"context"
 	"testing"
 )
 
@@ -42,7 +43,7 @@ func TestHintAwareIndexRule_ForceIndex(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, dataSource, optCtx)
+	plan, err := rule.Apply(context.TODO(), dataSource, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -65,7 +66,7 @@ func TestHintAwareIndexRule_UseIndex(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, dataSource, optCtx)
+	plan, err := rule.Apply(context.TODO(), dataSource, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -88,7 +89,7 @@ func TestHintAwareIndexRule_IgnoreIndex(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, dataSource, optCtx)
+	plan, err := rule.Apply(context.TODO(), dataSource, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestHintAwareIndexRule_OrderIndex(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, dataSource, optCtx)
+	plan, err := rule.Apply(context.TODO(), dataSource, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -134,7 +135,7 @@ func TestHintAwareIndexRule_NoOrderIndex(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, dataSource, optCtx)
+	plan, err := rule.Apply(context.TODO(), dataSource, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestHintAwareIndexRule_NoHints(t *testing.T) {
 		Hints: &OptimizerHints{},
 	}
 
-	plan, err := rule.Apply(nil, dataSource, optCtx)
+	plan, err := rule.Apply(context.TODO(), dataSource, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -169,7 +170,7 @@ func TestHintAwareIndexRule_NoContext(t *testing.T) {
 	rule := NewHintAwareIndexRule()
 	dataSource := NewLogicalDataSource("test_table", nil)
 
-	plan, err := rule.Apply(nil, dataSource, nil)
+	plan, err := rule.Apply(context.TODO(), dataSource, nil)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -192,7 +193,7 @@ func TestHintAwareIndexRule_WrongTableName(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, dataSource, optCtx)
+	plan, err := rule.Apply(context.TODO(), dataSource, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -234,7 +235,7 @@ func TestHintPriority(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, dataSource, optCtx)
+	plan, err := rule.Apply(context.TODO(), dataSource, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}

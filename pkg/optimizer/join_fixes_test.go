@@ -219,7 +219,7 @@ func TestJoinElimination_FKDetection_LeftIdRightFK(t *testing.T) {
 func TestJoinElimination_FKDetection_LeftFKRightId(t *testing.T) {
 	// Pattern: left.orders_id = right.id  (right table is "orders")
 	// This should be detected as a FK-PK relationship.
-	join := buildFKJoinPlan("users", "orders_id", "orders", "id", "=")
+	buildFKJoinPlan("users", "orders_id", "orders", "id", "=")
 
 	// We need left data source to have an "orders_id" column for the expression.
 	// Rebuild with correct columns.
@@ -231,7 +231,7 @@ func TestJoinElimination_FKDetection_LeftFKRightId(t *testing.T) {
 		{Name: "id", Type: "INT", Nullable: false},
 		{Name: "amount", Type: "DECIMAL", Nullable: true},
 	})
-	join = NewLogicalJoin(InnerJoin, left, right, []*JoinCondition{
+	join := NewLogicalJoin(InnerJoin, left, right, []*JoinCondition{
 		{
 			Left:     &sqlparser.Expression{Type: sqlparser.ExprTypeColumn, Column: "orders_id"},
 			Right:    &sqlparser.Expression{Type: sqlparser.ExprTypeColumn, Column: "id"},

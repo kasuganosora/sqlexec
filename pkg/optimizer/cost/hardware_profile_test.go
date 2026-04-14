@@ -52,16 +52,16 @@ func TestDetectHardwareProfile_DiskType(t *testing.T) {
 
 func TestDetectCloudEnvironment(t *testing.T) {
 	// Test without cloud environment variables
-	os.Unsetenv("AWS_REGION")
-	os.Unsetenv("GOOGLE_CLOUD_PROJECT")
-	os.Unsetenv("AZURE_RESOURCE_GROUP")
+	_ = os.Unsetenv("AWS_REGION")
+	_ = os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+	_ = os.Unsetenv("AZURE_RESOURCE_GROUP")
 
 	isCloud := detectCloudEnvironment()
 	assert.False(t, isCloud, "should not detect cloud environment without env vars")
 
 	// Test with AWS environment variable
-	os.Setenv("AWS_REGION", "us-east-1")
-	defer os.Unsetenv("AWS_REGION")
+	_ = os.Setenv("AWS_REGION", "us-east-1")
+	defer func() { _ = os.Unsetenv("AWS_REGION") }()
 
 	isCloud = detectCloudEnvironment()
 	assert.True(t, isCloud, "should detect cloud environment with AWS env var")

@@ -100,7 +100,7 @@ func (c *conn) QueryContext(_ context.Context, query string, args []driver.Named
 	for q.Next() {
 		data = append(data, q.Row())
 	}
-	q.Close()
+	_ = q.Close()
 
 	return &resultRows{columns: colNames, data: data}, nil
 }
@@ -117,7 +117,7 @@ func (c *conn) ExecContext(_ context.Context, query string, args []driver.NamedV
 			return nil, err
 		}
 		count := int64(q.RowsCount())
-		q.Close()
+		_ = q.Close()
 		return &execResult{affected: count}, nil
 	}
 
@@ -164,7 +164,7 @@ func (s *stmt) Query(args []driver.Value) (driver.Rows, error) {
 	for q.Next() {
 		data = append(data, q.Row())
 	}
-	q.Close()
+	_ = q.Close()
 	return &resultRows{columns: colNames, data: data}, nil
 }
 

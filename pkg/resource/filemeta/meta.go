@@ -48,7 +48,7 @@ func Save(metaPath string, meta *FileMeta) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	return gob.NewEncoder(f).Encode(meta)
 }
@@ -62,7 +62,7 @@ func Load(metaPath string) (*FileMeta, error) {
 		}
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var meta FileMeta
 	if err := gob.NewDecoder(f).Decode(&meta); err != nil {

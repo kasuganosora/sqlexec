@@ -7,15 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 )
-
-// 对象池，减少内存分配
-var bufPool = sync.Pool{
-	New: func() interface{} {
-		return bytes.NewBuffer(make([]byte, 0, 256))
-	},
-}
 
 func ReadStringByNullEnd(r *bytes.Buffer) (string, error) {
 	var buf []byte
@@ -176,14 +168,14 @@ func WriteStringByLenenc(buf *bytes.Buffer, s string) error {
 		buf.WriteByte(byte(length))
 	} else if length < 0x10000 {
 		buf.WriteByte(0xfc)
-		binary.Write(buf, binary.LittleEndian, uint16(length))
+		_ = binary.Write(buf, binary.LittleEndian, uint16(length))
 	} else if length < 0x1000000 { // 修复：16MB-1 (0x1000000)
 		buf.WriteByte(0xfd)
 		// 修复：正确写入3字节小端序
 		buf.Write([]byte{byte(length), byte(length >> 8), byte(length >> 16)})
 	} else {
 		buf.WriteByte(0xfe)
-		binary.Write(buf, binary.LittleEndian, uint64(length))
+		_ = binary.Write(buf, binary.LittleEndian, uint64(length))
 	}
 	// 写入字符串内容
 	buf.WriteString(s)
@@ -195,11 +187,11 @@ func WriteNumber[T uint8 | uint16 | uint32 | uint64 | uint | int | int8 | int16 
 	case 1:
 		buf.WriteByte(byte(value))
 	case 2:
-		binary.Write(buf, binary.LittleEndian, uint16(value))
+		_ = binary.Write(buf, binary.LittleEndian, uint16(value))
 	case 4:
-		binary.Write(buf, binary.LittleEndian, uint32(value))
+		_ = binary.Write(buf, binary.LittleEndian, uint32(value))
 	case 8:
-		binary.Write(buf, binary.LittleEndian, uint64(value))
+		_ = binary.Write(buf, binary.LittleEndian, uint64(value))
 	default:
 		return fmt.Errorf("unsupported write length: %d", writeLength)
 	}
@@ -238,14 +230,14 @@ func WriteLenencNumber[T uint8 | uint16 | uint32 | uint64 | uint | int | int8 | 
 		buf.WriteByte(byte(val))
 	} else if val < 0x10000 {
 		buf.WriteByte(0xfc)
-		binary.Write(buf, binary.LittleEndian, uint16(val))
+		_ = binary.Write(buf, binary.LittleEndian, uint16(val))
 	} else if val < 0x1000000 { // 修复：16MB-1
 		buf.WriteByte(0xfd)
 		// 修复：正确写入3字节小端序
 		buf.Write([]byte{byte(val), byte(val >> 8), byte(val >> 16)})
 	} else {
 		buf.WriteByte(0xfe)
-		binary.Write(buf, binary.LittleEndian, val)
+		_ = binary.Write(buf, binary.LittleEndian, val)
 	}
 	return nil
 }

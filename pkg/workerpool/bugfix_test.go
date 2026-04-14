@@ -30,7 +30,7 @@ func TestBug9_ExecuteParallelWithPool_NoDoubleWrite(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, sp.Start())
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{
 		{ID: 1, StartIndex: 0, EndIndex: 10},
@@ -57,7 +57,7 @@ func TestBug9_ExecuteParallelWithPool_MixedResults(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, sp.Start())
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{
 		{ID: 1, StartIndex: 0, EndIndex: 10},

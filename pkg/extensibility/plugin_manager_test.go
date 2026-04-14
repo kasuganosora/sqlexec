@@ -391,9 +391,9 @@ func TestPluginManager_ListPlugins(t *testing.T) {
 	funcPlugin := &MockFunctionPlugin{name: "func1"}
 	monitorPlugin := &MockMonitorPlugin{name: "mon1"}
 
-	pm.RegisterDataSourcePlugin(dsPlugin, nil)
-	pm.RegisterFunctionPlugin(funcPlugin, nil)
-	pm.RegisterMonitorPlugin(monitorPlugin, nil)
+	require.NoError(t, pm.RegisterDataSourcePlugin(dsPlugin, nil))
+	require.NoError(t, pm.RegisterFunctionPlugin(funcPlugin, nil))
+	require.NoError(t, pm.RegisterMonitorPlugin(monitorPlugin, nil))
 
 	plugins := pm.ListPlugins()
 	assert.Equal(t, 3, len(plugins))
@@ -409,9 +409,9 @@ func TestPluginManager_StartAllPlugins(t *testing.T) {
 	funcPlugin := &MockFunctionPlugin{name: "func1", running: false}
 	monitorPlugin := &MockMonitorPlugin{name: "mon1", running: false}
 
-	pm.RegisterDataSourcePlugin(dsPlugin, nil)
-	pm.RegisterFunctionPlugin(funcPlugin, nil)
-	pm.RegisterMonitorPlugin(monitorPlugin, nil)
+	require.NoError(t, pm.RegisterDataSourcePlugin(dsPlugin, nil))
+	require.NoError(t, pm.RegisterFunctionPlugin(funcPlugin, nil))
+	require.NoError(t, pm.RegisterMonitorPlugin(monitorPlugin, nil))
 
 	err := pm.StartAllPlugins()
 	assert.NoError(t, err)
@@ -427,9 +427,9 @@ func TestPluginManager_StopAllPlugins(t *testing.T) {
 	funcPlugin := &MockFunctionPlugin{name: "func1", running: true}
 	monitorPlugin := &MockMonitorPlugin{name: "mon1", running: true}
 
-	pm.RegisterDataSourcePlugin(dsPlugin, nil)
-	pm.RegisterFunctionPlugin(funcPlugin, nil)
-	pm.RegisterMonitorPlugin(monitorPlugin, nil)
+	_ = pm.RegisterDataSourcePlugin(dsPlugin, nil)
+	_ = pm.RegisterFunctionPlugin(funcPlugin, nil)
+	_ = pm.RegisterMonitorPlugin(monitorPlugin, nil)
 
 	err := pm.StopAllPlugins()
 	assert.NoError(t, err)
@@ -442,7 +442,7 @@ func TestPluginManager_StartAllPlugins_WithRunningPlugins(t *testing.T) {
 	pm := NewPluginManager()
 
 	dsPlugin := &MockDataSourcePlugin{name: "ds1", running: true}
-	pm.RegisterDataSourcePlugin(dsPlugin, nil)
+	_ = pm.RegisterDataSourcePlugin(dsPlugin, nil)
 
 	err := pm.StartAllPlugins()
 	assert.NoError(t, err)

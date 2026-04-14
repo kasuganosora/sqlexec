@@ -19,7 +19,7 @@ func TestNewScanPool(t *testing.T) {
 	if sp == nil {
 		t.Fatal("NewScanPool() returned nil")
 	}
-	sp.Close()
+	_ = sp.Close()
 }
 
 // TestScanPool_Start tests scan pool start
@@ -27,7 +27,7 @@ func TestScanPool_Start(t *testing.T) {
 	sp, _ := NewScanPool(2, func(ctx context.Context, task ScanTask) (ScanResult, error) {
 		return ScanResult{TaskID: task.ID}, nil
 	})
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	if err := sp.Start(); err != nil {
 		t.Errorf("Start() error = %v", err)
@@ -49,7 +49,7 @@ func TestScanPool_ExecuteParallel(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{
 		{ID: 0, StartIndex: 0, EndIndex: 100},
@@ -88,7 +88,7 @@ func TestScanPool_ExecuteParallelWithPool(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{
 		{ID: 0, Data: "data0"},
@@ -118,7 +118,7 @@ func TestScanPool_ExecuteParallelError(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{
 		{ID: 0},
@@ -199,7 +199,7 @@ func TestScanPool_Stats(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	stats := sp.Stats()
 	if stats.Workers <= 0 {
@@ -221,7 +221,7 @@ func TestScanPool_LargeBatch(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	// Create 100 tasks
 	tasks := make([]ScanTask, 100)
@@ -254,7 +254,7 @@ func TestScanPool_Panic(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{
 		{ID: 0},
@@ -282,7 +282,7 @@ func TestScanPool_ContextCancel(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -300,8 +300,8 @@ func BenchmarkScanPool_ExecuteParallel(b *testing.B) {
 	sp, _ := NewScanPool(4, func(ctx context.Context, task ScanTask) (ScanResult, error) {
 		return ScanResult{TaskID: task.ID}, nil
 	})
-	sp.Start()
-	defer sp.Close()
+	_ = sp.Start()
+	defer func() { _ = sp.Close() }()
 
 	tasks := make([]ScanTask, 4)
 	for i := range tasks {
@@ -319,8 +319,8 @@ func BenchmarkScanPool_ExecuteParallelWithPool(b *testing.B) {
 	sp, _ := NewScanPool(4, func(ctx context.Context, task ScanTask) (ScanResult, error) {
 		return ScanResult{TaskID: task.ID}, nil
 	})
-	sp.Start()
-	defer sp.Close()
+	_ = sp.Start()
+	defer func() { _ = sp.Close() }()
 
 	tasks := make([]ScanTask, 4)
 	for i := range tasks {
@@ -354,7 +354,7 @@ func TestScanPool_ExecuteParallelWithPoolError(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{
 		{ID: 0},
@@ -379,7 +379,7 @@ func TestScanPool_ExecuteParallelWithPoolPanic(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{
 		{ID: 0},
@@ -401,7 +401,7 @@ func TestScanPool_ExecuteParallelEmpty(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{}
 
@@ -422,7 +422,7 @@ func TestScanPool_ExecuteParallelWithPoolEmpty(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{}
 
@@ -472,7 +472,7 @@ func TestScanPool_ExecuteParallelWithTaskData(t *testing.T) {
 	if err := sp.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	defer sp.Close()
+	defer func() { _ = sp.Close() }()
 
 	tasks := []ScanTask{
 		{ID: 0, StartIndex: 0, EndIndex: 10},

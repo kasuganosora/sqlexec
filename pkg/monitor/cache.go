@@ -74,9 +74,7 @@ func (c *QueryCache) Set(key string, value interface{}, ttl time.Duration) {
 	defer c.mu.Unlock()
 
 	// 如果已存在，删除旧条目
-	if _, ok := c.entries[key]; ok {
-		delete(c.entries, key)
-	}
+	delete(c.entries, key)
 
 	// 如果缓存已满，淘汰最久未使用的条目
 	if len(c.entries) >= c.maxSize {

@@ -53,7 +53,7 @@ func NewSessionMgr(ctx context.Context, driver SessionDriver) *SessionMgr {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				sess.GC()
+				_ = sess.GC()
 			}
 		}
 	}()
@@ -166,12 +166,12 @@ func (m *SessionMgr) CleanupSession(ctx context.Context, sess *Session) {
 	}
 	// 关闭 API Session
 	if closer, ok := sess.APISession.(interface{ Close() error }); ok {
-		closer.Close()
+		_ = closer.Close()
 	}
 	// 删除 ThreadID 映射
-	m.DeleteThreadID(ctx, sess.ThreadID)
+	_ = m.DeleteThreadID(ctx, sess.ThreadID)
 	// 删除 Session
-	m.DeleteSession(ctx, sess.ID)
+	_ = m.DeleteSession(ctx, sess.ID)
 }
 
 func (m *SessionMgr) GetSessions(ctx context.Context) (sesses []*Session, err error) {

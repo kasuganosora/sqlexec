@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -62,7 +63,7 @@ func TestShowProcessList(t *testing.T) {
 	assert.Equal(t, expectedColumns, columnNames)
 
 	// Verify no rows returned (since no active queries)
-	result.Close()
+	require.NoError(t, result.Close())
 }
 
 // TestShowFullProcessList tests SHOW FULL PROCESSLIST functionality
@@ -107,7 +108,7 @@ func TestShowFullProcessList(t *testing.T) {
 	columns := result.Columns()
 	assert.Equal(t, 8, len(columns))
 
-	result.Close()
+	require.NoError(t, result.Close())
 }
 
 // TestShowProcessListFields tests PROCESSLIST field types and names
@@ -166,5 +167,5 @@ func TestShowProcessListFields(t *testing.T) {
 		assert.Equal(t, expectedType, col.Type, "Column %s should have type %s", col.Name, expectedType)
 	}
 
-	result.Close()
+	require.NoError(t, result.Close())
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWAL_AppendAndReadAll(t *testing.T) {
@@ -27,7 +28,7 @@ func TestWAL_AppendAndReadAll(t *testing.T) {
 			t.Fatalf("Append: %v", err)
 		}
 	}
-	wal.Close()
+	require.NoError(t, wal.Close())
 
 	// Read all
 	read, err := ReadAll(dir)
@@ -59,11 +60,11 @@ func TestWAL_Checkpoint(t *testing.T) {
 	}
 
 	// Write entries, then checkpoint, then more entries
-	wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(1)}}})
-	wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(2)}}})
-	wal.Append(&WALEntry{Type: WALCheckpoint})
-	wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(3)}}})
-	wal.Close()
+	require.NoError(t, wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(1)}}}))
+	require.NoError(t, wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(2)}}}))
+	require.NoError(t, wal.Append(&WALEntry{Type: WALCheckpoint}))
+	_ = wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(3)}}})
+	require.NoError(t, wal.Close())
 
 	// ReadAll should only return entries after checkpoint
 	read, err := ReadAll(dir)
@@ -87,15 +88,15 @@ func TestWAL_Truncate(t *testing.T) {
 		t.Fatalf("newWAL: %v", err)
 	}
 
-	wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(1)}}})
+	_ = wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(1)}}})
 
 	if err := wal.Truncate(); err != nil {
 		t.Fatalf("Truncate: %v", err)
 	}
 
 	// New entries after truncate
-	wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(2)}}})
-	wal.Close()
+	_ = wal.Append(&WALEntry{Type: WALInsert, TableName: "t1", Rows: []domain.Row{{"id": int64(2)}}})
+	require.NoError(t, wal.Close())
 
 	read, err := ReadAll(dir)
 	if err != nil {
@@ -127,7 +128,7 @@ func TestWAL_DDLEntries(t *testing.T) {
 		t.Fatalf("newWAL: %v", err)
 	}
 
-	wal.Append(&WALEntry{
+	_ = wal.Append(&WALEntry{
 		Type:      WALCreateTable,
 		TableName: "new_table",
 		Schema: &domain.TableInfo{
@@ -137,9 +138,9 @@ func TestWAL_DDLEntries(t *testing.T) {
 			},
 		},
 	})
-	wal.Append(&WALEntry{Type: WALDropTable, TableName: "new_table"})
-	wal.Append(&WALEntry{Type: WALTruncateTable, TableName: "other"})
-	wal.Close()
+	_ = wal.Append(&WALEntry{Type: WALDropTable, TableName: "new_table"})
+	_ = wal.Append(&WALEntry{Type: WALTruncateTable, TableName: "other"})
+	_ = wal.Close()
 
 	read, err := ReadAll(dir)
 	if err != nil {

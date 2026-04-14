@@ -82,10 +82,11 @@ func (e *SimpleCardinalityEstimator) EstimateFilter(table string, filters []doma
 	totalSelectivity := 1.0
 	for _, filter := range filters {
 		sel := e.estimateFilterSelectivity(table, filter)
-		if filter.LogicOp == "AND" {
+		switch filter.LogicOp {
+		case "AND":
 			// AND: 选择率相乘
 			totalSelectivity *= sel
-		} else if filter.LogicOp == "OR" {
+		case "OR":
 			// OR: 处理OR子过滤器
 			// 简化：使用平均选择率
 			orSelectivity := 0.0
@@ -96,7 +97,7 @@ func (e *SimpleCardinalityEstimator) EstimateFilter(table string, filters []doma
 			if len(filter.SubFilters) > 0 {
 				totalSelectivity *= (orSelectivity / float64(len(filter.SubFilters)))
 			}
-		} else {
+		default:
 			// 单个条件
 			totalSelectivity *= sel
 		}

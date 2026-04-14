@@ -332,23 +332,6 @@ func (acm *AdaptiveCostModel) estimatePlanRowCount(plan interface{}) int64 {
 	return 10000
 }
 
-// estimatePlanRowCountWithType 带类型断言的估算（如果需要）
-func (acm *AdaptiveCostModel) estimatePlanRowCountWithType(plan interface{}) int64 {
-	if ds, ok := plan.(interface{ GetTableName() string }); ok {
-		if method := ds.GetTableName; method != nil {
-			return acm.estimator.EstimateTableScan(method())
-		}
-	}
-
-	if sel, ok := plan.(interface{ Children() []interface{} }); ok && len(sel.Children()) > 0 {
-		// 简化：直接返回估算值
-		return acm.estimator.EstimateTableScan("unknown")
-	}
-
-	// 默认
-	return 10000
-}
-
 // canUseIndex 检查是否可以使用索引
 func (acm *AdaptiveCostModel) canUseIndex(fieldName string) bool {
 	// 简化：假设所有列都有索引
@@ -407,8 +390,4 @@ func (acm *AdaptiveCostModel) Explain() string {
 	)
 }
 
-// getTableName 获取表的名称（简化版）
-func getTableName(plan interface{}) string {
-	// 简化实现
-	return "unknown_table"
-}
+

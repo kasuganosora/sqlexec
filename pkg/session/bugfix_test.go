@@ -198,7 +198,7 @@ func TestBug5_ClosedCheck_Race(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		time.Sleep(5 * time.Millisecond)
-		sess.Close(context.Background())
+		require.NoError(t, sess.Close(context.Background()))
 	}()
 
 	// Another goroutine checks closed status

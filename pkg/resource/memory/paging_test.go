@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"sync"
@@ -205,7 +206,7 @@ func TestBufferPool_PinUnpin(t *testing.T) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour, // don't auto-evict during test
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	page := &RowPage{
 		id:        PageID{Table: "t", Version: 1, Index: 0},
@@ -236,7 +237,7 @@ func TestBufferPool_EvictAndReload(t *testing.T) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	// Create pages that exceed 1MB
 	var pages []*RowPage
@@ -288,7 +289,7 @@ func TestBufferPool_VersionPriorityEviction(t *testing.T) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	bp.UpdateLatestVersion("t", 2)
 
@@ -332,7 +333,7 @@ func TestBufferPool_Unregister(t *testing.T) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	page := &RowPage{
 		id:        PageID{Table: "t", Version: 1, Index: 0},
@@ -396,7 +397,7 @@ func TestPagedRows_WithBufferPool(t *testing.T) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	rows := makeTestRows(50)
 	pr := NewPagedRows(bp, rows, 10, "test", 1)
@@ -436,7 +437,7 @@ func TestPagedRows_WithEviction(t *testing.T) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	// Create enough data to exceed 1MB
 	rows := makeTestRows(5000)
@@ -490,7 +491,7 @@ func TestBufferPool_ConcurrentPinUnpin(t *testing.T) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	page := &RowPage{
 		id:        PageID{Table: "t", Version: 1, Index: 0},
@@ -661,7 +662,7 @@ func TestNewPagedRowsBuilder_AppendPage_WithBufferPool(t *testing.T) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	pr := NewPagedRowsBuilder(bp, 100, "test", 1)
 
@@ -749,7 +750,7 @@ func TestNewPagedRowsBuilder_Get(t *testing.T) {
 func TestBulkLoad_Basic(t *testing.T) {
 	ctx := context.Background()
 	ds := NewMVCCDataSource(nil)
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
 	tableInfo := &domain.TableInfo{
 		Name: "t",
@@ -786,7 +787,7 @@ func TestBulkLoad_Basic(t *testing.T) {
 func TestBulkLoad_EmptyTable(t *testing.T) {
 	ctx := context.Background()
 	ds := NewMVCCDataSource(nil)
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
 	tableInfo := &domain.TableInfo{
 		Name: "empty",
@@ -817,7 +818,7 @@ func TestBulkLoad_EmptyTable(t *testing.T) {
 func TestBulkLoad_NonexistentTable(t *testing.T) {
 	ctx := context.Background()
 	ds := NewMVCCDataSource(nil)
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
 	err := ds.BulkLoad("nonexistent", func(addPage func([]domain.Row)) error {
 		return nil
@@ -837,8 +838,8 @@ func TestBulkLoad_WithBufferPool(t *testing.T) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	ds.Connect(ctx)
-	defer ds.Close(ctx)
+	require.NoError(t, ds.Connect(ctx))
+	defer func() { _ = ds.Close(ctx) }()
 
 	tableInfo := &domain.TableInfo{
 		Name: "large",

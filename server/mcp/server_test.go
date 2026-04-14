@@ -30,7 +30,7 @@ func setupTestDeps(t *testing.T) *ToolDeps {
 		Name:     "default",
 		Writable: true,
 	})
-	require.NoError(t, ds.Connect(nil))
+	require.NoError(t, ds.Connect(context.TODO()))
 	require.NoError(t, db.RegisterDataSource("default", ds))
 
 	configDir := t.TempDir()
@@ -71,7 +71,7 @@ func TestHandleQuery_Select(t *testing.T) {
 	require.NoError(t, err)
 	_, err = session.Execute("INSERT INTO users (id, name) VALUES (2, 'Bob')")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
@@ -100,7 +100,7 @@ func TestHandleQuery_Insert(t *testing.T) {
 	session := deps.DB.Session()
 	_, err := session.Execute("CREATE TABLE insert_test (id INT, value VARCHAR(100))")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
@@ -156,7 +156,7 @@ func TestHandleListTables(t *testing.T) {
 	require.NoError(t, err)
 	_, err = session.Execute("CREATE TABLE table_b (id INT)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
@@ -192,7 +192,7 @@ func TestHandleDescribeTable(t *testing.T) {
 	session := deps.DB.Session()
 	_, err := session.Execute("CREATE TABLE desc_test (id INT, name VARCHAR(100), age INT)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
@@ -239,7 +239,7 @@ func TestAuditLogging_MCP(t *testing.T) {
 	session := deps.DB.Session()
 	_, err := session.Execute("CREATE TABLE audit_mcp (id INT)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
@@ -261,7 +261,7 @@ func TestHandleQuery_Update(t *testing.T) {
 	require.NoError(t, err)
 	_, err = session.Execute("INSERT INTO update_test (id, val) VALUES (1, 'old')")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
@@ -286,7 +286,7 @@ func TestHandleQuery_Delete(t *testing.T) {
 	require.NoError(t, err)
 	_, err = session.Execute("INSERT INTO delete_test (id) VALUES (1)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
@@ -345,7 +345,7 @@ func TestHandleQuery_WithDatabase(t *testing.T) {
 	session := deps.DB.Session()
 	_, err := session.Execute("CREATE TABLE dbparam_test (id INT)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	ctx := authedCtx()
 	req := makeCallToolRequest(map[string]interface{}{
@@ -365,7 +365,7 @@ func TestHandleQuery_WithAuthClient(t *testing.T) {
 	session := deps.DB.Session()
 	_, err := session.Execute("CREATE TABLE auth_test (id INT)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	client := &config_schema.APIClient{Name: "mcp_user", APIKey: "key-1", Enabled: true}
 	ctx := context.WithValue(context.Background(), ctxKeyMCPClient, client)
@@ -441,7 +441,7 @@ func TestHandleListTables_WithClient(t *testing.T) {
 	session := deps.DB.Session()
 	_, err := session.Execute("CREATE TABLE client_tables_test (id INT)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	client := &config_schema.APIClient{Name: "tbl_lister", APIKey: "key-3", Enabled: true}
 	ctx := context.WithValue(context.Background(), ctxKeyMCPClient, client)

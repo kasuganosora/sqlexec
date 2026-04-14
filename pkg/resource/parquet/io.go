@@ -18,7 +18,7 @@ func readParquetFile(filePath string) (*domain.TableInfo, []domain.Row, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open parquet file %q: %w", filePath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	stat, err := f.Stat()
 	if err != nil {
@@ -44,7 +44,7 @@ func readParquetFile(filePath string) (*domain.TableInfo, []domain.Row, error) {
 
 	// Read all rows
 	reader := pq.NewReader(f)
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	var rows []domain.Row
 	pqRows := make([]pq.Row, 128)
@@ -92,8 +92,8 @@ func writeParquetFile(filePath string, schema *domain.TableInfo, rows []domain.R
 	success := false
 	defer func() {
 		if !success {
-			tmpFile.Close()
-			os.Remove(tmpPath)
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
 		}
 	}()
 

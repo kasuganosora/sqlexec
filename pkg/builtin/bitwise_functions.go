@@ -54,7 +54,7 @@ func init() {
 	}
 
 	for _, fn := range bitwiseFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 

@@ -326,27 +326,6 @@ func (e *EnhancedCardinalityEstimator) EstimateJoin(left, right interface{}, joi
 	}
 }
 
-// estimateJoinSelectivity 估算JOIN的选择性
-func (e *EnhancedCardinalityEstimator) estimateJoinSelectivity(conditions []*parser.Expression, left, right interface{}) float64 {
-	if len(conditions) == 0 {
-		return 1.0
-	}
-
-	// 分析连接条件中的列
-	leftTableName := getTableName(left)
-	rightTableName := getTableName(right)
-
-	totalSelectivity := 1.0
-	for range conditions {
-		// 简化：假设等值连接
-		// 实际应该解析表达式获取列名
-		selectivity := e.estimateEquijoinSelectivity(leftTableName, rightTableName)
-		totalSelectivity *= selectivity
-	}
-
-	return totalSelectivity
-}
-
 // estimateEquijoinSelectivity 估算等值连接的选择性
 func (e *EnhancedCardinalityEstimator) estimateEquijoinSelectivity(leftTable, rightTable string) float64 {
 	// 获取两个表的NDV
@@ -443,9 +422,4 @@ func expressionToString(expr *parser.Expression) string {
 	return fmt.Sprintf("%v", expr)
 }
 
-// getTableName 获取逻辑计划的表名
-func getTableName(plan interface{}) string {
-	// 简化实现：需要处理具体的 LogicalPlan 类型
-	_ = plan
-	return ""
-}
+

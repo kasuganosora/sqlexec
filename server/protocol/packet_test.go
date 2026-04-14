@@ -331,7 +331,6 @@ func TestQueryResponsePackets(t *testing.T) {
 		assert.Equal(t, uint8(0xfe), eofPacket2.Header)
 		assert.Equal(t, uint16(0), eofPacket2.Warnings)
 		assert.Equal(t, uint16(2), eofPacket2.StatusFlags)
-		offset += 4 + length
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewMySQLUserTable(t *testing.T) {
@@ -65,12 +66,12 @@ func TestMySQLUserTableQuery(t *testing.T) {
 	}
 
 	// Create test users
-	am.CreateUser("%", "testuser1", "")
-	am.CreateUser("localhost", "testuser2", "")
-	am.CreateUser("192.168.1.1", "testuser3", "")
+	require.NoError(t, am.CreateUser("%", "testuser1", ""))
+	require.NoError(t, am.CreateUser("localhost", "testuser2", ""))
+	require.NoError(t, am.CreateUser("192.168.1.1", "testuser3", ""))
 
 	// Grant some privileges
-	am.Grant("%", "testuser1", []PermissionType{PrivSelect, PrivInsert}, PermissionLevelDatabase, "", "", "")
+	require.NoError(t, am.Grant("%", "testuser1", []PermissionType{PrivSelect, PrivInsert}, PermissionLevelDatabase, "", "", ""))
 
 	table := NewMySQLUserTable(am)
 	result, err := table.Query(context.Background(), nil, nil)
@@ -105,8 +106,8 @@ func TestMySQLUserTableQueryWithFilters(t *testing.T) {
 	}
 
 	// Create test users
-	am.CreateUser("%", "testuser1", "")
-	am.CreateUser("localhost", "testuser2", "")
+	require.NoError(t, am.CreateUser("%", "testuser1", ""))
+	require.NoError(t, am.CreateUser("localhost", "testuser2", ""))
 
 	table := NewMySQLUserTable(am)
 
@@ -157,9 +158,9 @@ func TestMySQLUserTableQueryWithLimit(t *testing.T) {
 	}
 
 	// Create test users
-	am.CreateUser("%", "user1", "")
-	am.CreateUser("%", "user2", "")
-	am.CreateUser("%", "user3", "")
+	require.NoError(t, am.CreateUser("%", "user1", ""))
+	require.NoError(t, am.CreateUser("%", "user2", ""))
+	require.NoError(t, am.CreateUser("%", "user3", ""))
 
 	table := NewMySQLUserTable(am)
 
@@ -186,9 +187,9 @@ func TestMySQLUserTableQueryWithOffset(t *testing.T) {
 	}
 
 	// Create test users
-	am.CreateUser("%", "user1", "")
-	am.CreateUser("%", "user2", "")
-	am.CreateUser("%", "user3", "")
+	require.NoError(t, am.CreateUser("%", "user1", ""))
+	require.NoError(t, am.CreateUser("%", "user2", ""))
+	require.NoError(t, am.CreateUser("%", "user3", ""))
 
 	table := NewMySQLUserTable(am)
 
@@ -215,8 +216,8 @@ func TestMySQLUserTablePrivilegeMapping(t *testing.T) {
 	}
 
 	// Create user and grant global privileges (which go into User.Privileges)
-	am.CreateUser("%", "testuser", "")
-	am.Grant("%", "testuser", []PermissionType{PrivSelect, PrivInsert, PrivGrant}, PermissionLevelGlobal, "", "", "")
+	require.NoError(t, am.CreateUser("%", "testuser", ""))
+	require.NoError(t, am.Grant("%", "testuser", []PermissionType{PrivSelect, PrivInsert, PrivGrant}, PermissionLevelGlobal, "", "", ""))
 
 	table := NewMySQLUserTable(am)
 	result, err := table.Query(context.Background(), nil, nil)

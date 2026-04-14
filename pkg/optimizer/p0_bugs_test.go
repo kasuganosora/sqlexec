@@ -121,7 +121,7 @@ func TestBatchExecutor_AddFlushDeadlock(t *testing.T) {
 		flushed <- items
 		return nil
 	})
-	defer be.Close()
+	defer func() { _ = be.Close() }()
 
 	done := make(chan struct{})
 	go func() {

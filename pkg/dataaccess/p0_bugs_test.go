@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
@@ -73,7 +74,7 @@ func TestInsertShouldRouteToCorrectDataSource(t *testing.T) {
 	service := NewDataService(primaryDS).(*DataService)
 
 	// Register and route "orders" table to the routed data source
-	service.manager.RegisterDataSource("orders_ds", routedDS)
+	require.NoError(t, service.manager.RegisterDataSource("orders_ds", routedDS))
 	service.router.AddRoute("orders", "orders_ds")
 
 	ctx := context.Background()
@@ -98,7 +99,7 @@ func TestUpdateShouldRouteToCorrectDataSource(t *testing.T) {
 	routedDS := &TrackingDataSource{name: "routed"}
 
 	service := NewDataService(primaryDS).(*DataService)
-	service.manager.RegisterDataSource("orders_ds", routedDS)
+	require.NoError(t, service.manager.RegisterDataSource("orders_ds", routedDS))
 	service.router.AddRoute("orders", "orders_ds")
 
 	ctx := context.Background()
@@ -124,7 +125,7 @@ func TestDeleteShouldRouteToCorrectDataSource(t *testing.T) {
 	routedDS := &TrackingDataSource{name: "routed"}
 
 	service := NewDataService(primaryDS).(*DataService)
-	service.manager.RegisterDataSource("orders_ds", routedDS)
+	require.NoError(t, service.manager.RegisterDataSource("orders_ds", routedDS))
 	service.router.AddRoute("orders", "orders_ds")
 
 	ctx := context.Background()

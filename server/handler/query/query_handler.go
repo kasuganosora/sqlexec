@@ -70,7 +70,7 @@ func (h *QueryHandler) Handle(ctx *handler.HandlerContext, packet interface{}) e
 		}
 		return ctx.SendError(err)
 	}
-	defer queryObj.Close()
+	defer func() { _ = queryObj.Close() }()
 
 	// 获取列信息
 	columns := queryObj.Columns()

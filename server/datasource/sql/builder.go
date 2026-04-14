@@ -36,7 +36,6 @@ func BuildSelectSQL(d Dialect, tableName string, options *domain.QueryOptions, p
 			sb.WriteString(" WHERE ")
 			sb.WriteString(whereClause)
 			params = append(params, whereParams...)
-			paramOffset += len(whereParams)
 		}
 	}
 

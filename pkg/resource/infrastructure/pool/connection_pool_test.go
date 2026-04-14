@@ -11,7 +11,8 @@ func TestNewConnectionPool(t *testing.T) {
 	pool := NewConnectionPool()
 
 	if pool == nil {
-		t.Errorf("NewConnectionPool() returned nil")
+		t.Fatalf("NewConnectionPool() returned nil")
+		return
 	}
 
 	if pool.maxOpen != 10 {
@@ -37,7 +38,8 @@ func TestNewConnectionPoolWithConfig(t *testing.T) {
 	pool := NewConnectionPoolWithConfig(maxOpen, maxIdle, lifetime, idleTimeout)
 
 	if pool == nil {
-		t.Errorf("NewConnectionPoolWithConfig() returned nil")
+		t.Fatalf("NewConnectionPoolWithConfig() returned nil")
+		return
 	}
 
 	if pool.maxOpen != maxOpen {

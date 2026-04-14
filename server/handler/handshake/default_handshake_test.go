@@ -13,9 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testLogger struct {
-	messages []string
-}
+type testLogger struct{}
 
 func (l *testLogger) Printf(format string, v ...interface{}) {
 	// no-op for tests
@@ -61,7 +59,7 @@ func TestHandle_Success(t *testing.T) {
 	sess := newTestSession()
 
 	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	done := make(chan error, 1)
 	go func() {
@@ -101,7 +99,7 @@ func TestHandle_WithDatabase(t *testing.T) {
 	sess := newTestSession()
 
 	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	done := make(chan error, 1)
 	go func() {
@@ -110,16 +108,19 @@ func TestHandle_WithDatabase(t *testing.T) {
 
 	// Read handshake
 	buf := make([]byte, 4096)
-	clientConn.Read(buf)
+	_, err := clientConn.Read(buf)
+	require.NoError(t, err)
 
 	// Send response with database
 	respData := buildHandshakeResponse("db_user", "mydb")
-	clientConn.Write(respData)
+	_, err = clientConn.Write(respData)
+	require.NoError(t, err)
 
 	// Read OK
-	clientConn.Read(buf)
+	_, err = clientConn.Read(buf)
+	require.NoError(t, err)
 
-	err := <-done
+	err = <-done
 	assert.NoError(t, err)
 
 	assert.Equal(t, "db_user", sess.User)
@@ -141,7 +142,7 @@ func TestHandle_WithDB_APISession(t *testing.T) {
 	sess.SetAPISession(apiSess)
 
 	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	done := make(chan error, 1)
 	go func() {
@@ -149,12 +150,15 @@ func TestHandle_WithDB_APISession(t *testing.T) {
 	}()
 
 	buf := make([]byte, 4096)
-	clientConn.Read(buf)
+	_, err = clientConn.Read(buf)
+	require.NoError(t, err)
 
 	respData := buildHandshakeResponse("api_user", "")
-	clientConn.Write(respData)
+	_, err = clientConn.Write(respData)
+	require.NoError(t, err)
 
-	clientConn.Read(buf)
+	_, err = clientConn.Read(buf)
+	require.NoError(t, err)
 
 	err = <-done
 	assert.NoError(t, err)
@@ -168,7 +172,7 @@ func TestHandle_WriteError(t *testing.T) {
 
 	// Close server conn before handler writes → write error
 	clientConn, serverConn := net.Pipe()
-	clientConn.Close()
+	require.NoError(t, clientConn.Close())
 
 	err := h.Handle(serverConn, sess)
 	assert.Error(t, err)
@@ -187,10 +191,11 @@ func TestHandle_ReadError(t *testing.T) {
 
 	// Read the handshake packet, then close without sending response → read error
 	buf := make([]byte, 4096)
-	clientConn.Read(buf)
-	clientConn.Close()
+	_, err := clientConn.Read(buf)
+	require.NoError(t, err)
+	require.NoError(t, clientConn.Close())
 
-	err := <-done
+	err = <-done
 	assert.Error(t, err)
 }
 
@@ -199,7 +204,7 @@ func TestHandle_NilLogger(t *testing.T) {
 	sess := newTestSession()
 
 	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	done := make(chan error, 1)
 	go func() {
@@ -207,14 +212,17 @@ func TestHandle_NilLogger(t *testing.T) {
 	}()
 
 	buf := make([]byte, 4096)
-	clientConn.Read(buf)
+	_, err := clientConn.Read(buf)
+	require.NoError(t, err)
 
 	respData := buildHandshakeResponse("nil_logger_user", "")
-	clientConn.Write(respData)
+	_, err = clientConn.Write(respData)
+	require.NoError(t, err)
 
-	clientConn.Read(buf)
+	_, err = clientConn.Read(buf)
+	require.NoError(t, err)
 
-	err := <-done
+	err = <-done
 	assert.NoError(t, err)
 	assert.Equal(t, "nil_logger_user", sess.User)
 }
@@ -232,19 +240,25 @@ func TestHandle_OKWriteError(t *testing.T) {
 
 	// Read handshake, send response, then close before reading OK
 	buf := make([]byte, 4096)
-	clientConn.Read(buf)
+	_, err := clientConn.Read(buf)
+	require.NoError(t, err)
 
 	respData := buildHandshakeResponse("ok_error_user", "")
-	clientConn.Write(respData)
+	_, err = clientConn.Write(respData)
+	require.NoError(t, err)
 
 	// Close immediately — the OK write may or may not succeed depending on buffering
 	// Use a small read to drain partial data then close
+	drainDone := make(chan struct{})
 	go func() {
-		io.ReadAll(clientConn)
+		_, _ = io.ReadAll(clientConn)
+		close(drainDone)
 	}()
-	clientConn.Close()
+	require.NoError(t, clientConn.Close())
 
-	err := <-done
+	err = <-done
 	// May succeed or fail depending on timing
 	_ = err
+
+	<-drainDone
 }

@@ -15,7 +15,7 @@ func TestMigrationManager_ExportImport(t *testing.T) {
 	// Create temp directory for test data
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create source data source
 	config := &domain.DataSourceConfig{
@@ -30,7 +30,7 @@ func TestMigrationManager_ExportImport(t *testing.T) {
 	ctx := context.Background()
 	err = ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table and insert data
 	tableInfo := &domain.TableInfo{
@@ -74,7 +74,7 @@ func TestMigrationManager_ExportImport(t *testing.T) {
 	destDS := NewBadgerDataSource(destConfig)
 	err = destDS.Connect(ctx)
 	require.NoError(t, err)
-	defer destDS.Close(ctx)
+	defer func() { _ = destDS.Close(ctx) }()
 
 	// Import from buffer
 	destMgr := NewMigrationManager(destDS)
@@ -91,7 +91,7 @@ func TestMigrationManager_ExportToFile(t *testing.T) {
 	// Create temp directory for test data
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create data source
 	config := &domain.DataSourceConfig{
@@ -106,7 +106,7 @@ func TestMigrationManager_ExportToFile(t *testing.T) {
 	ctx := context.Background()
 	err = ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -135,7 +135,7 @@ func TestMaintenanceManager_GetStats(t *testing.T) {
 	// Create temp directory for test data
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create data source
 	config := &domain.DataSourceConfig{
@@ -150,7 +150,7 @@ func TestMaintenanceManager_GetStats(t *testing.T) {
 	ctx := context.Background()
 	err = ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -186,7 +186,7 @@ func TestMaintenanceManager_RunGC(t *testing.T) {
 	// Create temp directory for test data
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create data source with persistent mode (GC not supported in memory mode)
 	config := &domain.DataSourceConfig{
@@ -202,7 +202,7 @@ func TestMaintenanceManager_RunGC(t *testing.T) {
 	ctx := context.Background()
 	err = ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create maintenance manager
 	mgr := NewMaintenanceManager(ds)
@@ -220,7 +220,7 @@ func TestMaintenanceManager_VerifyIntegrity(t *testing.T) {
 	// Create temp directory for test data
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create data source
 	config := &domain.DataSourceConfig{
@@ -235,7 +235,7 @@ func TestMaintenanceManager_VerifyIntegrity(t *testing.T) {
 	ctx := context.Background()
 	err = ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{

@@ -192,7 +192,7 @@ func TestMVCCTransaction_Insert(t *testing.T) {
 	assert.Equal(t, int64(2), count)
 
 	// 提交以验证
-	txn.Commit(ctx)
+	require.NoError(t, txn.Commit(ctx))
 }
 
 func TestMVCCTransaction_Update(t *testing.T) {
@@ -235,7 +235,7 @@ func TestMVCCTransaction_Update(t *testing.T) {
 	assert.Equal(t, int64(1), count)
 
 	// 提交以验证
-	txn.Commit(ctx)
+	require.NoError(t, txn.Commit(ctx))
 }
 
 func TestMVCCTransaction_Delete(t *testing.T) {
@@ -277,7 +277,7 @@ func TestMVCCTransaction_Delete(t *testing.T) {
 	assert.Equal(t, int64(1), count)
 
 	// 提交以验证
-	txn.Commit(ctx)
+	require.NoError(t, txn.Commit(ctx))
 }
 
 func TestMVCCTransaction_MultipleOperations(t *testing.T) {
@@ -445,7 +445,7 @@ func TestMVCCTransaction_Delete_MultipleRows(t *testing.T) {
 	assert.Equal(t, int64(2), count)
 
 	// 提交以验证
-	txn.Commit(ctx)
+	require.NoError(t, txn.Commit(ctx))
 }
 
 func TestMVCCTransaction_Update_NoMatch(t *testing.T) {
@@ -487,7 +487,7 @@ func TestMVCCTransaction_Update_NoMatch(t *testing.T) {
 	assert.Equal(t, int64(0), count)
 
 	// 提交以验证
-	txn.Commit(ctx)
+	require.NoError(t, txn.Commit(ctx))
 }
 
 func TestMVCCTransaction_ReadOnly(t *testing.T) {

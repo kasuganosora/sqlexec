@@ -149,7 +149,7 @@ func SQLFingerprint(stmt *parser.SQLStatement) uint64 {
 	h := fnv.New64a()
 
 	// Hash the statement type
-	fmt.Fprintf(h, "type:%v|", stmt.Type)
+	_, _ = fmt.Fprintf(h, "type:%v|", stmt.Type)
 
 	// Hash based on statement type
 	switch stmt.Type {
@@ -159,15 +159,15 @@ func SQLFingerprint(stmt *parser.SQLStatement) uint64 {
 		}
 	case parser.SQLTypeInsert:
 		if stmt.Insert != nil {
-			fmt.Fprintf(h, "insert:%s", stmt.Insert.Table)
+			_, _ = fmt.Fprintf(h, "insert:%s", stmt.Insert.Table)
 		}
 	case parser.SQLTypeUpdate:
 		if stmt.Update != nil {
-			fmt.Fprintf(h, "update:%s", stmt.Update.Table)
+			_, _ = fmt.Fprintf(h, "update:%s", stmt.Update.Table)
 		}
 	case parser.SQLTypeDelete:
 		if stmt.Delete != nil {
-			fmt.Fprintf(h, "delete:%s", stmt.Delete.Table)
+			_, _ = fmt.Fprintf(h, "delete:%s", stmt.Delete.Table)
 		}
 	}
 
@@ -177,11 +177,11 @@ func SQLFingerprint(stmt *parser.SQLStatement) uint64 {
 // fingerprintSelect creates a fingerprint for SELECT statements.
 func fingerprintSelect(h hash.Hash64, sel *parser.SelectStatement) {
 	// Table name
-	fmt.Fprintf(h, "from:%s|", sel.From)
+	_, _ = fmt.Fprintf(h, "from:%s|", sel.From)
 
 	// Columns
 	for _, col := range sel.Columns {
-		fmt.Fprintf(h, "col:%s.%s|", col.Table, col.Name)
+		_, _ = fmt.Fprintf(h, "col:%s.%s|", col.Table, col.Name)
 	}
 
 	// WHERE clause structure
@@ -191,7 +191,7 @@ func fingerprintSelect(h hash.Hash64, sel *parser.SelectStatement) {
 
 	// JOINs
 	for _, j := range sel.Joins {
-		fmt.Fprintf(h, "join:%s.%s|", j.Type, j.Table)
+		_, _ = fmt.Fprintf(h, "join:%s.%s|", j.Type, j.Table)
 		if j.Condition != nil {
 			fingerprintExpr(h, j.Condition)
 		}
@@ -199,20 +199,20 @@ func fingerprintSelect(h hash.Hash64, sel *parser.SelectStatement) {
 
 	// ORDER BY
 	for _, ob := range sel.OrderBy {
-		fmt.Fprintf(h, "order:%s.%s|", ob.Column, ob.Direction)
+		_, _ = fmt.Fprintf(h, "order:%s.%s|", ob.Column, ob.Direction)
 	}
 
 	// GROUP BY
 	for _, gb := range sel.GroupBy {
-		fmt.Fprintf(h, "group:%s|", gb)
+		_, _ = fmt.Fprintf(h, "group:%s|", gb)
 	}
 
 	// LIMIT & OFFSET
 	if sel.Limit != nil && *sel.Limit > 0 {
-		fmt.Fprintf(h, "limit:%d|", *sel.Limit)
+		_, _ = fmt.Fprintf(h, "limit:%d|", *sel.Limit)
 	}
 	if sel.Offset != nil && *sel.Offset > 0 {
-		fmt.Fprintf(h, "offset:%d|", *sel.Offset)
+		_, _ = fmt.Fprintf(h, "offset:%d|", *sel.Offset)
 	}
 }
 
@@ -222,7 +222,7 @@ func fingerprintExpr(h hash.Hash64, expr *parser.Expression) {
 		return
 	}
 
-	fmt.Fprintf(h, "(%v:%s:%s:%v|", expr.Type, expr.Column, expr.Operator, expr.Value)
+	_, _ = fmt.Fprintf(h, "(%v:%s:%s:%v|", expr.Type, expr.Column, expr.Operator, expr.Value)
 
 	if expr.Left != nil {
 		fingerprintExpr(h, expr.Left)

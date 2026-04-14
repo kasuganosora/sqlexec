@@ -477,10 +477,6 @@ func EstimateSampleSize(totalRows int64, confidenceLevel float64, marginOfError 
 	// p = proportion (0.5 for worst case)
 	// E = margin of error
 
-	if confidenceLevel <= 0 || confidenceLevel >= 1 {
-		confidenceLevel = 0.95 // 默认95%
-	}
-
 	if marginOfError <= 0 || marginOfError >= 1 {
 		marginOfError = 0.05 // 默认5%
 	}

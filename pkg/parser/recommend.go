@@ -39,7 +39,6 @@ func (p *RecommendIndexParser) Parse(sql string) (*RecommendIndexStatement, erro
 
 	// 移除 "RECOMMEND INDEX" (use length of prefix to preserve original case of remainder)
 	sql = strings.TrimSpace(sql[len("RECOMMEND INDEX"):])
-	upperSQL = strings.ToUpper(sql)
 
 	// 提取动作
 	action, remaining, err := p.extractAction(sql)

@@ -17,10 +17,9 @@ import (
 
 // HTTPClient 封装 HTTP 请求，支持认证、重试、模板头、TLS
 type HTTPClient struct {
-	client    *gohttp.Client
-	config    *HTTPConfig
-	dsCfg     *domain.DataSourceConfig
-	connected bool
+	client *gohttp.Client
+	config *HTTPConfig
+	dsCfg  *domain.DataSourceConfig
 }
 
 // NewHTTPClient 创建 HTTP 客户端
@@ -141,7 +140,7 @@ func (c *HTTPClient) doSingleRequest(method, url string, bodyBytes []byte, resul
 	if err != nil {
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -109,7 +109,7 @@ func Example_booleanQuery() {
 			ID:      int64(i + 1),
 			Content: content,
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 
 	// 构建布尔查询: (apple AND smartphone) OR (samsung)
@@ -149,7 +149,7 @@ func Example_phraseSearch() {
 			ID:      int64(i + 1),
 			Content: content,
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 
 	// 短语搜索 "machine learning"
@@ -170,7 +170,7 @@ func Example_highlight() {
 		ID:      1,
 		Content: "The quick brown fox jumps over the lazy dog. The quick brown fox is very quick.",
 	}
-	engine.IndexDocument(doc)
+	_ = engine.IndexDocument(doc)
 
 	// 带高亮的搜索
 	results, _ := engine.SearchWithHighlight("quick fox", 10, "<mark>", "</mark>")
@@ -193,7 +193,7 @@ func BenchmarkEngine_Index(b *testing.B) {
 			ID:      int64(i),
 			Content: content,
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 }
 
@@ -207,12 +207,12 @@ func BenchmarkEngine_Search(b *testing.B) {
 			ID:      int64(i),
 			Content: "The quick brown fox jumps over the lazy dog",
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		engine.Search("quick fox", 10)
+		_, _ = engine.Search("quick fox", 10)
 	}
 }
 
@@ -226,12 +226,12 @@ func BenchmarkEngine_SearchBM25(b *testing.B) {
 			ID:      int64(i),
 			Content: "The quick brown fox jumps over the lazy dog",
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		engine.SearchBM25("quick fox", 10)
+		_, _ = engine.SearchBM25("quick fox", 10)
 	}
 }
 
@@ -244,12 +244,12 @@ func BenchmarkEngine_SearchPhrase(b *testing.B) {
 			ID:      int64(i),
 			Content: "The quick brown fox jumps over the lazy dog",
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		engine.SearchPhrase("quick brown fox", 0, 10)
+		_, _ = engine.SearchPhrase("quick brown fox", 0, 10)
 	}
 }
 
@@ -270,12 +270,12 @@ func BenchmarkEngine_Search_LargeIndex(b *testing.B) {
 			ID:      int64(i),
 			Content: contents[i%len(contents)],
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		engine.Search("quick fox", 10)
+		_, _ = engine.Search("quick fox", 10)
 	}
 }
 
@@ -296,12 +296,12 @@ func BenchmarkEngine_SearchBM25_LargeIndex(b *testing.B) {
 			ID:      int64(i),
 			Content: contents[i%len(contents)],
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		engine.SearchBM25("quick fox", 10)
+		_, _ = engine.SearchBM25("quick fox", 10)
 	}
 }
 
@@ -314,7 +314,7 @@ func BenchmarkEngine_SearchWithQuery_Boolean(b *testing.B) {
 			ID:      int64(i),
 			Content: "The quick brown fox jumps over the lazy dog",
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 
 	boolQ := query.NewBooleanQuery()
@@ -323,7 +323,7 @@ func BenchmarkEngine_SearchWithQuery_Boolean(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		engine.SearchWithQuery(boolQ, 10)
+		_, _ = engine.SearchWithQuery(boolQ, 10)
 	}
 }
 
@@ -337,12 +337,12 @@ func BenchmarkEngine_Delete(b *testing.B) {
 			ID:      int64(i),
 			Content: "The quick brown fox jumps over the lazy dog",
 		}
-		engine.IndexDocument(doc)
+		_ = engine.IndexDocument(doc)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		engine.DeleteDocument(int64(i))
+		_ = engine.DeleteDocument(int64(i))
 	}
 }
 

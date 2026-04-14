@@ -3,6 +3,8 @@ package builtin
 import (
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -13,9 +15,9 @@ func init() {
 
 func TestAggGroupConcat(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggGroupConcat(ctx, []interface{}{"hello", nil})
-	aggGroupConcat(ctx, []interface{}{"world", nil})
-	aggGroupConcat(ctx, []interface{}{"foo", nil})
+	require.NoError(t, aggGroupConcat(ctx, []interface{}{"hello", nil}))
+	require.NoError(t, aggGroupConcat(ctx, []interface{}{"world", nil}))
+	require.NoError(t, aggGroupConcat(ctx, []interface{}{"foo", nil}))
 
 	result, err := aggGroupConcatResult(ctx)
 	if err != nil {
@@ -28,8 +30,8 @@ func TestAggGroupConcat(t *testing.T) {
 
 func TestAggGroupConcatCustomSeparator(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggGroupConcat(ctx, []interface{}{"a", " | "})
-	aggGroupConcat(ctx, []interface{}{"b", " | "})
+	require.NoError(t, aggGroupConcat(ctx, []interface{}{"a", " | "}))
+	require.NoError(t, aggGroupConcat(ctx, []interface{}{"b", " | "}))
 
 	result, err := aggGroupConcatResult(ctx)
 	if err != nil {
@@ -53,9 +55,9 @@ func TestAggGroupConcatEmpty(t *testing.T) {
 
 func TestAggGroupConcatSkipsNil(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggGroupConcat(ctx, []interface{}{"a", nil})
-	aggGroupConcat(ctx, []interface{}{nil, nil})
-	aggGroupConcat(ctx, []interface{}{"b", nil})
+	require.NoError(t, aggGroupConcat(ctx, []interface{}{"a", nil}))
+	require.NoError(t, aggGroupConcat(ctx, []interface{}{nil, nil}))
+	require.NoError(t, aggGroupConcat(ctx, []interface{}{"b", nil}))
 
 	result, err := aggGroupConcatResult(ctx)
 	if err != nil {
@@ -98,12 +100,12 @@ func TestAggGroupConcatRegisteredAliases(t *testing.T) {
 
 func TestAggCountIf(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggCountIf(ctx, []interface{}{true})
-	aggCountIf(ctx, []interface{}{false})
-	aggCountIf(ctx, []interface{}{true})
-	aggCountIf(ctx, []interface{}{1})
-	aggCountIf(ctx, []interface{}{0})
-	aggCountIf(ctx, []interface{}{nil})
+	require.NoError(t, aggCountIf(ctx, []interface{}{true}))
+	require.NoError(t, aggCountIf(ctx, []interface{}{false}))
+	require.NoError(t, aggCountIf(ctx, []interface{}{true}))
+	require.NoError(t, aggCountIf(ctx, []interface{}{1}))
+	require.NoError(t, aggCountIf(ctx, []interface{}{0}))
+	require.NoError(t, aggCountIf(ctx, []interface{}{nil}))
 
 	result, err := aggCountIfResult(ctx)
 	if err != nil {
@@ -116,9 +118,9 @@ func TestAggCountIf(t *testing.T) {
 
 func TestAggCountIfAllFalse(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggCountIf(ctx, []interface{}{false})
-	aggCountIf(ctx, []interface{}{0})
-	aggCountIf(ctx, []interface{}{""})
+	require.NoError(t, aggCountIf(ctx, []interface{}{false}))
+	require.NoError(t, aggCountIf(ctx, []interface{}{0}))
+	require.NoError(t, aggCountIf(ctx, []interface{}{""}))
 
 	result, err := aggCountIfResult(ctx)
 	if err != nil {
@@ -143,11 +145,11 @@ func TestAggCountIfNoArgs(t *testing.T) {
 
 func TestAggCountIfStrings(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggCountIf(ctx, []interface{}{"hello"})    // truthy
-	aggCountIf(ctx, []interface{}{""})         // falsy
-	aggCountIf(ctx, []interface{}{"0"})        // falsy
-	aggCountIf(ctx, []interface{}{"false"})    // falsy
-	aggCountIf(ctx, []interface{}{"anything"}) // truthy
+	require.NoError(t, aggCountIf(ctx, []interface{}{"hello"}))    // truthy
+	require.NoError(t, aggCountIf(ctx, []interface{}{""}))         // falsy
+	require.NoError(t, aggCountIf(ctx, []interface{}{"0"}))        // falsy
+	require.NoError(t, aggCountIf(ctx, []interface{}{"false"}))    // falsy
+	require.NoError(t, aggCountIf(ctx, []interface{}{"anything"})) // truthy
 
 	result, _ := aggCountIfResult(ctx)
 	if result != int64(2) {
@@ -159,9 +161,9 @@ func TestAggCountIfStrings(t *testing.T) {
 
 func TestAggBoolAndAllTrue(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggBoolAnd(ctx, []interface{}{true})
-	aggBoolAnd(ctx, []interface{}{true})
-	aggBoolAnd(ctx, []interface{}{true})
+	require.NoError(t, aggBoolAnd(ctx, []interface{}{true}))
+	require.NoError(t, aggBoolAnd(ctx, []interface{}{true}))
+	require.NoError(t, aggBoolAnd(ctx, []interface{}{true}))
 
 	result, err := aggBoolAndResult(ctx)
 	if err != nil {
@@ -174,9 +176,9 @@ func TestAggBoolAndAllTrue(t *testing.T) {
 
 func TestAggBoolAndOneFalse(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggBoolAnd(ctx, []interface{}{true})
-	aggBoolAnd(ctx, []interface{}{false})
-	aggBoolAnd(ctx, []interface{}{true})
+	require.NoError(t, aggBoolAnd(ctx, []interface{}{true}))
+	require.NoError(t, aggBoolAnd(ctx, []interface{}{false}))
+	require.NoError(t, aggBoolAnd(ctx, []interface{}{true}))
 
 	result, err := aggBoolAndResult(ctx)
 	if err != nil {
@@ -200,9 +202,9 @@ func TestAggBoolAndEmpty(t *testing.T) {
 
 func TestAggBoolAndSkipsNil(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggBoolAnd(ctx, []interface{}{true})
-	aggBoolAnd(ctx, []interface{}{nil})
-	aggBoolAnd(ctx, []interface{}{true})
+	require.NoError(t, aggBoolAnd(ctx, []interface{}{true}))
+	require.NoError(t, aggBoolAnd(ctx, []interface{}{nil}))
+	require.NoError(t, aggBoolAnd(ctx, []interface{}{true}))
 
 	result, err := aggBoolAndResult(ctx)
 	if err != nil {
@@ -239,9 +241,9 @@ func TestAggBoolAndNoArgs(t *testing.T) {
 
 func TestAggBoolOrOneTrue(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggBoolOr(ctx, []interface{}{false})
-	aggBoolOr(ctx, []interface{}{true})
-	aggBoolOr(ctx, []interface{}{false})
+	require.NoError(t, aggBoolOr(ctx, []interface{}{false}))
+	require.NoError(t, aggBoolOr(ctx, []interface{}{true}))
+	require.NoError(t, aggBoolOr(ctx, []interface{}{false}))
 
 	result, err := aggBoolOrResult(ctx)
 	if err != nil {
@@ -254,8 +256,8 @@ func TestAggBoolOrOneTrue(t *testing.T) {
 
 func TestAggBoolOrAllFalse(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggBoolOr(ctx, []interface{}{false})
-	aggBoolOr(ctx, []interface{}{false})
+	require.NoError(t, aggBoolOr(ctx, []interface{}{false}))
+	require.NoError(t, aggBoolOr(ctx, []interface{}{false}))
 
 	result, err := aggBoolOrResult(ctx)
 	if err != nil {
@@ -279,9 +281,9 @@ func TestAggBoolOrEmpty(t *testing.T) {
 
 func TestAggBoolOrSkipsNil(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggBoolOr(ctx, []interface{}{false})
-	aggBoolOr(ctx, []interface{}{nil})
-	aggBoolOr(ctx, []interface{}{false})
+	require.NoError(t, aggBoolOr(ctx, []interface{}{false}))
+	require.NoError(t, aggBoolOr(ctx, []interface{}{nil}))
+	require.NoError(t, aggBoolOr(ctx, []interface{}{false}))
 
 	result, err := aggBoolOrResult(ctx)
 	if err != nil {
@@ -297,7 +299,7 @@ func TestAggBoolOrSkipsNil(t *testing.T) {
 func TestAggStdDevPop(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{2, 4, 4, 4, 5, 5, 7, 9} {
-		aggStdDevPop(ctx, []interface{}{v})
+		require.NoError(t, aggStdDevPop(ctx, []interface{}{v}))
 	}
 
 	result, err := aggStdDevPopResult(ctx)
@@ -327,7 +329,7 @@ func TestAggStdDevPopEmpty(t *testing.T) {
 
 func TestAggStdDevPopSingleValue(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggStdDevPop(ctx, []interface{}{5.0})
+	require.NoError(t, aggStdDevPop(ctx, []interface{}{5.0}))
 	result, err := aggStdDevPopResult(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -343,7 +345,7 @@ func TestAggStdDevPopSingleValue(t *testing.T) {
 func TestAggStdDevSamp(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{2, 4, 4, 4, 5, 5, 7, 9} {
-		aggStdDevSamp(ctx, []interface{}{v})
+		require.NoError(t, aggStdDevSamp(ctx, []interface{}{v}))
 	}
 
 	result, err := aggStdDevSampResult(ctx)
@@ -363,7 +365,7 @@ func TestAggStdDevSamp(t *testing.T) {
 
 func TestAggStdDevSampSingleValue(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggStdDevSamp(ctx, []interface{}{5.0})
+	require.NoError(t, aggStdDevSamp(ctx, []interface{}{5.0}))
 	result, err := aggStdDevSampResult(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -389,7 +391,7 @@ func TestAggStdDevSampEmpty(t *testing.T) {
 func TestAggVarPop(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{2, 4, 4, 4, 5, 5, 7, 9} {
-		aggVarPop(ctx, []interface{}{v})
+		require.NoError(t, aggVarPop(ctx, []interface{}{v}))
 	}
 
 	result, err := aggVarPopResult(ctx)
@@ -419,7 +421,7 @@ func TestAggVarPopEmpty(t *testing.T) {
 func TestAggVarSamp(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{2, 4, 4, 4, 5, 5, 7, 9} {
-		aggVarSamp(ctx, []interface{}{v})
+		require.NoError(t, aggVarSamp(ctx, []interface{}{v}))
 	}
 
 	result, err := aggVarSampResult(ctx)
@@ -436,7 +438,7 @@ func TestAggVarSamp(t *testing.T) {
 
 func TestAggVarSampSingleValue(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggVarSamp(ctx, []interface{}{5.0})
+	require.NoError(t, aggVarSamp(ctx, []interface{}{5.0}))
 	result, err := aggVarSampResult(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -462,7 +464,7 @@ func TestAggVarSampEmpty(t *testing.T) {
 func TestAggMedianOdd(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{1, 3, 5, 7, 9} {
-		aggMedian(ctx, []interface{}{v})
+		require.NoError(t, aggMedian(ctx, []interface{}{v}))
 	}
 
 	result, err := aggMedianResult(ctx)
@@ -478,7 +480,7 @@ func TestAggMedianOdd(t *testing.T) {
 func TestAggMedianEven(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{1, 3, 5, 7} {
-		aggMedian(ctx, []interface{}{v})
+		require.NoError(t, aggMedian(ctx, []interface{}{v}))
 	}
 
 	result, err := aggMedianResult(ctx)
@@ -494,7 +496,7 @@ func TestAggMedianEven(t *testing.T) {
 
 func TestAggMedianSingleValue(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggMedian(ctx, []interface{}{42.0})
+	require.NoError(t, aggMedian(ctx, []interface{}{42.0}))
 	result, err := aggMedianResult(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -519,7 +521,7 @@ func TestAggMedianEmpty(t *testing.T) {
 func TestAggMedianUnsorted(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{9, 1, 7, 3, 5} {
-		aggMedian(ctx, []interface{}{v})
+		require.NoError(t, aggMedian(ctx, []interface{}{v}))
 	}
 	result, _ := aggMedianResult(ctx)
 	val := result.(float64)
@@ -534,7 +536,7 @@ func TestAggPercentileCont50(t *testing.T) {
 	ctx := NewAggregateContext()
 	vals := []float64{10, 20, 30, 40, 50}
 	for _, v := range vals {
-		aggPercentileCont(ctx, []interface{}{0.5, v})
+		require.NoError(t, aggPercentileCont(ctx, []interface{}{0.5, v}))
 	}
 
 	result, err := aggPercentileContResult(ctx)
@@ -552,7 +554,7 @@ func TestAggPercentileCont25(t *testing.T) {
 	ctx := NewAggregateContext()
 	vals := []float64{10, 20, 30, 40, 50}
 	for _, v := range vals {
-		aggPercentileCont(ctx, []interface{}{0.25, v})
+		require.NoError(t, aggPercentileCont(ctx, []interface{}{0.25, v}))
 	}
 
 	result, err := aggPercentileContResult(ctx)
@@ -569,7 +571,7 @@ func TestAggPercentileCont25(t *testing.T) {
 func TestAggPercentileContBoundary0(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{10, 20, 30} {
-		aggPercentileCont(ctx, []interface{}{0.0, v})
+		require.NoError(t, aggPercentileCont(ctx, []interface{}{0.0, v}))
 	}
 	result, _ := aggPercentileContResult(ctx)
 	val := result.(float64)
@@ -581,7 +583,7 @@ func TestAggPercentileContBoundary0(t *testing.T) {
 func TestAggPercentileContBoundary1(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{10, 20, 30} {
-		aggPercentileCont(ctx, []interface{}{1.0, v})
+		require.NoError(t, aggPercentileCont(ctx, []interface{}{1.0, v}))
 	}
 	result, _ := aggPercentileContResult(ctx)
 	val := result.(float64)
@@ -604,7 +606,7 @@ func TestAggPercentileContEmpty(t *testing.T) {
 func TestAggPercentileContInterpolation(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{0, 10} {
-		aggPercentileCont(ctx, []interface{}{0.5, v})
+		require.NoError(t, aggPercentileCont(ctx, []interface{}{0.5, v}))
 	}
 	result, _ := aggPercentileContResult(ctx)
 	val := result.(float64)
@@ -619,7 +621,7 @@ func TestAggPercentileContInterpolation(t *testing.T) {
 func TestAggPercentileDisc50(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{10, 20, 30, 40, 50} {
-		aggPercentileDisc(ctx, []interface{}{0.5, v})
+		require.NoError(t, aggPercentileDisc(ctx, []interface{}{0.5, v}))
 	}
 
 	result, err := aggPercentileDiscResult(ctx)
@@ -636,7 +638,7 @@ func TestAggPercentileDisc50(t *testing.T) {
 func TestAggPercentileDiscBoundary0(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{10, 20, 30} {
-		aggPercentileDisc(ctx, []interface{}{0.0, v})
+		require.NoError(t, aggPercentileDisc(ctx, []interface{}{0.0, v}))
 	}
 	result, _ := aggPercentileDiscResult(ctx)
 	val := result.(float64)
@@ -648,7 +650,7 @@ func TestAggPercentileDiscBoundary0(t *testing.T) {
 func TestAggPercentileDiscBoundary1(t *testing.T) {
 	ctx := NewAggregateContext()
 	for _, v := range []float64{10, 20, 30} {
-		aggPercentileDisc(ctx, []interface{}{1.0, v})
+		require.NoError(t, aggPercentileDisc(ctx, []interface{}{1.0, v}))
 	}
 	result, _ := aggPercentileDiscResult(ctx)
 	val := result.(float64)
@@ -672,10 +674,10 @@ func TestAggPercentileDiscEmpty(t *testing.T) {
 
 func TestAggArrayAgg(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggArrayAgg(ctx, []interface{}{"a"})
-	aggArrayAgg(ctx, []interface{}{42})
-	aggArrayAgg(ctx, []interface{}{nil})
-	aggArrayAgg(ctx, []interface{}{3.14})
+	require.NoError(t, aggArrayAgg(ctx, []interface{}{"a"}))
+	require.NoError(t, aggArrayAgg(ctx, []interface{}{42}))
+	require.NoError(t, aggArrayAgg(ctx, []interface{}{nil}))
+	require.NoError(t, aggArrayAgg(ctx, []interface{}{3.14}))
 
 	result, err := aggArrayAggResult(ctx)
 	if err != nil {
@@ -742,9 +744,9 @@ func TestAggArrayAggRegisteredAsList(t *testing.T) {
 
 func TestAggProduct(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggProduct(ctx, []interface{}{2.0})
-	aggProduct(ctx, []interface{}{3.0})
-	aggProduct(ctx, []interface{}{4.0})
+	require.NoError(t, aggProduct(ctx, []interface{}{2.0}))
+	require.NoError(t, aggProduct(ctx, []interface{}{3.0}))
+	require.NoError(t, aggProduct(ctx, []interface{}{4.0}))
 
 	result, err := aggProductResult(ctx)
 	if err != nil {
@@ -758,8 +760,8 @@ func TestAggProduct(t *testing.T) {
 
 func TestAggProductWithIntegers(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggProduct(ctx, []interface{}{5})
-	aggProduct(ctx, []interface{}{6})
+	require.NoError(t, aggProduct(ctx, []interface{}{5}))
+	require.NoError(t, aggProduct(ctx, []interface{}{6}))
 
 	result, err := aggProductResult(ctx)
 	if err != nil {
@@ -773,9 +775,9 @@ func TestAggProductWithIntegers(t *testing.T) {
 
 func TestAggProductWithZero(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggProduct(ctx, []interface{}{5.0})
-	aggProduct(ctx, []interface{}{0.0})
-	aggProduct(ctx, []interface{}{3.0})
+	require.NoError(t, aggProduct(ctx, []interface{}{5.0}))
+	require.NoError(t, aggProduct(ctx, []interface{}{0.0}))
+	require.NoError(t, aggProduct(ctx, []interface{}{3.0}))
 
 	result, err := aggProductResult(ctx)
 	if err != nil {
@@ -800,9 +802,9 @@ func TestAggProductEmpty(t *testing.T) {
 
 func TestAggProductSkipsNil(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggProduct(ctx, []interface{}{3.0})
-	aggProduct(ctx, []interface{}{nil})
-	aggProduct(ctx, []interface{}{4.0})
+	require.NoError(t, aggProduct(ctx, []interface{}{3.0}))
+	require.NoError(t, aggProduct(ctx, []interface{}{nil}))
+	require.NoError(t, aggProduct(ctx, []interface{}{4.0}))
 
 	result, _ := aggProductResult(ctx)
 	val := result.(float64)
@@ -813,7 +815,7 @@ func TestAggProductSkipsNil(t *testing.T) {
 
 func TestAggProductSingleValue(t *testing.T) {
 	ctx := NewAggregateContext()
-	aggProduct(ctx, []interface{}{7.0})
+	require.NoError(t, aggProduct(ctx, []interface{}{7.0}))
 
 	result, _ := aggProductResult(ctx)
 	val := result.(float64)

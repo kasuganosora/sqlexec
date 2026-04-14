@@ -388,14 +388,21 @@ func TestReplicationNetworkStream(t *testing.T) {
 	buf := new(bytes.Buffer)
 
 	eventBuf := new(bytes.Buffer)
-	binary.Write(eventBuf, binary.LittleEndian, uint32(1512576683)) // 时间戳
+	err := binary.Write(eventBuf, binary.LittleEndian, uint32(1512576683)) // 时间戳
+	assert.NoError(t, err)
 	eventBuf.WriteByte(BINLOG_GTID_EVENT)                           // 事件类型
-	binary.Write(eventBuf, binary.LittleEndian, uint32(10124))      // 服务器ID
-	binary.Write(eventBuf, binary.LittleEndian, uint32(42))         // 事件长度
-	binary.Write(eventBuf, binary.LittleEndian, uint32(535))        // 下一个位置
-	binary.Write(eventBuf, binary.LittleEndian, uint16(0))          // 标志
-	binary.Write(eventBuf, binary.LittleEndian, uint64(9883))       // GTID 序列号
-	binary.Write(eventBuf, binary.LittleEndian, uint32(0))          // 域ID
+	err = binary.Write(eventBuf, binary.LittleEndian, uint32(10124))      // 服务器ID
+	assert.NoError(t, err)
+	err = binary.Write(eventBuf, binary.LittleEndian, uint32(42))         // 事件长度
+	assert.NoError(t, err)
+	err = binary.Write(eventBuf, binary.LittleEndian, uint32(535))        // 下一个位置
+		assert.NoError(t, err)
+	err = binary.Write(eventBuf, binary.LittleEndian, uint16(0))          // 标志
+		assert.NoError(t, err)
+	err = binary.Write(eventBuf, binary.LittleEndian, uint64(9883))       // GTID 序列号
+	assert.NoError(t, err)
+	err = binary.Write(eventBuf, binary.LittleEndian, uint32(0))          // 域ID
+	assert.NoError(t, err)
 	eventBuf.WriteByte(0x29)                                        // 标志
 	eventBuf.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})      // 填充
 

@@ -259,7 +259,7 @@ func TestSession_GetNextSequenceID_WrapAround(t *testing.T) {
 func TestSessionMgr_CreateSession(t *testing.T) {
 	driver := NewMockSessionDriver()
 	ctx := context.Background()
-	defer driver.DeleteSession(ctx, "test-id")
+	defer func() { _ = driver.DeleteSession(ctx, "test-id") }()
 
 	mgr := NewSessionMgr(ctx, driver)
 	defer mgr.Close()

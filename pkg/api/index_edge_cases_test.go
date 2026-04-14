@@ -13,14 +13,14 @@ func TestIndex_EdgeCases(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建测试表
 	_, err = session.Execute(`
@@ -89,14 +89,14 @@ func TestIndex_TableNameCase(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建测试表
 	_, err = session.Execute(`
@@ -123,14 +123,14 @@ func TestIndex_IndexTypes(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建测试表（使用非保留字表名）
 	_, err = session.Execute(`
@@ -164,14 +164,14 @@ func TestIndex_InvalidSyntax(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	t.Run("Create Index without Table Name", func(t *testing.T) {
 		_, err = session.Execute("CREATE INDEX idx_name")
@@ -200,14 +200,14 @@ func TestIndex_IndexWithConstraints(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建测试表
 	_, err = session.Execute(`
@@ -237,14 +237,14 @@ func TestIndex_IndexLifecycle(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 1. 创建表
 	_, err = session.Execute(`
@@ -278,14 +278,14 @@ func TestIndex_IndexNameCase(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建测试表
 	_, err = session.Execute(`
@@ -315,7 +315,7 @@ func TestIndex_ParallelIndexOperations(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
@@ -323,9 +323,9 @@ func TestIndex_ParallelIndexOperations(t *testing.T) {
 
 	// 创建两个独立的 session
 	session1 := db.Session()
-	defer session1.Close()
+	defer func() { _ = session1.Close() }()
 	session2 := db.Session()
-	defer session2.Close()
+	defer func() { _ = session2.Close() }()
 
 	// 创建测试表
 	_, err = session1.Execute(`
@@ -361,14 +361,14 @@ func TestIndex_IndexAfterDataInsertion(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 1. 创建表
 	_, err = session.Execute(`
@@ -396,7 +396,7 @@ func TestIndex_IndexAfterDataInsertion(t *testing.T) {
 	// 4. 验证索引已创建，数据仍然可访问
 	query, err := session.Query("SELECT * FROM after_insert_test ORDER BY id")
 	assert.NoError(t, err)
-	defer query.Close()
+	defer func() { _ = query.Close() }()
 
 	rows := 0
 	for query.Next() {
@@ -410,14 +410,14 @@ func TestIndex_DropAllIndexes(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建测试表
 	_, err = session.Execute(`
@@ -466,14 +466,14 @@ func TestIndex_IndexWithTransaction(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建测试表
 	_, err = session.Execute(`
@@ -487,7 +487,7 @@ func TestIndex_IndexWithTransaction(t *testing.T) {
 	// 开始事务
 	tx, err := session.Begin()
 	assert.NoError(t, err)
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// 在事务中创建索引（可能不支持）
 	_, err = tx.Execute("CREATE INDEX idx_name ON txn_index_test (name)")

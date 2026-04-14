@@ -380,10 +380,11 @@ func TestContextWithValue(t *testing.T) {
 	ctx := context.Background()
 
 	// Test setting user in context
+	type contextKey string
 	user := "testuser"
-	ctx = context.WithValue(ctx, "user", user)
+	ctx = context.WithValue(ctx, contextKey("user"), user)
 
-	retrieved, ok := ctx.Value("user").(string)
+	retrieved, ok := ctx.Value(contextKey("user")).(string)
 	if !ok {
 		t.Error("Failed to retrieve user from context")
 	}
@@ -394,7 +395,7 @@ func TestContextWithValue(t *testing.T) {
 
 	// Test context without user
 	ctx = context.Background()
-	_, ok = ctx.Value("user").(string)
+	_, ok = ctx.Value(contextKey("user")).(string)
 	if ok {
 		t.Error("Should not have user in context")
 	}

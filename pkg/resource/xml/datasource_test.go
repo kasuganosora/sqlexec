@@ -2,6 +2,7 @@ package xml
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,7 @@ func createTestXMLDir(t *testing.T) string {
 
 	// account 表：纯属性模式
 	accountDir := filepath.Join(dir, "account")
-	os.MkdirAll(accountDir, 0755)
+	require.NoError(t, os.MkdirAll(accountDir, 0755))
 	writeFile(t, filepath.Join(accountDir, "luna.xml"),
 		`<?xml version="1.0" encoding="utf-8" ?>`+"\n"+
 			`<Account id="luna" password="BCFE94820B4EA7FC" name="Luna" flag="-1" authority="0" />`)
@@ -26,14 +27,14 @@ func createTestXMLDir(t *testing.T) string {
 
 	// idpool 表：简单属性
 	idpoolDir := filepath.Join(dir, "idpool")
-	os.MkdirAll(idpoolDir, 0755)
+	require.NoError(t, os.MkdirAll(idpoolDir, 0755))
 	writeFile(t, filepath.Join(idpoolDir, "charidpool.xml"),
 		`<?xml version="1.0" encoding="utf-8" ?>`+"\n"+
 			`<CharIDPool count="8000" />`)
 
 	// mixed 表：属性 + 简单文本子元素
 	mixedDir := filepath.Join(dir, "mixed")
-	os.MkdirAll(mixedDir, 0755)
+	require.NoError(t, os.MkdirAll(mixedDir, 0755))
 	writeFile(t, filepath.Join(mixedDir, "item1.xml"),
 		`<?xml version="1.0" encoding="utf-8" ?>`+"\n"+
 			`<Item id="100" name="Sword">`+"\n"+
@@ -43,7 +44,7 @@ func createTestXMLDir(t *testing.T) string {
 
 	// bestcook 表：列表容器模式
 	bestcookDir := filepath.Join(dir, "bestcook")
-	os.MkdirAll(bestcookDir, 0755)
+	require.NoError(t, os.MkdirAll(bestcookDir, 0755))
 	writeFile(t, filepath.Join(bestcookDir, "bestcook.xml"),
 		`<?xml version="1.0" encoding="utf-8" ?>`+"\n"+
 			`<BestCook>`+"\n"+
@@ -63,17 +64,17 @@ func createTestXMLDir(t *testing.T) string {
 
 	// _mail 目录（应该被跳过）
 	mailDir := filepath.Join(dir, "_mail")
-	os.MkdirAll(mailDir, 0755)
+	require.NoError(t, os.MkdirAll(mailDir, 0755))
 	writeFile(t, filepath.Join(mailDir, "log.xml"),
 		`<?xml version="1.0" encoding="utf-8" ?><Log msg="test" />`)
 
 	// empty 目录（应该被跳过，无 XML 文件）
 	emptyDir := filepath.Join(dir, "empty")
-	os.MkdirAll(emptyDir, 0755)
+	require.NoError(t, os.MkdirAll(emptyDir, 0755))
 
 	// cache 目录（包含 _cache.xml 文件，应该被过滤）
 	cacheDir := filepath.Join(dir, "cachetest")
-	os.MkdirAll(cacheDir, 0755)
+	require.NoError(t, os.MkdirAll(cacheDir, 0755))
 	writeFile(t, filepath.Join(cacheDir, "data.xml"),
 		`<?xml version="1.0" encoding="utf-8" ?><Data id="1" value="real" />`)
 	writeFile(t, filepath.Join(cacheDir, "data_cache.xml"),
@@ -104,7 +105,7 @@ func TestXMLAdapter_Connect_MultiTable(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	// 验证已加载的表
 	tables, err := adapter.GetTables(ctx)
@@ -149,7 +150,7 @@ func TestXMLAdapter_QueryFlatAttributes(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	// 查询 account 表
 	result, err := adapter.Query(ctx, "account", &domain.QueryOptions{
@@ -192,7 +193,7 @@ func TestXMLAdapter_QueryAllRows(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	// 查询所有 account 行
 	result, err := adapter.Query(ctx, "account", &domain.QueryOptions{SelectAll: true})
@@ -220,7 +221,7 @@ func TestXMLAdapter_MixedContent(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	// 查询 mixed 表（属性 + 子元素）
 	result, err := adapter.Query(ctx, "mixed", &domain.QueryOptions{SelectAll: true})
@@ -264,7 +265,7 @@ func TestXMLAdapter_ListExpansion(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	// 查询 bestcook 表（列表展开后应有 2 行）
 	result, err := adapter.Query(ctx, "bestcook", &domain.QueryOptions{SelectAll: true})
@@ -320,7 +321,7 @@ func TestXMLAdapter_CacheFileSkipped(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	// cachetest 表应该只有 1 行（data.xml），不包含 data_cache.xml
 	result, err := adapter.Query(ctx, "cachetest", &domain.QueryOptions{SelectAll: true})
@@ -352,7 +353,7 @@ func TestXMLAdapter_SchemaInference(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	// 获取 account 表信息
 	tableInfo, err := adapter.GetTableInfo(ctx, "account")
@@ -402,7 +403,7 @@ func TestXMLAdapter_ReadOnly(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	// Insert 应该失败
 	_, err := adapter.Insert(ctx, "account", []domain.Row{{"_file": "test"}}, nil)
@@ -435,7 +436,7 @@ func TestXMLAdapter_UTF16(t *testing.T) {
 
 	// 创建 UTF-16 LE 编码的 XML 文件
 	dataDir := filepath.Join(dir, "data")
-	os.MkdirAll(dataDir, 0755)
+	require.NoError(t, os.MkdirAll(dataDir, 0755))
 
 	utf8Content := `<?xml version="1.0" encoding="utf-16" ?>` + "\n" +
 		`<Record id="1" name="测试" value="42" />`
@@ -456,7 +457,7 @@ func TestXMLAdapter_UTF16(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	result, err := adapter.Query(ctx, "data", &domain.QueryOptions{SelectAll: true})
 	if err != nil {
@@ -489,7 +490,7 @@ func TestXMLAdapter_WriteBack(t *testing.T) {
 
 	// 创建初始数据
 	dataDir := filepath.Join(dir, "items")
-	os.MkdirAll(dataDir, 0755)
+	require.NoError(t, os.MkdirAll(dataDir, 0755))
 	writeFile(t, filepath.Join(dataDir, "sword.xml"),
 		`<?xml version="1.0" encoding="utf-8" ?>`+"\n"+
 			`<Item id="1" name="Sword" price="100" />`)
@@ -600,7 +601,7 @@ func TestXMLAdapter_ComplexChildren(t *testing.T) {
 
 	// 创建带复杂子元素的 XML
 	dataDir := filepath.Join(dir, "players")
-	os.MkdirAll(dataDir, 0755)
+	require.NoError(t, os.MkdirAll(dataDir, 0755))
 	writeFile(t, filepath.Join(dataDir, "player1.xml"),
 		`<?xml version="1.0" encoding="utf-8" ?>`+"\n"+
 			`<Player id="1" name="Hero">`+"\n"+
@@ -619,7 +620,7 @@ func TestXMLAdapter_ComplexChildren(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect failed: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	result, err := adapter.Query(ctx, "players", &domain.QueryOptions{SelectAll: true})
 	if err != nil {

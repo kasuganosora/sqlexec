@@ -248,16 +248,6 @@ func (t *TablesTable) applyFilters(rows []domain.Row, filters []domain.Filter) (
 	return utils.ApplyFilters(rows, filters)
 }
 
-// matchesFilter checks if a row matches a filter (using utils package)
-func (t *TablesTable) matchesFilter(row domain.Row, filter domain.Filter) (bool, error) {
-	return utils.MatchesFilter(row, filter)
-}
-
-// matchesLike implements simple LIKE pattern matching (using utils package)
-func (t *TablesTable) matchesLike(value, pattern string) bool {
-	return utils.MatchesLike(value, pattern)
-}
-
 // serializeTableAttributes converts table attributes map to JSON string
 func serializeTableAttributes(atts map[string]interface{}) interface{} {
 	if atts == nil {

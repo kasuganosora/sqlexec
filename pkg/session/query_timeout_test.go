@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ func TestQueryTimeout(t *testing.T) {
 		Type: domain.DataSourceTypeMemory,
 		Name: "test",
 	})
-	ds.Connect(context.Background())
+	require.NoError(t, ds.Connect(context.Background()))
 
 	// 创建测试表
 	_ = ds.CreateTable(context.Background(), &domain.TableInfo{
@@ -50,7 +51,7 @@ func TestQueryKill(t *testing.T) {
 		Type: domain.DataSourceTypeMemory,
 		Name: "test",
 	})
-	ds.Connect(context.Background())
+	require.NoError(t, ds.Connect(context.Background()))
 
 	// 创建测试表
 	_ = ds.CreateTable(context.Background(), &domain.TableInfo{

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDelete_NonTx_DeepCopiesRetainedRows verifies that non-transaction delete
@@ -17,21 +18,22 @@ func TestDelete_NonTx_DeepCopiesRetainedRows(t *testing.T) {
 		Writable: true,
 	})
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "items",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER"},
 			{Name: "tags", Type: "JSON"},
 		},
-	})
+	}))
 
 	// Insert rows with nested data
-	ds.Insert(ctx, "items", []domain.Row{
+	_, err := ds.Insert(ctx, "items", []domain.Row{
 		{"id": int64(1), "tags": []interface{}{"keep_me"}},
 		{"id": int64(2), "tags": []interface{}{"delete_me"}},
 	}, nil)
+	require.NoError(t, err)
 
 	// Record the version before delete
 	ds.mu.RLock()
@@ -44,9 +46,10 @@ func TestDelete_NonTx_DeepCopiesRetainedRows(t *testing.T) {
 	tableVer.mu.RUnlock()
 
 	// Delete row with id=2
-	ds.Delete(ctx, "items", []domain.Filter{
+	_, err = ds.Delete(ctx, "items", []domain.Filter{
 		{Field: "id", Operator: "=", Value: int64(2)},
 	}, nil)
+	require.NoError(t, err)
 
 	// Query new version
 	result, err := ds.Query(ctx, "items", &domain.QueryOptions{})

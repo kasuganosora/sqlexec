@@ -131,7 +131,7 @@ func (p *ObjectPool) Put(obj interface{}) error {
 	if len(p.idle) >= p.maxIdle {
 		// 销毁对象
 		if p.destroy != nil {
-			p.destroy(obj)
+			_ = p.destroy(obj)
 		}
 		return nil
 	}
@@ -172,7 +172,7 @@ func (p *ObjectPool) Close() error {
 	// 销毁所有空闲对象
 	for _, obj := range p.idle {
 		if p.destroy != nil {
-			p.destroy(obj)
+			_ = p.destroy(obj)
 		}
 	}
 	p.idle = nil
@@ -245,7 +245,7 @@ func (p *GoroutinePool) worker(id int) {
 			}
 			func() {
 				defer func() {
-					recover() // prevent worker crash from panicking tasks
+					_ = recover() // prevent worker crash from panicking tasks
 				}()
 				task()
 			}()

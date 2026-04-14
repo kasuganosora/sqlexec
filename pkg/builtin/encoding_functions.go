@@ -149,7 +149,7 @@ func init() {
 	}
 
 	for _, fn := range encodingFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 

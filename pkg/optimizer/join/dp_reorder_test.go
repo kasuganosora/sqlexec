@@ -526,7 +526,7 @@ func BenchmarkDPJoinReorder_Reorder(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		reorder.Reorder(context.Background(), plan)
+		_, _ = reorder.Reorder(context.Background(), plan)
 	}
 }
 

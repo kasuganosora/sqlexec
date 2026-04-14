@@ -4,6 +4,12 @@ import (
 	"fmt"
 )
 
+// ContextKey is a custom type for context keys to avoid collisions with built-in types.
+type ContextKey string
+
+// UserContextKey is the context key for storing the current user.
+const UserContextKey ContextKey = "user"
+
 // SQLType SQL 语句类型
 type SQLType string
 

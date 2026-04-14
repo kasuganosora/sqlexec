@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -17,7 +16,6 @@ import (
 // MigrationManager handles data migration operations
 type MigrationManager struct {
 	ds *BadgerDataSource
-	mu sync.RWMutex
 }
 
 // NewMigrationManager creates a new MigrationManager
@@ -279,7 +277,7 @@ func (m *MigrationManager) ExportToFile(ctx context.Context, filePath string, co
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	return m.ExportData(ctx, f, config)
 }
@@ -290,7 +288,7 @@ func (m *MigrationManager) ImportFromFile(ctx context.Context, filePath string, 
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	return m.ImportData(ctx, f, config)
 }
@@ -325,7 +323,7 @@ func (m *MigrationManager) Snapshot(ctx context.Context, dir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create backup file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	_, err = m.ds.db.Backup(f, 0)
 	return err
@@ -361,7 +359,7 @@ func (m *MigrationManager) Restore(ctx context.Context, dir string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open backup file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	return m.ds.db.Load(f, 100)
 }

@@ -443,7 +443,7 @@ func (h *HNSWIndex) Search(ctx context.Context, query []float32, k int, filter *
 		if filterSet != nil && !filterSet[c.id] {
 			continue
 		}
-		filtered = append(filtered, result{id: c.id, dist: c.dist})
+		filtered = append(filtered, result(c))
 		if len(filtered) >= k && filterSet == nil {
 			break
 		}

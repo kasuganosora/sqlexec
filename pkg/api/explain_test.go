@@ -2,12 +2,13 @@ package api
 
 import (
 	"testing"
+	"time"
 )
 
 func TestCache_GetExplain(t *testing.T) {
 	config := CacheConfig{
 		Enabled: true,
-		TTL:     5 * 60, //5 minutes
+		TTL:     5 * time.Minute,
 		MaxSize: 1000,
 	}
 
@@ -39,7 +40,7 @@ func TestCache_GetExplain(t *testing.T) {
 func TestCache_SetExplain(t *testing.T) {
 	config := CacheConfig{
 		Enabled: true,
-		TTL:     5 * 60, //5 minutes
+		TTL:     5 * time.Minute,
 		MaxSize: 1000,
 	}
 
@@ -71,7 +72,7 @@ func TestCache_SetExplain(t *testing.T) {
 func TestCache_DisabledExplain(t *testing.T) {
 	config := CacheConfig{
 		Enabled: false,
-		TTL:     5 * 60,
+		TTL:     5 * time.Minute,
 		MaxSize: 1000,
 	}
 
@@ -93,7 +94,7 @@ func TestCache_DisabledExplain(t *testing.T) {
 func TestCache_ExplainEntryTTL(t *testing.T) {
 	config := CacheConfig{
 		Enabled: true,
-		TTL:     1, // 1 nanosecond for testing
+		TTL:     time.Millisecond, // short TTL for testing expiration
 		MaxSize: 1000,
 	}
 

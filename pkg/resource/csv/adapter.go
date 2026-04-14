@@ -72,7 +72,7 @@ func (a *CSVAdapter) Connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to open CSV file %q: %w", a.filePath, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	reader := csv.NewReader(file)
 	reader.Comma = a.delimiter
@@ -470,7 +470,7 @@ func (a *CSVAdapter) writeBack() error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	writer := csv.NewWriter(file)
 	writer.Comma = a.delimiter

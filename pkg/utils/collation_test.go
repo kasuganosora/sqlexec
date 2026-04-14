@@ -157,7 +157,7 @@ func TestCollationEngine_SortKey(t *testing.T) {
 		t.Fatalf("SortKey error: %v", err)
 	}
 
-	if bytes.Compare(keyUpper, keyLower) != 0 {
+	if !bytes.Equal(keyUpper, keyLower) {
 		t.Errorf("SortKey(ABC, ci) should equal SortKey(abc, ci)")
 	}
 
@@ -165,7 +165,7 @@ func TestCollationEngine_SortKey(t *testing.T) {
 	keyBinUpper, _ := e.SortKey("ABC", "utf8mb4_bin")
 	keyBinLower, _ := e.SortKey("abc", "utf8mb4_bin")
 
-	if bytes.Compare(keyBinUpper, keyBinLower) == 0 {
+	if bytes.Equal(keyBinUpper, keyBinLower) {
 		t.Errorf("SortKey(ABC, bin) should differ from SortKey(abc, bin)")
 	}
 }

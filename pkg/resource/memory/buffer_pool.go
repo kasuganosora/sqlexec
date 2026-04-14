@@ -167,7 +167,7 @@ func NewBufferPool(cfg *PagingConfig) *BufferPool {
 	if spillDir == "" {
 		spillDir = filepath.Join(os.TempDir(), "sqlexec-spill")
 	}
-	os.MkdirAll(spillDir, 0755)
+	_ = os.MkdirAll(spillDir, 0755)
 
 	evictInterval := cfg.EvictInterval
 	if evictInterval <= 0 {
@@ -302,7 +302,7 @@ func (bp *BufferPool) Unregister(page *RowPage) {
 	}
 
 	if page.onDisk && page.diskPath != "" {
-		os.Remove(page.diskPath)
+		_ = os.Remove(page.diskPath)
 		page.onDisk = false
 		page.diskPath = ""
 	}
@@ -379,7 +379,7 @@ func (bp *BufferPool) Close() error {
 
 	// Clean up spill directory
 	if bp.spillDir != "" {
-		os.RemoveAll(bp.spillDir)
+		_ = os.RemoveAll(bp.spillDir)
 	}
 
 	return nil

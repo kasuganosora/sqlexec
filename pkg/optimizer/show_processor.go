@@ -169,9 +169,10 @@ func (sp *DefaultShowProcessor) ProcessShowProcessList(ctx context.Context) (exe
 		timeSeconds := uint64(duration.Seconds())
 
 		state := "executing"
-		if status == "canceled" {
+		switch status {
+		case "canceled":
 			state = "killed"
-		} else if status == "timeout" {
+		case "timeout":
 			state = "timeout"
 		}
 

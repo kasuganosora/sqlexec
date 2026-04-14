@@ -18,7 +18,7 @@ func init() {
 // registerVectorFunctions 注册所有向量函数
 func registerVectorFunctions() {
 	// VEC_COSINE_DISTANCE - 余弦距离
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "vec_cosine_distance",
 		Type:        FunctionTypeScalar,
 		Category:    "vector",
@@ -36,7 +36,7 @@ func registerVectorFunctions() {
 	})
 
 	// VEC_L2_DISTANCE - L2/Euclidean 距离
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "vec_l2_distance",
 		Type:        FunctionTypeScalar,
 		Category:    "vector",
@@ -54,7 +54,7 @@ func registerVectorFunctions() {
 	})
 
 	// VEC_INNER_PRODUCT - 内积
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "vec_inner_product",
 		Type:        FunctionTypeScalar,
 		Category:    "vector",
@@ -72,7 +72,7 @@ func registerVectorFunctions() {
 	})
 
 	// VEC_DISTANCE - 通用距离函数（默认使用余弦）
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "vec_distance",
 		Type:        FunctionTypeScalar,
 		Category:    "vector",

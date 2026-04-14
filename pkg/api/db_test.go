@@ -152,7 +152,7 @@ func TestRegisterDataSourceErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// First registration should succeed for duplicate case
 			if tt.name == "duplicate name" {
-				db.RegisterDataSource(tt.dsName, tt.ds)
+				require.NoError(t, db.RegisterDataSource(tt.dsName, tt.ds))
 			}
 
 			err := db.RegisterDataSource(tt.dsName, tt.ds)
@@ -301,7 +301,7 @@ func TestClearCache(t *testing.T) {
 
 	// Register datasource and create session
 	ds := newMockDataSource()
-	db.RegisterDataSource("test", ds)
+	require.NoError(t, db.RegisterDataSource("test", ds))
 	session := db.Session()
 
 	// Add some data to cache (simulated)
@@ -317,7 +317,7 @@ func TestClearCache(t *testing.T) {
 	_, found := db.cache.Get("SELECT 1", nil)
 	assert.False(t, found)
 
-	session.Close()
+	require.NoError(t, session.Close())
 }
 
 func TestClearTableCache(t *testing.T) {
@@ -352,8 +352,8 @@ func TestClose(t *testing.T) {
 	// Register datasources
 	ds1 := newMockDataSource()
 	ds2 := newMockDataSource()
-	db.RegisterDataSource("ds1", ds1)
-	db.RegisterDataSource("ds2", ds2)
+	require.NoError(t, db.RegisterDataSource("ds1", ds1))
+	require.NoError(t, db.RegisterDataSource("ds2", ds2))
 
 	// Close DB
 	err := db.Close()
@@ -368,9 +368,9 @@ func TestGetDataSourceNames(t *testing.T) {
 	db, _ := NewDB(nil)
 
 	// Register datasources
-	db.RegisterDataSource("ds1", newMockDataSource())
-	db.RegisterDataSource("ds2", newMockDataSource())
-	db.RegisterDataSource("ds3", newMockDataSource())
+	require.NoError(t, db.RegisterDataSource("ds1", newMockDataSource()))
+	require.NoError(t, db.RegisterDataSource("ds2", newMockDataSource()))
+	require.NoError(t, db.RegisterDataSource("ds3", newMockDataSource()))
 
 	// Get datasource names
 	names := db.GetDataSourceNames()
@@ -415,7 +415,7 @@ func ExampleDB_Session() {
 
 	// Create a new session
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// Use the session...
 	_ = session

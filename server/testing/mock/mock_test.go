@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // === MockConnection Tests ===
@@ -36,9 +37,12 @@ func TestMockConnection_WriteRead(t *testing.T) {
 func TestMockConnection_MultipleWrites(t *testing.T) {
 	conn := NewMockConnection()
 
-	conn.Write([]byte("first"))
-	conn.Write([]byte("second"))
-	conn.Write([]byte("third"))
+	_, err := conn.Write([]byte("first"))
+	require.NoError(t, err)
+	_, err = conn.Write([]byte("second"))
+	require.NoError(t, err)
+	_, err = conn.Write([]byte("third"))
+	require.NoError(t, err)
 
 	written := conn.GetWrittenData()
 	assert.Len(t, written, 3)
@@ -49,8 +53,10 @@ func TestMockConnection_MultipleWrites(t *testing.T) {
 
 func TestMockConnection_GetWrittenDataBytes(t *testing.T) {
 	conn := NewMockConnection()
-	conn.Write([]byte("hello"))
-	conn.Write([]byte(" world"))
+	_, err := conn.Write([]byte("hello"))
+	require.NoError(t, err)
+	_, err = conn.Write([]byte(" world"))
+	require.NoError(t, err)
 
 	combined := conn.GetWrittenDataBytes()
 	assert.Equal(t, []byte("hello world"), combined)
@@ -58,7 +64,8 @@ func TestMockConnection_GetWrittenDataBytes(t *testing.T) {
 
 func TestMockConnection_ClearWrittenData(t *testing.T) {
 	conn := NewMockConnection()
-	conn.Write([]byte("data"))
+	_, err := conn.Write([]byte("data"))
+	require.NoError(t, err)
 	assert.Len(t, conn.GetWrittenData(), 1)
 
 	conn.ClearWrittenData()
@@ -100,7 +107,7 @@ func TestMockConnection_ReadEmptyQueue(t *testing.T) {
 func TestMockConnection_ReadAfterClose(t *testing.T) {
 	conn := NewMockConnection()
 	conn.AddReadData([]byte("data"))
-	conn.Close()
+	require.NoError(t, conn.Close())
 
 	buf := make([]byte, 100)
 	_, err := conn.Read(buf)
@@ -109,7 +116,7 @@ func TestMockConnection_ReadAfterClose(t *testing.T) {
 
 func TestMockConnection_WriteAfterClose(t *testing.T) {
 	conn := NewMockConnection()
-	conn.Close()
+	require.NoError(t, conn.Close())
 
 	_, err := conn.Write([]byte("data"))
 	assert.Equal(t, io.EOF, err)
@@ -167,7 +174,8 @@ func TestMockConnection_Close(t *testing.T) {
 func TestMockConnection_WriteDataIsolation(t *testing.T) {
 	conn := NewMockConnection()
 	data := []byte("original")
-	conn.Write(data)
+	_, err := conn.Write(data)
+	require.NoError(t, err)
 
 	// Mutate original slice
 	data[0] = 'X'
@@ -336,7 +344,7 @@ func TestMockSession_Clone(t *testing.T) {
 
 func TestMockSession_ClonePreservesClosed(t *testing.T) {
 	sess := NewMockSession()
-	sess.Close()
+	require.NoError(t, sess.Close())
 
 	clone := sess.Clone()
 	assert.True(t, clone.IsClosed())

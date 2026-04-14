@@ -20,7 +20,7 @@ func TestBufferPool_PinEvictRace(t *testing.T) {
 		EvictInterval: 1 * time.Millisecond, // Very aggressive eviction
 	}
 	bp := NewBufferPool(cfg)
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	// Create pages with some data
 	pages := make([]*RowPage, 20)

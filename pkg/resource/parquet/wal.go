@@ -15,7 +15,7 @@ import (
 type WALEntryType uint8
 
 const (
-	WALInsert       WALEntryType = iota + 1
+	WALInsert WALEntryType = iota + 1
 	WALUpdate
 	WALDelete
 	WALCreateTable
@@ -28,9 +28,9 @@ const (
 type WALEntry struct {
 	Type      WALEntryType
 	TableName string
-	Rows      []domain.Row     // Insert
-	Filters   []domain.Filter  // Update/Delete
-	Updates   domain.Row       // Update
+	Rows      []domain.Row      // Insert
+	Filters   []domain.Filter   // Update/Delete
+	Updates   domain.Row        // Update
 	Schema    *domain.TableInfo // CreateTable
 }
 
@@ -93,7 +93,7 @@ func ReadAll(dirPath string) ([]WALEntry, error) {
 		}
 		return nil, fmt.Errorf("failed to open WAL file %q: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var entries []WALEntry
 	decoder := gob.NewDecoder(f)

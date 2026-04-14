@@ -144,7 +144,9 @@ func PersistTableData(cfg *TablePersistConfig, tableInfo *domain.TableInfo, rows
 
 	if len(rows) == 0 {
 		// Still need to clean old data files
-		deleteDataFiles(tableDir)
+		if err := deleteDataFiles(tableDir); err != nil {
+			return fmt.Errorf("failed to clean old data files: %w", err)
+		}
 		return nil
 	}
 
@@ -157,7 +159,9 @@ func PersistTableData(cfg *TablePersistConfig, tableInfo *domain.TableInfo, rows
 
 	if cfg.StorageMode == StorageModeSingleFile {
 		// For single file, clean old data files first (removes any stale per-row files)
-		deleteDataFiles(tableDir)
+		if err := deleteDataFiles(tableDir); err != nil {
+			return fmt.Errorf("failed to clean old data files: %w", err)
+		}
 		return persistSingleFile(tableDir, rootTag, tableInfo, rows, pkCol)
 	}
 	return persistFilePerRow(tableDir, rootTag, tableInfo, rows, pkCol)
@@ -232,7 +236,7 @@ func persistFilePerRow(tableDir, rootTag string, tableInfo *domain.TableInfo, ro
 			continue
 		}
 		if strings.HasSuffix(name, ".xml") && !writtenFiles[name] {
-			os.Remove(filepath.Join(tableDir, name))
+			_ = os.Remove(filepath.Join(tableDir, name))
 		}
 	}
 
@@ -338,7 +342,7 @@ func PersistIndexMeta(cfg *TablePersistConfig, indexes []*IndexMeta) error {
 	}
 
 	// Remove legacy XML meta file if present
-	os.Remove(filepath.Join(tableDir, "__meta__.xml"))
+	_ = os.Remove(filepath.Join(tableDir, "__meta__.xml"))
 	return nil
 }
 
@@ -811,12 +815,6 @@ func loadIndexMeta(metaPath string) ([]*IndexMeta, error) {
 	return result, nil
 }
 
-// parseRowXML parses a single-row XML element into a domain.Row (legacy, used by tests)
-func parseRowXML(data []byte, tableInfo *domain.TableInfo) (domain.Row, error) {
-	colTypes := buildColTypes(tableInfo)
-	return parseRowXMLFast(data, colTypes)
-}
-
 // parseRowXMLFast parses a self-closing XML element by scanning for name="value" attribute pairs.
 // This avoids the overhead of encoding/xml.Unmarshal and reflection.
 // Expected format: <Tag attr1="val1" attr2="val2" ... />
@@ -1008,7 +1006,7 @@ func deleteDataFiles(tableDir string) error {
 			continue
 		}
 		if strings.HasSuffix(name, ".xml") {
-			os.Remove(filepath.Join(tableDir, name))
+			_ = os.Remove(filepath.Join(tableDir, name))
 		}
 	}
 	return nil

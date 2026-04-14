@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -59,7 +60,10 @@ type BackupManager struct {
 // NewBackupManager 创建备份管理器
 func NewBackupManager(backupDir string) *BackupManager {
 	// 确保备份目录存在
-	os.MkdirAll(backupDir, 0755)
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		log.Printf("创建备份目录失败: %v", err)
+		return nil
+	}
 
 	return &BackupManager{
 		metadata:  make(map[string]*BackupMetadata),
@@ -293,7 +297,7 @@ func (bm *BackupManager) CleanOldBackups(olderThan time.Duration, keepCount int)
 	for _, id := range toBeDeleted {
 		if metadata, ok := bm.metadata[id]; ok {
 			if metadata.FilePath != "" {
-				os.Remove(metadata.FilePath)
+				_ = os.Remove(metadata.FilePath)
 			}
 			delete(bm.metadata, id)
 
@@ -349,7 +353,7 @@ func decompressData(compressed []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	data, err := io.ReadAll(reader)
 	if err != nil {

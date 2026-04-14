@@ -115,7 +115,6 @@ func (r *Registry) Clear() {
 
 var (
 	globalRegistry = NewRegistry()
-	registryOnce   sync.Once
 )
 
 // GetRegistry 获取全局注册表

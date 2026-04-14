@@ -31,7 +31,6 @@ func ArrayAppend(bj BinaryJSON, args ...interface{}) (BinaryJSON, error) {
 			return BinaryJSON{}, &JSONError{Code: ErrTypeMismatch, Message: "value is not an array"}
 		}
 		arr, _ = bj.GetArray()
-		parentBj = bj
 	} else {
 		// Get array at path
 		// Extract parent path and last leg

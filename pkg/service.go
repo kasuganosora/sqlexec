@@ -201,8 +201,8 @@ func (s *Server) GetDataSourceManager() *application.DataSourceManager {
 func (s *Server) HandleConn(ctx context.Context, conn net.Conn) (err error) {
 	// 设置连接超时
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		tcpConn.SetKeepAlive(true)
-		tcpConn.SetKeepAlivePeriod(config.DefaultConfig().Server.KeepAlivePeriod)
+		_ = tcpConn.SetKeepAlive(true)
+		_ = tcpConn.SetKeepAlivePeriod(config.DefaultConfig().Server.KeepAlivePeriod)
 	}
 
 	// 获取客户端地址
@@ -289,7 +289,7 @@ func (s *Server) HandleConn(ctx context.Context, conn net.Conn) (err error) {
 				return nil
 			}
 			log.Printf("读取命令包失败: %v", err)
-			protocol.SendError(conn, err)
+			_ = protocol.SendError(conn, err)
 			return fmt.Errorf("读取命令包失败: %w", err)
 		}
 
@@ -342,7 +342,7 @@ func (s *Server) HandleConn(ctx context.Context, conn net.Conn) (err error) {
 			handleErr = s.handleShutdown(ctx, conn)
 		default:
 			log.Printf("不支持的命令类型: %s (0x%02x)", commandName, packetType)
-			protocol.SendError(conn, fmt.Errorf("不支持的命令类型: %d", packetType))
+			_ = protocol.SendError(conn, fmt.Errorf("不支持的命令类型: %d", packetType))
 		}
 
 		if handleErr != nil {
@@ -400,7 +400,7 @@ func (s *Server) handleQuery(ctx context.Context, conn net.Conn, packet *protoco
 		log.Printf("设置变量完成: %d 个变量", r.Count)
 		// 保存变量到 session
 		for name, value := range r.Vars {
-			sess.SetVariable(name, value)
+			_ = sess.SetVariable(name, value)
 		}
 		return protocol.SendOK(conn, sess.GetNextSequenceID())
 	case *parser.ShowResult:
@@ -412,7 +412,7 @@ func (s *Server) handleQuery(ctx context.Context, conn net.Conn, packet *protoco
 		return s.sendResultSet(ctx, conn, sess)
 	case *parser.UseResult:
 		// USE 命令
-		sess.Set("current_database", r.Database)
+		_ = sess.Set("current_database", r.Database)
 		log.Printf("切换到数据库: %s", r.Database)
 		return protocol.SendOK(conn, sess.GetNextSequenceID())
 	case *parser.DefaultResult:
@@ -431,7 +431,7 @@ func (s *Server) handleInitDB(ctx context.Context, conn net.Conn, packet *protoc
 	sess := getSession(ctx)
 
 	log.Printf("切换数据库: %s", dbName)
-	sess.Set("current_database", dbName)
+	_ = sess.Set("current_database", dbName)
 
 	return protocol.SendOK(conn, sess.GetNextSequenceID())
 }
@@ -450,7 +450,7 @@ func (s *Server) handleStmtPrepare(ctx context.Context, conn net.Conn, packet *p
 	stmtPreparePacket := &protocol.ComStmtPreparePacket{}
 	if err := stmtPreparePacket.Unmarshal(bytes.NewReader(packet.RawBytes())); err != nil {
 		log.Printf("解析 COM_STMT_PREPARE 包失败: %v", err)
-		protocol.SendError(conn, err)
+		_ = protocol.SendError(conn, err)
 		return err
 	}
 
@@ -520,7 +520,7 @@ func (s *Server) handleStmtPrepare(ctx context.Context, conn net.Conn, packet *p
 	data, err := response.Marshal()
 	if err != nil {
 		log.Printf("序列化 COM_STMT_PREPARE 响应失败: %v", err)
-		protocol.SendError(conn, err)
+		_ = protocol.SendError(conn, err)
 		return err
 	}
 
@@ -533,7 +533,7 @@ func (s *Server) handleStmtPrepare(ctx context.Context, conn net.Conn, packet *p
 		response.StatementID, response.ParamCount, response.ColumnCount)
 
 	// 保存预处理语句到会话
-	sess.Set(fmt.Sprintf("stmt_%d", stmtID), stmtPreparePacket.Query)
+	_ = sess.Set(fmt.Sprintf("stmt_%d", stmtID), stmtPreparePacket.Query)
 
 	return nil
 }
@@ -546,7 +546,7 @@ func (s *Server) handleStmtExecute(ctx context.Context, conn net.Conn, packet *p
 	stmtExecutePacket := &protocol.ComStmtExecutePacket{}
 	if err := stmtExecutePacket.Unmarshal(bytes.NewReader(packet.RawBytes())); err != nil {
 		log.Printf("解析 COM_STMT_EXECUTE 包失败: %v", err)
-		protocol.SendError(conn, err)
+		_ = protocol.SendError(conn, err)
 		return err
 	}
 
@@ -558,7 +558,7 @@ func (s *Server) handleStmtExecute(ctx context.Context, conn net.Conn, packet *p
 	query, _ := sess.Get(queryKey)
 	if query == nil {
 		log.Printf("预处理语句不存在: statement_id=%d", stmtExecutePacket.StatementID)
-		protocol.SendError(conn, fmt.Errorf("预处理语句不存在"))
+		_ = protocol.SendError(conn, fmt.Errorf("预处理语句不存在"))
 		return fmt.Errorf("预处理语句不存在")
 	}
 
@@ -600,7 +600,7 @@ func (s *Server) handleStmtExecute(ctx context.Context, conn net.Conn, packet *p
 		fieldMetaData, err := fieldMeta.MarshalDefault()
 		if err != nil {
 			log.Printf("序列化列元数据失败: %v", err)
-			protocol.SendError(conn, err)
+			_ = protocol.SendError(conn, err)
 			return err
 		}
 		if _, err := conn.Write(fieldMetaData); err != nil {
@@ -662,7 +662,7 @@ func (s *Server) handleStmtClose(ctx context.Context, conn net.Conn, packet *pro
 
 	// 释放预处理语句资源
 	queryKey := fmt.Sprintf("stmt_%d", stmtClosePacket.StatementID)
-	sess.Delete(queryKey)
+	_ = sess.Delete(queryKey)
 
 	// COM_STMT_CLOSE 不需要发送响应
 	log.Printf("已关闭预处理语句: statement_id=%d", stmtClosePacket.StatementID)
@@ -1393,90 +1393,6 @@ func getColumns(query string) []string {
 	return []string{}
 }
 
-// handleSetCommand 处理 SET 命令
-func (s *Server) handleSetCommand(ctx context.Context, conn net.Conn, sess *session.Session, query string) error {
-	log.Printf("处理 SET 命令: %s", query)
-
-	// 去除 SET 关键词和首尾空格
-	cmd := strings.TrimSpace(query[3:])
-
-	// 处理 SET NAMES charset
-	if strings.HasPrefix(strings.ToUpper(cmd), "NAMES") {
-		charset := strings.TrimSpace(cmd[5:])
-		collation := ""
-		if idx := strings.Index(strings.ToUpper(charset), "COLLATE"); idx > 0 {
-			collation = strings.TrimSpace(charset[idx+7:])
-			charset = strings.TrimSpace(charset[:idx])
-		}
-		if err := sess.SetVariable("names", charset); err != nil {
-			log.Printf("设置字符集失败: %v", err)
-			return err
-		}
-		if collation != "" {
-			sess.SetVariable("COLLATION_CONNECTION", collation)
-		}
-		log.Printf("设置字符集: %s", charset)
-		return protocol.SendOK(conn, sess.GetNextSequenceID())
-	}
-
-	// 处理 SET @@variable = value 或 SET @variable = value
-	// 支持多个变量设置: SET var1=val1, var2=val2
-	assignments := strings.Split(cmd, ",")
-
-	for _, assign := range assignments {
-		assign = strings.TrimSpace(assign)
-
-		// 解析变量名和值
-		var varName, varValue string
-
-		// 查找等号位置
-		eqIdx := strings.Index(assign, "=")
-		if eqIdx == -1 {
-			// 尝试查找 := 赋值
-			eqIdx = strings.Index(assign, ":=")
-		}
-
-		if eqIdx == -1 {
-			log.Printf("无法解析 SET 命令: %s", assign)
-			continue
-		}
-
-		varName = strings.TrimSpace(assign[:eqIdx])
-		varValue = strings.TrimSpace(assign[eqIdx+1:])
-
-		// 去除值两端的引号
-		if (strings.HasPrefix(varValue, "'") && strings.HasSuffix(varValue, "'")) ||
-			(strings.HasPrefix(varValue, "\"") && strings.HasSuffix(varValue, "\"")) {
-			varValue = varValue[1 : len(varValue)-1]
-		}
-
-		// 处理变量名前缀
-		varName = strings.TrimSpace(varName)
-
-		// 移除 @@global. 或 @@session. 前缀
-		varName = strings.TrimPrefix(varName, "@@global.")
-		varName = strings.TrimPrefix(varName, "@@session.")
-		varName = strings.TrimPrefix(varName, "@@local.")
-		varName = strings.TrimPrefix(varName, "@@")
-
-		// 移除 @ 前缀（用户变量）
-		varName = strings.TrimPrefix(varName, "@")
-
-		// 转换为小写（不区分大小写）
-		varName = strings.ToLower(varName)
-
-		// 保存到会话
-		if err := sess.SetVariable(varName, varValue); err != nil {
-			log.Printf("设置变量 %s 失败: %v", varName, err)
-			continue
-		}
-
-		log.Printf("设置会话变量: %s = %s", varName, varValue)
-	}
-
-	return protocol.SendOK(conn, sess.GetNextSequenceID())
-}
-
 // Start 启动服务器
 func (s *Server) Start(ctx context.Context, listener net.Listener) error {
 	log.Println("正在启动服务器...")
@@ -1499,7 +1415,7 @@ func (s *Server) Start(ctx context.Context, listener net.Listener) error {
 			}
 
 			// 使用goroutine池处理连接
-			s.goroutinePool.Submit(func() {
+			_ = s.goroutinePool.Submit(func() {
 				defer func() {
 					if err := conn.Close(); err != nil {
 						log.Printf("关闭连接失败: %v", err)

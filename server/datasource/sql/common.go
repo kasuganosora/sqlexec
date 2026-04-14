@@ -63,7 +63,7 @@ func (ds *SQLCommonDataSource) Connect(ctx context.Context) error {
 	defer cancel()
 
 	if err := db.PingContext(pingCtx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return &domain.ErrConnectionFailed{
 			DataSourceType: ds.dialect.DriverName(),
 			Reason:         err.Error(),
@@ -114,7 +114,7 @@ func (ds *SQLCommonDataSource) GetTables(ctx context.Context) ([]string, error) 
 	if err != nil {
 		return nil, fmt.Errorf("get tables: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tables []string
 	for rows.Next() {
@@ -137,7 +137,7 @@ func (ds *SQLCommonDataSource) GetTableInfo(ctx context.Context, tableName strin
 	if err != nil {
 		return nil, fmt.Errorf("get table info: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	colTypes, err := rows.ColumnTypes()
 	if err != nil {
@@ -225,7 +225,7 @@ func (ds *SQLCommonDataSource) Query(ctx context.Context, tableName string, opti
 	if err != nil {
 		return nil, fmt.Errorf("query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	data, columns, err := ScanRows(rows, ds.dialect)
 	if err != nil {
@@ -360,7 +360,7 @@ func (ds *SQLCommonDataSource) Execute(ctx context.Context, rawSQL string) (*dom
 		if err != nil {
 			return nil, fmt.Errorf("execute query: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		data, columns, err := ScanRows(rows, ds.dialect)
 		if err != nil {
@@ -420,7 +420,7 @@ func (ds *SQLCommonDataSource) Filter(ctx context.Context, tableName string, fil
 	if err != nil {
 		return nil, 0, fmt.Errorf("filter: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	data, _, err := ScanRows(rows, ds.dialect)
 	if err != nil {

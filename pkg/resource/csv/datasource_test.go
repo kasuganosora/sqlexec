@@ -2,6 +2,7 @@ package csv
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 
@@ -42,7 +43,7 @@ func TestNewCSVAdapter(t *testing.T) {
 			cs := NewCSVAdapter(tt.config, tt.filePath)
 
 			if cs == nil {
-				t.Errorf("NewCSVAdapter() returned nil")
+				t.Fatalf("NewCSVAdapter() returned nil")
 			}
 
 			if cs.writable != false {
@@ -67,12 +68,12 @@ func TestCSVSource_Connect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -111,12 +112,12 @@ func TestCSVSource_Close(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -152,7 +153,7 @@ func TestCSVSource_GetConfig(t *testing.T) {
 
 	got := cs.GetConfig()
 	if got == nil {
-		t.Errorf("GetConfig() returned nil")
+		t.Fatalf("GetConfig() returned nil")
 	}
 
 	if got.Type != config.Type {
@@ -185,12 +186,12 @@ func TestCSVSource_GetTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -230,12 +231,12 @@ func TestCSVSource_GetTableInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -256,7 +257,7 @@ func TestCSVSource_GetTableInfo(t *testing.T) {
 	}
 
 	if tableInfo == nil {
-		t.Errorf("GetTableInfo() returned nil")
+		t.Fatalf("GetTableInfo() returned nil")
 	}
 
 	if tableInfo.Name != "csv_data" {
@@ -293,12 +294,12 @@ func TestCSVSource_Query(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -347,12 +348,12 @@ func TestCSVSource_Insert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -388,12 +389,12 @@ func TestCSVSource_Update(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -430,12 +431,12 @@ func TestCSVSource_Delete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -471,12 +472,12 @@ func TestCSVSource_CreateTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -513,12 +514,12 @@ func TestCSVSource_DropTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -549,12 +550,12 @@ func TestCSVSource_TruncateTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -603,12 +604,12 @@ func TestCSVSource_Query_WithoutHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -652,12 +653,12 @@ func TestCSVSource_Query_WithDifferentDelimiter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -705,12 +706,12 @@ func TestCSVSource_Query_WithFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,
@@ -753,12 +754,12 @@ func TestCSVSource_Query_WithPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeCSV,

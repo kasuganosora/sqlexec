@@ -105,7 +105,6 @@ type BTreeNode struct {
 	isLeaf   bool
 	keys     []interface{}
 	children []*BTreeNode
-	mu       sync.RWMutex
 }
 
 // NewBTreeNode 创建B-Tree节点

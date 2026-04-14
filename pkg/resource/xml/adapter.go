@@ -304,16 +304,16 @@ func (a *XMLAdapter) writeBackTable(tableName string) error {
 		tmpPath := tmpFile.Name()
 
 		if _, err := tmpFile.Write(outputData); err != nil {
-			tmpFile.Close()
-			os.Remove(tmpPath)
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
 			return fmt.Errorf("failed to write temp file: %w", err)
 		}
 		if err := tmpFile.Close(); err != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			return fmt.Errorf("failed to close temp file: %w", err)
 		}
 		if err := os.Rename(tmpPath, filePath); err != nil {
-			os.Remove(tmpPath)
+			_ = os.Remove(tmpPath)
 			return fmt.Errorf("failed to rename temp file: %w", err)
 		}
 
@@ -330,7 +330,7 @@ func (a *XMLAdapter) writeBackTable(tableName string) error {
 			continue
 		}
 		if !writtenFiles[f.Name()] {
-			os.Remove(filepath.Join(dirPath, f.Name()))
+			_ = os.Remove(filepath.Join(dirPath, f.Name()))
 		}
 	}
 

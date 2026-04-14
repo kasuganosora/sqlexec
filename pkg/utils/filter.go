@@ -5,7 +5,6 @@ import (
 	"unicode"
 
 	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -274,12 +273,6 @@ func stripAccents(s string) string {
 		}
 	}
 	return buf.String()
-}
-
-// stripAccentsForLocale strips accents using locale-specific rules.
-// Currently delegates to stripAccents; can be extended for locale-specific behavior.
-func stripAccentsForLocale(s string, _ language.Tag) string {
-	return stripAccents(s)
 }
 
 // findSegment finds the first position >= startPos where segment matches in value.

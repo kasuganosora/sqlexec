@@ -242,7 +242,7 @@ func init() {
 	}
 
 	for _, fn := range dateFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 

@@ -84,10 +84,7 @@ func TestDeriveTopNFromWindowRule_Apply(t *testing.T) {
 			if err != nil {
 				t.Errorf("Apply() returned error: %v", err)
 			}
-			// Rule should return original plan if no conversion happens
-			if result != tt.plan && tt.plan != nil {
-				// It's ok if conversion happens
-			}
+			_ = result
 		})
 	}
 }
@@ -308,7 +305,7 @@ func TestConvertWindowToTopN_EmptyWindowFuncs(t *testing.T) {
 
 	// Should not panic when extracting from empty window funcs
 	sortItems := rule.extractSortItems(window)
-	if sortItems != nil && len(sortItems) != 0 {
+	if len(sortItems) != 0 {
 		t.Errorf("Expected empty or non-empty sortItems, got %v", sortItems)
 	}
 }

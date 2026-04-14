@@ -34,7 +34,7 @@ func (m *MVCCDataSource) Close(ctx context.Context) error {
 
 	// Shut down buffer pool and clean up spill files
 	if m.bufferPool != nil {
-		m.bufferPool.Close()
+		_ = m.bufferPool.Close()
 	}
 
 	return nil

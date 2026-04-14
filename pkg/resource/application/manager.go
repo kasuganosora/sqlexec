@@ -230,7 +230,7 @@ func (m *DataSourceManager) CreateAndRegister(ctx context.Context, name string, 
 
 	// 注册数据源
 	if err := m.Register(name, ds); err != nil {
-		ds.Close(ctx)
+		_ = ds.Close(ctx)
 		return err
 	}
 

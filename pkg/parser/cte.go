@@ -150,6 +150,7 @@ func (opt *CTEOptimizer) collectReferences(stmt *SelectStatement, refCounts map[
 		// 简化的实现: 假设FROM中可能有CTE引用
 		// 实际需要更复杂的SQL解析
 		// 这里暂时不实现,因为当前SelectStatement结构不支持表列表
+		_ = stmt.From
 	}
 
 	// 检查JOIN子句中的CTE引用

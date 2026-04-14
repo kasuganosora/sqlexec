@@ -193,7 +193,7 @@ func (arc *AutoRefreshStatisticsCache) Get(tableName string) (*TableStatistics, 
 // refresh 刷新表的统计信息
 func (arc *AutoRefreshStatisticsCache) refresh(tableName string) (*TableStatistics, error) {
 	// 收集新的统计信息
-	stats, err := arc.collector.CollectStatistics(nil, tableName)
+	stats, err := arc.collector.CollectStatistics(context.TODO(), tableName)
 	if err != nil {
 		return nil, err
 	}

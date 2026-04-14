@@ -630,7 +630,7 @@ func BenchmarkEnhancedPredicatePushdown_SimpleFilter(b *testing.B) {
 	})
 
 	ctx := context.Background()
-	dataSource.CreateTable(ctx, &domain.TableInfo{
+	_ = dataSource.CreateTable(ctx, &domain.TableInfo{
 		Name: "test_table",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "int", Primary: true},
@@ -663,7 +663,7 @@ func BenchmarkEnhancedPredicatePushdown_SimpleFilter(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		opt.Optimize(ctx, sqlStmt)
+		_, _ = opt.Optimize(ctx, sqlStmt)
 	}
 }
 
@@ -675,7 +675,7 @@ func BenchmarkEnhancedPredicatePushdown_ComplexFilter(b *testing.B) {
 	})
 
 	ctx := context.Background()
-	dataSource.CreateTable(ctx, &domain.TableInfo{
+	_ = dataSource.CreateTable(ctx, &domain.TableInfo{
 		Name: "test_table",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "int", Primary: true},
@@ -741,6 +741,6 @@ func BenchmarkEnhancedPredicatePushdown_ComplexFilter(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		opt.Optimize(ctx, sqlStmt)
+		_, _ = opt.Optimize(ctx, sqlStmt)
 	}
 }

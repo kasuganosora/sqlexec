@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // countingListener wraps a net.Listener and counts Accept calls after close.
@@ -36,7 +37,7 @@ func (cl *countingListener) Close() error {
 // in an infinite error loop.
 func TestBug_Start_AcceptLoopExitsOnListenerClose(t *testing.T) {
 	server := NewServer(nil)
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -55,7 +56,7 @@ func TestBug_Start_AcceptLoopExitsOnListenerClose(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Close the listener - this should cause Accept() to return an error
-	cl.Close()
+	require.NoError(t, cl.Close())
 
 	// Wait for the goroutine to notice and exit
 	time.Sleep(200 * time.Millisecond)

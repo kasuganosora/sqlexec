@@ -69,7 +69,7 @@ func TestSession_ExplainComplexSQL(t *testing.T) {
 		ReadOnly:       false,
 		CacheEnabled:   true,
 	})
-	defer apiSession.Close()
+	defer func() { _ = apiSession.Close() }()
 
 	// Test 1: Simple EXPLAIN with SELECT
 	t.Run("Simple EXPLAIN SELECT", func(t *testing.T) {

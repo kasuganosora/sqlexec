@@ -480,7 +480,7 @@ func init() {
 	}
 
 	for _, fn := range mathFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 

@@ -186,7 +186,7 @@ func (a *ParquetAdapter) loadIndexMeta() {
 	}
 
 	for _, idx := range meta.Indexes {
-		if err := a.MVCCDataSource.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
+		if err := a.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
 			log.Printf("warning: failed to rebuild index %s on %s: %v", idx.Name, idx.Table, err)
 		}
 	}
@@ -323,7 +323,7 @@ func (a *ParquetAdapter) DropTable(ctx context.Context, tableName string) error 
 
 	// Remove Parquet file
 	filePath := filepath.Join(a.dataDir, tableName+".parquet")
-	os.Remove(filePath)
+	_ = os.Remove(filePath)
 
 	a.removeDirty(tableName)
 	return nil
@@ -455,7 +455,7 @@ func (a *ParquetAdapter) Close(ctx context.Context) error {
 
 	// Close WAL
 	if a.wal != nil {
-		a.wal.Close()
+		_ = a.wal.Close()
 	}
 
 	return a.MVCCDataSource.Close(ctx)

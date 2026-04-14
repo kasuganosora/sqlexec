@@ -291,7 +291,7 @@ func init() {
 	}
 
 	for _, fn := range financialFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 

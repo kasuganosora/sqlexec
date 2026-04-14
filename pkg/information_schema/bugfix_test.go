@@ -78,7 +78,7 @@ func (m *mockDSForFK) Execute(_ context.Context, _ string) (*domain.QueryResult,
 
 func TestBug9_ForeignKey_ReferencedTableSchema(t *testing.T) {
 	dsManager := application.NewDataSourceManager()
-	dsManager.Register("mydb", &mockDSForFK{})
+	require.NoError(t, dsManager.Register("mydb", &mockDSForFK{}))
 
 	table := NewKeyColumnUsageTable(dsManager)
 

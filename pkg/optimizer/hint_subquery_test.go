@@ -1,6 +1,7 @@
 package optimizer
 
 import (
+	"context"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/parser"
@@ -51,7 +52,7 @@ func TestHintAwareSubqueryRule_SemiJoinRewrite(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, apply, optCtx)
+	plan, err := rule.Apply(context.TODO(), apply, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -77,7 +78,7 @@ func TestHintAwareSubqueryRule_NoDecorrelate(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, apply, optCtx)
+	plan, err := rule.Apply(context.TODO(), apply, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -102,7 +103,7 @@ func TestHintAwareSubqueryRule_UseTOJA(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, apply, optCtx)
+	plan, err := rule.Apply(context.TODO(), apply, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -125,7 +126,7 @@ func TestHintAwareSubqueryRule_NoHints(t *testing.T) {
 		Hints: &OptimizerHints{},
 	}
 
-	plan, err := rule.Apply(nil, apply, optCtx)
+	plan, err := rule.Apply(context.TODO(), apply, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -146,7 +147,7 @@ func TestHintAwareSubqueryRule_NoContext(t *testing.T) {
 	inner := NewLogicalDataSource("inner_table", nil)
 	apply := NewLogicalApply(SemiJoin, outer, inner, nil)
 
-	plan, err := rule.Apply(nil, apply, nil)
+	plan, err := rule.Apply(context.TODO(), apply, nil)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestHintPriority_Subquery(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, apply, optCtx)
+	plan, err := rule.Apply(context.TODO(), apply, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -225,7 +226,7 @@ func TestHintAwareSubqueryRule_ComplexSubquery(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, apply, optCtx)
+	plan, err := rule.Apply(context.TODO(), apply, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}
@@ -254,7 +255,7 @@ func TestHintAwareSubqueryRule_MultipleHints(t *testing.T) {
 		},
 	}
 
-	plan, err := rule.Apply(nil, apply, optCtx)
+	plan, err := rule.Apply(context.TODO(), apply, optCtx)
 	if err != nil {
 		t.Fatalf("Apply failed: %v", err)
 	}

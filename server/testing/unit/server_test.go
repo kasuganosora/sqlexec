@@ -50,7 +50,7 @@ func TestServer_ConcurrentQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create listener: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := server.NewServer(ctx, listener, &config.Config{})
 	s.SetDB(db)
@@ -107,7 +107,7 @@ func TestServer_ParserRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create listener: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := server.NewServer(ctx, listener, &config.Config{})
 
@@ -140,7 +140,7 @@ func TestServer_HandshakeHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create listener: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := server.NewServer(ctx, listener, &config.Config{})
 	s.SetDB(db)

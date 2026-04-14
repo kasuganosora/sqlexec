@@ -125,7 +125,7 @@ func (l *DefaultLogger) log(level LogLevel, format string, args ...interface{}) 
 	defer l.mu.Unlock()
 
 	message := fmt.Sprintf(format, args...)
-	fmt.Fprintf(l.output, "[%s] %s\n", level.String(), message)
+	_, _ = fmt.Fprintf(l.output, "[%s] %s\n", level.String(), message)
 }
 
 // NoOpLogger 空日志实现（用于禁用日志）

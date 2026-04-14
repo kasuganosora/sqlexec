@@ -31,16 +31,16 @@ func setupBoolTestDB(t *testing.T) *gorm.DB {
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
 	require.NoError(t, memoryDS.Connect(context.Background()))
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, err := gorm.Open(dialector, &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&Inventory{}))
 	t.Cleanup(func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
-		db.Close()
+		require.NoError(t, db.Close())
 	})
 	return gormDB
 }

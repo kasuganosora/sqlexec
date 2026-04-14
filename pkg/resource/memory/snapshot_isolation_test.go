@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSnapshotIsolation_ReadDoesNotSeeNewerCommits verifies that a transaction
@@ -17,19 +18,20 @@ func TestSnapshotIsolation_ReadDoesNotSeeNewerCommits(t *testing.T) {
 		Writable: true,
 	})
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
 	// Create table and insert initial row
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "users",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER", Primary: true},
 			{Name: "name", Type: "VARCHAR"},
 		},
-	})
-	ds.Insert(ctx, "users", []domain.Row{
+	}))
+	_, err := ds.Insert(ctx, "users", []domain.Row{
 		{"id": int64(1), "name": "alice"},
 	}, nil)
+	require.NoError(t, err)
 
 	// TX1: start a read-only transaction — should see snapshot at this point
 	tx1ID, err := ds.BeginTx(ctx, true)
@@ -38,9 +40,10 @@ func TestSnapshotIsolation_ReadDoesNotSeeNewerCommits(t *testing.T) {
 	}
 
 	// Now, outside the transaction, insert a new row
-	ds.Insert(ctx, "users", []domain.Row{
+	_, err = ds.Insert(ctx, "users", []domain.Row{
 		{"id": int64(2), "name": "bob"},
 	}, nil)
+	require.NoError(t, err)
 
 	// TX1: query inside the transaction — should only see alice, not bob
 	tx1Ctx := SetTransactionID(ctx, tx1ID)
@@ -59,7 +62,7 @@ func TestSnapshotIsolation_ReadDoesNotSeeNewerCommits(t *testing.T) {
 	}
 
 	// Cleanup
-	ds.RollbackTx(ctx, tx1ID)
+	require.NoError(t, ds.RollbackTx(ctx, tx1ID))
 }
 
 // TestSnapshotIsolation_WriteTxDoesNotSeeOtherWrites verifies that a write
@@ -71,18 +74,19 @@ func TestSnapshotIsolation_WriteTxDoesNotSeeOtherWrites(t *testing.T) {
 		Writable: true,
 	})
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "items",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER"},
 			{Name: "value", Type: "VARCHAR"},
 		},
-	})
-	ds.Insert(ctx, "items", []domain.Row{
+	}))
+	_, err := ds.Insert(ctx, "items", []domain.Row{
 		{"id": int64(1), "value": "original"},
 	}, nil)
+	require.NoError(t, err)
 
 	// TX1: start a write transaction
 	tx1ID, err := ds.BeginTx(ctx, false)
@@ -91,9 +95,10 @@ func TestSnapshotIsolation_WriteTxDoesNotSeeOtherWrites(t *testing.T) {
 	}
 
 	// Outside tx1: insert a new row and update the existing one
-	ds.Insert(ctx, "items", []domain.Row{
+	_, err = ds.Insert(ctx, "items", []domain.Row{
 		{"id": int64(2), "value": "new_outside"},
 	}, nil)
+	require.NoError(t, err)
 
 	// TX1: read — should not see the new row
 	tx1Ctx := SetTransactionID(ctx, tx1ID)
@@ -109,7 +114,7 @@ func TestSnapshotIsolation_WriteTxDoesNotSeeOtherWrites(t *testing.T) {
 		}
 	}
 
-	ds.RollbackTx(ctx, tx1ID)
+	require.NoError(t, ds.RollbackTx(ctx, tx1ID))
 }
 
 // TestSnapshotIsolation_TxSeesOwnInserts verifies that a transaction can see
@@ -121,15 +126,15 @@ func TestSnapshotIsolation_TxSeesOwnInserts(t *testing.T) {
 		Writable: true,
 	})
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "items",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER"},
 			{Name: "value", Type: "VARCHAR"},
 		},
-	})
+	}))
 
 	// TX1: begin, insert, then read own insert
 	tx1ID, err := ds.BeginTx(ctx, false)
@@ -138,9 +143,10 @@ func TestSnapshotIsolation_TxSeesOwnInserts(t *testing.T) {
 	}
 	tx1Ctx := SetTransactionID(ctx, tx1ID)
 
-	ds.Insert(tx1Ctx, "items", []domain.Row{
+	_, err = ds.Insert(tx1Ctx, "items", []domain.Row{
 		{"id": int64(1), "value": "from_tx1"},
 	}, nil)
+	require.NoError(t, err)
 
 	result, err := ds.Query(tx1Ctx, "items", &domain.QueryOptions{})
 	if err != nil {
@@ -151,5 +157,5 @@ func TestSnapshotIsolation_TxSeesOwnInserts(t *testing.T) {
 		t.Errorf("tx should see its own inserts: expected 1 row, got %d", len(result.Rows))
 	}
 
-	ds.RollbackTx(ctx, tx1ID)
+	require.NoError(t, ds.RollbackTx(ctx, tx1ID))
 }

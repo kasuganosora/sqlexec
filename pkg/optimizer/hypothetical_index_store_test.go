@@ -238,7 +238,7 @@ func TestFindIndexByColumns(t *testing.T) {
 	}
 
 	// 查找多列索引
-	index, ok = store.FindIndexByColumns("users", []string{"first_name", "last_name"})
+	_, ok = store.FindIndexByColumns("users", []string{"first_name", "last_name"})
 	if !ok {
 		t.Error("Expected to find index by columns [first_name, last_name]")
 	}

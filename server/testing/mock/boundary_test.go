@@ -8,6 +8,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/server/protocol"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestBoundary_LargePacket tests large packet handling
@@ -314,7 +315,7 @@ func TestBoundary_ErrorMessageSpecialChars(t *testing.T) {
 func TestBoundary_ConnectionClosed(t *testing.T) {
 	// Given: Create mock connection
 	mockConn := NewMockConnection()
-	mockConn.Close()
+	require.NoError(t, mockConn.Close())
 
 	// Then: Verify connection is closed
 	assert.True(t, mockConn.IsClosed(), "Connection should be closed")
@@ -349,7 +350,8 @@ func TestBoundary_MultiplePackets(t *testing.T) {
 		_, err := packet.MarshalBytes()
 		assert.NoError(t, err)
 
-		mockConn.Write(packet.Payload)
+		_, err = mockConn.Write(packet.Payload)
+		require.NoError(t, err)
 	}
 
 	// Then: Verify all packets are recorded

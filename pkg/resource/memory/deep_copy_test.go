@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDeepCopyRow_SliceIsolation verifies that deepCopyRow truly deep-copies
@@ -117,20 +118,21 @@ func TestMVCC_InsertRowIsolation(t *testing.T) {
 		Writable: true,
 	})
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "users",
 		Columns: []domain.ColumnInfo{
 			{Name: "name", Type: "VARCHAR"},
 			{Name: "tags", Type: "JSON"},
 		},
-	})
+	}))
 
 	// Insert a row with a nested slice
 	tags := []interface{}{"admin", "user"}
 	row := domain.Row{"name": "alice", "tags": tags}
-	ds.Insert(ctx, "users", []domain.Row{row}, nil)
+	_, err := ds.Insert(ctx, "users", []domain.Row{row}, nil)
+	require.NoError(t, err)
 
 	// Mutate the original slice
 	tags[0] = "HACKED"

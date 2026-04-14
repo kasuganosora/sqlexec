@@ -17,7 +17,7 @@ import (
 type contextKey string
 
 const (
-	ctxKeyMCPClient contextKey = "mcp_client"
+	ctxKeyMCPClient  contextKey = "mcp_client"
 	ctxKeyMCPRequest contextKey = "mcp_http_request"
 
 	// maxResultRows limits the number of rows returned by read queries to prevent OOM.
@@ -69,7 +69,7 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 	start := time.Now()
 
 	session := d.DB.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 	if d.VDBRegistry != nil {
 		session.SetVirtualDBRegistry(d.VDBRegistry)
 	}
@@ -96,7 +96,7 @@ func (d *ToolDeps) HandleQuery(ctx context.Context, request mcp.CallToolRequest)
 			d.logToolCall(traceID, clientName, clientIP, "query", map[string]interface{}{"sql": sql, "database": database}, time.Since(start).Milliseconds(), false)
 			return mcp.NewToolResultError(fmt.Sprintf("query failed: %v", err)), nil
 		}
-		defer query.Close()
+		defer func() { _ = query.Close() }()
 
 		var sb strings.Builder
 		// Write column headers
@@ -159,7 +159,7 @@ func (d *ToolDeps) HandleListDatabases(ctx context.Context, request mcp.CallTool
 	start := time.Now()
 
 	session := d.DB.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 	if d.VDBRegistry != nil {
 		session.SetVirtualDBRegistry(d.VDBRegistry)
 	}
@@ -172,7 +172,7 @@ func (d *ToolDeps) HandleListDatabases(ctx context.Context, request mcp.CallTool
 		d.logToolCall(traceID, clientName, clientIP, "list_databases", nil, time.Since(start).Milliseconds(), false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list databases: %v", err)), nil
 	}
-	defer query.Close()
+	defer func() { _ = query.Close() }()
 
 	var sb strings.Builder
 	sb.WriteString("Databases:\n")
@@ -212,7 +212,7 @@ func (d *ToolDeps) HandleListTables(ctx context.Context, request mcp.CallToolReq
 	start := time.Now()
 
 	session := d.DB.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 	if d.VDBRegistry != nil {
 		session.SetVirtualDBRegistry(d.VDBRegistry)
 	}
@@ -226,7 +226,7 @@ func (d *ToolDeps) HandleListTables(ctx context.Context, request mcp.CallToolReq
 		d.logToolCall(traceID, clientName, clientIP, "list_tables", map[string]interface{}{"database": database}, time.Since(start).Milliseconds(), false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list tables: %v", err)), nil
 	}
-	defer query.Close()
+	defer func() { _ = query.Close() }()
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Tables in %s:\n", database))
@@ -275,7 +275,7 @@ func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallTool
 	start := time.Now()
 
 	session := d.DB.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 	if d.VDBRegistry != nil {
 		session.SetVirtualDBRegistry(d.VDBRegistry)
 	}
@@ -289,7 +289,7 @@ func (d *ToolDeps) HandleDescribeTable(ctx context.Context, request mcp.CallTool
 		d.logToolCall(traceID, clientName, clientIP, "describe_table", map[string]interface{}{"database": database, "table": table}, time.Since(start).Milliseconds(), false)
 		return mcp.NewToolResultError(fmt.Sprintf("failed to describe table: %v", err)), nil
 	}
-	defer query.Close()
+	defer func() { _ = query.Close() }()
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Table: %s.%s\n\n", database, table))

@@ -486,7 +486,9 @@ func NewSchemaBuilder() *SchemaBuilder {
 
 // AddField 添加字段
 func (b *SchemaBuilder) AddField(field *Field) *SchemaBuilder {
-	b.schema.AddField(field)
+	if err := b.schema.AddField(field); err != nil {
+		return nil
+	}
 	return b
 }
 
@@ -496,7 +498,9 @@ func (b *SchemaBuilder) AddTextField(name string, fn func(*FieldSchemaBuilder)) 
 	if fn != nil {
 		fn(builder)
 	}
-	b.schema.AddField(builder.Build())
+	if err := b.schema.AddField(builder.Build()); err != nil {
+		return nil
+	}
 	return b
 }
 
@@ -506,7 +510,9 @@ func (b *SchemaBuilder) AddNumericField(name string, fn func(*FieldSchemaBuilder
 	if fn != nil {
 		fn(builder)
 	}
-	b.schema.AddField(builder.Build())
+	if err := b.schema.AddField(builder.Build()); err != nil {
+		return nil
+	}
 	return b
 }
 

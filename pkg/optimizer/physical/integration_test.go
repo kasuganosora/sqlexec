@@ -22,7 +22,7 @@ func TestPhysicalExecuteIntegration_IntegrationFull(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -70,7 +70,7 @@ func TestPhysicalExecuteIntegration_WithLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -114,7 +114,7 @@ func TestPhysicalExecuteIntegration_ParallelScan(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -163,7 +163,7 @@ func TestPhysicalExecuteIntegration_ParallelScanWithLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -236,7 +236,7 @@ func TestPhysicalExecuteIntegration_FilterSchema(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -281,7 +281,7 @@ func TestPhysicalExecuteIntegration_AggregateSchema(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -351,7 +351,7 @@ func TestPhysicalExecuteIntegration_ExplainOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -385,7 +385,7 @@ func TestPhysicalExecuteIntegration_CostCalculation(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -433,7 +433,7 @@ func TestPhysicalExecuteIntegration_ConcurrentExecution(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -497,7 +497,7 @@ func TestPhysicalExecuteIntegration_FilterExecution(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -560,7 +560,7 @@ func TestPhysicalExecuteIntegration_EmptyTable(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table without data
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -594,7 +594,7 @@ func TestPhysicalExecuteIntegration_TableScanWithOffsetLimit(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	_ = dataSource.Connect(ctx)
 
 	// Create test table
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{

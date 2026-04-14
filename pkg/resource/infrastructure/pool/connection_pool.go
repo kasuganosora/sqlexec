@@ -15,8 +15,8 @@ func safeCloseDB(db *sql.DB) {
 	if db == nil {
 		return
 	}
-	defer func() { recover() }()
-	db.Close()
+	defer func() { _ = recover() }()
+	_ = db.Close()
 }
 
 // ==================== 连接池 ====================

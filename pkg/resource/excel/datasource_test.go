@@ -14,15 +14,15 @@ func createTestExcelFile(t *testing.T) string {
 	f := excelize.NewFile()
 
 	// 使用默认的Sheet1作为测试表
-	f.SetCellValue("Sheet1", "A1", "id")
-	f.SetCellValue("Sheet1", "B1", "name")
-	f.SetCellValue("Sheet1", "C1", "email")
-	f.SetCellValue("Sheet1", "A2", 1)
-	f.SetCellValue("Sheet1", "B2", "Alice")
-	f.SetCellValue("Sheet1", "C2", "alice@example.com")
-	f.SetCellValue("Sheet1", "A3", 2)
-	f.SetCellValue("Sheet1", "B3", "Bob")
-	f.SetCellValue("Sheet1", "C3", "bob@example.com")
+	_ = f.SetCellValue("Sheet1", "A1", "id")
+	_ = f.SetCellValue("Sheet1", "B1", "name")
+	_ = f.SetCellValue("Sheet1", "C1", "email")
+	_ = f.SetCellValue("Sheet1", "A2", 1)
+	_ = f.SetCellValue("Sheet1", "B2", "Alice")
+	_ = f.SetCellValue("Sheet1", "C2", "alice@example.com")
+	_ = f.SetCellValue("Sheet1", "A3", 2)
+	_ = f.SetCellValue("Sheet1", "B3", "Bob")
+	_ = f.SetCellValue("Sheet1", "C3", "bob@example.com")
 
 	// 保存文件
 	tmpFile, err := os.CreateTemp("", "test*.xlsx")
@@ -74,7 +74,7 @@ func TestNewExcelAdapter(t *testing.T) {
 			es := NewExcelAdapter(tt.config, tt.filePath)
 
 			if es == nil {
-				t.Errorf("NewExcelAdapter() returned nil")
+				t.Fatalf("NewExcelAdapter() returned nil")
 			}
 
 			if es.filePath != tt.filePath {
@@ -87,7 +87,7 @@ func TestNewExcelAdapter(t *testing.T) {
 // TestNewExcelAdapter_Connect 测试连接Excel文件
 func TestNewExcelAdapter_Connect(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -169,7 +169,7 @@ func TestExcelSource_IsWritable(t *testing.T) {
 // TestExcelSource_GetTables 测试获取所有表（sheets）
 func TestExcelSource_GetTables(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -202,7 +202,7 @@ func TestExcelSource_GetTables(t *testing.T) {
 // TestExcelSource_GetTableInfo 测试获取表信息
 func TestExcelSource_GetTableInfo(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -259,7 +259,7 @@ func TestExcelSource_GetTableInfo(t *testing.T) {
 // TestExcelSource_Query 测试查询数据
 func TestExcelSource_Query(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -307,7 +307,7 @@ func TestExcelSource_Query(t *testing.T) {
 // TestExcelSource_Insert 测试插入数据
 func TestExcelSource_Insert(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -332,7 +332,7 @@ func TestExcelSource_Insert(t *testing.T) {
 // TestExcelSource_Update 测试更新数据
 func TestExcelSource_Update(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -359,7 +359,7 @@ func TestExcelSource_Update(t *testing.T) {
 // TestExcelSource_Delete 测试删除数据
 func TestExcelSource_Delete(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -385,7 +385,7 @@ func TestExcelSource_Delete(t *testing.T) {
 // TestExcelSource_CreateTable 测试创建表
 func TestExcelSource_CreateTable(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -417,7 +417,7 @@ func TestExcelSource_CreateTable(t *testing.T) {
 // TestExcelSource_DropTable 测试删除表
 func TestExcelSource_DropTable(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -441,7 +441,7 @@ func TestExcelSource_DropTable(t *testing.T) {
 // TestExcelSource_TruncateTable 测试清空表
 func TestExcelSource_TruncateTable(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	// 使用writable配置
 	config := &domain.DataSourceConfig{
@@ -486,7 +486,7 @@ func TestExcelSource_TruncateTable(t *testing.T) {
 // TestExcelSource_Execute 测试执行SQL
 func TestExcelSource_Execute(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -568,7 +568,7 @@ func TestExcelFactory(t *testing.T) {
 // TestExcelAdapter_Close 测试关闭
 func TestExcelAdapter_Close(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,

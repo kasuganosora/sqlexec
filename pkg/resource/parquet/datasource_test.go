@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/stretchr/testify/require"
 )
 
 // TestNewParquetAdapter tests creating a Parquet datasource.
@@ -79,7 +80,7 @@ func TestParquetSource_ReadOnly_Operations(t *testing.T) {
 	if err := ps.Connect(ctx); err != nil {
 		t.Fatalf("Connect() error = %v", err)
 	}
-	defer ps.Close(ctx)
+	defer func() { require.NoError(t, ps.Close(ctx)) }()
 
 	// Insert should fail
 	_, err := ps.Insert(ctx, "test", []domain.Row{{"id": int64(1)}}, nil)

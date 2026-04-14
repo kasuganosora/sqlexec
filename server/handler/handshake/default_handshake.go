@@ -3,6 +3,7 @@ package handshake
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"net"
 
 	"github.com/kasuganosora/sqlexec/pkg/api"
@@ -35,7 +36,9 @@ func (h *DefaultHandshakeHandler) Handle(conn net.Conn, sess *pkg_session.Sessio
 	handshakePacket.ThreadID = sess.ThreadID
 	// Generate random 20-byte scramble for mysql_native_password
 	scramble := make([]byte, 20)
-	rand.Read(scramble)
+	if _, err := rand.Read(scramble); err != nil {
+		return fmt.Errorf("failed to generate random scramble: %w", err)
+	}
 	// Scramble bytes must not be 0x00 (NUL) to avoid truncation in NUL-terminated contexts
 	for i := range scramble {
 		if scramble[i] == 0 {
@@ -97,7 +100,9 @@ func (h *DefaultHandshakeHandler) Handle(conn net.Conn, sess *pkg_session.Sessio
 
 	if handshakeResponse.Database != "" {
 		// 简化实现，不调用 SetCurrentDB
-		sess.Set("current_database", handshakeResponse.Database)
+		if err := sess.Set("current_database", handshakeResponse.Database); err != nil {
+			return fmt.Errorf("failed to set current database in session: %w", err)
+		}
 	}
 
 	// MySQL握手阶段序列号是连续的：

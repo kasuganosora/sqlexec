@@ -169,8 +169,6 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownAcrossJoin(selection *Logical
 	// 分类条件
 	leftPushable := make([]*parser.Expression, 0)
 	rightPushable := make([]*parser.Expression, 0)
-	bothPushable := make([]*parser.Expression, 0)
-	remaining := make([]*parser.Expression, 0)
 
 	for _, cond := range conditions {
 		// 确定条件引用的表
@@ -184,10 +182,6 @@ func (r *EnhancedPredicatePushdownRule) tryPushDownAcrossJoin(selection *Logical
 			leftPushable = append(leftPushable, cond)
 		case PushRight:
 			rightPushable = append(rightPushable, cond)
-		case PushBoth:
-			bothPushable = append(bothPushable, cond)
-		default:
-			remaining = append(remaining, cond)
 		}
 	}
 

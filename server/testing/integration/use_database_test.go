@@ -57,7 +57,7 @@ func TestE2E_UseDatabaseAfterConnection(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SHOW TABLES failed: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		tableCount := 0
 		for rows.Next() {

@@ -42,13 +42,6 @@ type OptimizedExecutor struct {
 	sessionVars   map[string]string                // 会话级系统变量覆盖
 }
 
-// contextKey 是context中的key类型
-type contextKey int
-
-const (
-	aclManagerKey contextKey = iota
-)
-
 // NewOptimizedExecutor 创建优化的执行器
 func NewOptimizedExecutor(dataSource domain.DataSource, useOptimizer bool) *OptimizedExecutor {
 	return newOptimizedExecutor(dataSource, nil, useOptimizer, "")
@@ -66,7 +59,7 @@ func newOptimizedExecutor(dataSource domain.DataSource, dsManager *application.D
 	registry := builtin.GetGlobalRegistry()
 	// 注册所有旧的全局函数到新的API
 	for _, info := range registry.List() {
-		functionAPI.RegisterScalarFunction(
+		_ = functionAPI.RegisterScalarFunction(
 			info.Name,
 			info.Name,
 			info.Description,
@@ -236,7 +229,7 @@ func (e *OptimizedExecutor) executeVirtualDBDelete(ctx context.Context, stmt *pa
 func (e *OptimizedExecutor) ExecuteSelect(ctx context.Context, stmt *parser.SelectStatement) (*domain.QueryResult, error) {
 	// 将用户信息传递到 context（用于权限检查）
 	if e.currentUser != "" {
-		ctx = context.WithValue(ctx, "user", e.currentUser)
+		ctx = context.WithValue(ctx, parser.UserContextKey, e.currentUser)
 	}
 
 	// Check if this is an information_schema query
@@ -265,7 +258,7 @@ func (e *OptimizedExecutor) ExecuteSelect(ctx context.Context, stmt *parser.Sele
 func (e *OptimizedExecutor) ExecuteShow(ctx context.Context, showStmt *parser.ShowStatement) (*domain.QueryResult, error) {
 	// 将用户信息传递到 context（用于权限检查）
 	if e.currentUser != "" {
-		ctx = context.WithValue(ctx, "user", e.currentUser)
+		ctx = context.WithValue(ctx, parser.UserContextKey, e.currentUser)
 	}
 
 	showExecutor := NewShowExecutor(e.currentDB, e.dsManager, e.executeWithBuilder)

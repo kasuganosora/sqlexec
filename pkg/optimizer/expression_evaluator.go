@@ -43,6 +43,7 @@ func (e *ExpressionEvaluator) Evaluate(expr interface{}, ctx executor.Expression
 	if ctx != nil {
 		// 从 context 获取值 - 这里简化处理
 		// 实际实现可能需要遍历所有可能的列名
+		_ = ctx // placeholder for future implementation
 	}
 
 	return e.evaluateInternal(parserExpr, row)
@@ -88,10 +89,7 @@ func (e *ExpressionEvaluator) EvaluateBoolean(expr interface{}, ctx executor.Exp
 
 	// 将 ExpressionContext 转换为 parser.Row
 	row := make(parser.Row)
-	if ctx != nil {
-		// 尝试从 context 获取值
-		// 这里简化处理，实际可能需要更多逻辑
-	}
+	// TODO: extract values from context when ExpressionContext provides richer data
 
 	result, err := e.evaluateInternal(parserExpr, row)
 	if err != nil {
@@ -370,23 +368,6 @@ func (e *ExpressionEvaluator) convertToExpectedType(value any, params []builtin.
 		return utils.ToString(value), nil
 	default:
 		return value, nil // 未知类型，返回原值
-	}
-}
-
-// exists 检查值是否存在（替代 ! 运算符）
-func (e *ExpressionEvaluator) exists(v any) bool {
-	if v == nil {
-		return false
-	}
-	switch v.(type) {
-	case string:
-		return len(v.(string)) > 0
-	case []any:
-		return len(v.([]any)) > 0
-	case map[string]any:
-		return len(v.(map[string]any)) > 0
-	default:
-		return true
 	}
 }
 

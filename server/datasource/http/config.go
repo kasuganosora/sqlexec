@@ -87,9 +87,7 @@ func ParseHTTPConfig(dsCfg *domain.DataSourceConfig) (*HTTPConfig, error) {
 	}
 
 	// 如果 basic auth，使用顶层 username/password
-	if cfg.AuthType == "basic" && dsCfg.Username != "" {
-		// basic auth 凭证从顶层取
-	}
+	// basic auth credentials are handled via applyDefaults
 
 	// 设置默认值
 	cfg.applyDefaults(dsCfg)

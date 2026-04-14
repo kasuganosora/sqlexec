@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewACLManager(t *testing.T) {
@@ -855,9 +857,9 @@ func TestGetUsers(t *testing.T) {
 	}
 
 	// Create some users
-	am.CreateUser("%", "user1", "")
-	am.CreateUser("localhost", "user2", "")
-	am.CreateUser("192.168.1.1", "user3", "")
+	require.NoError(t, am.CreateUser("%", "user1", ""))
+	require.NoError(t, am.CreateUser("localhost", "user2", ""))
+	require.NoError(t, am.CreateUser("192.168.1.1", "user3", ""))
 
 	// Get users
 	users = am.GetUsers()

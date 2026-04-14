@@ -206,11 +206,11 @@ func TestLoadPersistedTables(t *testing.T) {
 	cfg1 := &TablePersistConfig{BasePath: tmpDir, TableName: "users", RootTag: "User", StorageMode: StorageModeFilePerRow}
 	cfg2 := &TablePersistConfig{BasePath: tmpDir, TableName: "logs", RootTag: "Log", StorageMode: StorageModeSingleFile}
 
-	PersistTableSchema(cfg1, &domain.TableInfo{Name: "users", Columns: []domain.ColumnInfo{{Name: "id", Type: "INT", Primary: true}}})
-	PersistTableSchema(cfg2, &domain.TableInfo{Name: "logs", Columns: []domain.ColumnInfo{{Name: "id", Type: "INT", Primary: true}}})
+	require.NoError(t, PersistTableSchema(cfg1, &domain.TableInfo{Name: "users", Columns: []domain.ColumnInfo{{Name: "id", Type: "INT", Primary: true}}}))
+	require.NoError(t, PersistTableSchema(cfg2, &domain.TableInfo{Name: "logs", Columns: []domain.ColumnInfo{{Name: "id", Type: "INT", Primary: true}}}))
 
 	// Create a directory without schema (should be skipped)
-	os.MkdirAll(filepath.Join(tmpDir, "no_schema"), 0755)
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "no_schema"), 0755))
 
 	configs, err := LoadPersistedTables(tmpDir)
 	require.NoError(t, err)
@@ -257,9 +257,9 @@ func TestLoadTableFromDisk(t *testing.T) {
 		{Name: "idx_name", Table: "users", Type: "btree", Unique: false, Columns: []string{"name"}},
 	}
 
-	PersistTableSchema(cfg, tableInfo)
-	PersistTableData(cfg, tableInfo, rows)
-	PersistIndexMeta(cfg, indexes)
+	require.NoError(t, PersistTableSchema(cfg, tableInfo))
+	require.NoError(t, PersistTableData(cfg, tableInfo, rows))
+	require.NoError(t, PersistIndexMeta(cfg, indexes))
 
 	// Load everything back
 	loadedInfo, loadedRows, loadedIndexes, err := LoadTableFromDisk(cfg)
@@ -289,19 +289,19 @@ func TestPersistTableData_Overwrite(t *testing.T) {
 	}
 
 	// Write initial data (3 rows)
-	PersistTableSchema(cfg, tableInfo)
-	PersistTableData(cfg, tableInfo, []domain.Row{
+	require.NoError(t, PersistTableSchema(cfg, tableInfo))
+	require.NoError(t, PersistTableData(cfg, tableInfo, []domain.Row{
 		{"id": int64(1), "name": "Alice"},
 		{"id": int64(2), "name": "Bob"},
 		{"id": int64(3), "name": "Charlie"},
-	})
+	}))
 	assert.FileExists(t, filepath.Join(tmpDir, "users", "3.xml"))
 
 	// Overwrite with fewer rows (2 rows) - old file 3.xml should be cleaned
-	PersistTableData(cfg, tableInfo, []domain.Row{
+	require.NoError(t, PersistTableData(cfg, tableInfo, []domain.Row{
 		{"id": int64(1), "name": "Alice Updated"},
 		{"id": int64(2), "name": "Bob Updated"},
-	})
+	}))
 
 	// 3.xml should be gone
 	assert.NoFileExists(t, filepath.Join(tmpDir, "users", "3.xml"))
@@ -326,7 +326,7 @@ func TestPersistTableData_EmptyRows(t *testing.T) {
 		Columns: []domain.ColumnInfo{{Name: "id", Type: "INT", Primary: true}},
 	}
 
-	PersistTableSchema(cfg, tableInfo)
+	require.NoError(t, PersistTableSchema(cfg, tableInfo))
 	err := PersistTableData(cfg, tableInfo, nil)
 	require.NoError(t, err)
 }
@@ -364,8 +364,8 @@ func TestDeleteTableDir(t *testing.T) {
 	}
 
 	// Create the directory
-	os.MkdirAll(cfg.TableDir(), 0755)
-	os.WriteFile(filepath.Join(cfg.TableDir(), "test.xml"), []byte("<test/>"), 0644)
+	require.NoError(t, os.MkdirAll(cfg.TableDir(), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(cfg.TableDir(), "test.xml"), []byte("<test/>"), 0644))
 	assert.DirExists(t, cfg.TableDir())
 
 	err := DeleteTableDir(cfg)
@@ -414,7 +414,7 @@ func TestXMLSpecialCharsInData(t *testing.T) {
 		{"id": int64(1), "data": `hello "world" & <test>`},
 	}
 
-	PersistTableSchema(cfg, tableInfo)
+	require.NoError(t, PersistTableSchema(cfg, tableInfo))
 	err := PersistTableData(cfg, tableInfo, rows)
 	require.NoError(t, err)
 
@@ -532,7 +532,7 @@ func TestLoadIndexMeta_NoFile(t *testing.T) {
 func TestLoadIndexMeta_InvalidXML(t *testing.T) {
 	tmpDir := t.TempDir()
 	metaPath := filepath.Join(tmpDir, "__meta__.xml")
-	os.WriteFile(metaPath, []byte("not valid xml <><><>"), 0644)
+	require.NoError(t, os.WriteFile(metaPath, []byte("not valid xml <><><>"), 0644))
 
 	loaded, err := loadIndexMeta(metaPath)
 	assert.Error(t, err)
@@ -1063,7 +1063,7 @@ func BenchmarkPersistTableSchema(b *testing.B) {
 			RootTag:     "Row",
 			StorageMode: StorageModeFilePerRow,
 		}
-		PersistTableSchema(cfg, tableInfo)
+		_ = PersistTableSchema(cfg, tableInfo)
 	}
 }
 
@@ -1123,8 +1123,8 @@ func benchPersistData(b *testing.B, mode StorageMode, numRows int) {
 			RootTag:     "Row",
 			StorageMode: mode,
 		}
-		os.MkdirAll(cfg.TableDir(), 0755)
-		PersistTableData(cfg, tableInfo, rows)
+		_ = os.MkdirAll(cfg.TableDir(), 0755)
+		_ = PersistTableData(cfg, tableInfo, rows)
 	}
 }
 
@@ -1174,18 +1174,18 @@ func benchLoadTable(b *testing.B, mode StorageMode, numRows int) {
 		RootTag:     "Row",
 		StorageMode: mode,
 	}
-	PersistTableSchema(cfg, tableInfo)
-	PersistTableData(cfg, tableInfo, rows)
+	_ = PersistTableSchema(cfg, tableInfo)
+	_ = PersistTableData(cfg, tableInfo, rows)
 
 	indexes := []*IndexMeta{
 		{Name: "idx_name", Table: "bench", Type: "btree", Unique: false, Columns: []string{"name"}},
 		{Name: "idx_email", Table: "bench", Type: "btree", Unique: true, Columns: []string{"email"}},
 	}
-	PersistIndexMeta(cfg, indexes)
+	_ = PersistIndexMeta(cfg, indexes)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		LoadTableFromDisk(cfg)
+		_, _, _, _ = LoadTableFromDisk(cfg)
 	}
 }
 
@@ -1209,8 +1209,8 @@ func BenchmarkPersistIndexMeta(b *testing.B) {
 			BasePath:  tmpDir,
 			TableName: fmt.Sprintf("bench_%d", i),
 		}
-		os.MkdirAll(cfg.TableDir(), 0755)
-		PersistIndexMeta(cfg, indexes)
+		_ = os.MkdirAll(cfg.TableDir(), 0755)
+		_ = PersistIndexMeta(cfg, indexes)
 	}
 }
 
@@ -1270,7 +1270,7 @@ func BenchmarkParseRowXMLFast(b *testing.B) {
 	data := []byte(`<Row id="42" name="Alice" email="alice@example.com" age="30" />`)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		parseRowXMLFast(data, colTypes)
+		_, _ = parseRowXMLFast(data, colTypes)
 	}
 }
 
@@ -1282,7 +1282,7 @@ func BenchmarkParseRowXMLFast_SpecialChars(b *testing.B) {
 	data := []byte(`<Row id="1" data="hello &amp; &lt;world&gt; &quot;test&quot;" />`)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		parseRowXMLFast(data, colTypes)
+		_, _ = parseRowXMLFast(data, colTypes)
 	}
 }
 
@@ -1555,7 +1555,7 @@ func BenchmarkLoadBatched_FilePerRow_1000Rows(b *testing.B) {
 		RootTag:     "Row",
 		StorageMode: StorageModeFilePerRow,
 	}
-	PersistTableSchema(cfg, tableInfo)
+	_ = PersistTableSchema(cfg, tableInfo)
 
 	rows := make([]domain.Row, 1000)
 	for i := range rows {
@@ -1564,11 +1564,11 @@ func BenchmarkLoadBatched_FilePerRow_1000Rows(b *testing.B) {
 			"value": 3.14, "active": true,
 		}
 	}
-	PersistTableData(cfg, tableInfo, rows)
+	_ = PersistTableData(cfg, tableInfo, rows)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		LoadTableFromDiskBatched(cfg, 4096, func(batch []domain.Row) {})
+		_, _, _ = LoadTableFromDiskBatched(cfg, 4096, func(batch []domain.Row) {})
 	}
 }
 
@@ -1589,7 +1589,7 @@ func BenchmarkLoadBatched_SingleFile_1000Rows(b *testing.B) {
 		RootTag:     "Row",
 		StorageMode: StorageModeSingleFile,
 	}
-	PersistTableSchema(cfg, tableInfo)
+	_ = PersistTableSchema(cfg, tableInfo)
 
 	rows := make([]domain.Row, 1000)
 	for i := range rows {
@@ -1598,10 +1598,10 @@ func BenchmarkLoadBatched_SingleFile_1000Rows(b *testing.B) {
 			"value": 3.14, "active": true,
 		}
 	}
-	PersistTableData(cfg, tableInfo, rows)
+	_ = PersistTableData(cfg, tableInfo, rows)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		LoadTableFromDiskBatched(cfg, 4096, func(batch []domain.Row) {})
+		_, _, _ = LoadTableFromDiskBatched(cfg, 4096, func(batch []domain.Row) {})
 	}
 }

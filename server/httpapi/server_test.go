@@ -51,7 +51,7 @@ func setupTestEnv(t *testing.T) *testEnv {
 		Name:     "default",
 		Writable: true,
 	})
-	require.NoError(t, ds.Connect(nil))
+	require.NoError(t, ds.Connect(context.TODO()))
 	require.NoError(t, db.RegisterDataSource("default", ds))
 
 	// Create a test API client
@@ -105,7 +105,7 @@ func TestHealthEndpoint(t *testing.T) {
 
 	resp, err := http.Get(server.URL + "/api/v1/health")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -129,7 +129,7 @@ func TestQueryEndpoint_NoAuth(t *testing.T) {
 	body := `{"sql":"SELECT 1"}`
 	resp, err := http.Post(server.URL+"/api/v1/query", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
@@ -156,7 +156,7 @@ func TestQueryEndpoint_InvalidSignature(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
@@ -172,7 +172,7 @@ func TestQueryEndpoint_ValidQuery(t *testing.T) {
 	require.NoError(t, err)
 	_, err = session.Execute("INSERT INTO test_users (id, name) VALUES (2, 'Bob')")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	queryHandler := NewQueryHandler(env.db, env.configDir, env.auditLogger)
 	clientStore := NewClientStore(env.configDir)
@@ -196,7 +196,7 @@ func TestQueryEndpoint_ValidQuery(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -213,7 +213,7 @@ func TestQueryEndpoint_ExecuteDML(t *testing.T) {
 	session := env.db.Session()
 	_, err := session.Execute("CREATE TABLE dml_test (id INT, value VARCHAR(100))")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	queryHandler := NewQueryHandler(env.db, env.configDir, env.auditLogger)
 	clientStore := NewClientStore(env.configDir)
@@ -238,7 +238,7 @@ func TestQueryEndpoint_ExecuteDML(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -272,7 +272,7 @@ func TestQueryEndpoint_EmptySQL(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
@@ -292,7 +292,7 @@ func TestCORSMiddleware(t *testing.T) {
 	require.NoError(t, err)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
@@ -378,7 +378,7 @@ func TestAuditLogging(t *testing.T) {
 	session := env.db.Session()
 	_, err := session.Execute("CREATE TABLE audit_test (id INT)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	queryHandler := NewQueryHandler(env.db, env.configDir, env.auditLogger)
 	clientStore := NewClientStore(env.configDir)
@@ -402,7 +402,7 @@ func TestAuditLogging(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	resp.Body.Close()
+	require.NoError(t, resp.Body.Close())
 
 	// Check audit log
 	events := env.auditLogger.GetEventsByType(security.EventTypeAPIRequest)
@@ -426,7 +426,7 @@ func TestRecoveryMiddleware(t *testing.T) {
 
 	resp, err := http.Get(server.URL + "/test")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
@@ -461,7 +461,7 @@ func TestQueryEndpoint_MethodNotAllowed(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 
@@ -495,7 +495,7 @@ func TestQueryEndpoint_InvalidJSON(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
@@ -524,7 +524,7 @@ func TestQueryEndpoint_MissingSignatureHeaders(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 
@@ -559,7 +559,7 @@ func TestQueryEndpoint_QueryError(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
@@ -590,7 +590,7 @@ func TestQueryEndpoint_DMLError(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
@@ -602,7 +602,7 @@ func TestQueryEndpoint_WithDatabase(t *testing.T) {
 	session := env.db.Session()
 	_, err := session.Execute("CREATE TABLE db_test (id INT)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	queryHandler := NewQueryHandler(env.db, env.configDir, env.auditLogger)
 	clientStore := NewClientStore(env.configDir)
@@ -626,7 +626,7 @@ func TestQueryEndpoint_WithDatabase(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
@@ -746,7 +746,8 @@ func TestServer_ShutdownNil(t *testing.T) {
 func TestLoggingMiddleware(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("ok"))
+		_, err := w.Write([]byte("ok"))
+		require.NoError(t, err)
 	})
 
 	handler := LoggingMiddleware(inner)
@@ -755,7 +756,7 @@ func TestLoggingMiddleware(t *testing.T) {
 
 	resp, err := http.Get(server.URL + "/test")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 }
 
@@ -777,7 +778,7 @@ func TestLoggingMiddleware_WithClient(t *testing.T) {
 
 	resp, err := http.Get(server.URL + "/test")
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -839,7 +840,7 @@ func TestQueryEndpoint_ShowDatabases(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -878,7 +879,7 @@ func TestQueryEndpoint_ErrorMessageSanitized(t *testing.T) {
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		var errResp ErrorResponse
@@ -901,7 +902,7 @@ func TestQueryEndpoint_ErrorMessageSanitized(t *testing.T) {
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		var errResp ErrorResponse
@@ -919,7 +920,7 @@ func TestQueryResponse_TruncatedField(t *testing.T) {
 	require.NoError(t, err)
 	_, err = session.Execute("INSERT INTO truncate_test (id) VALUES (1)")
 	require.NoError(t, err)
-	session.Close()
+	require.NoError(t, session.Close())
 
 	queryHandler := NewQueryHandler(env.db, env.configDir, env.auditLogger)
 	clientStore := NewClientStore(env.configDir)
@@ -943,7 +944,7 @@ func TestQueryResponse_TruncatedField(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 

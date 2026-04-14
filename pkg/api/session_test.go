@@ -5,6 +5,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSessionOptions(t *testing.T) {
@@ -74,7 +75,7 @@ func TestSession_Query_CacheHit(t *testing.T) {
 	// First query should execute and cache
 	query1, err := session.Query("SELECT * FROM users")
 	if err == nil && query1 != nil {
-		query1.Close()
+		require.NoError(t, query1.Close())
 	}
 
 	// Note: Cache hit testing is limited by mock implementation
@@ -157,7 +158,7 @@ func TestSession_QueryAll_Success(t *testing.T) {
 				return nil
 			})
 			_ = err
-			query.Close()
+			require.NoError(t, query.Close())
 		}
 	})
 
@@ -190,7 +191,7 @@ func TestSession_QueryAll_Success(t *testing.T) {
 		}
 
 		assert.Equal(t, 3, len(rows))
-		query.Close()
+		require.NoError(t, query.Close())
 	})
 
 	// QueryAll with query.Err after iteration
@@ -214,17 +215,16 @@ func TestSession_QueryAll_Success(t *testing.T) {
 		query := NewQuery(session, mockResult, "SELECT * FROM users", nil)
 		query.err = NewError(ErrCodeInternal, "query error", nil)
 
-		// Simulate QueryAll logic with error
-		rows := []domain.Row{}
-		for query.Next() {
-			rows = append(rows, query.Row())
-		}
+			// Simulate QueryAll logic with error
+			for query.Next() {
+			_ = query.Row()
+			}
 
 		// This tests to path where query.Err() returns error
 		if query.Err() != nil {
 			assert.Error(t, query.Err())
 		}
-		query.Close()
+		require.NoError(t, query.Close())
 	})
 }
 
@@ -281,7 +281,7 @@ func TestSession_QueryOne_Success(t *testing.T) {
 		}
 
 		query := NewQuery(session, mockResult, "SELECT * FROM users", nil)
-		defer query.Close()
+		defer func() { _ = query.Close() }()
 
 		// This tests the code path where query.Next() returns true
 		// and QueryOne should return the first row
@@ -310,7 +310,7 @@ func TestSession_QueryOne_Success(t *testing.T) {
 		}
 
 		query := NewQuery(session, mockResult, "SELECT * FROM users", nil)
-		defer query.Close()
+		defer func() { _ = query.Close() }()
 
 		// This tests the code path where query.Next() returns false
 		// and QueryOne should return "no rows found" error
@@ -354,7 +354,7 @@ func TestSession_Begin_NestedTransaction(t *testing.T) {
 	tx1, err := session.Begin()
 	assert.NoError(t, err)
 	assert.NotNil(t, tx1)
-	defer tx1.Rollback()
+	defer func() { _ = tx1.Rollback() }()
 
 	// Try to begin nested transaction - should fail
 	tx2, err := session.Begin()
@@ -459,10 +459,10 @@ func TestSession_Begin(t *testing.T) {
 func TestSession_InTransaction(t *testing.T) {
 	db, _ := NewDB(nil)
 	ds := newMockDataSource()
-	db.RegisterDataSource("test", ds)
+	require.NoError(t, db.RegisterDataSource("test", ds))
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// By default, should not be in transaction
 	assert.False(t, session.InTransaction())
@@ -789,7 +789,7 @@ func TestSession_QueryAll_MultipleRows(t *testing.T) {
 	}
 
 	assert.Equal(t, 3, len(rows))
-	query.Close()
+	require.NoError(t, query.Close())
 }
 
 func TestSession_QueryOne_WithRows(t *testing.T) {
@@ -821,5 +821,5 @@ func TestSession_QueryOne_WithRows(t *testing.T) {
 		assert.Equal(t, "Alice", row["name"])
 	}
 
-	query.Close()
+	require.NoError(t, query.Close())
 }

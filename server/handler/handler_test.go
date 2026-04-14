@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
 
@@ -224,10 +225,8 @@ func TestNewHandlerError(t *testing.T) {
 }
 
 func TestHandlerError_ImplementsError(t *testing.T) {
-	var err error = NewHandlerError("test")
-	if err == nil {
-		t.Fatal("HandlerError should implement error interface")
-	}
+	// Compile-time check that HandlerError implements error
+	var _ error = (*HandlerError)(nil)
 }
 
 // === HandlerRegistry Tests ===
@@ -286,7 +285,7 @@ func TestHandlerRegistry_Register_Duplicate(t *testing.T) {
 	h1 := &mockHandler{cmd: 0x01, name: "first"}
 	h2 := &mockHandler{cmd: 0x01, name: "second"}
 
-	reg.Register(h1)
+	require.NoError(t, reg.Register(h1))
 	err := reg.Register(h2)
 	if err == nil {
 		t.Fatal("Register duplicate should return error")
@@ -296,7 +295,7 @@ func TestHandlerRegistry_Register_Duplicate(t *testing.T) {
 func TestHandlerRegistry_Get(t *testing.T) {
 	reg := NewHandlerRegistry(nil)
 	h := &mockHandler{cmd: 0x03, name: "query"}
-	reg.Register(h)
+	require.NoError(t, reg.Register(h))
 
 	got, ok := reg.Get(0x03)
 	if !ok {
@@ -322,7 +321,7 @@ func TestHandlerRegistry_Handle(t *testing.T) {
 		called = true
 		return nil
 	}}
-	reg.Register(h)
+	require.NoError(t, reg.Register(h))
 
 	ctx, _, _ := newTestContext()
 	err := reg.Handle(ctx, 0x01, nil)
@@ -347,9 +346,9 @@ func TestHandlerRegistry_Handle_NotRegistered(t *testing.T) {
 
 func TestHandlerRegistry_List(t *testing.T) {
 	reg := NewHandlerRegistry(nil)
-	reg.Register(&mockHandler{cmd: 0x01, name: "h1"})
-	reg.Register(&mockHandler{cmd: 0x02, name: "h2"})
-	reg.Register(&mockHandler{cmd: 0x03, name: "h3"})
+	require.NoError(t, reg.Register(&mockHandler{cmd: 0x01, name: "h1"}))
+	require.NoError(t, reg.Register(&mockHandler{cmd: 0x02, name: "h2"}))
+	require.NoError(t, reg.Register(&mockHandler{cmd: 0x03, name: "h3"}))
 
 	list := reg.List()
 	if len(list) != 3 {
@@ -407,7 +406,7 @@ func TestPacketParserRegistry_Register_Duplicate(t *testing.T) {
 	p1 := &mockParser{cmd: 0x03, name: "first"}
 	p2 := &mockParser{cmd: 0x03, name: "second"}
 
-	reg.Register(p1)
+	require.NoError(t, reg.Register(p1))
 	err := reg.Register(p2)
 	if err == nil {
 		t.Fatal("Register duplicate should return error")
@@ -417,7 +416,7 @@ func TestPacketParserRegistry_Register_Duplicate(t *testing.T) {
 func TestPacketParserRegistry_Get(t *testing.T) {
 	reg := NewPacketParserRegistry(nil)
 	p := &mockParser{cmd: 0x03, name: "query"}
-	reg.Register(p)
+	require.NoError(t, reg.Register(p))
 
 	got, ok := reg.Get(0x03)
 	if !ok {
@@ -439,7 +438,7 @@ func TestPacketParserRegistry_Get_NotFound(t *testing.T) {
 func TestPacketParserRegistry_Parse(t *testing.T) {
 	reg := NewPacketParserRegistry(nil)
 	p := &mockParser{cmd: 0x03, name: "query"}
-	reg.Register(p)
+	require.NoError(t, reg.Register(p))
 
 	result, err := reg.Parse(0x03, &protocol.Packet{})
 	if err != nil {
@@ -462,8 +461,8 @@ func TestPacketParserRegistry_Parse_NotRegistered(t *testing.T) {
 
 func TestPacketParserRegistry_List(t *testing.T) {
 	reg := NewPacketParserRegistry(nil)
-	reg.Register(&mockParser{cmd: 0x01, name: "p1"})
-	reg.Register(&mockParser{cmd: 0x02, name: "p2"})
+	require.NoError(t, reg.Register(&mockParser{cmd: 0x01, name: "p1"}))
+	require.NoError(t, reg.Register(&mockParser{cmd: 0x02, name: "p2"}))
 
 	list := reg.List()
 	if len(list) != 2 {
@@ -482,7 +481,7 @@ func TestHandlerRegistry_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			reg.Register(&mockHandler{cmd: uint8(i), name: fmt.Sprintf("h%d", i)})
+			require.NoError(t, reg.Register(&mockHandler{cmd: uint8(i), name: fmt.Sprintf("h%d", i)}))
 		}(i)
 	}
 	wg.Wait()

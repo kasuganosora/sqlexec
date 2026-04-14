@@ -1,0 +1,3 @@
+level=error msg="[formatter] gci: command \"go env -json GOMOD\": exec: \"go\": executable file not found in $PATH: "
+level=warning msg="Failed to discover go env: command \"go env -json GOCACHE GOROOT\": exec: \"go\": executable file not found in $PATH: "
+level=error msg="Running error: context loading failed: failed to load packages: failed to load packages: failed to load with go/packages: err: go command required, not found: exec: \"go\": executable file not found in $PATH: stderr: "

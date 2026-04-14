@@ -82,11 +82,11 @@ func (ctx *HandlerContext) SetDB(db DBAccessor) {
 func (ctx *HandlerContext) SendOKWithSequenceID(seqID uint8) error {
 	okPacket := &protocol.OkPacket{}
 	okPacket.SequenceID = seqID
-	okPacket.OkInPacket.Header = 0x00
-	okPacket.OkInPacket.AffectedRows = 0
-	okPacket.OkInPacket.LastInsertId = 0
-	okPacket.OkInPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
-	okPacket.OkInPacket.Warnings = 0
+	okPacket.Header = 0x00
+	okPacket.AffectedRows = 0
+	okPacket.LastInsertId = 0
+	okPacket.StatusFlags = protocol.SERVER_STATUS_AUTOCOMMIT
+	okPacket.Warnings = 0
 
 	packetBytes, err := okPacket.Marshal()
 	if err != nil {

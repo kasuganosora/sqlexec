@@ -11,10 +11,6 @@ import (
 func TestNewDataSourceManager(t *testing.T) {
 	manager := NewDataSourceManager()
 
-	if manager == nil {
-		t.Errorf("NewDataSourceManager() returned nil")
-	}
-
 	if manager.sources == nil {
 		t.Errorf("Expected sources map to be initialized")
 	}
@@ -28,10 +24,6 @@ func TestNewDataSourceManager(t *testing.T) {
 func TestNewDataSourceManagerWithRegistry(t *testing.T) {
 	registry := NewRegistry()
 	manager := NewDataSourceManagerWithRegistry(registry)
-
-	if manager == nil {
-		t.Errorf("NewDataSourceManagerWithRegistry() returned nil")
-	}
 
 	if manager.registry != registry {
 		t.Errorf("Expected manager to use provided registry")

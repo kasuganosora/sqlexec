@@ -9,6 +9,7 @@ import (
 	"github.com/kasuganosora/sqlexec/server/protocol"
 	"github.com/kasuganosora/sqlexec/server/testing/mock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestPacketParserRegistry_Register 测试解析器注册功能
@@ -32,11 +33,13 @@ func TestPacketParserRegistry_Register(t *testing.T) {
 	})
 
 	t.Run("duplicate registration", func(t *testing.T) {
+		dupRegistry := handler.NewPacketParserRegistry(logger)
+
 		parser1 := packet_parsers.NewPingPacketParser()
 		parser2 := packet_parsers.NewPingPacketParser()
 
-		registry.Register(parser1)
-		err := registry.Register(parser2)
+		require.NoError(t, dupRegistry.Register(parser1))
+		err := dupRegistry.Register(parser2)
 
 		assert.Error(t, err, "Duplicate registration should return error")
 		assert.Contains(t, err.Error(), "already registered")
@@ -68,7 +71,7 @@ func TestPacketParserRegistry_Get(t *testing.T) {
 
 	t.Run("get registered parser", func(t *testing.T) {
 		parser := packet_parsers.NewPingPacketParser()
-		registry.Register(parser)
+		require.NoError(t, registry.Register(parser))
 
 		retrieved, exists := registry.Get(protocol.COM_PING)
 
@@ -91,9 +94,9 @@ func TestPacketParserRegistry_Parse(t *testing.T) {
 	registry := handler.NewPacketParserRegistry(logger)
 
 	// 注册所有解析器
-	registry.Register(packet_parsers.NewPingPacketParser())
-	registry.Register(packet_parsers.NewQuitPacketParser())
-	registry.Register(packet_parsers.NewQueryPacketParser())
+	require.NoError(t, registry.Register(packet_parsers.NewPingPacketParser()))
+	require.NoError(t, registry.Register(packet_parsers.NewQuitPacketParser()))
+	require.NoError(t, registry.Register(packet_parsers.NewQueryPacketParser()))
 
 	t.Run("parse COM_PING", func(t *testing.T) {
 		packet := &protocol.Packet{}
@@ -148,7 +151,7 @@ func TestPacketParserRegistry_Concurrency(t *testing.T) {
 	}
 
 	for _, p := range parsers {
-		registry.Register(p)
+		require.NoError(t, registry.Register(p))
 	}
 
 	t.Run("concurrent reads", func(t *testing.T) {
@@ -161,7 +164,8 @@ func TestPacketParserRegistry_Concurrency(t *testing.T) {
 				defer wg.Done()
 				for j := 0; j < iterations; j++ {
 					packet := &protocol.Packet{}
-					registry.Parse(protocol.COM_PING, packet)
+					_, err := registry.Parse(protocol.COM_PING, packet)
+					require.NoError(t, err)
 				}
 			}()
 		}
@@ -171,6 +175,7 @@ func TestPacketParserRegistry_Concurrency(t *testing.T) {
 	})
 
 	t.Run("concurrent writes", func(t *testing.T) {
+		writeRegistry := handler.NewPacketParserRegistry(logger)
 		var wg sync.WaitGroup
 
 		for i := 0; i < 5; i++ {
@@ -179,7 +184,7 @@ func TestPacketParserRegistry_Concurrency(t *testing.T) {
 				defer wg.Done()
 				// 尝试注册新的解析器（会失败但不会panic）
 				parser := packet_parsers.NewPingPacketParser()
-				registry.Register(parser)
+				writeRegistry.Register(parser) // nolint: errcheck
 			}()
 		}
 
@@ -199,9 +204,9 @@ func TestPacketParserRegistry_List(t *testing.T) {
 	})
 
 	t.Run("list registered parsers", func(t *testing.T) {
-		registry.Register(packet_parsers.NewPingPacketParser())
-		registry.Register(packet_parsers.NewQuitPacketParser())
-		registry.Register(packet_parsers.NewQueryPacketParser())
+		require.NoError(t, registry.Register(packet_parsers.NewPingPacketParser()))
+		require.NoError(t, registry.Register(packet_parsers.NewQuitPacketParser()))
+		require.NoError(t, registry.Register(packet_parsers.NewQueryPacketParser()))
 
 		list := registry.List()
 
@@ -216,9 +221,9 @@ func TestPacketParserRegistry_Count(t *testing.T) {
 
 	assert.Equal(t, 0, registry.Count(), "New registry should have count 0")
 
-	registry.Register(packet_parsers.NewPingPacketParser())
+	require.NoError(t, registry.Register(packet_parsers.NewPingPacketParser()))
 	assert.Equal(t, 1, registry.Count(), "Count should be 1 after first registration")
 
-	registry.Register(packet_parsers.NewQuitPacketParser())
+	require.NoError(t, registry.Register(packet_parsers.NewQuitPacketParser()))
 	assert.Equal(t, 2, registry.Count(), "Count should be 2 after second registration")
 }

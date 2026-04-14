@@ -52,7 +52,6 @@ type Session struct {
 	logger       Logger
 	mu           sync.RWMutex
 	err          error         // Error state if session creation failed
-	queryTimeout time.Duration // 实际生效的超时时间
 	threadID     uint32        // 关联的线程ID (用于KILL)
 }
 

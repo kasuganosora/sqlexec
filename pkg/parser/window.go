@@ -273,7 +273,7 @@ func ValidateWindowExpression(we *WindowExpression) error {
 	}
 
 	// 检查ORDER BY
-	if we.Spec.OrderBy == nil || len(we.Spec.OrderBy) == 0 {
+	if len(we.Spec.OrderBy) == 0 {
 		// 排名函数和偏移函数需要ORDER BY
 		if we.IsRankingFunction() || we.IsOffsetFunction() {
 			return fmt.Errorf("%s() requires ORDER BY in OVER clause", we.FuncName)

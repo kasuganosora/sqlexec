@@ -72,7 +72,7 @@ func (s *Session) QueryAll(sql string, args ...interface{}) ([]domain.Row, error
 	if err != nil {
 		return nil, err
 	}
-	defer query.Close()
+	defer func() { _ = query.Close() }()
 
 	var rows []domain.Row
 	for query.Next() {
@@ -93,7 +93,7 @@ func (s *Session) QueryOne(sql string, args ...interface{}) (domain.Row, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer query.Close()
+	defer func() { _ = query.Close() }()
 
 	if !query.Next() {
 		return nil, NewError(ErrCodeInternal, "no rows found", nil)

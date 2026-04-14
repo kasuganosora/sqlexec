@@ -156,7 +156,7 @@ func NewBatchExecutor(batchSize int, flushInterval time.Duration, flushFunc func
 		flushInterval: flushInterval,
 		flushFunc:     flushFunc,
 	}
-	be.timer = time.AfterFunc(flushInterval, func() { be.Flush() })
+	be.timer = time.AfterFunc(flushInterval, func() { _ = be.Flush() })
 	return be
 }
 
@@ -264,8 +264,7 @@ func NewPriorityQueue() *PriorityQueue {
 
 // PerformanceOptimizer 性能优化器
 type PerformanceOptimizer struct {
-	indexManager  *IndexManager
-	batchExecutor *BatchExecutor
+	indexManager *IndexManager
 }
 
 // NewPerformanceOptimizer 创建性能优化器

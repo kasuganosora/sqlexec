@@ -136,7 +136,7 @@ func (a *JSONAdapter) Connect(ctx context.Context) error {
 	// Rebuild indexes from sidecar metadata
 	if meta != nil {
 		for _, idx := range meta.Indexes {
-			if err := a.MVCCDataSource.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
+			if err := a.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
 				log.Printf("warning: failed to rebuild index %s on %s: %v", idx.Name, idx.Table, err)
 			}
 		}
@@ -420,17 +420,17 @@ func (a *JSONAdapter) writeBack() error {
 	tmpPath := tmpFile.Name()
 
 	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, a.filePath); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 

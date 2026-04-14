@@ -421,7 +421,7 @@ func TestMemoryDriver_ConcurrentAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(i int) {
 			key := "key" + string(rune('0'+i))
-			driver.SetKey(ctx, "test_session_id", key, i)
+			require.NoError(t, driver.SetKey(ctx, "test_session_id", key, i))
 			done <- true
 		}(i)
 	}

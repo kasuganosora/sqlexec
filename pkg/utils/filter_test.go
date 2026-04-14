@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -366,13 +365,6 @@ func TestMatchesLike(t *testing.T) {
 	}
 }
 
-// mockCompareValues simulates an error case for testing error propagation
-type testErrorValue struct{}
-
-func (e testErrorValue) Error() string {
-	return "test error value"
-}
-
 // TestMatchesAllSubFilters_ErrorPropagation tests that errors are properly propagated
 func TestMatchesAllSubFilters_ErrorPropagation(t *testing.T) {
 	// This test verifies the fix for ignoring error return values
@@ -459,4 +451,4 @@ func TestMatchesAllSubFilters_ReturnsErrorOnFailure(t *testing.T) {
 	}
 }
 
-var errTestCompare = errors.New("test compare error")
+

@@ -64,7 +64,7 @@ func (a *JSONLAdapter) Connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to open JSONL file %q: %w", a.filePath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024) // 最大 10MB 每行
@@ -409,34 +409,34 @@ func (a *JSONLAdapter) writeBack() error {
 	for _, row := range rows {
 		data, err := json.Marshal(map[string]interface{}(row))
 		if err != nil {
-			tmpFile.Close()
-			os.Remove(tmpPath)
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
 			return fmt.Errorf("failed to marshal row: %w", err)
 		}
 		if _, err := writer.Write(data); err != nil {
-			tmpFile.Close()
-			os.Remove(tmpPath)
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
 			return fmt.Errorf("failed to write row: %w", err)
 		}
 		if err := writer.WriteByte('\n'); err != nil {
-			tmpFile.Close()
-			os.Remove(tmpPath)
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpPath)
 			return fmt.Errorf("failed to write newline: %w", err)
 		}
 	}
 
 	if err := writer.Flush(); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to flush writer: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, a.filePath); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 

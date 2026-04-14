@@ -151,9 +151,3 @@ func (p *QueryPlanner) indexScan(tableData *TableData, plan *QueryPlan) (*domain
 		Total:   int64(len(filteredRows)),
 	}, nil
 }
-
-// rangeScan 范围查询
-func (p *QueryPlanner) rangeScan(tableData *TableData, plan *QueryPlan) (*domain.QueryResult, error) {
-	// 暂不实现，简化为全表扫描
-	return p.fullScan(tableData, plan)
-}

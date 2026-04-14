@@ -311,9 +311,9 @@ func TestLoadConfigOrDefault_WithEnvVar(t *testing.T) {
 	// 设置环境变量
 	oldEnv := os.Getenv("SQLEXEC_CONFIG")
 	t.Cleanup(func() {
-		os.Setenv("SQLEXEC_CONFIG", oldEnv)
+		require.NoError(t, os.Setenv("SQLEXEC_CONFIG", oldEnv))
 	})
-	os.Setenv("SQLEXEC_CONFIG", configPath)
+	require.NoError(t, os.Setenv("SQLEXEC_CONFIG", configPath))
 
 	config := LoadConfigOrDefault()
 
@@ -327,9 +327,9 @@ func TestLoadConfigOrDefault_WithLocalFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// 切换到临时目录
-	os.Chdir(tmpDir)
+	require.NoError(t, os.Chdir(tmpDir))
 	t.Cleanup(func() {
-		os.Chdir(oldWd)
+		require.NoError(t, os.Chdir(oldWd))
 	})
 
 	configPath := filepath.Join(tmpDir, "config.json")
@@ -354,9 +354,9 @@ func TestLoadConfigOrDefault_NoConfigFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldWd, _ := os.Getwd()
-	os.Chdir(tmpDir)
+	require.NoError(t, os.Chdir(tmpDir))
 	t.Cleanup(func() {
-		os.Chdir(oldWd)
+		require.NoError(t, os.Chdir(oldWd))
 	})
 
 	config := LoadConfigOrDefault()

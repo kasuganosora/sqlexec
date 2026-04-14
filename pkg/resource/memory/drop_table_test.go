@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDropTable_ReleasesPagedRows verifies that DropTable releases all
@@ -23,15 +24,15 @@ func TestDropTable_ReleasesPagedRows(t *testing.T) {
 		Writable: true,
 	}, cfg)
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "bigdata",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER"},
 			{Name: "payload", Type: "VARCHAR"},
 		},
-	})
+	}))
 
 	// Insert data to create multiple versions
 	for i := 0; i < 3; i++ {
@@ -39,7 +40,8 @@ func TestDropTable_ReleasesPagedRows(t *testing.T) {
 		for j := range rows {
 			rows[j] = domain.Row{"id": int64(j), "payload": "data"}
 		}
-		ds.Insert(ctx, "bigdata", rows, nil)
+		_, err := ds.Insert(ctx, "bigdata", rows, nil)
+		require.NoError(t, err)
 	}
 
 	// Record memory before drop
@@ -49,7 +51,7 @@ func TestDropTable_ReleasesPagedRows(t *testing.T) {
 	}
 
 	// Drop the table
-	ds.DropTable(ctx, "bigdata")
+	require.NoError(t, ds.DropTable(ctx, "bigdata"))
 
 	// Memory should be released
 	usedAfter := atomic.LoadInt64(&ds.bufferPool.usedMemory)
@@ -73,21 +75,22 @@ func TestTruncateTable_ReleasesOldVersions(t *testing.T) {
 		Writable: true,
 	}, cfg)
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "data",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER"},
 		},
-	})
+	}))
 
 	// Insert data
 	rows := make([]domain.Row, 500)
 	for j := range rows {
 		rows[j] = domain.Row{"id": int64(j)}
 	}
-	ds.Insert(ctx, "data", rows, nil)
+	_, err := ds.Insert(ctx, "data", rows, nil)
+	require.NoError(t, err)
 
 	usedBefore := atomic.LoadInt64(&ds.bufferPool.usedMemory)
 	if usedBefore == 0 {
@@ -95,7 +98,7 @@ func TestTruncateTable_ReleasesOldVersions(t *testing.T) {
 	}
 
 	// Truncate
-	ds.TruncateTable(ctx, "data")
+	require.NoError(t, ds.TruncateTable(ctx, "data"))
 
 	// After GC, old version memory should be freed
 	ds.mu.Lock()

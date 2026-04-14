@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -460,7 +461,7 @@ func TestMonitorContext(t *testing.T) {
 	metrics := NewMetricsCollector()
 	slowQuery := NewSlowQueryAnalyzer(1*time.Second, 100)
 
-	ctx := NewMonitorContext(nil, metrics, slowQuery, "SELECT * FROM users")
+	ctx := NewMonitorContext(context.TODO(), metrics, slowQuery, "SELECT * FROM users")
 	if ctx == nil {
 		t.Fatal("NewMonitorContext returned nil")
 	}
@@ -482,7 +483,7 @@ func TestMonitorContextWithSlowQuery(t *testing.T) {
 	metrics := NewMetricsCollector()
 	slowQuery := NewSlowQueryAnalyzer(100*time.Millisecond, 100)
 
-	ctx := NewMonitorContext(nil, metrics, slowQuery, "SELECT * FROM users")
+	ctx := NewMonitorContext(context.TODO(), metrics, slowQuery, "SELECT * FROM users")
 	ctx.Start()
 
 	// 等待使其成为慢查询
@@ -500,7 +501,7 @@ func TestMonitorContextWithError(t *testing.T) {
 	metrics := NewMetricsCollector()
 	slowQuery := NewSlowQueryAnalyzer(100*time.Millisecond, 100)
 
-	ctx := NewMonitorContext(nil, metrics, slowQuery, "SELECT * FROM users")
+	ctx := NewMonitorContext(context.TODO(), metrics, slowQuery, "SELECT * FROM users")
 	ctx.Start()
 	time.Sleep(150 * time.Millisecond)
 

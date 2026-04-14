@@ -81,7 +81,7 @@ func (b *QueryBuilder) executeSelect(ctx context.Context, stmt *SelectStatement)
 	options := &domain.QueryOptions{}
 
 	// 从上下文中获取用户信息（用于权限检查）
-	if user, ok := ctx.Value("user").(string); ok {
+	if user, ok := ctx.Value(UserContextKey).(string); ok {
 		options.User = user
 	}
 
@@ -1056,7 +1056,6 @@ func (b *QueryBuilder) executeInsert(ctx context.Context, stmt *InsertStatement)
 			}
 		}
 		affected = totalAffected
-		err = nil
 	} else if err != nil {
 		return nil, fmt.Errorf("insert failed: %w", err)
 	}
@@ -1846,7 +1845,7 @@ func (b *QueryBuilder) executeCreateView(ctx context.Context, stmt *CreateViewSt
 		// Check if table already exists
 		if stmt.OrReplace {
 			// Try to drop first
-			b.dataSource.DropTable(ctx, stmt.Name)
+			_ = b.dataSource.DropTable(ctx, stmt.Name)
 			err = b.dataSource.CreateTable(ctx, &tableInfo)
 		}
 		if err != nil {

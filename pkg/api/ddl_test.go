@@ -6,6 +6,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestDDL_CreateTable 测试创建表
@@ -15,7 +16,7 @@ func TestDDL_CreateTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { require.NoError(t, ds.Close(context.Background())) }()
 
 		// 创建 DB
 		db, _ := NewDB(nil)
@@ -24,7 +25,7 @@ func TestDDL_CreateTable(t *testing.T) {
 
 		// 创建 session
 		session := db.Session()
-		defer session.Close()
+		defer func() { require.NoError(t, session.Close()) }()
 
 		// 创建表
 		result, err := session.Execute(`
@@ -56,14 +57,14 @@ func TestDDL_CreateTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { require.NoError(t, ds.Close(context.Background())) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		_, err = session.Execute(`
 			CREATE TABLE products (
@@ -85,14 +86,14 @@ func TestDDL_CreateTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { require.NoError(t, ds.Close(context.Background())) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		_, err = session.Execute(`
 			CREATE TABLE orders (
@@ -114,14 +115,14 @@ func TestDDL_CreateTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		_, err = session.Execute(`
 			CREATE TABLE accounts (
@@ -142,14 +143,14 @@ func TestDDL_CreateTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		_, err = session.Execute(`
 			CREATE TABLE unique_test (
@@ -172,14 +173,14 @@ func TestDDL_CreateTableErrors(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 第一次创建
 		_, err = session.Execute(`
@@ -207,14 +208,14 @@ func TestDDL_DropTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 先创建表
 		_, err = session.Execute(`
@@ -243,14 +244,14 @@ func TestDDL_DropTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// MySQL standard: DROP TABLE IF EXISTS for non-existent table should succeed
 		_, err = session.Execute("DROP TABLE IF EXISTS non_existent_table")
@@ -262,14 +263,14 @@ func TestDDL_DropTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 删除不存在的表（应该报错）
 		_, err = session.Execute("DROP TABLE non_existent_table")
@@ -282,14 +283,14 @@ func TestDDL_CreateTableAndInsert(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建表
 	_, err = session.Execute(`
@@ -314,7 +315,7 @@ func TestDDL_CreateTableAndInsert(t *testing.T) {
 	// 查询数据
 	query, err := session.Query("SELECT * FROM test_users ORDER BY id")
 	assert.NoError(t, err)
-	defer query.Close()
+	defer func() { require.NoError(t, query.Close()) }()
 
 	rows := []map[string]interface{}{}
 	for query.Next() {
@@ -334,14 +335,14 @@ func TestDDL_DropAndRecreate(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建表
 	_, err = session.Execute(`
@@ -381,7 +382,7 @@ func TestDDL_DropAndRecreate(t *testing.T) {
 	// 查询验证新结构
 	query, err := session.Query("SELECT * FROM recreate_test")
 	assert.NoError(t, err)
-	defer query.Close()
+	defer func() { _ = query.Close() }()
 
 	assert.True(t, query.Next())
 	row := query.Row()
@@ -395,14 +396,14 @@ func TestDDL_MultipleTables(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建多个表
 	tables := []string{
@@ -432,19 +433,19 @@ func TestDDL_CreateTableWithTransaction(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 开始事务
 	tx, err := session.Begin()
 	assert.NoError(t, err)
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// 在事务中创建表
 	_, err = tx.Execute(`
@@ -464,14 +465,14 @@ func TestDDL_ParameterBinding(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// DDL 通常不支持参数绑定，但这里测试不会报错
 	tableName := "param_test"
@@ -493,14 +494,14 @@ func TestDDL_ComplexSchema(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	db, _ := NewDB(nil)
 	_ = db.RegisterDataSource("test", ds)
 	_ = db.SetDefaultDataSource("test")
 
 	session := db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// 创建复杂表结构
 	_, err = session.Execute(`

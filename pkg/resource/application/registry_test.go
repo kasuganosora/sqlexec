@@ -106,7 +106,7 @@ func TestNewRegistry(t *testing.T) {
 	registry := NewRegistry()
 
 	if registry == nil {
-		t.Errorf("NewRegistry() returned nil")
+		t.Fatalf("NewRegistry() returned nil")
 	}
 
 	if registry.factories == nil {

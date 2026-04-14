@@ -9,6 +9,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // MockDataSource is a mock for domain.DataSource
@@ -286,7 +287,7 @@ func TestSamplingCollector_SampleRows(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	require.NoError(t, dataSource.Connect(ctx))
 
 	// Create table and insert data
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{
@@ -507,7 +508,7 @@ func TestSamplingCollector_CollectColumnStats(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx := context.Background()
-	dataSource.Connect(ctx)
+	require.NoError(t, dataSource.Connect(ctx))
 
 	// Create table and insert data
 	err = dataSource.CreateTable(ctx, &domain.TableInfo{

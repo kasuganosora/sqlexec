@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // --- Benchmark data generators ---
@@ -198,7 +200,7 @@ func BenchmarkCompareLike_FullPath(b *testing.B) {
 		b.Run(c.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				CompareValues(c.value, c.pattern, "LIKE")
+				_, _ = CompareValues(c.value, c.pattern, "LIKE")
 			}
 		})
 	}
@@ -410,14 +412,16 @@ func TestSaveLikeBaseline(t *testing.T) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				CompareValues("hello world", "hello%", "LIKE")
+				_, err := CompareValues("hello world", "hello%", "LIKE")
+				require.NoError(t, err)
 			}
 		},
 		"CompareLike_Int": func(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				CompareValues(12345, "%234%", "LIKE")
+				_, err := CompareValues(12345, "%234%", "LIKE")
+				require.NoError(t, err)
 			}
 		},
 		"StdlibContains_1000": func(b *testing.B) {
@@ -631,14 +635,16 @@ func TestCompareLikeBaseline(t *testing.T) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				CompareValues("hello world", "hello%", "LIKE")
+				_, err := CompareValues("hello world", "hello%", "LIKE")
+				require.NoError(t, err)
 			}
 		},
 		"CompareLike_Int": func(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				CompareValues(12345, "%234%", "LIKE")
+				_, err := CompareValues(12345, "%234%", "LIKE")
+				require.NoError(t, err)
 			}
 		},
 		"Batch1K_Prefix": func(b *testing.B) {

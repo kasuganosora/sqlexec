@@ -157,9 +157,9 @@ func TestHandleNoFromQuery(t *testing.T) {
 				if len(result.Columns) != 3 {
 					t.Errorf("Expected 3 columns, got %d", len(result.Columns))
 				}
-				val1, _ := result.Rows[0]["1"]
-				val2, _ := result.Rows[0]["2"]
-				val3, _ := result.Rows[0]["3"]
+				val1 := result.Rows[0]["1"]
+				val2 := result.Rows[0]["2"]
+				val3 := result.Rows[0]["3"]
 				if fmt.Sprintf("%v", val1) != "1" || fmt.Sprintf("%v", val2) != "2" || fmt.Sprintf("%v", val3) != "3" {
 					t.Errorf("Expected 1,2,3 got %v,%v,%v (types: %T, %T, %T)", val1, val2, val3, val1, val2, val3)
 				}

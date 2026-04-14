@@ -439,7 +439,7 @@ func init() {
 	}
 
 	for _, fn := range stringFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 

@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -112,7 +113,7 @@ func TestFlatIndexDelete(t *testing.T) {
 
 	// 插入测试数据
 	for i := 0; i < 100; i++ {
-		idx.Insert(int64(i), randomVector(64))
+		require.NoError(t, idx.Insert(int64(i), randomVector(64)))
 	}
 
 	t.Run("delete_existing", func(t *testing.T) {
@@ -159,7 +160,7 @@ func TestFlatIndexSearch(t *testing.T) {
 
 	// 插入测试数据
 	for i := 0; i < 1000; i++ {
-		idx.Insert(int64(i), randomVector(64))
+		require.NoError(t, idx.Insert(int64(i), randomVector(64)))
 	}
 
 	t.Run("basic_search", func(t *testing.T) {
@@ -253,10 +254,10 @@ func TestFlatIndexSearch(t *testing.T) {
 			MetricType: VectorMetricL2,
 			Dimension:  2,
 		})
-		idx2.Insert(1, []float32{0.0, 0.0})
-		idx2.Insert(2, []float32{1.0, 1.0})
-		idx2.Insert(3, []float32{2.0, 2.0})
-		idx2.Insert(4, []float32{3.0, 3.0})
+		require.NoError(t, idx2.Insert(1, []float32{0.0, 0.0}))
+		require.NoError(t, idx2.Insert(2, []float32{1.0, 1.0}))
+		require.NoError(t, idx2.Insert(3, []float32{2.0, 2.0}))
+		require.NoError(t, idx2.Insert(4, []float32{3.0, 3.0}))
 
 		query := []float32{0.0, 0.0}
 		result, err := idx2.Search(ctx, query, 3, nil)
@@ -320,7 +321,7 @@ func TestFlatIndexStats(t *testing.T) {
 
 	// 插入数据
 	for i := 0; i < 100; i++ {
-		idx.Insert(int64(i), randomVector(128))
+		require.NoError(t, idx.Insert(int64(i), randomVector(128)))
 	}
 
 	stats := idx.Stats()
@@ -367,7 +368,7 @@ func TestFlatIndexClose(t *testing.T) {
 
 	// 插入数据
 	for i := 0; i < 100; i++ {
-		idx.Insert(int64(i), randomVector(64))
+		require.NoError(t, idx.Insert(int64(i), randomVector(64)))
 	}
 
 	err := idx.Close()
@@ -419,7 +420,7 @@ func TestFlatIndexDifferentMetrics(t *testing.T) {
 
 			// 插入数据
 			for i := 0; i < 50; i++ {
-				idx.Insert(int64(i), randomVector(64))
+				require.NoError(t, idx.Insert(int64(i), randomVector(64)))
 			}
 
 			// 搜索

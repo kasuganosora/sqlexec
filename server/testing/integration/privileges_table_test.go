@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 
@@ -57,8 +58,8 @@ func TestPrivilegeTablesReproduction(t *testing.T) {
 
 		// 切换到临时目录
 		originalDir, _ := os.Getwd()
-		defer os.Chdir(originalDir)
-		os.Chdir(tmpDir)
+		defer func() { _ = os.Chdir(originalDir) }()
+		require.NoError(t, os.Chdir(tmpDir))
 
 		// 使用"."创建ACL Manager（这是server.go第87行的修复）
 		aclMgr, err := acl.NewACLManager(".")
@@ -121,8 +122,8 @@ func TestServerInitializationACL(t *testing.T) {
 
 	// 切换到临时目录
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
-	os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(originalDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
 
 	// 模拟Server初始化中的ACL Manager创建
 	// 在server.go第87行：dataDir := "."
@@ -188,8 +189,8 @@ func TestPrivilegeTablesDataFiles(t *testing.T) {
 
 	// 切换到临时目录
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
-	os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(originalDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
 
 	// 创建ACL Manager
 	aclMgr, err := acl.NewACLManager(".")
@@ -283,8 +284,8 @@ func TestRootUserPrivileges(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	originalDir, _ := os.Getwd()
-	defer os.Chdir(originalDir)
-	os.Chdir(tmpDir)
+	defer func() { _ = os.Chdir(originalDir) }()
+	require.NoError(t, os.Chdir(tmpDir))
 
 	aclMgr, err := acl.NewACLManager(".")
 	if err != nil {

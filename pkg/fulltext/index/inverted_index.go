@@ -432,12 +432,7 @@ func (h *minHeap) tryAdd(docID int64, score float64) {
 	}
 }
 
-func (h *minHeap) minScore() float64 {
-	if len(h.items) == 0 {
-		return 0
-	}
-	return h.items[0].score
-}
+
 
 func (h *minHeap) toResults(idx *InvertedIndex) []SearchResult {
 	results := make([]SearchResult, len(h.items))

@@ -34,7 +34,7 @@ var _ handler.HandshakeHandler = (*mockHandshakeHandler)(nil)
 func TestNewServer(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	ctx := context.Background()
 	s := NewServer(ctx, listener, nil)
@@ -52,7 +52,7 @@ func TestNewServer(t *testing.T) {
 func TestNewServer_WithConfig(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	cfg := config.DefaultConfig()
 	s := NewServer(context.Background(), listener, cfg)
@@ -63,7 +63,7 @@ func TestNewServer_WithConfig(t *testing.T) {
 func TestServer_SetDB(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := NewServer(context.Background(), listener, nil)
 	require.NotNil(t, s)
@@ -81,7 +81,7 @@ func TestServer_SetDB(t *testing.T) {
 func TestServer_GetConfigDir(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := NewServer(context.Background(), listener, nil)
 	require.NotNil(t, s)
@@ -119,7 +119,7 @@ func TestServer_Start_ListenerClose(t *testing.T) {
 	}()
 
 	// Close listener to cause Accept() error
-	listener.Close()
+	require.NoError(t, listener.Close())
 	err = <-done
 	assert.Error(t, err)
 }
@@ -131,7 +131,7 @@ func TestNewServer_WithDatasources(t *testing.T) {
 	origDir, err := os.Getwd()
 	require.NoError(t, err)
 	require.NoError(t, os.Chdir(tmpDir))
-	defer os.Chdir(origDir)
+	defer func() { _ = os.Chdir(origDir) }()
 
 	// Create datasources.json with a memory datasource
 	dsJSON := `[{"name":"test_ds","type":"memory","writable":true}]`
@@ -139,7 +139,7 @@ func TestNewServer_WithDatasources(t *testing.T) {
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := NewServer(context.Background(), listener, nil)
 	require.NotNil(t, s)
@@ -158,7 +158,7 @@ func TestServer_HandleConnection_NilSessionMgr(t *testing.T) {
 	}
 	// Use a pipe for connection
 	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	err := s.handleConnection(serverConn)
 	assert.Error(t, err)
@@ -168,14 +168,14 @@ func TestServer_HandleConnection_NilSessionMgr(t *testing.T) {
 func TestServer_HandleConnection_ClosedConn(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := NewServer(context.Background(), listener, nil)
 	require.NotNil(t, s)
 
 	// Use a pipe; close client side immediately to trigger EOF on read
 	clientConn, serverConn := net.Pipe()
-	clientConn.Close()
+	_ = clientConn.Close()
 
 	err = s.handleConnection(serverConn)
 	// Should error during handshake or packet read
@@ -185,7 +185,7 @@ func TestServer_HandleConnection_ClosedConn(t *testing.T) {
 func TestServer_HandleConnection_QuitCommand(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := NewServer(context.Background(), listener, nil)
 	require.NotNil(t, s)
@@ -193,7 +193,7 @@ func TestServer_HandleConnection_QuitCommand(t *testing.T) {
 	s.handshakeHandler = &mockHandshakeHandler{}
 
 	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	done := make(chan error, 1)
 	go func() {
@@ -217,14 +217,14 @@ func TestServer_HandleConnection_QuitCommand(t *testing.T) {
 func TestServer_HandleConnection_PingThenQuit(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := NewServer(context.Background(), listener, nil)
 	require.NotNil(t, s)
 	s.handshakeHandler = &mockHandshakeHandler{}
 
 	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	done := make(chan error, 1)
 	go func() {
@@ -238,7 +238,7 @@ func TestServer_HandleConnection_PingThenQuit(t *testing.T) {
 
 	// Read OK response (variable length, just read what's available)
 	buf := make([]byte, 1024)
-	clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	n, err := clientConn.Read(buf)
 	require.NoError(t, err)
 	assert.Greater(t, n, 0)
@@ -262,7 +262,7 @@ func TestServer_HandleConnection_PingThenQuit(t *testing.T) {
 func TestServer_HandleConnection_HandlerError_Continue(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := NewServer(context.Background(), listener, nil)
 	require.NotNil(t, s)
@@ -307,20 +307,20 @@ func TestServer_HandleConnection_HandlerError_Continue(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("handleConnection did not return in time")
 	}
-	clientConn.Close()
+	_ = clientConn.Close()
 }
 
 func TestServer_HandleConnection_UnknownCommand(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	s := NewServer(context.Background(), listener, nil)
 	require.NotNil(t, s)
 	s.handshakeHandler = &mockHandshakeHandler{}
 
 	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	done := make(chan error, 1)
 	go func() {

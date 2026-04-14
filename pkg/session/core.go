@@ -37,7 +37,6 @@ type CoreSession struct {
 	queryTimeout     time.Duration                                        // 查询超时时间
 	threadID         uint32                                               // 关联的线程ID (用于KILL)
 	traceID          string                                               // 追踪ID (来自协议层 Session)
-	queryMu          sync.Mutex                                           // 查询锁
 	vdbRegistry      *virtual.VirtualDatabaseRegistry                     // 虚拟数据库注册表
 	sessionVars      map[string]string                                    // 会话级系统变量覆盖 (SET NAMES, SET @@var, etc.)
 	databaseDir      string                                               // 持久化存储根目录
@@ -108,15 +107,6 @@ func (s *CoreSession) getTablePersistence(dbName, tableName string) *xmlpersist.
 		return dbTables[tableName]
 	}
 	return nil
-}
-
-// removeTablePersistence removes persistence tracking for a table
-func (s *CoreSession) removeTablePersistence(dbName, tableName string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if dbTables, ok := s.tablePersistence[dbName]; ok {
-		delete(dbTables, tableName)
-	}
 }
 
 // persistTableData writes current table data to XML files
@@ -284,7 +274,8 @@ func (s *CoreSession) ExecuteQuery(ctx context.Context, sql string) (*domain.Que
 	}
 
 	// 将用户信息传递到上下文（用于权限检查）
-	queryCtx = context.WithValue(queryCtx, "user", currentUser)
+	type contextKey string
+	queryCtx = context.WithValue(queryCtx, contextKey("user"), currentUser)
 
 	// 处理 USE 语句
 	if parseResult.Statement.Use != nil {
@@ -359,7 +350,7 @@ func (s *CoreSession) ExecuteInsert(ctx context.Context, sql string, rows []doma
 
 	// 注册查询
 	registry := GetGlobalQueryRegistry()
-	registry.RegisterQuery(qc)
+	_ = registry.RegisterQuery(qc)
 	defer registry.UnregisterQuery(qc.QueryID)
 
 	// 解析 SQL
@@ -426,7 +417,7 @@ func (s *CoreSession) ExecuteUpdate(ctx context.Context, sql string, _ []domain.
 
 	// 注册查询
 	registry := GetGlobalQueryRegistry()
-	registry.RegisterQuery(qc)
+	_ = registry.RegisterQuery(qc)
 	defer registry.UnregisterQuery(qc.QueryID)
 
 	// 解析 SQL
@@ -493,7 +484,7 @@ func (s *CoreSession) ExecuteDelete(ctx context.Context, sql string, _ []domain.
 
 	// 注册查询
 	registry := GetGlobalQueryRegistry()
-	registry.RegisterQuery(qc)
+	_ = registry.RegisterQuery(qc)
 	defer registry.UnregisterQuery(qc.QueryID)
 
 	// 解析 SQL

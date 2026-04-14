@@ -1,6 +1,7 @@
 package performance
 
 import (
+	"github.com/stretchr/testify/require"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ func TestBatchExecutorAdd(t *testing.T) {
 
 	// Use a longer interval to avoid timer interference
 	be := NewBatchExecutor(3, 1*time.Hour, flushFunc)
-	defer be.Close()
+	defer func() { require.NoError(t, be.Close()) }()
 
 	// Test Add - first item
 	err := be.Add("item1")
@@ -68,11 +69,11 @@ func TestBatchExecutorManualFlush(t *testing.T) {
 	}
 
 	be := NewBatchExecutor(10, 100*time.Millisecond, flushFunc)
-	defer be.Close()
+	defer func() { require.NoError(t, be.Close()) }()
 
 	// Add items
-	be.Add("item1")
-	be.Add("item2")
+	require.NoError(t, be.Add("item1"))
+	require.NoError(t, be.Add("item2"))
 
 	// Manual flush
 	err := be.Flush()
@@ -98,10 +99,10 @@ func TestBatchExecutorTimerFlush(t *testing.T) {
 	}
 
 	be := NewBatchExecutor(10, 50*time.Millisecond, flushFunc)
-	defer be.Close()
+	defer func() { require.NoError(t, be.Close()) }()
 
 	// Add one item
-	be.Add("item1")
+	require.NoError(t, be.Add("item1"))
 
 	// Wait for timer to trigger
 	time.Sleep(100 * time.Millisecond)
@@ -121,8 +122,8 @@ func TestBatchExecutorClose(t *testing.T) {
 
 	be := NewBatchExecutor(10, 100*time.Millisecond, flushFunc)
 
-	be.Add("item1")
-	be.Add("item2")
+	require.NoError(t, be.Add("item1"))
+	require.NoError(t, be.Add("item2"))
 
 	err := be.Close()
 	if err != nil {

@@ -72,13 +72,14 @@ func (o *Optimizer) parseAggregationFunction(expr *parser.Expression) *Aggregati
 	var funcExpr *parser.Expression
 
 	// 尝试从表达式提取函数名和参数
-	if expr.Type == parser.ExprTypeFunction {
+	switch expr.Type {
+	case parser.ExprTypeFunction:
 		// 假设表达式中有 FunctionName 和 Args 字段
 		if name, ok := expr.Value.(string); ok {
 			funcName = name
 		}
 		funcExpr = expr
-	} else if expr.Type == parser.ExprTypeColumn {
+	case parser.ExprTypeColumn:
 		// 可能是列名，也可能包含函数调用
 		colName := expr.Column
 		// 解析函数名（如 "COUNT(id)" -> "COUNT"）

@@ -14,7 +14,7 @@ func TestBadgerDataSource_BasicCRUD(t *testing.T) {
 	// Create temp directory for test data
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create data source
 	config := &domain.DataSourceConfig{
@@ -32,7 +32,7 @@ func TestBadgerDataSource_BasicCRUD(t *testing.T) {
 	ctx := context.Background()
 	err = ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Verify connection
 	assert.True(t, ds.IsConnected())
@@ -129,7 +129,7 @@ func TestBadgerDataSource_TruncateTable(t *testing.T) {
 	// Create temp directory for test data
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create data source with in-memory mode
 	config := &domain.DataSourceConfig{
@@ -146,7 +146,7 @@ func TestBadgerDataSource_TruncateTable(t *testing.T) {
 	ctx := context.Background()
 	err = ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -292,7 +292,7 @@ func TestBadgerDataSource_OrderBy(t *testing.T) {
 	// Create temp directory for test data
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create data source
 	config := &domain.DataSourceConfig{
@@ -308,7 +308,7 @@ func TestBadgerDataSource_OrderBy(t *testing.T) {
 	ctx := context.Background()
 	err = ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -358,7 +358,7 @@ func TestBadgerDataSource_LikePattern(t *testing.T) {
 	// Create temp directory for test data
 	tmpDir, err := os.MkdirTemp("", "badger-test-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create data source
 	config := &domain.DataSourceConfig{
@@ -374,7 +374,7 @@ func TestBadgerDataSource_LikePattern(t *testing.T) {
 	ctx := context.Background()
 	err = ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{

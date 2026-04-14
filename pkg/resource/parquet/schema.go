@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -101,102 +100,6 @@ func parquetSchemaToDomain(schema *pq.Schema) []domain.ColumnInfo {
 		columns = append(columns, parquetFieldToDomain(field))
 	}
 	return columns
-}
-
-// domainRowToParquetRow converts a domain.Row to a parquet.Row using the given schema.
-func domainRowToParquetRow(schema *pq.Schema, columns []domain.ColumnInfo, row domain.Row) pq.Row {
-	values := make([]pq.Value, len(columns))
-	for i, col := range columns {
-		v, ok := row[col.Name]
-		if !ok || v == nil {
-			values[i] = pq.NullValue().Level(0, 0, i)
-			continue
-		}
-		values[i] = goValueToParquet(col, v, i)
-	}
-	return pq.Row(values)
-}
-
-// goValueToParquet converts a Go value to a parquet.Value based on column type.
-func goValueToParquet(col domain.ColumnInfo, v interface{}, colIndex int) pq.Value {
-	defLevel := 0
-	if col.Nullable {
-		defLevel = 1
-	}
-
-	switch strings.ToLower(col.Type) {
-	case "int64", "bigint", "time", "datetime", "timestamp":
-		switch val := v.(type) {
-		case int64:
-			return pq.Int64Value(val).Level(0, defLevel, colIndex)
-		case int:
-			return pq.Int64Value(int64(val)).Level(0, defLevel, colIndex)
-		case int32:
-			return pq.Int64Value(int64(val)).Level(0, defLevel, colIndex)
-		case float64:
-			return pq.Int64Value(int64(val)).Level(0, defLevel, colIndex)
-		default:
-			return pq.Int64Value(0).Level(0, defLevel, colIndex)
-		}
-	case "int32", "int", "integer":
-		switch val := v.(type) {
-		case int32:
-			return pq.Int32Value(val).Level(0, defLevel, colIndex)
-		case int:
-			return pq.Int32Value(int32(val)).Level(0, defLevel, colIndex)
-		case int64:
-			return pq.Int32Value(int32(val)).Level(0, defLevel, colIndex)
-		case float64:
-			return pq.Int32Value(int32(val)).Level(0, defLevel, colIndex)
-		default:
-			return pq.Int32Value(0).Level(0, defLevel, colIndex)
-		}
-	case "float64", "double":
-		switch val := v.(type) {
-		case float64:
-			return pq.DoubleValue(val).Level(0, defLevel, colIndex)
-		case int64:
-			return pq.DoubleValue(float64(val)).Level(0, defLevel, colIndex)
-		case int:
-			return pq.DoubleValue(float64(val)).Level(0, defLevel, colIndex)
-		default:
-			return pq.DoubleValue(0).Level(0, defLevel, colIndex)
-		}
-	case "float32", "float":
-		switch val := v.(type) {
-		case float32:
-			return pq.FloatValue(val).Level(0, defLevel, colIndex)
-		case float64:
-			return pq.FloatValue(float32(val)).Level(0, defLevel, colIndex)
-		default:
-			return pq.FloatValue(0).Level(0, defLevel, colIndex)
-		}
-	case "bool", "boolean":
-		switch val := v.(type) {
-		case bool:
-			return pq.BooleanValue(val).Level(0, defLevel, colIndex)
-		default:
-			return pq.BooleanValue(false).Level(0, defLevel, colIndex)
-		}
-	case "string", "varchar", "text":
-		switch val := v.(type) {
-		case string:
-			return pq.ByteArrayValue([]byte(val)).Level(0, defLevel, colIndex)
-		default:
-			return pq.ByteArrayValue([]byte(fmt.Sprintf("%v", v))).Level(0, defLevel, colIndex)
-		}
-	case "bytes", "blob", "binary", "varbinary":
-		switch val := v.(type) {
-		case []byte:
-			return pq.ByteArrayValue(val).Level(0, defLevel, colIndex)
-		case string:
-			return pq.ByteArrayValue([]byte(val)).Level(0, defLevel, colIndex)
-		default:
-			return pq.ByteArrayValue(nil).Level(0, defLevel, colIndex)
-		}
-	default:
-		return pq.ByteArrayValue([]byte(fmt.Sprintf("%v", v))).Level(0, defLevel, colIndex)
-	}
 }
 
 // parquetValueToGo converts a parquet.Value to a Go value based on column type.

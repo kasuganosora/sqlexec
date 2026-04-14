@@ -3,6 +3,8 @@ package acl
 import (
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewUserManager(t *testing.T) {
@@ -196,6 +198,7 @@ func TestGetUser(t *testing.T) {
 			if !tt.wantErr {
 				if user == nil {
 					t.Error("GetUser() returned nil user")
+					return
 				}
 				if user.User != tt.user {
 					t.Errorf("GetUser() user.User = %v, want %v", user.User, tt.user)
@@ -238,9 +241,9 @@ func TestListUsers(t *testing.T) {
 	}
 
 	// Create some users
-	um.CreateUser("%", "user1", passwordHash, privileges)
-	um.CreateUser("localhost", "user2", passwordHash, privileges)
-	um.CreateUser("192.168.1.1", "user3", passwordHash, privileges)
+	require.NoError(t, um.CreateUser("%", "user1", passwordHash, privileges))
+	require.NoError(t, um.CreateUser("localhost", "user2", passwordHash, privileges))
+	require.NoError(t, um.CreateUser("192.168.1.1", "user3", passwordHash, privileges))
 
 	// List users
 	users = um.ListUsers()
@@ -497,9 +500,9 @@ func TestExportUsers(t *testing.T) {
 	privileges := map[string]bool{"SELECT": true}
 
 	// Create some users
-	um.CreateUser("%", "user1", passwordHash, privileges)
-	um.CreateUser("localhost", "user2", passwordHash, privileges)
-	um.CreateUser("192.168.1.1", "user3", passwordHash, privileges)
+	require.NoError(t, um.CreateUser("%", "user1", passwordHash, privileges))
+	require.NoError(t, um.CreateUser("localhost", "user2", passwordHash, privileges))
+	require.NoError(t, um.CreateUser("192.168.1.1", "user3", passwordHash, privileges))
 
 	// Export users
 	exported := um.ExportUsers()

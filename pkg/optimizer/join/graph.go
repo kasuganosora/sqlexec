@@ -147,29 +147,6 @@ func (jg *JoinGraph) GetConnectedComponents() [][]string {
 	return components
 }
 
-// BFS 广度优先搜索（有向）
-func (jg *JoinGraph) bfs(start string, visited map[string]bool) []string {
-	queue := []string{start}
-	visited[start] = true
-	component := []string{}
-
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-		component = append(component, current)
-
-		// 遍历邻居
-		for _, neighbor := range jg.GetNeighbors(current) {
-			if !visited[neighbor] {
-				visited[neighbor] = true
-				queue = append(queue, neighbor)
-			}
-		}
-	}
-
-	return component
-}
-
 // bfsUndirected 广度优先搜索（无向，用于连通性检查）
 func (jg *JoinGraph) bfsUndirected(start string, visited map[string]bool) []string {
 	queue := []string{start}

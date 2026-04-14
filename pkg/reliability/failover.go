@@ -382,14 +382,14 @@ func ExecuteWithRetryAndFailover(ctx context.Context, fm *FailoverManager, lb *L
 		err := fn(node)
 		if err == nil {
 			// 更新负载（假设操作成功）
-			fm.UpdateNodeLoad(node.ID, node.Load*0.9)
+			_ = fm.UpdateNodeLoad(node.ID, node.Load*0.9)
 			return nil
 		}
 
 		lastErr = err
 
 		// 更新负载（假设操作失败）
-		fm.UpdateNodeLoad(node.ID, node.Load*1.1)
+		_ = fm.UpdateNodeLoad(node.ID, node.Load*1.1)
 
 		// 如果是最后一次重试，尝试故障转移
 		if i == maxRetries-1 {

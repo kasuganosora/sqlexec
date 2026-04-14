@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -16,15 +17,15 @@ func TestIndexMaintenance_InsertUpdatesIndex(t *testing.T) {
 		Writable: true,
 	})
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "users",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER", Primary: true},
 			{Name: "name", Type: "VARCHAR"},
 		},
-	})
+	}))
 
 	// Create a BTree index on "name"
 	err := ds.CreateIndex("users", "name", "btree", false)
@@ -33,10 +34,11 @@ func TestIndexMaintenance_InsertUpdatesIndex(t *testing.T) {
 	}
 
 	// Insert rows
-	ds.Insert(ctx, "users", []domain.Row{
+	_, err = ds.Insert(ctx, "users", []domain.Row{
 		{"id": int64(1), "name": "alice"},
 		{"id": int64(2), "name": "bob"},
 	}, nil)
+	require.NoError(t, err)
 
 	// Verify index can find "alice"
 	idx, err := ds.indexManager.GetIndex("users", "name")
@@ -64,24 +66,25 @@ func TestIndexMaintenance_DeleteUpdatesIndex(t *testing.T) {
 		Writable: true,
 	})
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "users",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER", Primary: true},
 			{Name: "name", Type: "VARCHAR"},
 		},
-	})
+	}))
 
 	// Insert rows first
-	ds.Insert(ctx, "users", []domain.Row{
+	_, err := ds.Insert(ctx, "users", []domain.Row{
 		{"id": int64(1), "name": "alice"},
 		{"id": int64(2), "name": "bob"},
 	}, nil)
+	require.NoError(t, err)
 
 	// Create a BTree index on "name"
-	err := ds.CreateIndex("users", "name", "btree", false)
+	err = ds.CreateIndex("users", "name", "btree", false)
 	if err != nil {
 		t.Fatalf("CreateIndex failed: %v", err)
 	}
@@ -91,12 +94,13 @@ func TestIndexMaintenance_DeleteUpdatesIndex(t *testing.T) {
 	tableVer.mu.RLock()
 	latestData := tableVer.versions[tableVer.latest]
 	tableVer.mu.RUnlock()
-	ds.indexManager.RebuildIndex("users", latestData.schema, latestData.Rows())
+	require.NoError(t, ds.indexManager.RebuildIndex("users", latestData.schema, latestData.Rows()))
 
 	// Delete "alice"
-	ds.Delete(ctx, "users", []domain.Filter{
+	_, err = ds.Delete(ctx, "users", []domain.Filter{
 		{Field: "name", Operator: "=", Value: "alice"},
 	}, nil)
+	require.NoError(t, err)
 
 	// Verify "alice" is no longer in the index
 	idx, err := ds.indexManager.GetIndex("users", "name")
@@ -125,32 +129,34 @@ func TestIndexMaintenance_UpdateUpdatesIndex(t *testing.T) {
 		Writable: true,
 	})
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "users",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER", Primary: true},
 			{Name: "name", Type: "VARCHAR"},
 		},
-	})
+	}))
 
 	// Insert and build index
-	ds.Insert(ctx, "users", []domain.Row{
+	_, err := ds.Insert(ctx, "users", []domain.Row{
 		{"id": int64(1), "name": "alice"},
 	}, nil)
-	ds.CreateIndex("users", "name", "btree", false)
+	require.NoError(t, err)
+	require.NoError(t, ds.CreateIndex("users", "name", "btree", false))
 
 	tableVer := ds.tables["users"]
 	tableVer.mu.RLock()
 	latestData := tableVer.versions[tableVer.latest]
 	tableVer.mu.RUnlock()
-	ds.indexManager.RebuildIndex("users", latestData.schema, latestData.Rows())
+	require.NoError(t, ds.indexManager.RebuildIndex("users", latestData.schema, latestData.Rows()))
 
 	// Update alice -> carol
-	ds.Update(ctx, "users", []domain.Filter{
+	_, err = ds.Update(ctx, "users", []domain.Filter{
 		{Field: "name", Operator: "=", Value: "alice"},
 	}, domain.Row{"name": "carol"}, nil)
+	require.NoError(t, err)
 
 	idx, _ := ds.indexManager.GetIndex("users", "name")
 
@@ -176,26 +182,27 @@ func TestIndexMaintenance_IndexScanAfterInsert(t *testing.T) {
 		Writable: true,
 	})
 	ctx := context.Background()
-	ds.Connect(ctx)
+	require.NoError(t, ds.Connect(ctx))
 
-	ds.CreateTable(ctx, &domain.TableInfo{
+	require.NoError(t, ds.CreateTable(ctx, &domain.TableInfo{
 		Name: "products",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "INTEGER", Primary: true},
 			{Name: "sku", Type: "VARCHAR"},
 			{Name: "price", Type: "FLOAT"},
 		},
-	})
+	}))
 
 	// Create index before inserting
-	ds.CreateIndex("products", "sku", "btree", true)
+	require.NoError(t, ds.CreateIndex("products", "sku", "btree", true))
 
 	// Insert data
-	ds.Insert(ctx, "products", []domain.Row{
+	_, err := ds.Insert(ctx, "products", []domain.Row{
 		{"id": int64(1), "sku": "ABC-001", "price": float64(9.99)},
 		{"id": int64(2), "sku": "DEF-002", "price": float64(19.99)},
 		{"id": int64(3), "sku": "GHI-003", "price": float64(29.99)},
 	}, nil)
+	require.NoError(t, err)
 
 	// Query using the indexed column — should use index scan
 	result, err := ds.Query(ctx, "products", &domain.QueryOptions{

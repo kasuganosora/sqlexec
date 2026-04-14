@@ -70,8 +70,8 @@ func TestFailoverManager_RemoveNode(t *testing.T) {
 	manager := NewFailoverManager(checker, 5*time.Second, 30*time.Second)
 
 	// Add nodes
-	manager.AddNode("node1", "localhost:3306", 10)
-	manager.AddNode("node2", "localhost:3307", 5)
+	_ = manager.AddNode("node1", "localhost:3306", 10)
+	_ = manager.AddNode("node2", "localhost:3307", 5)
 
 	// Remove node1
 	err := manager.RemoveNode("node1")
@@ -96,9 +96,9 @@ func TestFailoverManager_GetActiveNode(t *testing.T) {
 	manager := NewFailoverManager(checker, 5*time.Second, 30*time.Second)
 
 	// Add multiple nodes with different weights
-	manager.AddNode("node1", "localhost:3306", 5)
-	manager.AddNode("node2", "localhost:3307", 10)
-	manager.AddNode("node3", "localhost:3308", 8)
+	_ = manager.AddNode("node1", "localhost:3306", 5)
+	require.NoError(t, manager.AddNode("node2", "localhost:3307", 10))
+	require.NoError(t, manager.AddNode("node3", "localhost:3308", 8))
 
 	// Active node should be the one with highest weight
 	activeNode := manager.GetActiveNode()
@@ -111,8 +111,8 @@ func TestFailoverManager_ManualFailover(t *testing.T) {
 	checker := &MockHealthChecker{healthy: true}
 	manager := NewFailoverManager(checker, 5*time.Second, 30*time.Second)
 
-	manager.AddNode("node1", "localhost:3306", 10)
-	manager.AddNode("node2", "localhost:3307", 5)
+	require.NoError(t, manager.AddNode("node1", "localhost:3306", 10))
+	require.NoError(t, manager.AddNode("node2", "localhost:3307", 5))
 
 	// Manual failover to node2
 	err := manager.ManualFailover("node2")
@@ -126,8 +126,8 @@ func TestFailoverManager_ManualFailover_Unhealthy(t *testing.T) {
 	checker := &MockHealthChecker{healthy: true}
 	manager := NewFailoverManager(checker, 5*time.Second, 30*time.Second)
 
-	manager.AddNode("node1", "localhost:3306", 10)
-	manager.AddNode("node2", "localhost:3307", 5)
+	require.NoError(t, manager.AddNode("node1", "localhost:3306", 10))
+	require.NoError(t, manager.AddNode("node2", "localhost:3307", 5))
 
 	// Mark node2 as unhealthy
 	nodes := manager.GetAllNodes()
@@ -155,7 +155,7 @@ func TestFailoverManager_GetNodeStatus(t *testing.T) {
 	checker := &MockHealthChecker{healthy: true}
 	manager := NewFailoverManager(checker, 5*time.Second, 30*time.Second)
 
-	manager.AddNode("node1", "localhost:3306", 10)
+	require.NoError(t, manager.AddNode("node1", "localhost:3306", 10))
 
 	node, err := manager.GetNodeStatus("node1")
 	require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestFailoverManager_UpdateNodeLoad(t *testing.T) {
 	checker := &MockHealthChecker{healthy: true}
 	manager := NewFailoverManager(checker, 5*time.Second, 30*time.Second)
 
-	manager.AddNode("node1", "localhost:3306", 10)
+	require.NoError(t, manager.AddNode("node1", "localhost:3306", 10))
 
 	// Update load
 	err := manager.UpdateNodeLoad("node1", 0.9)
@@ -252,7 +252,7 @@ func TestExecuteWithRetryAndFailover(t *testing.T) {
 	lb := NewLoadBalancer()
 
 	// Add nodes
-	fm.AddNode("node1", "localhost:3306", 10)
+	require.NoError(t, fm.AddNode("node1", "localhost:3306", 10))
 	lb.AddNode(&Node{ID: "node1", Address: "localhost:3306", Status: NodeStatusHealthy, Load: 0.3})
 
 	// Execute successfully
@@ -285,7 +285,7 @@ func TestFailoverManager_StartStop(t *testing.T) {
 	checker := &MockHealthChecker{healthy: true}
 	manager := NewFailoverManager(checker, 100*time.Millisecond, 30*time.Second)
 
-	manager.AddNode("node1", "localhost:3306", 10)
+	require.NoError(t, manager.AddNode("node1", "localhost:3306", 10))
 
 	// Start the manager
 	manager.Start()
@@ -306,8 +306,8 @@ func TestFailoverManager_HealthCheckFailure(t *testing.T) {
 	checker := &MockHealthChecker{healthy: false}
 	manager := NewFailoverManager(checker, 100*time.Millisecond, 30*time.Second)
 
-	manager.AddNode("node1", "localhost:3306", 10)
-	manager.AddNode("node2", "localhost:3307", 5)
+	require.NoError(t, manager.AddNode("node1", "localhost:3306", 10))
+	require.NoError(t, manager.AddNode("node2", "localhost:3307", 5))
 
 	// Start health checks
 	manager.Start()

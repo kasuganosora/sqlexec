@@ -12,7 +12,7 @@ func TestNewQueryCache(t *testing.T) {
 	cache := NewQueryCache()
 
 	if cache == nil {
-		t.Errorf("NewQueryCache() returned nil")
+		t.Fatalf("NewQueryCache() returned nil")
 	}
 
 	if cache.maxSize != 100 {
@@ -32,7 +32,7 @@ func TestNewQueryCacheWithConfig(t *testing.T) {
 	cache := NewQueryCacheWithConfig(maxSize, ttl)
 
 	if cache == nil {
-		t.Errorf("NewQueryCacheWithConfig() returned nil")
+		t.Fatalf("NewQueryCacheWithConfig() returned nil")
 	}
 
 	if cache.maxSize != maxSize {
@@ -65,7 +65,7 @@ func TestQueryCache_SetAndGet(t *testing.T) {
 	}
 
 	if cachedResult == nil {
-		t.Errorf("Expected cached result, got nil")
+		t.Fatalf("Expected cached result, got nil")
 	}
 
 	if len(cachedResult.Rows) != 1 {

@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// seededRand is the random generator controlled by setseed().
+var seededRand = mathrand.New(mathrand.NewSource(42))
+
 func init() {
 	systemFunctions := []*FunctionInfo{
 		{
@@ -101,7 +104,7 @@ func init() {
 	}
 
 	for _, fn := range systemFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 
@@ -170,20 +173,21 @@ func sysSetseed(args []interface{}) (interface{}, error) {
 		return nil, nil
 	}
 	// Convert seed to int64 (seed range: -1.0 to 1.0 maps to int64)
+	// Use a local random generator since math/rand.Seed is deprecated
 	switch v := args[0].(type) {
 	case float64:
-		mathrand.Seed(int64(v * float64(1<<31)))
+		seededRand = mathrand.New(mathrand.NewSource(int64(v * float64(1<<31))))
 	case float32:
-		mathrand.Seed(int64(float64(v) * float64(1<<31)))
+		seededRand = mathrand.New(mathrand.NewSource(int64(float64(v) * float64(1<<31))))
 	case int:
-		mathrand.Seed(int64(v))
+		seededRand = mathrand.New(mathrand.NewSource(int64(v)))
 	case int64:
-		mathrand.Seed(v)
+		seededRand = mathrand.New(mathrand.NewSource(v))
 	default:
 		n, ok := new(big.Float).SetString(fmt.Sprintf("%v", v))
 		if ok {
 			f, _ := n.Float64()
-			mathrand.Seed(int64(f * float64(1<<31)))
+			seededRand = mathrand.New(mathrand.NewSource(int64(f * float64(1<<31))))
 		}
 	}
 	return nil, nil

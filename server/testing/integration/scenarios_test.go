@@ -52,7 +52,7 @@ func TestScenario_DatabaseSwitching(t *testing.T) {
 				if err != nil {
 					return fmt.Errorf("SELECT FROM schemata in information_schema failed: %w", err)
 				}
-				defer rows.Close()
+				defer func() { _ = rows.Close() }()
 
 				count := 0
 				for rows.Next() {

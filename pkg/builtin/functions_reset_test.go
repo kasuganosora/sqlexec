@@ -3,6 +3,8 @@ package builtin
 import (
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestResetGlobalRegistry(t *testing.T) {
@@ -19,7 +21,7 @@ func TestResetGlobalRegistry(t *testing.T) {
 		Handler:     func(args []interface{}) (interface{}, error) { return nil, nil },
 		Description: "Test function",
 	}
-	RegisterGlobal(testFunc)
+	require.NoError(t, RegisterGlobal(testFunc))
 
 	// Verify it exists
 	_, exists := GetGlobal("test_func_reset")
@@ -52,7 +54,7 @@ func TestResetGlobalRegistryWith(t *testing.T) {
 		Handler:     func(args []interface{}) (interface{}, error) { return nil, nil },
 		Description: "Custom function",
 	}
-	customRegistry.Register(testFunc)
+	require.NoError(t, customRegistry.Register(testFunc))
 
 	// Set as global
 	ResetGlobalRegistryWith(customRegistry)
@@ -106,7 +108,7 @@ func TestFunctionRegistry_Unregister(t *testing.T) {
 	}
 
 	// Register and verify
-	registry.Register(testFunc)
+	require.NoError(t, registry.Register(testFunc))
 	_, exists := registry.Get("test_unregister")
 	if !exists {
 		t.Fatal("function should exist after registration")
@@ -141,7 +143,7 @@ func TestFunctionRegistry_List(t *testing.T) {
 			Handler:  func(args []interface{}) (interface{}, error) { return nil, nil },
 			Category: "test",
 		}
-		registry.Register(info)
+		require.NoError(t, registry.Register(info))
 	}
 
 	list := registry.List()
@@ -161,7 +163,7 @@ func TestFunctionRegistry_ListByCategory(t *testing.T) {
 			Handler:  func(args []interface{}) (interface{}, error) { return nil, nil },
 			Category: "math",
 		}
-		registry.Register(info)
+		require.NoError(t, registry.Register(info))
 	}
 
 	for i := 0; i < 2; i++ {
@@ -171,7 +173,7 @@ func TestFunctionRegistry_ListByCategory(t *testing.T) {
 			Handler:  func(args []interface{}) (interface{}, error) { return nil, nil },
 			Category: "string",
 		}
-		registry.Register(info)
+		require.NoError(t, registry.Register(info))
 	}
 
 	mathFuncs := registry.ListByCategory("math")
@@ -198,7 +200,7 @@ func TestFunctionRegistry_Exists(t *testing.T) {
 		t.Error("function should not exist before registration")
 	}
 
-	registry.Register(testFunc)
+	require.NoError(t, registry.Register(testFunc))
 
 	if !registry.Exists("exists_test") {
 		t.Error("function should exist after registration")

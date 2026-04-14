@@ -90,7 +90,7 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Create ephemeral session
 	session := h.db.Session()
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 	if h.vdbRegistry != nil {
 		session.SetVirtualDBRegistry(h.vdbRegistry)
 	}
@@ -119,7 +119,7 @@ func (h *QueryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		defer query.Close()
+		defer func() { _ = query.Close() }()
 
 		rows := make([]domain.Row, 0, 64)
 		truncated := false

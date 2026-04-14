@@ -2,6 +2,7 @@ package jsonl
 
 import (
 	"context"
+	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
 
@@ -16,11 +17,11 @@ func createTempJSONL(t *testing.T, content string) string {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
 	if _, err := tmpFile.Write([]byte(content)); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()
+		require.NoError(t, os.Remove(tmpFile.Name()))
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	require.NoError(t, tmpFile.Close())
 	return tmpFile.Name()
 }
 
@@ -35,7 +36,7 @@ func createConnectedAdapter(t *testing.T, content string, opts map[string]interf
 	}
 	adapter := NewJSONLAdapter(config, path)
 	if err := adapter.Connect(context.Background()); err != nil {
-		os.Remove(path)
+		require.NoError(t, os.Remove(path))
 		t.Fatalf("Connect() error = %v", err)
 	}
 	return adapter, path
@@ -87,7 +88,7 @@ func TestConnect_BasicJSONL(t *testing.T) {
 {"id": 3, "name": "Charlie"}
 `
 	adapter, path := createConnectedAdapter(t, content, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	if !adapter.IsConnected() {
 		t.Error("should be connected after Connect()")
@@ -96,7 +97,7 @@ func TestConnect_BasicJSONL(t *testing.T) {
 
 func TestConnect_EmptyFile(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, "", nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	tables, err := adapter.GetTables(context.Background())
 	if err != nil {
@@ -114,7 +115,7 @@ func TestConnect_EmptyLines(t *testing.T) {
 
 `
 	adapter, path := createConnectedAdapter(t, content, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	result, err := adapter.Query(context.Background(), "jsonl_data", &domain.QueryOptions{})
 	if err != nil {
@@ -142,7 +143,7 @@ func TestConnect_InvalidJSON(t *testing.T) {
 not json
 {"id": 3}
 `)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSONL,
@@ -163,7 +164,7 @@ not json at all
 	adapter, path := createConnectedAdapter(t, content, map[string]interface{}{
 		"skip_errors": true,
 	})
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	result, err := adapter.Query(context.Background(), "jsonl_data", &domain.QueryOptions{})
 	if err != nil {
@@ -180,7 +181,7 @@ func TestQuery_AllRows(t *testing.T) {
 {"id": 3, "name": "Charlie", "age": 35}
 `
 	adapter, path := createConnectedAdapter(t, content, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 	ctx := context.Background()
 
 	result, err := adapter.Query(ctx, "jsonl_data", &domain.QueryOptions{})
@@ -202,7 +203,7 @@ func TestQuery_WithFilters(t *testing.T) {
 {"id": 3, "name": "Charlie", "age": 35}
 `
 	adapter, path := createConnectedAdapter(t, content, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 	ctx := context.Background()
 
 	result, err := adapter.Query(ctx, "jsonl_data", &domain.QueryOptions{
@@ -226,7 +227,7 @@ func TestQuery_WithPagination(t *testing.T) {
 {"id": 5, "name": "Eve"}
 `
 	adapter, path := createConnectedAdapter(t, content, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 	ctx := context.Background()
 
 	result, err := adapter.Query(ctx, "jsonl_data", &domain.QueryOptions{
@@ -246,7 +247,7 @@ func TestQuery_WithPagination(t *testing.T) {
 
 func TestQuery_NonexistentTable(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	_, err := adapter.Query(context.Background(), "no_such_table", &domain.QueryOptions{})
 	if err == nil {
@@ -256,7 +257,7 @@ func TestQuery_NonexistentTable(t *testing.T) {
 
 func TestGetTables(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	tables, err := adapter.GetTables(context.Background())
 	if err != nil {
@@ -272,7 +273,7 @@ func TestGetTableInfo(t *testing.T) {
 {"id": 2, "name": "Bob", "active": false}
 `
 	adapter, path := createConnectedAdapter(t, content, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 	ctx := context.Background()
 
 	info, err := adapter.GetTableInfo(ctx, "jsonl_data")
@@ -305,7 +306,7 @@ func TestGetTableInfo_TypeInference(t *testing.T) {
 {"int_col": 100, "float_col": 2.71, "bool_col": false, "str_col": "world"}
 `
 	adapter, path := createConnectedAdapter(t, content, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	info, err := adapter.GetTableInfo(context.Background(), "jsonl_data")
 	if err != nil {
@@ -332,7 +333,7 @@ func TestGetTableInfo_TypeInference(t *testing.T) {
 
 func TestInsert_ReadOnly(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	_, err := adapter.Insert(context.Background(), "jsonl_data", []domain.Row{{"id": 2}}, nil)
 	if err == nil {
@@ -342,7 +343,7 @@ func TestInsert_ReadOnly(t *testing.T) {
 
 func TestUpdate_ReadOnly(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	_, err := adapter.Update(context.Background(), "jsonl_data",
 		[]domain.Filter{{Field: "id", Operator: "=", Value: 1}},
@@ -354,7 +355,7 @@ func TestUpdate_ReadOnly(t *testing.T) {
 
 func TestDelete_ReadOnly(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	_, err := adapter.Delete(context.Background(), "jsonl_data",
 		[]domain.Filter{{Field: "id", Operator: "=", Value: 1}}, nil)
@@ -369,7 +370,7 @@ func TestInsert_Writable(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, content, map[string]interface{}{
 		"writable": true,
 	})
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 	ctx := context.Background()
 
 	count, err := adapter.Insert(ctx, "jsonl_data", []domain.Row{
@@ -397,13 +398,14 @@ func TestWriteBack(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, content, map[string]interface{}{
 		"writable": true,
 	})
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 	ctx := context.Background()
 
 	// 插入一行
-	adapter.Insert(ctx, "jsonl_data", []domain.Row{
+	_, err := adapter.Insert(ctx, "jsonl_data", []domain.Row{
 		{"id": int64(2), "name": "Bob"},
 	}, nil)
+	require.NoError(t, err)
 
 	// 关闭（触发写回）
 	if err := adapter.Close(ctx); err != nil {
@@ -440,7 +442,7 @@ func TestWriteBack(t *testing.T) {
 
 func TestCreateTable_Unsupported(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	err := adapter.CreateTable(context.Background(), &domain.TableInfo{Name: "new"})
 	if err == nil {
@@ -450,7 +452,7 @@ func TestCreateTable_Unsupported(t *testing.T) {
 
 func TestDropTable_Unsupported(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	err := adapter.DropTable(context.Background(), "jsonl_data")
 	if err == nil {
@@ -460,7 +462,7 @@ func TestDropTable_Unsupported(t *testing.T) {
 
 func TestTruncateTable_Unsupported(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	err := adapter.TruncateTable(context.Background(), "jsonl_data")
 	if err == nil {
@@ -470,7 +472,7 @@ func TestTruncateTable_Unsupported(t *testing.T) {
 
 func TestExecute_Unsupported(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	_, err := adapter.Execute(context.Background(), "SELECT 1")
 	if err == nil {
@@ -480,7 +482,7 @@ func TestExecute_Unsupported(t *testing.T) {
 
 func TestClose_ReadOnly(t *testing.T) {
 	adapter, path := createConnectedAdapter(t, `{"id": 1}`, nil)
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	err := adapter.Close(context.Background())
 	if err != nil {

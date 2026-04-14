@@ -61,7 +61,7 @@ func (h *InitDBHandler) Handle(ctx *handler.HandlerContext, packet interface{}) 
 	}
 
 	// 设置数据库名
-	ctx.Session.Set("current_database", dbName)
+	_ = ctx.Session.Set("current_database", dbName)
 
 	// 获取 API Session 并更新当前数据库
 	apiSessIntf := ctx.Session.GetAPISession()

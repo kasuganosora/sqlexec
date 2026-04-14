@@ -180,7 +180,9 @@ func (pm *PluginManager) UnregisterPlugin(name string) error {
 	}
 
 	if plugin.IsRunning() {
-		plugin.Stop()
+		if err := plugin.Stop(); err != nil {
+			return fmt.Errorf("failed to stop plugin '%s': %w", name, err)
+		}
 	}
 	return nil
 }

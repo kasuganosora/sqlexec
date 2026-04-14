@@ -226,7 +226,7 @@ func (hp *HardwareProfile) String() string {
 // Explain 返回详细的硬件配置说明
 func (hp *HardwareProfile) Explain() string {
 	var explanation strings.Builder
-	explanation.WriteString(fmt.Sprintf("=== Hardware Profile ===\n"))
+	explanation.WriteString("=== Hardware Profile ===\n")
 	explanation.WriteString(fmt.Sprintf("CPU:         %d cores @ %.2fGHz (Speed: %.2fx)\n",
 		hp.CPUCores, hp.CPUFrequency, hp.CPUSpeed))
 	explanation.WriteString(fmt.Sprintf("Memory:      %d / %d MB (Speed: %.2fx)\n",

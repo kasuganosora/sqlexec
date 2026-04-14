@@ -47,7 +47,8 @@ func TestAddIndex(t *testing.T) {
 	// Check stats
 	stats := im.stats["idx_id"]
 	if stats == nil {
-		t.Errorf("Expected stats to be created")
+		t.Fatalf("Expected stats to be created")
+		return
 	}
 
 	if stats.Name != "idx_id" {
@@ -119,7 +120,7 @@ func TestFindBestIndex(t *testing.T) {
 	// Test 1: Find best index for id column
 	bestIndex := im.FindBestIndex("test_table", []string{"id"})
 	if bestIndex == nil {
-		t.Errorf("Expected best index for id column")
+		t.Fatalf("Expected best index for id column")
 	}
 
 	if bestIndex.Name != "idx_id_primary" {
@@ -129,7 +130,7 @@ func TestFindBestIndex(t *testing.T) {
 	// Test 2: Find best index for name column
 	bestIndex = im.FindBestIndex("test_table", []string{"name"})
 	if bestIndex == nil {
-		t.Errorf("Expected best index for name column")
+		t.Fatalf("Expected best index for name column")
 	}
 
 	if bestIndex.Name != "idx_name" {
@@ -139,7 +140,7 @@ func TestFindBestIndex(t *testing.T) {
 	// Test 3: Find best index for both id and name
 	bestIndex = im.FindBestIndex("test_table", []string{"id", "name"})
 	if bestIndex == nil {
-		t.Errorf("Expected best index for id and name columns")
+		t.Fatalf("Expected best index for id and name columns")
 	}
 
 	if bestIndex.Name != "idx_id_name" {

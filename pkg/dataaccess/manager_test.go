@@ -145,7 +145,7 @@ func TestManager_ReleaseConnection(t *testing.T) {
 	ds := &TestDataSource{}
 	manager := NewManager(ds)
 
-	manager.AcquireConnection("conn1")
+	require.NoError(t, manager.AcquireConnection("conn1"))
 	manager.ReleaseConnection("conn1")
 
 	err := manager.AcquireConnection("conn1")

@@ -154,7 +154,7 @@ func (q *Query) Close() error {
 
 // Iter 遍历所有行（回调函数）
 func (q *Query) Iter(fn func(row domain.Row) error) error {
-	defer q.Close()
+	defer func() { _ = q.Close() }()
 
 	for q.Next() {
 		row := q.Row()

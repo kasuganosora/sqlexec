@@ -652,7 +652,7 @@ func TestInitDBHandler_Handle_EmptyDBName_FallbackToSession(t *testing.T) {
 	h := NewInitDBHandler(nil)
 
 	// Pre-set current_database in session
-	ctx.Session.Set("current_database", "fallback_db")
+	_ = ctx.Session.Set("current_database", "fallback_db")
 
 	cmd := &protocol.ComInitDBPacket{}
 	cmd.Payload = []byte{protocol.COM_INIT_DB} // Empty DB name

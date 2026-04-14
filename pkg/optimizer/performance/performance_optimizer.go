@@ -9,8 +9,7 @@ import (
 
 // PerformanceOptimizer 性能优化器
 type PerformanceOptimizer struct {
-	indexManager  *IndexManager
-	batchExecutor *BatchExecutor
+	indexManager *IndexManager
 }
 
 // NewPerformanceOptimizer 创建性能优化器

@@ -14,14 +14,14 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 使用SQL创建包含VIRTUAL生成列的表
 		result, err := session.Execute(`
@@ -61,14 +61,14 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 使用SQL创建包含STORED生成列的表
 		result, err := session.Execute(`
@@ -96,14 +96,14 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 创建表
 		_, err = session.Execute(`
@@ -128,7 +128,7 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		// 查询数据，验证生成列的值
 		query, err := session.Query(`SELECT id, price, quantity, total FROM items ORDER BY id`)
 		assert.NoError(t, err)
-		defer query.Close()
+		defer func() { _ = query.Close() }()
 
 		var rows []map[string]interface{}
 		for query.Next() {
@@ -157,14 +157,14 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 创建表
 		_, err = session.Execute(`
@@ -206,14 +206,14 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 创建包含多个生成列的表
 		_, err = session.Execute(`
@@ -243,14 +243,14 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// MySQL官方三角形验证示例
 		_, err = session.Execute(`
@@ -296,14 +296,14 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 省略VIRTUAL/STORED，默认为VIRTUAL
 		_, err = session.Execute(`
@@ -334,14 +334,14 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		db, _ := NewDB(nil)
 		_ = db.RegisterDataSource("test", ds)
 		_ = db.SetDefaultDataSource("test")
 
 		session := db.Session()
-		defer session.Close()
+		defer func() { _ = session.Close() }()
 
 		// 创建表
 		_, err = session.Execute(`
@@ -364,7 +364,7 @@ func TestGeneratedColumns_SQLIntegration(t *testing.T) {
 
 		// 验证剩余数据
 		query, _ := session.Query(`SELECT id, value, doubled FROM test_table ORDER BY id`)
-		defer query.Close()
+		defer func() { _ = query.Close() }()
 
 		var rows []map[string]interface{}
 		for query.Next() {

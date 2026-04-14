@@ -26,11 +26,11 @@ func (CharSwitch) TableName() string { return "char_switches" }
 
 // Character mirrors the model from the external project for UPDATE testing.
 type Character struct {
-	ID   uint   `gorm:"primaryKey;autoIncrement"`
-	Name string `gorm:"column:name;size:255"`
-	MapID int   `gorm:"column:map_id"`
-	MapX  int   `gorm:"column:map_x"`
-	MapY  int   `gorm:"column:map_y"`
+	ID    uint   `gorm:"primaryKey;autoIncrement"`
+	Name  string `gorm:"column:name;size:255"`
+	MapID int    `gorm:"column:map_id"`
+	MapX  int    `gorm:"column:map_x"`
+	MapY  int    `gorm:"column:map_y"`
 }
 
 func (Character) TableName() string { return "characters" }
@@ -47,7 +47,7 @@ func setupTestGormDB(t *testing.T) (*gorm.DB, func()) {
 	}
 	memoryDS := memory.NewMVCCDataSource(config)
 	require.NoError(t, memoryDS.Connect(context.Background()))
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 
 	session := db.Session()
 	dialector := NewDialector(session)
@@ -56,9 +56,9 @@ func setupTestGormDB(t *testing.T) (*gorm.DB, func()) {
 
 	cleanup := func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
-		db.Close()
+		require.NoError(t, db.Close())
 	}
 
 	return gormDB, cleanup

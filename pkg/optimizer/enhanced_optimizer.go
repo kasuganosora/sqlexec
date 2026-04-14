@@ -236,42 +236,6 @@ func extractTableName(plan LogicalPlan) string {
 	return ""
 }
 
-// costModelAdapter 将 cost.CostModel 适配为 optimizer.CostModel
-type costModelAdapter struct {
-	costModel cost.CostModel
-}
-
-func (a *costModelAdapter) ScanCost(tableName string, rowCount int64) float64 {
-	return a.costModel.ScanCost(tableName, rowCount, false)
-}
-
-func (a *costModelAdapter) FilterCost(inputRows int64, selectivity float64) float64 {
-	return a.costModel.FilterCost(inputRows, selectivity, []domain.Filter{})
-}
-
-func (a *costModelAdapter) JoinCost(leftRows, rightRows int64, joinType JoinType) float64 {
-	// 简化实现：转换为 cost.JoinType
-	costJoinType := cost.InnerJoin
-	switch joinType {
-	case LeftOuterJoin:
-		costJoinType = cost.LeftOuterJoin
-	case RightOuterJoin:
-		costJoinType = cost.RightOuterJoin
-	case FullOuterJoin:
-		costJoinType = cost.FullOuterJoin
-	}
-	return a.costModel.JoinCost(leftRows, rightRows, costJoinType, []*parser.Expression{})
-}
-
-func (a *costModelAdapter) AggregateCost(inputRows int64, groupByCols int) float64 {
-	// cost.AdaptiveCostModel 需要3个参数，这里简化处理
-	return a.costModel.AggregateCost(inputRows, groupByCols, 1)
-}
-
-func (a *costModelAdapter) ProjectCost(inputRows int64, projCols int) float64 {
-	return a.costModel.ProjectCost(inputRows, projCols)
-}
-
 // Optimize 优化查询（增强版）
 func (eo *EnhancedOptimizer) Optimize(ctx context.Context, stmt *parser.SQLStatement) (*plan.Plan, error) {
 	debugln("=== Enhanced Optimizer Started ===")
@@ -1176,17 +1140,6 @@ func expressionToFilter(expr *parser.Expression) *domain.Filter {
 	}
 
 	return nil
-}
-
-func convertAggFuncs(aggItems []*AggregationItem) []*AggregationItem {
-	funcs := make([]*AggregationItem, len(aggItems))
-	for i, item := range aggItems {
-		funcs[i] = &AggregationItem{
-			Type:  item.Type,
-			Alias: item.Type.String(),
-		}
-	}
-	return funcs
 }
 
 // SetParallelism 设置并行度

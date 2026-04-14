@@ -26,7 +26,7 @@ func TestE2E_ShowDatabases_BugReproduction(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SHOW DATABASES failed: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		// 鏀堕泦鎵€鏈夋暟鎹簱鍚?
 		var databases []string
@@ -73,7 +73,7 @@ func TestE2E_ShowTablesInInformationSchema(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SHOW TABLES in information_schema failed: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		// 鏀堕泦鎵€鏈夎〃鍚?
 		var tables []string
@@ -150,7 +150,7 @@ func TestE2E_UseInformationSchema(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SELECT from information_schema.schemata failed: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		// 鏌ヨ鏁版嵁
 		rowCount := 0
@@ -251,7 +251,7 @@ func querySingleColumn(conn *sql.DB, query string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []string
 	for rows.Next() {

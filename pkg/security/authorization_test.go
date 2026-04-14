@@ -1,6 +1,7 @@
 package security
 
 import (
+	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 )
@@ -69,7 +70,7 @@ func TestGetUser(t *testing.T) {
 	username := "testuser"
 	password := "password123"
 	roles := []Role{RoleUser}
-	am.CreateUser(username, password, roles)
+	require.NoError(t, am.CreateUser(username, password, roles))
 
 	// 测试获取存在的用户
 	user, err := am.GetUser(username)
@@ -94,7 +95,7 @@ func TestDeleteUser(t *testing.T) {
 	am := NewAuthorizationManager()
 
 	username := "testuser"
-	am.CreateUser(username, "password", []Role{RoleUser})
+	require.NoError(t, am.CreateUser(username, "password", []Role{RoleUser}))
 
 	// 删除存在的用户
 	err := am.DeleteUser(username)
@@ -119,11 +120,11 @@ func TestHasPermission(t *testing.T) {
 	am := NewAuthorizationManager()
 
 	// 创建不同角色的用户
-	am.CreateUser("admin", "password", []Role{RoleAdmin})
-	am.CreateUser("moderator", "password", []Role{RoleModerator})
-	am.CreateUser("user", "password", []Role{RoleUser})
-	am.CreateUser("readonly", "password", []Role{RoleReadOnly})
-	am.CreateUser("guest", "password", []Role{RoleGuest})
+	require.NoError(t, am.CreateUser("admin", "password", []Role{RoleAdmin}))
+	_ = am.CreateUser("moderator", "password", []Role{RoleModerator})
+	_ = am.CreateUser("user", "password", []Role{RoleUser})
+	_ = am.CreateUser("readonly", "password", []Role{RoleReadOnly})
+	require.NoError(t, am.CreateUser("guest", "password", []Role{RoleGuest}))
 
 	tests := []struct {
 		username   string
@@ -160,7 +161,7 @@ func TestHasPermission(t *testing.T) {
 
 func TestGrantPermission(t *testing.T) {
 	am := NewAuthorizationManager()
-	am.CreateUser("testuser", "password", []Role{RoleUser})
+	require.NoError(t, am.CreateUser("testuser", "password", []Role{RoleUser}))
 
 	tests := []struct {
 		name        string
@@ -191,10 +192,10 @@ func TestGrantPermission(t *testing.T) {
 
 func TestRevokePermission(t *testing.T) {
 	am := NewAuthorizationManager()
-	am.CreateUser("testuser", "password", []Role{RoleAdmin})
+	require.NoError(t, am.CreateUser("testuser", "password", []Role{RoleAdmin}))
 
 	// 先授予权限
-	am.GrantPermission("testuser", PermissionRead, "users")
+	require.NoError(t, am.GrantPermission("testuser", PermissionRead, "users"))
 
 	// 撤销权限
 	err := am.RevokePermission("testuser", PermissionRead, "users")
@@ -211,7 +212,7 @@ func TestRevokePermission(t *testing.T) {
 
 func TestAssignRole(t *testing.T) {
 	am := NewAuthorizationManager()
-	am.CreateUser("testuser", "password", []Role{RoleUser})
+	require.NoError(t, am.CreateUser("testuser", "password", []Role{RoleUser}))
 
 	err := am.AssignRole("testuser", RoleModerator)
 	if err != nil {
@@ -233,7 +234,7 @@ func TestAssignRole(t *testing.T) {
 
 func TestRemoveRole(t *testing.T) {
 	am := NewAuthorizationManager()
-	am.CreateUser("testuser", "password", []Role{RoleUser, RoleModerator})
+	require.NoError(t, am.CreateUser("testuser", "password", []Role{RoleUser, RoleModerator}))
 
 	err := am.RemoveRole("testuser", RoleModerator)
 	if err != nil {
@@ -255,10 +256,10 @@ func TestRemoveRole(t *testing.T) {
 
 func TestActivateUser(t *testing.T) {
 	am := NewAuthorizationManager()
-	am.CreateUser("testuser", "password", []Role{RoleUser})
+	require.NoError(t, am.CreateUser("testuser", "password", []Role{RoleUser}))
 
 	// 停用用户
-	am.DeactivateUser("testuser")
+	require.NoError(t, am.DeactivateUser("testuser"))
 	user, _ := am.GetUser("testuser")
 	if user.IsActive {
 		t.Error("User should be inactive")
@@ -278,7 +279,7 @@ func TestActivateUser(t *testing.T) {
 
 func TestDeactivateUser(t *testing.T) {
 	am := NewAuthorizationManager()
-	am.CreateUser("testuser", "password", []Role{RoleUser})
+	require.NoError(t, am.CreateUser("testuser", "password", []Role{RoleUser}))
 
 	err := am.DeactivateUser("testuser")
 	if err != nil {
@@ -294,9 +295,9 @@ func TestDeactivateUser(t *testing.T) {
 func TestListUsers(t *testing.T) {
 	am := NewAuthorizationManager()
 
-	am.CreateUser("user1", "password", []Role{RoleUser})
-	am.CreateUser("user2", "password", []Role{RoleAdmin})
-	am.CreateUser("user3", "password", []Role{RoleModerator})
+	require.NoError(t, am.CreateUser("user1", "password", []Role{RoleUser}))
+	require.NoError(t, am.CreateUser("user2", "password", []Role{RoleAdmin}))
+	require.NoError(t, am.CreateUser("user3", "password", []Role{RoleModerator}))
 
 	users := am.ListUsers()
 	if len(users) != 3 {
@@ -308,7 +309,7 @@ func TestUserTimestamps(t *testing.T) {
 	am := NewAuthorizationManager()
 
 	beforeCreation := time.Now()
-	am.CreateUser("testuser", "password", []Role{RoleUser})
+	require.NoError(t, am.CreateUser("testuser", "password", []Role{RoleUser}))
 	user, _ := am.GetUser("testuser")
 
 	if user.CreatedAt.Before(beforeCreation) {
@@ -321,7 +322,7 @@ func TestUserTimestamps(t *testing.T) {
 
 	// 更新用户并检查UpdatedAt
 	beforeUpdate := time.Now()
-	am.AssignRole("testuser", RoleModerator)
+	require.NoError(t, am.AssignRole("testuser", RoleModerator))
 	user, _ = am.GetUser("testuser")
 
 	if user.UpdatedAt.Before(beforeUpdate) {
@@ -371,10 +372,10 @@ func TestRoleConstants(t *testing.T) {
 
 func TestInactiveUserHasPermission(t *testing.T) {
 	am := NewAuthorizationManager()
-	am.CreateUser("testuser", "password", []Role{RoleAdmin})
+	require.NoError(t, am.CreateUser("testuser", "password", []Role{RoleAdmin}))
 
 	// 停用用户
-	am.DeactivateUser("testuser")
+	require.NoError(t, am.DeactivateUser("testuser"))
 
 	// 不活跃用户不应该有权限
 	if am.HasPermission("testuser", PermissionRead, "users") {
@@ -384,10 +385,10 @@ func TestInactiveUserHasPermission(t *testing.T) {
 
 func TestTableLevelPermissionPriority(t *testing.T) {
 	am := NewAuthorizationManager()
-	am.CreateUser("testuser", "password", []Role{RoleReadOnly})
+	require.NoError(t, am.CreateUser("testuser", "password", []Role{RoleReadOnly}))
 
 	// 授予表级别的写权限
-	am.GrantPermission("testuser", PermissionWrite, "users")
+	require.NoError(t, am.GrantPermission("testuser", PermissionWrite, "users"))
 
 	// 应该有表级别权限
 	if !am.HasPermission("testuser", PermissionWrite, "users") {

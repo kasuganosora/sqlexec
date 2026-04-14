@@ -233,23 +233,6 @@ func (p *PhysicalMergeJoin) mergeRowWithNull(notNull, nullRow domain.Row) domain
 	return merged
 }
 
-// getJoinColumns 从连接条件中获取列名
-func getJoinColumns(conditions []*JoinCondition) (string, string) {
-	if len(conditions) == 0 {
-		return "", ""
-	}
-
-	if conditions[0].Left != nil {
-		leftStr := fmt.Sprintf("%v", conditions[0].Left)
-		if conditions[0].Right != nil {
-			rightStr := fmt.Sprintf("%v", conditions[0].Right)
-			return leftStr, rightStr
-		}
-		return leftStr, ""
-	}
-	return "", ""
-}
-
 // compareValuesForSort 为归并排序比较两个值
 // 返回 -1: a < b, 0: a == b, 1: a > b
 func compareValuesForSort(a, b interface{}) int {

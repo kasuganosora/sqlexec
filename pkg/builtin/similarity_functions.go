@@ -76,7 +76,7 @@ func init() {
 	}
 
 	for _, fn := range similarityFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 

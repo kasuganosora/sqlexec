@@ -143,13 +143,7 @@ func (e *Engine) IndexDocumentWithTokens(doc *Document, tokens []Token) error {
 	// 转换词为ID
 	idTokens := make([]analyzer.Token, len(tokens))
 	for i, token := range tokens {
-		idTokens[i] = analyzer.Token{
-			Text:     token.Text,
-			Position: token.Position,
-			Start:    token.Start,
-			End:      token.End,
-			Type:     token.Type,
-		}
+		idTokens[i] = analyzer.Token(token)
 	}
 
 	// 转换为内部文档类型

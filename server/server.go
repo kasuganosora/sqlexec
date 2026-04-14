@@ -115,10 +115,10 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 	dsManager := db.GetDSManager()
 
 	// 注册数据源工厂
-	dsManager.GetRegistry().Register(memory.NewMemoryFactory())
-	dsManager.GetRegistry().Register(httpds.NewHTTPFactory())
-	dsManager.GetRegistry().Register(mysqlds.NewMySQLFactory())
-	dsManager.GetRegistry().Register(pgds.NewPostgreSQLFactory())
+	_ = dsManager.GetRegistry().Register(memory.NewMemoryFactory())
+	_ = dsManager.GetRegistry().Register(httpds.NewHTTPFactory())
+	_ = dsManager.GetRegistry().Register(mysqlds.NewMySQLFactory())
+	_ = dsManager.GetRegistry().Register(pgds.NewPostgreSQLFactory())
 	dsConfigs, err := config_schema.LoadDatasources(configDir)
 	if err != nil {
 		log.Printf("加载 datasources.json 失败: %v", err)
@@ -202,21 +202,21 @@ func NewServer(ctx context.Context, listener net.Listener, cfg *config.Config) *
 // registerHandlers 注册所有命令处理器
 func (s *Server) registerHandlers() {
 	// 注册简单处理器
-	s.handlerRegistry.Register(simpleHandlers.NewPingHandler(nil))
-	s.handlerRegistry.Register(simpleHandlers.NewQuitHandler())
-	s.handlerRegistry.Register(simpleHandlers.NewSetOptionHandler(nil))
-	s.handlerRegistry.Register(simpleHandlers.NewRefreshHandler(nil))
-	s.handlerRegistry.Register(simpleHandlers.NewStatisticsHandler())
-	s.handlerRegistry.Register(simpleHandlers.NewDebugHandler())
-	s.handlerRegistry.Register(simpleHandlers.NewShutdownHandler())
+	_ = s.handlerRegistry.Register(simpleHandlers.NewPingHandler(nil))
+	_ = s.handlerRegistry.Register(simpleHandlers.NewQuitHandler())
+	_ = s.handlerRegistry.Register(simpleHandlers.NewSetOptionHandler(nil))
+	_ = s.handlerRegistry.Register(simpleHandlers.NewRefreshHandler(nil))
+	_ = s.handlerRegistry.Register(simpleHandlers.NewStatisticsHandler())
+	_ = s.handlerRegistry.Register(simpleHandlers.NewDebugHandler())
+	_ = s.handlerRegistry.Register(simpleHandlers.NewShutdownHandler())
 
 	// 注册查询处理器
-	s.handlerRegistry.Register(queryHandlers.NewQueryHandler())
-	s.handlerRegistry.Register(queryHandlers.NewInitDBHandler(nil))
-	s.handlerRegistry.Register(queryHandlers.NewFieldListHandler(nil))
+	_ = s.handlerRegistry.Register(queryHandlers.NewQueryHandler())
+	_ = s.handlerRegistry.Register(queryHandlers.NewInitDBHandler(nil))
+	_ = s.handlerRegistry.Register(queryHandlers.NewFieldListHandler(nil))
 
 	// 注册进程控制处理器
-	s.handlerRegistry.Register(processHandlers.NewProcessKillHandler(nil))
+	_ = s.handlerRegistry.Register(processHandlers.NewProcessKillHandler(nil))
 
 	if s.logger != nil {
 		s.logger.Printf("已注册 %d 个命令处理器", s.handlerRegistry.Count())
@@ -226,13 +226,13 @@ func (s *Server) registerHandlers() {
 // registerParsers 注册所有包解析器
 func (s *Server) registerParsers() {
 	// 注册所有命令包解析器
-	s.parserRegistry.Register(parsers.NewPingPacketParser())
-	s.parserRegistry.Register(parsers.NewQuitPacketParser())
-	s.parserRegistry.Register(parsers.NewSetOptionPacketParser())
-	s.parserRegistry.Register(parsers.NewQueryPacketParser())
-	s.parserRegistry.Register(parsers.NewInitDBPacketParser())
-	s.parserRegistry.Register(parsers.NewFieldListPacketParser())
-	s.parserRegistry.Register(parsers.NewProcessKillPacketParser())
+	_ = s.parserRegistry.Register(parsers.NewPingPacketParser())
+	_ = s.parserRegistry.Register(parsers.NewQuitPacketParser())
+	_ = s.parserRegistry.Register(parsers.NewSetOptionPacketParser())
+	_ = s.parserRegistry.Register(parsers.NewQueryPacketParser())
+	_ = s.parserRegistry.Register(parsers.NewInitDBPacketParser())
+	_ = s.parserRegistry.Register(parsers.NewFieldListPacketParser())
+	_ = s.parserRegistry.Register(parsers.NewProcessKillPacketParser())
 
 	if s.logger != nil {
 		s.logger.Printf("已注册 %d 个包解析器", s.parserRegistry.Count())
@@ -284,7 +284,7 @@ func (s *Server) Start() (err error) {
 	for {
 		select {
 		case conn := <-acceptChan:
-			go s.handleConnection(conn)
+			go func() { _ = s.handleConnection(conn) }()
 		case err := <-errChan:
 			return err
 		case <-s.ctx.Done():
@@ -294,7 +294,7 @@ func (s *Server) Start() (err error) {
 }
 
 func (s *Server) handleConnection(conn net.Conn) (err error) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// 调试：检查 server 的关键字段是否为 nil
 	if s == nil {

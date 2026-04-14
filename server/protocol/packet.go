@@ -17,7 +17,6 @@ const NULLValueMarker = "___SQL_EXEC_NULL___"
 type Packet struct {
 	PayloadLength uint32 `mysql:"int<3>"`
 	SequenceID    uint8  `mysql:"int<1>"`
-	rawData       []byte // 保存原始数据
 	Payload       []byte // 保存载荷数据
 }
 
@@ -105,7 +104,7 @@ func (p *HandshakeV10Packet) Unmarshal(r io.Reader) (err error) {
 	p.ServerVersion, _ = ReadStringByNullEnd(nb)
 	p.ThreadID, _ = ReadNumber[uint32](nb, 4)
 	authPart := make([]byte, 8)
-	nb.Read(authPart)
+	_, _ = nb.Read(authPart)
 	p.AuthPluginDataPart = authPart
 	p.Filter, _ = ReadNumber[uint8](nb, 1)
 	p.CapabilityFlags1, _ = ReadNumber[uint16](nb, 2)
@@ -166,37 +165,37 @@ func (p *HandshakeV10Packet) Marshal() ([]byte, error) {
 	}
 
 	// 1. 写入 ProtocolVersion
-	WriteNumber(buf, p.ProtocolVersion, 1)
+	_ = WriteNumber(buf, p.ProtocolVersion, 1)
 	// 2. 写入 ServerVersion (以0结尾)
-	WriteStringByNullEnd(buf, p.ServerVersion)
+	_ = WriteStringByNullEnd(buf, p.ServerVersion)
 	// 3. 写入 ThreadID (4字节小端)
-	WriteNumber(buf, p.ThreadID, 4)
+	_ = WriteNumber(buf, p.ThreadID, 4)
 	// 4. 写入 AuthPluginDataPart (8字节)+NUL
 	authPart1 := make([]byte, len(p.AuthPluginDataPart)+1)
 	copy(authPart1, p.AuthPluginDataPart)
-	WriteBinary(buf, authPart1)
+	_ = WriteBinary(buf, authPart1)
 
 	// 6. 写入 CapabilityFlags1 (2字节小端)
-	WriteNumber(buf, p.CapabilityFlags1, 2)
+	_ = WriteNumber(buf, p.CapabilityFlags1, 2)
 	// 7. 写入 CharacterSet
-	WriteNumber(buf, p.CharacterSet, 1)
+	_ = WriteNumber(buf, p.CharacterSet, 1)
 	// 8. 写入 StatusFlags (2字节小端)
-	WriteNumber(buf, p.StatusFlags, 2)
+	_ = WriteNumber(buf, p.StatusFlags, 2)
 	// 9. 写入 CapabilityFlags2 (2字节小端)
-	WriteNumber(buf, p.CapabilityFlags2, 2)
+	_ = WriteNumber(buf, p.CapabilityFlags2, 2)
 	// 10. 写入 AuthPluginDataLen
-	WriteNumber(buf, authPluginDataLen, 1)
+	_ = WriteNumber(buf, authPluginDataLen, 1)
 	// 11. 写入 Reserved (6字节)
-	WriteBinary(buf, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	_ = WriteBinary(buf, []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	// 12. 写入 MariaDBCaps (4字节小端)
-	WriteNumber(buf, p.MariaDBCaps, 4)
+	_ = WriteNumber(buf, p.MariaDBCaps, 4)
 	// 13. 写入 AuthPluginDataPart2 (padded to at least 13 bytes)
 	if paddedPart2 != nil {
-		WriteBinary(buf, paddedPart2)
+		_ = WriteBinary(buf, paddedPart2)
 	}
 	// 14. 写入 AuthPluginName (以0结尾)
 	if p.AuthPluginName != "" {
-		WriteStringByNullEnd(buf, p.AuthPluginName)
+		_ = WriteStringByNullEnd(buf, p.AuthPluginName)
 	}
 
 	// 组装Packet头部
@@ -265,8 +264,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 	}
 
 	// 6. 尝试读取MariaDBCaps（如果还有数据）
-	buf = make([]byte, 1)
-	reader.Peek(1) // 检查是否还有数据
+	_, _ = reader.Peek(1) // 检查是否还有数据
 	if reader.Buffered() >= 4 {
 		buf, _ := readBytes(4)
 		p.MariaDBCaps = binary.LittleEndian.Uint32(buf)
@@ -282,8 +280,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 	clientCaps := (uint32(p.ExtendedClientCapabilities) << 16) | uint32(p.ClientCapabilities)
 
 	// 8. 读取认证响应
-	buf = make([]byte, 1)
-	reader.Peek(1) // 检查是否还有数据
+	_, _ = reader.Peek(1) // 检查是否还有数据
 	if reader.Buffered() > 0 {
 		switch {
 		case clientCaps&CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA != 0:
@@ -294,7 +291,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 			authLenBytes, _ := readBytes(1)
 			authLen := int(authLenBytes[0])
 			authData := make([]byte, authLen)
-			io.ReadFull(reader, authData)
+			_, _ = io.ReadFull(reader, authData)
 			p.AuthResponse = hex.EncodeToString(authData)
 		default:
 			// 旧密码认证：NUL结尾字符串
@@ -304,8 +301,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 
 	// 9. 读取Database（如果有）
 	if clientCaps&CLIENT_CONNECT_WITH_DB != 0 {
-		buf = make([]byte, 1)
-		reader.Peek(1) // 检查是否还有数据
+		_, _ = reader.Peek(1) // 检查是否还有数据
 		if reader.Buffered() > 0 {
 			p.Database, _ = ReadStringByNullEndFromReader(reader)
 		}
@@ -313,8 +309,7 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 
 	// 10. 读取ClientAuthPluginName（如果有）
 	if clientCaps&CLIENT_PLUGIN_AUTH != 0 {
-		buf = make([]byte, 1)
-		reader.Peek(1) // 检查是否还有数据
+		_, _ = reader.Peek(1) // 检查是否还有数据
 		if reader.Buffered() > 0 {
 			p.ClientAuthPluginName, _ = ReadStringByNullEndFromReader(reader)
 		}
@@ -322,8 +317,8 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 
 	// 11. 读取连接属性（如果有）
 	if clientCaps&CLIENT_CONNECT_ATTRS != 0 {
-		buf = make([]byte, 1)
-		reader.Peek(1) // 检查是否还有数据
+		_ = make([]byte, 1)
+		_, _ = reader.Peek(1) // 检查是否还有数据
 		if reader.Buffered() > 0 {
 			attrLenBytes, _ := ReadLenencNumber[uint64](reader)
 			p.ConnectionAttributesLength = attrLenBytes
@@ -346,8 +341,8 @@ func (p *HandshakeResponse) Unmarshal(r io.Reader, capabilities uint32) (err err
 
 	// 12. 读取ZstdCompressionLevel（如果有）
 	if clientCaps&CLIENT_ZSTD_COMPRESSION_ALGORITHM != 0 {
-		buf = make([]byte, 1)
-		reader.Peek(1) // 检查是否还有数据
+		_ = make([]byte, 1)
+		_, _ = reader.Peek(1) // 检查是否还有数据
 		if reader.Buffered() > 0 {
 			buf, _ := readBytes(1)
 			p.ZstdCompressionLevel = buf[0]
@@ -361,33 +356,33 @@ func (p *HandshakeResponse) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 1. 写入 ClientCapabilities (2字节小端)
-	WriteNumber(buf, p.ClientCapabilities, 2)
+	_ = WriteNumber(buf, p.ClientCapabilities, 2)
 	// 2. 写入 ExtendedClientCapabilities (2字节小端)
-	WriteNumber(buf, p.ExtendedClientCapabilities, 2)
+	_ = WriteNumber(buf, p.ExtendedClientCapabilities, 2)
 	// 3. 写入 MaxPacketSize (4字节小端)
-	WriteNumber(buf, p.MaxPacketSize, 4)
+	_ = WriteNumber(buf, p.MaxPacketSize, 4)
 	// 4. 写入 CharacterSet (1字节)
-	WriteNumber(buf, p.CharacterSet, 1)
+	_ = WriteNumber(buf, p.CharacterSet, 1)
 	// 5. 写入 Reserved (19字节)
-	WriteBinary(buf, p.Reserved)
+	_ = WriteBinary(buf, p.Reserved)
 	// 6. 写入 MariaDBCaps (4字节小端)
-	WriteNumber(buf, p.MariaDBCaps, 4)
+	_ = WriteNumber(buf, p.MariaDBCaps, 4)
 	// 7. 写入 User (NUL结尾字符串)
-	WriteStringByNullEnd(buf, p.User)
+	_ = WriteStringByNullEnd(buf, p.User)
 	// 8. 写入 AuthResponse (1字节长度+N字节内容)
 	authRespBytes, err := hex.DecodeString(p.AuthResponse)
 	if err != nil {
 		return nil, err
 	}
-	WriteNumber(buf, uint8(len(authRespBytes)), 1)
-	WriteBinary(buf, authRespBytes)
+	_ = WriteNumber(buf, uint8(len(authRespBytes)), 1)
+	_ = WriteBinary(buf, authRespBytes)
 	// 9. 写入 Database (如果存在，NUL结尾字符串)
 	if p.Database != "" {
-		WriteStringByNullEnd(buf, p.Database)
+		_ = WriteStringByNullEnd(buf, p.Database)
 	}
 	// 10. 写入 ClientAuthPluginName (如果存在，NUL结尾字符串)
 	if p.ClientAuthPluginName != "" {
-		WriteStringByNullEnd(buf, p.ClientAuthPluginName)
+		_ = WriteStringByNullEnd(buf, p.ClientAuthPluginName)
 	}
 	// 11. 写入 ConnectionAttributes (如果存在)
 	if len(p.ConnectionAttributes) > 0 {
@@ -402,13 +397,13 @@ func (p *HandshakeResponse) Marshal() ([]byte, error) {
 		}
 		attrData := attrBuf.Bytes()
 		// 写入属性长度（lenenc）
-		WriteLenencNumber(buf, uint64(len(attrData)))
+		_ = WriteLenencNumber(buf, uint64(len(attrData)))
 		// 写入属性数据
-		WriteBinary(buf, attrData)
+		_ = WriteBinary(buf, attrData)
 	}
 	// 12. 写入 ZstdCompressionLevel (如果存在，1字节)
 	if p.ZstdCompressionLevel != 0 {
-		WriteNumber(buf, p.ZstdCompressionLevel, 1)
+		_ = WriteNumber(buf, p.ZstdCompressionLevel, 1)
 	}
 
 	// 组装Packet头部
@@ -445,9 +440,9 @@ func (p *ConnectionAttributeItem) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入Name (长度编码)
-	WriteStringByLenenc(buf, p.Name)
+	_ = WriteStringByLenenc(buf, p.Name)
 	// 写入Value (长度编码)
-	WriteStringByLenenc(buf, p.Value)
+	_ = WriteStringByLenenc(buf, p.Value)
 
 	return buf.Bytes(), nil
 }
@@ -476,22 +471,22 @@ func (p *OkPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入 OK 包内容
-	WriteNumber(buf, p.OkInPacket.Header, 1)
-	WriteLenencNumber(buf, p.OkInPacket.AffectedRows)
-	WriteLenencNumber(buf, p.OkInPacket.LastInsertId)
+	_ = WriteNumber(buf, p.OkInPacket.Header, 1)
+	_ = WriteLenencNumber(buf, p.OkInPacket.AffectedRows)
+	_ = WriteLenencNumber(buf, p.OkInPacket.LastInsertId)
 
 	// StatusFlags 和 Warnings 都需要在 CLIENT_PROTOCOL_41 时写入
 	// 这里我们假设客户端支持 CLIENT_PROTOCOL_41，实际使用时应该传入条件参数
-	WriteNumber(buf, p.OkInPacket.StatusFlags, 2)
-	WriteNumber(buf, p.OkInPacket.Warnings, 2)
+	_ = WriteNumber(buf, p.OkInPacket.StatusFlags, 2)
+	_ = WriteNumber(buf, p.OkInPacket.Warnings, 2)
 
 	// 总是写入 Info（使用长度编码，即使Info是空字符串）
 	// 根据MySQL协议，Info字段总是存在，长度为0表示空字符串
-	WriteStringByLenenc(buf, p.OkInPacket.Info)
+	_ = WriteStringByLenenc(buf, p.OkInPacket.Info)
 
 	// 总是写入 SessionStateInfo（如果标志位设置了）
 	if p.OkInPacket.StatusFlags&SERVER_SESSION_STATE_CHANGED != 0 {
-		WriteStringByLenenc(buf, p.OkInPacket.SessionStateInfo)
+		_ = WriteStringByLenenc(buf, p.OkInPacket.SessionStateInfo)
 	}
 
 	// 组装Packet头部
@@ -627,7 +622,7 @@ func (p *OkInPacket) Unmarshal(r io.Reader, conditional uint32) (err error) {
 		infoLen, _ := ReadLenencNumber[uint8](reader)
 		if infoLen > 0 {
 			infoBytes := make([]byte, infoLen)
-			reader.Read(infoBytes)
+			_, _ = reader.Read(infoBytes)
 			p.Info = string(infoBytes)
 		}
 		// infoLen = 0 表示空字符串，Info保持为""
@@ -682,25 +677,25 @@ func (p *ErrorPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入错误包内容
-	WriteNumber(buf, p.ErrorInPacket.Header, 1)
-	WriteNumber(buf, p.ErrorInPacket.ErrorCode, 2)
+	_ = WriteNumber(buf, p.Header, 1)
+	_ = WriteNumber(buf, p.ErrorCode, 2)
 
-	if p.ErrorInPacket.SqlState != "" {
+	if p.SqlState != "" {
 		// SQL State Marker: 写入1个字节 '#'
 		buf.WriteByte('#')
 		// SQL State: 写入5个字节（固定长度，不带NULL终止）
-		if len(p.ErrorInPacket.SqlState) >= 5 {
-			buf.WriteString(p.ErrorInPacket.SqlState[:5])
+		if len(p.SqlState) >= 5 {
+			buf.WriteString(p.SqlState[:5])
 		} else {
 			// 如果SqlState不足5字节，右补空格
-			buf.WriteString(p.ErrorInPacket.SqlState)
-			for i := len(p.ErrorInPacket.SqlState); i < 5; i++ {
+			buf.WriteString(p.SqlState)
+			for i := len(p.SqlState); i < 5; i++ {
 				buf.WriteByte(' ')
 			}
 		}
 	}
 
-	WriteStringByNullEnd(buf, p.ErrorInPacket.ErrorMessage)
+	_ = WriteStringByNullEnd(buf, p.ErrorMessage)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -865,11 +860,11 @@ func (p *EofPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入 EOF 包内容
-	WriteNumber(buf, p.EofInPacket.Header, 1)
+	_ = WriteNumber(buf, p.EofInPacket.Header, 1)
 
 	// 在 CLIENT_PROTOCOL_41 条件下，总是写入 Warnings 和 StatusFlags
-	WriteNumber(buf, p.EofInPacket.Warnings, 2)
-	WriteNumber(buf, p.EofInPacket.StatusFlags, 2)
+	_ = WriteNumber(buf, p.EofInPacket.Warnings, 2)
+	_ = WriteNumber(buf, p.EofInPacket.StatusFlags, 2)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -1000,9 +995,9 @@ func (p *ComSetOptionPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入选项操作
-	WriteNumber(buf, p.OptionOperation, 2)
+	_ = WriteNumber(buf, p.OptionOperation, 2)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -1055,7 +1050,7 @@ func (p *ColumnCountPacket) Marshal(capabilities uint32) ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入列数（长度编码）
-	WriteLenencNumber(buf, p.ColumnCount)
+	_ = WriteLenencNumber(buf, p.ColumnCount)
 
 	// 如果支持MARIADB_CLIENT_CACHE_METADATA且有metadata follows,写入该字节
 	if capabilities&MARIADB_CLIENT_CACHE_METADATA != 0 && p.MetadataFollows != nil {
@@ -1110,7 +1105,7 @@ func (p *FieldMetaPacket) Unmarshal(r io.Reader, capabilities uint32) error {
 
 	// 读取保留字段（2字节）
 	reserved := make([]byte, 2)
-	io.ReadFull(reader, reserved)
+	_, _ = io.ReadFull(reader, reserved)
 	p.Reserved = string(reserved)
 
 	// 读取扩展元数据（如果支持）
@@ -1156,31 +1151,31 @@ func (p *FieldMetaPacket) Marshal(capabilities uint32) ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入字段元数据
-	WriteStringByLenenc(buf, p.Catalog)
-	WriteStringByLenenc(buf, p.Schema)
-	WriteStringByLenenc(buf, p.Table)
-	WriteStringByLenenc(buf, p.OrgTable)
-	WriteStringByLenenc(buf, p.Name)
-	WriteStringByLenenc(buf, p.OrgName)
+	_ = WriteStringByLenenc(buf, p.Catalog)
+	_ = WriteStringByLenenc(buf, p.Schema)
+	_ = WriteStringByLenenc(buf, p.Table)
+	_ = WriteStringByLenenc(buf, p.OrgTable)
+	_ = WriteStringByLenenc(buf, p.Name)
+	_ = WriteStringByLenenc(buf, p.OrgName)
 	p.LengthOfFixedLengthFields = 0xc
-	WriteLenencNumber(buf, p.LengthOfFixedLengthFields)
-	WriteNumber(buf, p.CharacterSet, 2)
-	WriteNumber(buf, p.ColumnLength, 4)
-	WriteNumber(buf, p.Type, 1)
-	WriteNumber(buf, p.Flags, 2)
-	WriteNumber(buf, p.Decimals, 1)
-	WriteBinary(buf, []byte{0x00, 0x00})
+	_ = WriteLenencNumber(buf, p.LengthOfFixedLengthFields)
+	_ = WriteNumber(buf, p.CharacterSet, 2)
+	_ = WriteNumber(buf, p.ColumnLength, 4)
+	_ = WriteNumber(buf, p.Type, 1)
+	_ = WriteNumber(buf, p.Flags, 2)
+	_ = WriteNumber(buf, p.Decimals, 1)
+	_ = WriteBinary(buf, []byte{0x00, 0x00})
 
 	// 写入扩展元数据（如果支持且有数据）
 	if capabilities&MARIADB_CLIENT_EXTENDED_METADATA != 0 && p.ExtendedMetadata != "" {
 		// 写入类型标识(0x00表示type)
 		buf.WriteByte(0x00)
 		// 写入扩展元数据值
-		WriteStringByLenenc(buf, p.ExtendedMetadata)
+		_ = WriteStringByLenenc(buf, p.ExtendedMetadata)
 	}
 
 	if p.DefaultValue != nil {
-		WriteStringByLenenc(buf, *p.DefaultValue)
+		_ = WriteStringByLenenc(buf, *p.DefaultValue)
 	}
 
 	// 组装Packet头部
@@ -1248,7 +1243,7 @@ func (p *RowDataPacket) Marshal() ([]byte, error) {
 		if value == NULLValueMarker {
 			buf.WriteByte(0xfb) // NULL标记
 		} else {
-			WriteStringByLenenc(buf, value)
+			_ = WriteStringByLenenc(buf, value)
 		}
 	}
 
@@ -1292,7 +1287,7 @@ func (p *ComStmtPreparePacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入查询字符串（直接写入字节数组，不添加null结束符）
 	buf.WriteString(p.Query)
 
@@ -1347,7 +1342,7 @@ func (p *ComStmtExecutePacket) Unmarshal(r io.Reader) error {
 
 	// 读取剩余的所有数据（包含 NULL Bitmap, NewParamsBindFlag, ParamTypes, ParamValues）
 	remainingData, _ := io.ReadAll(reader)
-	dataReader := bytes.NewReader(remainingData)
+	var dataReader *bytes.Reader
 
 	// 使用更智能的方法确定 NULL bitmap 的长度
 	// remainingData 包含：NULL Bitmap + NewParamsBindFlag + ParamTypes + ParamValues
@@ -1448,7 +1443,7 @@ func (p *ComStmtExecutePacket) Unmarshal(r io.Reader) error {
 			// 如果遇到无效的类型，停止读取
 			if !validTypes[paramType.Type] || paramType.Flag >= 0x10 {
 				// 无效的类型，回退
-				dataReader.Seek(-2, io.SeekCurrent)
+				_, _ = dataReader.Seek(-2, io.SeekCurrent)
 				break
 			}
 
@@ -1505,11 +1500,11 @@ func (p *ComStmtExecutePacket) Unmarshal(r io.Reader) error {
 				p.ParamValues = append(p.ParamValues, int64(val))
 			case 0x0a: // FLOAT
 				var val float32
-				binary.Read(dataReader, binary.LittleEndian, &val)
+				_ = binary.Read(dataReader, binary.LittleEndian, &val)
 				p.ParamValues = append(p.ParamValues, val)
 			case 0x0b: // DOUBLE
 				var val float64
-				binary.Read(dataReader, binary.LittleEndian, &val)
+				_ = binary.Read(dataReader, binary.LittleEndian, &val)
 				p.ParamValues = append(p.ParamValues, val)
 			case 0x0f, 0xfd: // VARCHAR, VAR_STRING
 				val, _ := ReadStringByLenencFromReader[uint8](dataReader)
@@ -1572,13 +1567,13 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入语句ID
-	WriteNumber(buf, p.StatementID, 4)
+	_ = WriteNumber(buf, p.StatementID, 4)
 	// 写入标志
-	WriteNumber(buf, p.Flags, 1)
+	_ = WriteNumber(buf, p.Flags, 1)
 	// 写入迭代计数
-	WriteNumber(buf, p.IterationCount, 4)
+	_ = WriteNumber(buf, p.IterationCount, 4)
 
 	// 计算参数数量
 	paramCount := len(p.ParamTypes)
@@ -1603,17 +1598,17 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 	}
 
 	// 写入NULL位图
-	WriteBinary(buf, p.NullBitmap)
+	_ = WriteBinary(buf, p.NullBitmap)
 
 	// 写入新参数绑定标志
-	WriteNumber(buf, p.NewParamsBindFlag, 1)
+	_ = WriteNumber(buf, p.NewParamsBindFlag, 1)
 
 	// 如果有参数类型和值，写入它们
 	if p.NewParamsBindFlag == 1 {
 		// 写入参数类型
 		for _, paramType := range p.ParamTypes {
-			WriteNumber(buf, paramType.Type, 1)
-			WriteNumber(buf, paramType.Flag, 1)
+			_ = WriteNumber(buf, paramType.Type, 1)
+			_ = WriteNumber(buf, paramType.Flag, 1)
 		}
 
 		// 写入参数值（根据类型）
@@ -1636,44 +1631,44 @@ func (p *ComStmtExecutePacket) Marshal() ([]byte, error) {
 					}
 				case 0x02: // SMALLINT
 					if val, ok := value.(int16); ok {
-						binary.Write(buf, binary.LittleEndian, val)
+						_ = binary.Write(buf, binary.LittleEndian, val)
 					} else if val, ok := value.(int); ok {
-						binary.Write(buf, binary.LittleEndian, int16(val))
+						_ = binary.Write(buf, binary.LittleEndian, int16(val))
 					}
 				case 0x03: // INT
 					if val, ok := value.(int32); ok {
-						binary.Write(buf, binary.LittleEndian, val)
+						_ = binary.Write(buf, binary.LittleEndian, val)
 					} else if val, ok := value.(int); ok {
-						binary.Write(buf, binary.LittleEndian, int32(val))
+						_ = binary.Write(buf, binary.LittleEndian, int32(val))
 					}
 				case 0x08: // BIGINT
 					if val, ok := value.(int64); ok {
-						binary.Write(buf, binary.LittleEndian, val)
+						_ = binary.Write(buf, binary.LittleEndian, val)
 					} else if val, ok := value.(int); ok {
-						binary.Write(buf, binary.LittleEndian, int64(val))
+						_ = binary.Write(buf, binary.LittleEndian, int64(val))
 					}
 				case 0x0a: // FLOAT
 					if val, ok := value.(float32); ok {
-						binary.Write(buf, binary.LittleEndian, val)
+						_ = binary.Write(buf, binary.LittleEndian, val)
 					}
 				case 0x0b: // DOUBLE
 					if val, ok := value.(float64); ok {
-						binary.Write(buf, binary.LittleEndian, val)
+						_ = binary.Write(buf, binary.LittleEndian, val)
 					}
 				case 0x0f, 0xfd: // VARCHAR, VAR_STRING
 					if val, ok := value.(string); ok {
-						WriteStringByLenenc(buf, val)
+						_ = WriteStringByLenenc(buf, val)
 					}
 				default:
 					// 默认作为字符串
 					if val, ok := value.(string); ok {
-						WriteStringByLenenc(buf, val)
+						_ = WriteStringByLenenc(buf, val)
 					}
 				}
 			} else {
 				// 没有类型信息，默认作为字符串
 				if val, ok := value.(string); ok {
-					WriteStringByLenenc(buf, val)
+					_ = WriteStringByLenenc(buf, val)
 				}
 			}
 		}
@@ -1736,7 +1731,7 @@ func (p *StmtPrepareResponsePacket) Unmarshal(r io.Reader) error {
 		paramMeta.Decimals, _ = ReadNumber[uint8](reader, 1)
 		// 读取保留字段（2字节）
 		reserved := make([]byte, 2)
-		io.ReadFull(reader, reserved)
+		_, _ = io.ReadFull(reader, reserved)
 		p.Params[i] = paramMeta
 	}
 
@@ -1754,7 +1749,7 @@ func (p *StmtPrepareResponsePacket) Unmarshal(r io.Reader) error {
 					eofPacket.StatusFlags, _ = ReadNumber[uint16](reader, 2)
 				} else if eofPacket.Header == 0x00 {
 					// OK 包 - 读取受影响行数和插入ID
-					io.ReadFull(reader, make([]byte, 2)) // 跳过
+					_, _ = io.ReadFull(reader, make([]byte, 2)) // 跳过
 					eofPacket.Warnings, _ = ReadNumber[uint16](reader, 2)
 					eofPacket.StatusFlags, _ = ReadNumber[uint16](reader, 2)
 				}
@@ -1780,7 +1775,7 @@ func (p *StmtPrepareResponsePacket) Unmarshal(r io.Reader) error {
 		colMeta.Decimals, _ = ReadNumber[uint8](reader, 1)
 		// 读取保留字段（2字节）
 		reserved := make([]byte, 2)
-		io.ReadFull(reader, reserved)
+		_, _ = io.ReadFull(reader, reserved)
 		p.Columns[i] = colMeta
 	}
 
@@ -1791,70 +1786,70 @@ func (p *StmtPrepareResponsePacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入语句ID
-	WriteNumber(buf, p.StatementID, 4)
+	_ = WriteNumber(buf, p.StatementID, 4)
 	// 写入列数
-	WriteNumber(buf, p.ColumnCount, 2)
+	_ = WriteNumber(buf, p.ColumnCount, 2)
 	// 写入参数数
-	WriteNumber(buf, p.ParamCount, 2)
+	_ = WriteNumber(buf, p.ParamCount, 2)
 	// 写入保留字段
-	WriteNumber(buf, p.Reserved, 1)
+	_ = WriteNumber(buf, p.Reserved, 1)
 	// 写入警告数
-	WriteNumber(buf, p.WarningCount, 2)
+	_ = WriteNumber(buf, p.WarningCount, 2)
 
 	// 写入参数元数据
 	for _, param := range p.Params {
-		WriteStringByLenenc(buf, param.Catalog)
-		WriteStringByLenenc(buf, param.Schema)
-		WriteStringByLenenc(buf, param.Table)
-		WriteStringByLenenc(buf, param.OrgTable)
-		WriteStringByLenenc(buf, param.Name)
-		WriteStringByLenenc(buf, param.OrgName)
-		WriteLenencNumber(buf, 0x0c)
-		WriteNumber(buf, param.CharacterSet, 2)
-		WriteNumber(buf, param.ColumnLength, 4)
-		WriteNumber(buf, param.Type, 1)
-		WriteNumber(buf, param.Flags, 2)
-		WriteNumber(buf, param.Decimals, 1)
-		WriteBinary(buf, []byte{0x00, 0x00})
+		_ = WriteStringByLenenc(buf, param.Catalog)
+		_ = WriteStringByLenenc(buf, param.Schema)
+		_ = WriteStringByLenenc(buf, param.Table)
+		_ = WriteStringByLenenc(buf, param.OrgTable)
+		_ = WriteStringByLenenc(buf, param.Name)
+		_ = WriteStringByLenenc(buf, param.OrgName)
+		_ = WriteLenencNumber(buf, 0x0c)
+		_ = WriteNumber(buf, param.CharacterSet, 2)
+		_ = WriteNumber(buf, param.ColumnLength, 4)
+		_ = WriteNumber(buf, param.Type, 1)
+		_ = WriteNumber(buf, param.Flags, 2)
+		_ = WriteNumber(buf, param.Decimals, 1)
+		_ = WriteBinary(buf, []byte{0x00, 0x00})
 	}
 
 	// 写入参数结束包（如果存在参数）
 	if p.ParamCount > 0 {
 		eofBuf := new(bytes.Buffer)
-		eofBuf.WriteByte(0x00)       // OK header
-		WriteLenencNumber(eofBuf, 0) // affected rows
-		WriteLenencNumber(eofBuf, 0) // last insert id
-		WriteNumber(eofBuf, 0, 2)    // status flags
-		WriteNumber(eofBuf, 0, 2)    // warnings
-		WriteBinary(buf, eofBuf.Bytes())
+		eofBuf.WriteByte(0x00)           // OK header
+		_ = WriteLenencNumber(eofBuf, 0) // affected rows
+		_ = WriteLenencNumber(eofBuf, 0) // last insert id
+		_ = WriteNumber(eofBuf, 0, 2)    // status flags
+		_ = WriteNumber(eofBuf, 0, 2)    // warnings
+		_ = WriteBinary(buf, eofBuf.Bytes())
 	}
 
 	// 写入列元数据
 	for _, col := range p.Columns {
-		WriteStringByLenenc(buf, col.Catalog)
-		WriteStringByLenenc(buf, col.Schema)
-		WriteStringByLenenc(buf, col.Table)
-		WriteStringByLenenc(buf, col.OrgTable)
-		WriteStringByLenenc(buf, col.Name)
-		WriteStringByLenenc(buf, col.OrgName)
-		WriteLenencNumber(buf, 0x0c)
-		WriteNumber(buf, col.CharacterSet, 2)
-		WriteNumber(buf, col.ColumnLength, 4)
-		WriteNumber(buf, col.Type, 1)
-		WriteNumber(buf, col.Flags, 2)
-		WriteNumber(buf, col.Decimals, 1)
-		WriteBinary(buf, []byte{0x00, 0x00})
+		_ = WriteStringByLenenc(buf, col.Catalog)
+		_ = WriteStringByLenenc(buf, col.Schema)
+		_ = WriteStringByLenenc(buf, col.Table)
+		_ = WriteStringByLenenc(buf, col.OrgTable)
+		_ = WriteStringByLenenc(buf, col.Name)
+		_ = WriteStringByLenenc(buf, col.OrgName)
+		_ = WriteLenencNumber(buf, 0x0c)
+		_ = WriteNumber(buf, col.CharacterSet, 2)
+		_ = WriteNumber(buf, col.ColumnLength, 4)
+		_ = WriteNumber(buf, col.Type, 1)
+		_ = WriteNumber(buf, col.Flags, 2)
+		_ = WriteNumber(buf, col.Decimals, 1)
+		_ = WriteBinary(buf, []byte{0x00, 0x00})
 	}
 
 	// 写入列结束包（如果存在列）
 	if p.ColumnCount > 0 {
 		eofBuf := new(bytes.Buffer)
-		eofBuf.WriteByte(0x00)       // OK header
-		WriteLenencNumber(eofBuf, 0) // affected rows
-		WriteLenencNumber(eofBuf, 0) // last insert id
-		WriteNumber(eofBuf, 0, 2)    // status flags
-		WriteNumber(eofBuf, 0, 2)    // warnings
-		WriteBinary(buf, eofBuf.Bytes())
+		eofBuf.WriteByte(0x00)           // OK header
+		_ = WriteLenencNumber(eofBuf, 0) // affected rows
+		_ = WriteLenencNumber(eofBuf, 0) // last insert id
+		_ = WriteNumber(eofBuf, 0, 2)    // status flags
+		_ = WriteNumber(eofBuf, 0, 2)    // warnings
+		_ = WriteBinary(buf, eofBuf.Bytes())
 	}
 
 	// 组装Packet头部
@@ -2323,7 +2318,7 @@ func (p *BinaryRowDataPacket) Marshal(columnCount uint64, columnTypes []uint8) (
 		} else {
 			// 默认作为字符串处理
 			if str, ok := value.(string); ok {
-				WriteStringByLenenc(buf, str)
+				_ = WriteStringByLenenc(buf, str)
 			}
 		}
 	}
@@ -2342,38 +2337,38 @@ func (p *BinaryRowDataPacket) writeValueByType(buf *bytes.Buffer, value any, col
 
 	case 0x02: // MYSQL_TYPE_SHORT
 		if val, ok := value.(int16); ok {
-			binary.Write(buf, binary.LittleEndian, val)
+			_ = binary.Write(buf, binary.LittleEndian, val)
 		}
 
 	case 0x03: // MYSQL_TYPE_LONG
 		if val, ok := value.(int32); ok {
-			binary.Write(buf, binary.LittleEndian, val)
+			_ = binary.Write(buf, binary.LittleEndian, val)
 		}
 
 	case 0x08: // MYSQL_TYPE_LONGLONG
 		if val, ok := value.(int64); ok {
-			binary.Write(buf, binary.LittleEndian, val)
+			_ = binary.Write(buf, binary.LittleEndian, val)
 		}
 
 	case 0x04: // MYSQL_TYPE_FLOAT
 		if val, ok := value.(float32); ok {
-			binary.Write(buf, binary.LittleEndian, val)
+			_ = binary.Write(buf, binary.LittleEndian, val)
 		}
 
 	case 0x05: // MYSQL_TYPE_DOUBLE
 		if val, ok := value.(float64); ok {
-			binary.Write(buf, binary.LittleEndian, val)
+			_ = binary.Write(buf, binary.LittleEndian, val)
 		}
 
 	case 0x0f, 0xfd, 0xfe: // VARCHAR, VAR_STRING, STRING
 		if val, ok := value.(string); ok {
-			WriteStringByLenenc(buf, val)
+			_ = WriteStringByLenenc(buf, val)
 		}
 
 	default:
 		// 默认作为字符串处理
 		if val, ok := value.(string); ok {
-			WriteStringByLenenc(buf, val)
+			_ = WriteStringByLenenc(buf, val)
 		}
 	}
 	return nil
@@ -2402,9 +2397,9 @@ func (p *ComStmtClosePacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入语句ID
-	WriteNumber(buf, p.StatementID, 4)
+	_ = WriteNumber(buf, p.StatementID, 4)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2440,7 +2435,7 @@ func (p *ComPingPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2476,7 +2471,7 @@ func (p *ComQuitPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2513,9 +2508,9 @@ func (p *ComRefreshPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入子命令
-	WriteNumber(buf, p.SubCommand, 1)
+	_ = WriteNumber(buf, p.SubCommand, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2552,9 +2547,9 @@ func (p *ComShutdownPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入关闭类型
-	WriteNumber(buf, p.ShutdownType, 1)
+	_ = WriteNumber(buf, p.ShutdownType, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2589,7 +2584,7 @@ func (p *ComStatisticsPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2624,7 +2619,7 @@ func (p *ComProcessInfoPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2661,9 +2656,9 @@ func (p *ComProcessKillPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入进程ID
-	WriteNumber(buf, p.ProcessID, 4)
+	_ = WriteNumber(buf, p.ProcessID, 4)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2698,7 +2693,7 @@ func (p *ComDebugPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2733,7 +2728,7 @@ func (p *ComTimePacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2768,7 +2763,7 @@ func (p *ComDelayedInsertPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2812,15 +2807,15 @@ func (p *ComChangeUserPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入用户名
-	WriteStringByNullEnd(buf, p.User)
+	_ = WriteStringByNullEnd(buf, p.User)
 	// 写入认证响应
-	WriteStringByLenenc(buf, p.AuthResponse)
+	_ = WriteStringByLenenc(buf, p.AuthResponse)
 	// 写入数据库名
-	WriteStringByNullEnd(buf, p.Database)
+	_ = WriteStringByNullEnd(buf, p.Database)
 	// 写入字符集
-	WriteNumber(buf, p.CharacterSet, 2)
+	_ = WriteNumber(buf, p.CharacterSet, 2)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2864,15 +2859,15 @@ func (p *ComBinlogDumpPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入二进制日志位置
-	WriteNumber(buf, p.BinlogPos, 4)
+	_ = WriteNumber(buf, p.BinlogPos, 4)
 	// 写入标志
-	WriteNumber(buf, p.Flags, 2)
+	_ = WriteNumber(buf, p.Flags, 2)
 	// 写入服务器ID
-	WriteNumber(buf, p.ServerID, 4)
+	_ = WriteNumber(buf, p.ServerID, 4)
 	// 写入二进制日志文件名（以 NULL 结尾）
-	WriteStringByNullEnd(buf, p.BinlogFilename)
+	_ = WriteStringByNullEnd(buf, p.BinlogFilename)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2911,11 +2906,11 @@ func (p *ComTableDumpPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入数据库名
-	WriteStringByNullEnd(buf, p.Database)
+	_ = WriteStringByNullEnd(buf, p.Database)
 	// 写入表名
-	WriteStringByNullEnd(buf, p.Table)
+	_ = WriteStringByNullEnd(buf, p.Table)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -2954,11 +2949,11 @@ func (p *ComConnectOutPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入主机名
-	WriteStringByNullEnd(buf, p.Host)
+	_ = WriteStringByNullEnd(buf, p.Host)
 	// 写入端口
-	WriteNumber(buf, p.Port, 2)
+	_ = WriteNumber(buf, p.Port, 2)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -3008,21 +3003,21 @@ func (p *ComRegisterSlavePacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入服务器ID
-	WriteNumber(buf, p.ServerID, 4)
+	_ = WriteNumber(buf, p.ServerID, 4)
 	// 写入主机名
-	WriteStringByNullEnd(buf, p.Host)
+	_ = WriteStringByNullEnd(buf, p.Host)
 	// 写入用户名
-	WriteStringByNullEnd(buf, p.User)
+	_ = WriteStringByNullEnd(buf, p.User)
 	// 写入密码
-	WriteStringByNullEnd(buf, p.Password)
+	_ = WriteStringByNullEnd(buf, p.Password)
 	// 写入端口
-	WriteNumber(buf, p.Port, 2)
+	_ = WriteNumber(buf, p.Port, 2)
 	// 写入复制等级
-	WriteNumber(buf, p.ReplicationRank, 4)
+	_ = WriteNumber(buf, p.ReplicationRank, 4)
 	// 写入主服务器ID
-	WriteNumber(buf, p.MasterID, 4)
+	_ = WriteNumber(buf, p.MasterID, 4)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -3067,13 +3062,13 @@ func (p *ComStmtSendLongDataPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入语句ID
-	WriteNumber(buf, p.StatementID, 4)
+	_ = WriteNumber(buf, p.StatementID, 4)
 	// 写入参数ID
-	WriteNumber(buf, p.ParamID, 2)
+	_ = WriteNumber(buf, p.ParamID, 2)
 	// 写入数据
-	WriteBinary(buf, p.Data)
+	_ = WriteBinary(buf, p.Data)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -3111,9 +3106,9 @@ func (p *ComStmtResetPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入语句ID
-	WriteNumber(buf, p.StatementID, 4)
+	_ = WriteNumber(buf, p.StatementID, 4)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -3153,11 +3148,11 @@ func (p *ComFetchPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入语句ID
-	WriteNumber(buf, p.StatementID, 4)
+	_ = WriteNumber(buf, p.StatementID, 4)
 	// 写入行数
-	WriteNumber(buf, p.RowCount, 4)
+	_ = WriteNumber(buf, p.RowCount, 4)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -3192,7 +3187,7 @@ func (p *ComDaemonPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -3227,7 +3222,7 @@ func (p *ComErrorPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -3266,9 +3261,9 @@ func (p *LocalInfilePacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入头部
-	WriteNumber(buf, p.Header, 1)
+	_ = WriteNumber(buf, p.Header, 1)
 	// 写入文件名
-	WriteStringByNullEnd(buf, p.Filename)
+	_ = WriteStringByNullEnd(buf, p.Filename)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -3322,16 +3317,16 @@ func (p *ProgressReportPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入头部
-	WriteNumber(buf, p.Header, 1)
+	_ = WriteNumber(buf, p.Header, 1)
 	// 写入错误码（0xFFFF）
-	WriteNumber(buf, p.ErrorCode, 2)
+	_ = WriteNumber(buf, p.ErrorCode, 2)
 	// 写入阶段信息
-	WriteNumber(buf, p.Stage, 1)
-	WriteNumber(buf, p.MaxStage, 1)
+	_ = WriteNumber(buf, p.Stage, 1)
+	_ = WriteNumber(buf, p.MaxStage, 1)
 	// 写入进度值（4字节小端）
-	WriteNumber(buf, p.Progress, 4)
+	_ = WriteNumber(buf, p.Progress, 4)
 	// 写入进度信息
-	WriteStringByNullEnd(buf, p.Info)
+	_ = WriteStringByNullEnd(buf, p.Info)
 
 	// 组装Packet头部
 	payload := buf.Bytes()
@@ -3366,7 +3361,7 @@ func (p *ComQueryPacket) Marshal() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// 写入命令类型
-	WriteNumber(buf, p.Command, 1)
+	_ = WriteNumber(buf, p.Command, 1)
 	// 写入查询字符串（不添加null终止符）
 	buf.WriteString(p.Query)
 

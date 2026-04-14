@@ -149,7 +149,7 @@ func (ds *BadgerDataSource) Connect(ctx context.Context) error {
 
 	// Load existing tables into cache
 	if err := ds.loadTablesFromDB(ctx); err != nil {
-		ds.db.Close()
+		_ = ds.db.Close()
 		ds.connected = false
 		return fmt.Errorf("failed to load tables: %w", err)
 	}
@@ -341,8 +341,7 @@ func (ds *BadgerDataSource) DropTable(ctx context.Context, tableName string) err
 	}
 
 	// Delete all indexes
-	idxPrefix := ds.keyEncoder.EncodeIndexPrefix(tableName, "")
-	idxPrefix = []byte(PrefixIndex + tableName + ":")
+	idxPrefix := []byte(PrefixIndex + tableName + ":")
 	if err := ds.deleteByPrefix(idxPrefix); err != nil {
 		return fmt.Errorf("failed to delete indexes: %w", err)
 	}

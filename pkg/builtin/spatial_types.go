@@ -1014,8 +1014,6 @@ func formatPointList(points []GeoPoint) string {
 // It accepts Geometry objects directly, or WKT strings.
 func ParseGeometryArg(arg interface{}) (Geometry, error) {
 	switch v := arg.(type) {
-	case Geometry:
-		return v, nil
 	case *GeoPoint:
 		return v, nil
 	case *GeoLineString:
@@ -1029,6 +1027,8 @@ func ParseGeometryArg(arg interface{}) (Geometry, error) {
 	case *GeoMultiPolygon:
 		return v, nil
 	case *GeoCollection:
+		return v, nil
+	case Geometry:
 		return v, nil
 	case string:
 		return ParseWKT(v)

@@ -34,7 +34,7 @@ func BenchmarkNewPagedRows_WithPool(b *testing.B) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	for _, n := range []int{100, 1000, 10000, 100000} {
 		rows := makeBenchRows(n)
@@ -75,7 +75,7 @@ func BenchmarkMaterialize_WithPool(b *testing.B) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	for _, n := range []int{100, 1000, 10000, 100000} {
 		rows := makeBenchRows(n)
@@ -145,7 +145,7 @@ func BenchmarkGet_WithPool(b *testing.B) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	rows := makeBenchRows(10000)
 	pr := NewPagedRows(bp, rows, 4096, "bench", 1)
@@ -184,7 +184,7 @@ func BenchmarkRange_WithPool(b *testing.B) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	for _, n := range []int{1000, 10000, 100000} {
 		rows := makeBenchRows(n)
@@ -227,7 +227,7 @@ func BenchmarkPinUnpin_Enabled_InMemory(b *testing.B) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	page := &RowPage{
 		id:        PageID{Table: "t", Version: 1, Index: 0},
@@ -255,7 +255,7 @@ func BenchmarkEvictAndReload(b *testing.B) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	defer bp.Close()
+	defer func() { _ = bp.Close() }()
 
 	for _, n := range []int{100, 1000, 4096} {
 		b.Run(fmt.Sprintf("pageRows=%d", n), func(b *testing.B) {
@@ -428,9 +428,9 @@ func BenchmarkEstimatePageSize(b *testing.B) {
 
 func BenchmarkE2E_Insert_Passthrough(b *testing.B) {
 	ds := NewMVCCDataSource(nil)
-	ds.Connect(context.Background())
+	_ = ds.Connect(context.Background())
 	ctx := context.Background()
-	ds.CreateTable(ctx, &domain.TableInfo{
+	_ = ds.CreateTable(ctx, &domain.TableInfo{
 		Name:    "bench",
 		Columns: benchColumns(),
 	})
@@ -438,7 +438,7 @@ func BenchmarkE2E_Insert_Passthrough(b *testing.B) {
 	rows := makeBenchRows(100)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ds.Insert(ctx, "bench", rows, nil)
+		_, _ = ds.Insert(ctx, "bench", rows, nil)
 	}
 }
 
@@ -451,9 +451,9 @@ func BenchmarkE2E_Insert_WithPool(b *testing.B) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	ds.Connect(context.Background())
+	_ = ds.Connect(context.Background())
 	ctx := context.Background()
-	ds.CreateTable(ctx, &domain.TableInfo{
+	_ = ds.CreateTable(ctx, &domain.TableInfo{
 		Name:    "bench",
 		Columns: benchColumns(),
 	})
@@ -461,21 +461,21 @@ func BenchmarkE2E_Insert_WithPool(b *testing.B) {
 	rows := makeBenchRows(100)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ds.Insert(ctx, "bench", rows, nil)
+		_, _ = ds.Insert(ctx, "bench", rows, nil)
 	}
 	b.StopTimer()
-	ds.Close(ctx)
+	_ = ds.Close(ctx)
 }
 
 func BenchmarkE2E_Query_Passthrough(b *testing.B) {
 	ds := NewMVCCDataSource(nil)
-	ds.Connect(context.Background())
+	_ = ds.Connect(context.Background())
 	ctx := context.Background()
-	ds.CreateTable(ctx, &domain.TableInfo{
+	_ = ds.CreateTable(ctx, &domain.TableInfo{
 		Name:    "bench",
 		Columns: benchColumns(),
 	})
-	ds.Insert(ctx, "bench", makeBenchRows(10000), nil)
+	_, _ = ds.Insert(ctx, "bench", makeBenchRows(10000), nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -498,13 +498,13 @@ func BenchmarkE2E_Query_WithPool(b *testing.B) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	ds.Connect(context.Background())
+	_ = ds.Connect(context.Background())
 	ctx := context.Background()
-	ds.CreateTable(ctx, &domain.TableInfo{
+	_ = ds.CreateTable(ctx, &domain.TableInfo{
 		Name:    "bench",
 		Columns: benchColumns(),
 	})
-	ds.Insert(ctx, "bench", makeBenchRows(10000), nil)
+	_, _ = ds.Insert(ctx, "bench", makeBenchRows(10000), nil)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -517,18 +517,18 @@ func BenchmarkE2E_Query_WithPool(b *testing.B) {
 		}
 	}
 	b.StopTimer()
-	ds.Close(ctx)
+	_ = ds.Close(ctx)
 }
 
 func BenchmarkE2E_QueryWithFilter_Passthrough(b *testing.B) {
 	ds := NewMVCCDataSource(nil)
-	ds.Connect(context.Background())
+	_ = ds.Connect(context.Background())
 	ctx := context.Background()
-	ds.CreateTable(ctx, &domain.TableInfo{
+	_ = ds.CreateTable(ctx, &domain.TableInfo{
 		Name:    "bench",
 		Columns: benchColumns(),
 	})
-	ds.Insert(ctx, "bench", makeBenchRows(10000), nil)
+	_, _ = ds.Insert(ctx, "bench", makeBenchRows(10000), nil)
 
 	opts := &domain.QueryOptions{
 		Filters: []domain.Filter{{Field: "id", Operator: "=", Value: int64(5000)}},
@@ -551,13 +551,13 @@ func BenchmarkE2E_QueryWithFilter_WithPool(b *testing.B) {
 		SpillDir:      dir,
 		EvictInterval: time.Hour,
 	})
-	ds.Connect(context.Background())
+	_ = ds.Connect(context.Background())
 	ctx := context.Background()
-	ds.CreateTable(ctx, &domain.TableInfo{
+	_ = ds.CreateTable(ctx, &domain.TableInfo{
 		Name:    "bench",
 		Columns: benchColumns(),
 	})
-	ds.Insert(ctx, "bench", makeBenchRows(10000), nil)
+	_, _ = ds.Insert(ctx, "bench", makeBenchRows(10000), nil)
 
 	opts := &domain.QueryOptions{
 		Filters: []domain.Filter{{Field: "id", Operator: "=", Value: int64(5000)}},
@@ -570,7 +570,7 @@ func BenchmarkE2E_QueryWithFilter_WithPool(b *testing.B) {
 		}
 	}
 	b.StopTimer()
-	ds.Close(ctx)
+	_ = ds.Close(ctx)
 }
 
 // --- Page size tuning benchmark ---

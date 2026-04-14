@@ -374,37 +374,37 @@ func BenchmarkToStringString(b *testing.B) {
 
 func BenchmarkToInt64Int(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ToInt64(42)
+		_, _ = ToInt64(42)
 	}
 }
 
 func BenchmarkToInt64Int64(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ToInt64(int64(42))
+		_, _ = ToInt64(int64(42))
 	}
 }
 
 func BenchmarkToInt64Float64(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ToInt64(42.5)
+		_, _ = ToInt64(42.5)
 	}
 }
 
 func BenchmarkToFloat64Float64(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ToFloat64(42.5)
+		_, _ = ToFloat64(42.5)
 	}
 }
 
 func BenchmarkToFloat64Int(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ToFloat64(42)
+		_, _ = ToFloat64(42)
 	}
 }
 
 func BenchmarkToFloat64String(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		ToFloat64("42.5")
+		_, _ = ToFloat64("42.5")
 	}
 }
 

@@ -18,7 +18,7 @@ func TestFilterableDataSourceIntegration(t *testing.T) {
 	if err := ds.Connect(ctx); err != nil {
 		t.Fatalf("Failed to connect to datasource: %v", err)
 	}
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 创建测试表
 	tableName := "test_users"
@@ -256,7 +256,7 @@ func TestFilterableDataSource_Performance(t *testing.T) {
 	if err := ds.Connect(ctx); err != nil {
 		t.Fatalf("Failed to connect to datasource: %v", err)
 	}
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 创建测试表
 	tableName := "perf_test_users"
@@ -368,7 +368,7 @@ func TestFilterableDataSource_EdgeCases(t *testing.T) {
 	if err := ds.Connect(ctx); err != nil {
 		t.Fatalf("Failed to connect to datasource: %v", err)
 	}
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 创建测试表
 	tableName := "edge_test_table"
@@ -464,7 +464,7 @@ func TestFilterableDataSource_WithUtilMatchesFilter(t *testing.T) {
 	if err := ds.Connect(ctx); err != nil {
 		t.Fatalf("Failed to connect to datasource: %v", err)
 	}
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 创建测试表
 	tableName := "compat_test_table"

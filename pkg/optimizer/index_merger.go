@@ -179,11 +179,7 @@ func (im *IndexMerger) canMerge(idx1, idx2 *MergerIndex) bool {
 	// 检查合并后的列数是否超过限制
 	// 合并策略：去重后保持顺序
 	mergedColumns := im.mergeColumns(idx1.Columns, idx2.Columns)
-	if len(mergedColumns) > im.maxIndexColumns {
-		return false
-	}
-
-	return true
+	return len(mergedColumns) <= im.maxIndexColumns
 }
 
 // createMerge 创建合并操作

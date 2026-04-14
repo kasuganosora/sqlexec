@@ -55,7 +55,7 @@ func (p *ConnectionPool) Get(ctx context.Context) (*sql.Conn, error) {
 		}
 		// 连接无效，关闭并创建新的
 		p.mu.Lock()
-		p.destroy(conn)
+		_ = p.destroy(conn)
 		p.currentSize--
 		p.mu.Unlock()
 	default:
@@ -83,7 +83,7 @@ func (p *ConnectionPool) Put(conn *sql.Conn) error {
 
 	// 检查连接是否有效
 	if err := conn.PingContext(context.Background()); err != nil {
-		p.destroy(conn)
+		_ = p.destroy(conn)
 		p.currentSize--
 		return nil
 	}
@@ -115,7 +115,7 @@ func (p *ConnectionPool) createConnection(ctx context.Context) (*sql.Conn, error
 			case conn := <-p.connections:
 				p.mu.Lock()
 				if err := conn.PingContext(ctx); err != nil {
-					p.destroy(conn)
+					_ = p.destroy(conn)
 					p.currentSize--
 					p.mu.Unlock()
 					continue // retry instead of recursion
@@ -171,7 +171,7 @@ func (p *ConnectionPool) Close() error {
 	// 关闭所有连接
 	close(p.connections)
 	for conn := range p.connections {
-		p.destroy(conn)
+		_ = p.destroy(conn)
 		p.currentSize--
 	}
 

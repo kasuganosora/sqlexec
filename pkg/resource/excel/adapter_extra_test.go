@@ -13,7 +13,7 @@ import (
 // TestExcelAdapter_writeBack 测试写回功能
 func TestExcelAdapter_writeBack(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	// 使用writable配置
 	config := &domain.DataSourceConfig{
@@ -53,7 +53,7 @@ func TestExcelAdapter_writeBack(t *testing.T) {
 // TestExcelAdapter_Connect_MissingSheet 测试连接指定不存在的工作表
 func TestExcelAdapter_Connect_MissingSheet(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	// 指定不存在的工作表
 	config := &domain.DataSourceConfig{
@@ -105,7 +105,7 @@ func TestExcelAdapter_Connect_EmptySheet(t *testing.T) {
 		t.Errorf("Expected error when connecting to empty sheet")
 	}
 
-	os.Remove(tmpFile.Name())
+	_ = os.Remove(tmpFile.Name())
 }
 
 // TestExcelAdapter_DetectType_CaseInsensitiveBool 测试布尔值检测大小写不敏感
@@ -167,7 +167,7 @@ func TestExcelAdapter_ParseValue_CaseInsensitiveBool(t *testing.T) {
 // TestExcelAdapter_writeBack_SafeSheetReplacement 测试安全的 sheet 替换写回
 func TestExcelAdapter_writeBack_SafeSheetReplacement(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -204,7 +204,7 @@ func TestExcelAdapter_writeBack_SafeSheetReplacement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to reopen file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// 验证 sheet 名称正确（应该是 "Sheet1"，不是临时名称）
 	sheets := f.GetSheetList()
@@ -236,7 +236,7 @@ func TestExcelAdapter_writeBack_SafeSheetReplacement(t *testing.T) {
 // TestExcelAdapter_writeBack_NilValues 测试写回时 nil 值不会导致问题
 func TestExcelAdapter_writeBack_NilValues(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,
@@ -272,7 +272,7 @@ func TestExcelAdapter_writeBack_NilValues(t *testing.T) {
 // TestExcelAdapter_InferColumnTypes 测试列类型推断
 func TestExcelAdapter_InferColumnTypes(t *testing.T) {
 	filePath := createTestExcelFile(t)
-	defer os.Remove(filePath)
+	defer func() { _ = os.Remove(filePath) }()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeExcel,

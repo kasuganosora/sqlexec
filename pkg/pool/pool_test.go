@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewObjectPool(t *testing.T) {
@@ -79,7 +80,7 @@ func TestObjectPool_Get_PoolClosed(t *testing.T) {
 	}
 
 	pool := NewObjectPool(factory, destroy, 5)
-	pool.Close()
+	require.NoError(t, pool.Close())
 	ctx := context.Background()
 
 	obj, err := pool.Get(ctx)
@@ -167,7 +168,7 @@ func TestObjectPool_Put_DestroyWhenIdleFull(t *testing.T) {
 	t.Logf("Before Put obj2: Idle=%d, Active=%d", stats.IdleCount, stats.ActiveCount)
 
 	// 归还 obj2，此时 idle 不满（因为之前拿走了一个），应该放回
-	pool.Put(obj2)
+	require.NoError(t, pool.Put(obj2))
 	stats = pool.Stats()
 	t.Logf("After Put obj2 (should be added): Idle=%d, Destroyed=%d", stats.IdleCount, len(destroyed))
 
@@ -176,7 +177,7 @@ func TestObjectPool_Put_DestroyWhenIdleFull(t *testing.T) {
 	pool.active[obj3] = struct{}{}
 
 	// 归还 obj3，此时 idle 应该已满，这个对象应该被销毁
-	pool.Put(obj3)
+	require.NoError(t, pool.Put(obj3))
 
 	stats = pool.Stats()
 	t.Logf("After Put obj3 (should be destroyed): Idle=%d, Destroyed=%d", stats.IdleCount, len(destroyed))
@@ -199,7 +200,7 @@ func TestObjectPool_Put_PoolClosed(t *testing.T) {
 	ctx := context.Background()
 
 	obj, _ := pool.Get(ctx)
-	pool.Close()
+	require.NoError(t, pool.Close())
 
 	err := pool.Put(obj)
 
@@ -223,7 +224,7 @@ func TestObjectPool_Stats(t *testing.T) {
 
 	obj1, _ := pool.Get(ctx)
 	_, _ = pool.Get(ctx) // obj2 not used intentionally
-	pool.Put(obj1)
+	require.NoError(t, pool.Put(obj1))
 
 	stats := pool.Stats()
 
@@ -253,8 +254,8 @@ func TestObjectPool_Close(t *testing.T) {
 	// 创建并归还一些对象
 	obj1, _ := pool.Get(ctx)
 	obj2, _ := pool.Get(ctx)
-	pool.Put(obj1)
-	pool.Put(obj2)
+	require.NoError(t, pool.Put(obj1))
+	require.NoError(t, pool.Put(obj2))
 
 	err := pool.Close()
 
@@ -296,7 +297,7 @@ func TestObjectPool_ConcurrentAccess(t *testing.T) {
 			obj, err := pool.Get(ctx)
 			assert.NoError(t, err)
 			time.Sleep(10 * time.Millisecond)
-			pool.Put(obj)
+			require.NoError(t, pool.Put(obj))
 			done <- true
 		}()
 	}
@@ -355,7 +356,7 @@ func TestGoroutinePool_Submit_MultipleTasks(t *testing.T) {
 
 func TestGoroutinePool_Submit_PoolClosed(t *testing.T) {
 	pool := NewGoroutinePool(2, 10)
-	pool.Close()
+	require.NoError(t, pool.Close())
 
 	task := func() {}
 
@@ -395,8 +396,8 @@ func TestGoroutinePool_Close_WaitForWorkers(t *testing.T) {
 		atomic.AddInt32(&completed, 1)
 	}
 
-	pool.Submit(task)
-	pool.Submit(task)
+	require.NoError(t, pool.Submit(task))
+	require.NoError(t, pool.Submit(task))
 
 	// 立即关闭 - 由于任务可能还没开始执行，不能保证等待时间
 	err := pool.Close()
@@ -538,7 +539,7 @@ func TestObjectPool_MaxSizeLimit(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// 归还一个对象
-	pool.Put(objs[0])
+	require.NoError(t, pool.Put(objs[0]))
 
 	// 等待goroutine完成
 	select {
@@ -559,7 +560,7 @@ func TestGoroutinePool_ContextCanceled(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	pool.Submit(task)
+	require.NoError(t, pool.Submit(task))
 
 	// 取消context - workers应该继续处理任务直到完成
 	cancel()

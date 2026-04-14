@@ -17,7 +17,6 @@ type IndexAdvisor struct {
 	statsIntegrator *StatisticsIntegrator
 	merger          *IndexMerger
 	extractor       *IndexCandidateExtractor
-	geneticAlgo     *GeneticAlgorithm
 
 	// 配置参数
 	MaxNumIndexes   int
@@ -322,13 +321,13 @@ func (ia *IndexAdvisor) evaluateCandidateBenefits(
 		}
 
 		if stats != nil {
-			ia.store.UpdateStats(hypoIndex.ID, stats)
+			_ = ia.store.UpdateStats(hypoIndex.ID, stats)
 		}
 
 		// 计算使用虚拟索引的成本
 		costWithIndex, err := ia.estimateQueryCost(stmt, hypoIndex, tableInfo)
 		if err != nil {
-			ia.store.DeleteIndex(hypoIndex.ID)
+			_ = ia.store.DeleteIndex(hypoIndex.ID)
 			continue
 		}
 
@@ -338,7 +337,7 @@ func (ia *IndexAdvisor) evaluateCandidateBenefits(
 		benefits[key] = benefit
 
 		// 清理虚拟索引
-		ia.store.DeleteIndex(hypoIndex.ID)
+		_ = ia.store.DeleteIndex(hypoIndex.ID)
 	}
 
 	return benefits, nil

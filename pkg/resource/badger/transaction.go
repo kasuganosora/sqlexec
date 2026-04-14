@@ -195,7 +195,9 @@ func (m *SequenceManager) ResetSequence(key string, start uint64) error {
 
 	// Release existing sequence
 	if seq, ok := m.seqs[key]; ok {
-		seq.Release()
+		if err := seq.Release(); err != nil {
+			return fmt.Errorf("failed to release sequence %s: %w", key, err)
+		}
 		delete(m.seqs, key)
 	}
 
@@ -215,7 +217,7 @@ func (m *SequenceManager) Close() {
 	defer m.mu.Unlock()
 
 	for _, seq := range m.seqs {
-		seq.Release()
+		_ = seq.Release()
 	}
 	m.seqs = make(map[string]*badger.Sequence)
 }

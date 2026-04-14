@@ -41,7 +41,7 @@ func TestNewJSONAdapter(t *testing.T) {
 			js := NewJSONAdapter(tt.config, tt.filePath)
 
 			if js == nil {
-				t.Errorf("NewJSONAdapter() returned nil")
+				t.Fatalf("NewJSONAdapter() returned nil")
 			}
 
 			if js.writable != false {
@@ -64,12 +64,12 @@ func TestJSONSource_Connect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSON,
@@ -106,12 +106,12 @@ func TestJSONSource_Close(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSON,
@@ -147,7 +147,7 @@ func TestJSONSource_GetConfig(t *testing.T) {
 
 	got := js.GetConfig()
 	if got == nil {
-		t.Errorf("GetConfig() returned nil")
+		t.Fatalf("GetConfig() returned nil")
 	}
 
 	if got.Type != config.Type {
@@ -178,12 +178,12 @@ func TestJSONSource_GetTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSON,
@@ -221,12 +221,12 @@ func TestJSONSource_GetTableInfo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSON,
@@ -247,7 +247,7 @@ func TestJSONSource_GetTableInfo(t *testing.T) {
 	}
 
 	if tableInfo == nil {
-		t.Errorf("GetTableInfo() returned nil")
+		t.Fatalf("GetTableInfo() returned nil")
 	}
 
 	if tableInfo.Name != "json_data" {
@@ -287,12 +287,12 @@ func TestJSONSource_Query(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSON,
@@ -340,12 +340,12 @@ func TestJSONSource_Query_WithFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSON,
@@ -383,12 +383,12 @@ func TestJSONSource_Query_WithPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSON,
@@ -440,12 +440,12 @@ func TestJSONSource_Query_WithArrayRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSON,
@@ -646,12 +646,12 @@ func TestJSONSource_Query_WithDifferentTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.Write([]byte(testData)); err != nil {
 		t.Fatalf("Failed to write test data: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	config := &domain.DataSourceConfig{
 		Type: domain.DataSourceTypeJSON,

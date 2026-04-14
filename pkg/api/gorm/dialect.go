@@ -81,37 +81,37 @@ func (d *Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 				// We need to rewrite the INSERT prefix. Since GORM has
 				// already written "INSERT INTO", we append a dummy ON
 				// DUPLICATE KEY UPDATE that sets the first column to itself.
-				builder.WriteString("ON DUPLICATE KEY UPDATE ")
+				_, _ = builder.WriteString("ON DUPLICATE KEY UPDATE ")
 				if len(onConflict.DoUpdates) > 0 {
 					for idx, assignment := range onConflict.DoUpdates {
 						if idx > 0 {
-							builder.WriteByte(',')
+							_ = builder.WriteByte(',')
 						}
 						builder.WriteQuoted(assignment.Column)
-						builder.WriteByte('=')
+						_ = builder.WriteByte('=')
 						builder.WriteQuoted(assignment.Column)
 					}
 				} else {
 					// Fallback: use a self-referencing no-op update
-					builder.WriteString("`id`=`id`")
+					_, _ = builder.WriteString("`id`=`id`")
 				}
 				return
 			}
 
-			builder.WriteString("ON DUPLICATE KEY UPDATE ")
+			_, _ = builder.WriteString("ON DUPLICATE KEY UPDATE ")
 			if len(onConflict.DoUpdates) > 0 {
 				for idx, assignment := range onConflict.DoUpdates {
 					if idx > 0 {
-						builder.WriteByte(',')
+						_ = builder.WriteByte(',')
 					}
 					builder.WriteQuoted(assignment.Column)
-					builder.WriteByte('=')
+					_ = builder.WriteByte('=')
 					// GORM's AssignmentColumns generates clause.Column{Table:"excluded", Name:col}
 					// which is PostgreSQL syntax. Convert to MySQL's VALUES(col).
 					if col, ok := assignment.Value.(clause.Column); ok && col.Table == "excluded" {
-						builder.WriteString("VALUES(")
+						_, _ = builder.WriteString("VALUES(")
 						builder.WriteQuoted(clause.Column{Name: col.Name})
-						builder.WriteByte(')')
+						_ = builder.WriteByte(')')
 					} else {
 						builder.AddVar(builder, assignment.Value)
 					}
@@ -172,14 +172,14 @@ func (d *Dialector) DefaultValueOf(field *schema.Field) clause.Expression {
 
 // BindVarTo writes a `?` placeholder for parameter binding (MySQL style).
 func (d *Dialector) BindVarTo(writer clause.Writer, _ *gorm.Statement, _ interface{}) {
-	writer.WriteByte('?')
+	_ = writer.WriteByte('?')
 }
 
 // QuoteTo quotes an identifier with backticks (MySQL style).
 func (d *Dialector) QuoteTo(writer clause.Writer, str string) {
-	writer.WriteByte('`')
-	writer.WriteString(str)
-	writer.WriteByte('`')
+	_ = writer.WriteByte('`')
+	_, _ = writer.WriteString(str)
+	_ = writer.WriteByte('`')
 }
 
 // Explain returns a human-readable version of the SQL with bound parameters.

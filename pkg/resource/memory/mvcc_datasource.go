@@ -38,9 +38,6 @@ type MVCCDataSource struct {
 	autoIncCounters map[string]int64
 }
 
-// maxRetainedVersions is the maximum number of old versions to keep per table
-// beyond what active transactions require
-const maxRetainedVersions = 2
 
 // NewMVCCDataSource creates an MVCC in-memory data source.
 // An optional *PagingConfig can be passed to configure the buffer pool.

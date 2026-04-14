@@ -70,7 +70,7 @@ func TestParquetAdapter_DirectoryMode_DDL(t *testing.T) {
 	if err := adapter.Connect(ctx); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
-	defer adapter.Close(ctx)
+	defer func() { _ = adapter.Close(ctx) }()
 
 	// CreateTable
 	tableInfo := &domain.TableInfo{
@@ -169,14 +169,14 @@ func TestParquetAdapter_DirectoryMode_Persistence(t *testing.T) {
 			{Name: "price", Type: "float64", Nullable: true},
 		},
 	}
-	adapter.CreateTable(ctx, tableInfo)
+	_ = adapter.CreateTable(ctx, tableInfo)
 
 	rows := []domain.Row{
 		{"id": int64(1), "name": "Widget", "price": float64(9.99)},
 		{"id": int64(2), "name": "Gadget", "price": float64(19.99)},
 		{"id": int64(3), "name": "Doohickey", "price": float64(4.99)},
 	}
-	adapter.Insert(ctx, "items", rows, nil)
+	_, _ = adapter.Insert(ctx, "items", rows, nil)
 
 	// Close triggers flush
 	if err := adapter.Close(ctx); err != nil {
@@ -188,7 +188,7 @@ func TestParquetAdapter_DirectoryMode_Persistence(t *testing.T) {
 	if err := adapter2.Connect(ctx); err != nil {
 		t.Fatalf("Re-Connect: %v", err)
 	}
-	defer adapter2.Close(ctx)
+	defer func() { _ = adapter2.Close(ctx) }()
 
 	result, err := adapter2.Query(ctx, "items", &domain.QueryOptions{})
 	if err != nil {
@@ -231,14 +231,14 @@ func TestParquetAdapter_DirectoryMode_MultiTable(t *testing.T) {
 	}
 
 	// Create two tables
-	adapter.CreateTable(ctx, &domain.TableInfo{
+	_ = adapter.CreateTable(ctx, &domain.TableInfo{
 		Name: "table_a",
 		Columns: []domain.ColumnInfo{
 			{Name: "id", Type: "int64"},
 			{Name: "data", Type: "string", Nullable: true},
 		},
 	})
-	adapter.CreateTable(ctx, &domain.TableInfo{
+	_ = adapter.CreateTable(ctx, &domain.TableInfo{
 		Name: "table_b",
 		Columns: []domain.ColumnInfo{
 			{Name: "key", Type: "string"},
@@ -247,8 +247,8 @@ func TestParquetAdapter_DirectoryMode_MultiTable(t *testing.T) {
 	})
 
 	// Insert into both
-	adapter.Insert(ctx, "table_a", []domain.Row{{"id": int64(1), "data": "hello"}}, nil)
-	adapter.Insert(ctx, "table_b", []domain.Row{{"key": "x", "val": int64(42)}}, nil)
+	_, _ = adapter.Insert(ctx, "table_a", []domain.Row{{"id": int64(1), "data": "hello"}}, nil)
+	_, _ = adapter.Insert(ctx, "table_b", []domain.Row{{"key": "x", "val": int64(42)}}, nil)
 
 	// Verify both exist
 	tables, _ := adapter.GetTables(ctx)
@@ -257,13 +257,13 @@ func TestParquetAdapter_DirectoryMode_MultiTable(t *testing.T) {
 	}
 
 	// Close and reconnect
-	adapter.Close(ctx)
+	_ = adapter.Close(ctx)
 
 	adapter2 := NewParquetAdapter(config)
 	if err := adapter2.Connect(ctx); err != nil {
 		t.Fatalf("Re-Connect: %v", err)
 	}
-	defer adapter2.Close(ctx)
+	defer func() { _ = adapter2.Close(ctx) }()
 
 	tables2, _ := adapter2.GetTables(ctx)
 	if len(tables2) != 2 {

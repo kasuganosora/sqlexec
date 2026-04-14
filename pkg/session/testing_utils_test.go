@@ -33,7 +33,7 @@ func TestSession_WithMemoryDataSource(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, ds.Connect(ctx))
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 2. 创建 CoreSession
 	sess := NewCoreSession(ds)
@@ -81,7 +81,7 @@ func TestSession_DatabaseSwitching(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, ds.Connect(ctx))
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 创建 CoreSession
 	sess := NewCoreSession(ds)
@@ -112,7 +112,7 @@ func TestSession_ParserOnly(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, ds.Connect(ctx))
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 创建 CoreSession
 	sess := NewCoreSession(ds)
@@ -139,7 +139,7 @@ func TestSession_TableOperations(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, ds.Connect(ctx))
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 创建表
 	tableInfo := &domain.TableInfo{
@@ -206,7 +206,7 @@ func TestSession_InformationSchema(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, ds.Connect(ctx))
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 创建 CoreSession
 	sess := NewCoreSession(ds)
@@ -248,7 +248,7 @@ func TestSession_MultipleQueries(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, ds.Connect(ctx))
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// 创建表
 	tableInfo := &domain.TableInfo{

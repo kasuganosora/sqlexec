@@ -164,7 +164,7 @@ func (pm *PluginManager) createDatasourcesFromConfig() {
 
 		if err := pm.dsManager.Register(cfg.Name, ds); err != nil {
 			// Close the connection to avoid resource leak
-			ds.Close(context.Background())
+			_ = ds.Close(context.Background())
 			log.Printf("[PLUGIN] Failed to register datasource '%s': %v", cfg.Name, err)
 			continue
 		}

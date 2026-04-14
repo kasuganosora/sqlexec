@@ -296,11 +296,6 @@ func (e *IndexCandidateExtractor) isIndexableComparison(expr *parser.Expression)
 	return indexableOps[expr.Operator]
 }
 
-// isColumnLeft 判断列是否在运算符左边
-func (e *IndexCandidateExtractor) isColumnLeft(expr *parser.Expression) bool {
-	return expr.Left != nil && expr.Left.Column != ""
-}
-
 // isColumnTypeSupported 检查列类型是否支持索引
 func (e *IndexCandidateExtractor) isColumnTypeSupported(columnType string) bool {
 	if columnType == "" {

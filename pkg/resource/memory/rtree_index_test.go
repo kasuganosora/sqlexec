@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/builtin"
@@ -90,9 +91,9 @@ func TestRTreeIndex_SearchContains(t *testing.T) {
 	poly2 := &builtin.GeoPolygon{Rings: [][]builtin.GeoPoint{{{X: 5, Y: 5}, {X: 7, Y: 5}, {X: 7, Y: 7}, {X: 5, Y: 7}, {X: 5, Y: 5}}}}
 	poly3 := &builtin.GeoPolygon{Rings: [][]builtin.GeoPoint{{{X: 0, Y: 0}, {X: 10, Y: 0}, {X: 10, Y: 10}, {X: 0, Y: 10}, {X: 0, Y: 0}}}}
 
-	idx.Insert(poly1, []int64{1})
-	idx.Insert(poly2, []int64{2})
-	idx.Insert(poly3, []int64{3})
+	require.NoError(t, idx.Insert(poly1, []int64{1}))
+	require.NoError(t, idx.Insert(poly2, []int64{2}))
+	require.NoError(t, idx.Insert(poly3, []int64{3}))
 
 	// Search for geometries contained within [0,0]-[10,10]
 	searchBBox := builtin.BoundingBox{MinX: 0, MinY: 0, MaxX: 10, MaxY: 10}
@@ -120,9 +121,9 @@ func TestRTreeIndex_Delete(t *testing.T) {
 	pt2 := &builtin.GeoPoint{X: 5, Y: 5}
 	pt3 := &builtin.GeoPoint{X: 9, Y: 9}
 
-	idx.Insert(pt1, []int64{1})
-	idx.Insert(pt2, []int64{2})
-	idx.Insert(pt3, []int64{3})
+	require.NoError(t, idx.Insert(pt1, []int64{1}))
+	require.NoError(t, idx.Insert(pt2, []int64{2}))
+	require.NoError(t, idx.Insert(pt3, []int64{3}))
 
 	if idx.Size() != 3 {
 		t.Errorf("expected size 3, got %d", idx.Size())
@@ -159,7 +160,7 @@ func TestRTreeIndex_FindRange(t *testing.T) {
 
 	for i := int64(0); i < 20; i++ {
 		pt := &builtin.GeoPoint{X: float64(i), Y: float64(i)}
-		idx.Insert(pt, []int64{i})
+		require.NoError(t, idx.Insert(pt, []int64{i}))
 	}
 
 	// FindRange with two bbox corners
@@ -240,7 +241,7 @@ func TestRTreeIndex_Reset(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		pt := &builtin.GeoPoint{X: float64(i), Y: float64(i)}
-		idx.Insert(pt, []int64{int64(i)})
+		require.NoError(t, idx.Insert(pt, []int64{int64(i)}))
 	}
 
 	if idx.Size() != 10 {
@@ -276,7 +277,7 @@ func TestRTreeIndex_LineStringEnvelope(t *testing.T) {
 	ls := &builtin.GeoLineString{Points: []builtin.GeoPoint{
 		{X: 0, Y: 0}, {X: 10, Y: 10},
 	}}
-	idx.Insert(ls, []int64{1})
+	require.NoError(t, idx.Insert(ls, []int64{1}))
 
 	// Search with a bbox that should intersect the linestring's envelope
 	results := idx.SearchIntersects(builtin.BoundingBox{MinX: 3, MinY: 3, MaxX: 7, MaxY: 7})

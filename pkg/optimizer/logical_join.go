@@ -142,12 +142,6 @@ func (p *LogicalJoin) Explain() string {
 	return "Join(" + p.LeftTable + ", " + p.RightTable + ", type=" + p.GetJoinType().String() + ")"
 }
 
-// hintApplied 标记已应用的 hint
-type hintApplied struct {
-	hintType string
-	applied  bool
-}
-
 // SetHintApplied 标记已应用的 hint
 func (p *LogicalJoin) SetHintApplied(hintType string) {
 	// Placeholder for hint tracking

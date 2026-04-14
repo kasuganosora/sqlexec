@@ -2,6 +2,8 @@ package builtin
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewFunctionRegistry(t *testing.T) {
@@ -81,7 +83,7 @@ func TestGet(t *testing.T) {
 			return "test", nil
 		},
 	}
-	registry.Register(info)
+	require.NoError(t, registry.Register(info))
 
 	// 测试获取存在的函数
 	fn, exists := registry.Get("test_func")
@@ -105,13 +107,13 @@ func TestList(t *testing.T) {
 	// 注册几个函数
 	names := []string{"func1", "func2", "func3"}
 	for _, name := range names {
-		registry.Register(&FunctionInfo{
+		require.NoError(t, registry.Register(&FunctionInfo{
 			Name: name,
 			Type: FunctionTypeScalar,
 			Handler: func(args []interface{}) (interface{}, error) {
 				return nil, nil
 			},
-		})
+		}))
 	}
 
 	list := registry.List()
@@ -124,26 +126,26 @@ func TestListByCategory(t *testing.T) {
 	registry := NewFunctionRegistry()
 
 	// 注册不同类别的函数
-	registry.Register(&FunctionInfo{
+	require.NoError(t, registry.Register(&FunctionInfo{
 		Name:     "math_func",
 		Category: "math",
 		Type:     FunctionTypeScalar,
 		Handler:  func(args []interface{}) (interface{}, error) { return nil, nil },
-	})
+	}))
 
-	registry.Register(&FunctionInfo{
+	require.NoError(t, registry.Register(&FunctionInfo{
 		Name:     "string_func",
 		Category: "string",
 		Type:     FunctionTypeScalar,
 		Handler:  func(args []interface{}) (interface{}, error) { return nil, nil },
-	})
+	}))
 
-	registry.Register(&FunctionInfo{
+	require.NoError(t, registry.Register(&FunctionInfo{
 		Name:     "another_math_func",
 		Category: "math",
 		Type:     FunctionTypeScalar,
 		Handler:  func(args []interface{}) (interface{}, error) { return nil, nil },
-	})
+	}))
 
 	// 测试列出 math 类别的函数
 	mathFuncs := registry.ListByCategory("math")
@@ -167,13 +169,13 @@ func TestListByCategory(t *testing.T) {
 func TestExists(t *testing.T) {
 	registry := NewFunctionRegistry()
 
-	registry.Register(&FunctionInfo{
+	require.NoError(t, registry.Register(&FunctionInfo{
 		Name: "test_func",
 		Type: FunctionTypeScalar,
 		Handler: func(args []interface{}) (interface{}, error) {
 			return nil, nil
 		},
-	})
+	}))
 
 	if !registry.Exists("test_func") {
 		t.Error("Exists() should return true for registered function")
@@ -187,13 +189,13 @@ func TestExists(t *testing.T) {
 func TestUnregister(t *testing.T) {
 	registry := NewFunctionRegistry()
 
-	registry.Register(&FunctionInfo{
+	require.NoError(t, registry.Register(&FunctionInfo{
 		Name: "test_func",
 		Type: FunctionTypeScalar,
 		Handler: func(args []interface{}) (interface{}, error) {
 			return nil, nil
 		},
-	})
+	}))
 
 	// 注销存在的函数
 	removed := registry.Unregister("test_func")
@@ -308,13 +310,13 @@ func TestConcurrentRegistryAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(n int) {
 			name := "func_" + string(rune('0'+n))
-			registry.Register(&FunctionInfo{
+			require.NoError(t, registry.Register(&FunctionInfo{
 				Name: name,
 				Type: FunctionTypeScalar,
 				Handler: func(args []interface{}) (interface{}, error) {
 					return nil, nil
 				},
-			})
+			}))
 			done <- true
 		}(i)
 	}
@@ -365,7 +367,7 @@ func TestOverwriteFunction(t *testing.T) {
 			return "v1", nil
 		},
 	}
-	registry.Register(info1)
+	require.NoError(t, registry.Register(info1))
 
 	// 注册第二个版本（覆盖）
 	info2 := &FunctionInfo{
@@ -376,7 +378,7 @@ func TestOverwriteFunction(t *testing.T) {
 			return "v2", nil
 		},
 	}
-	registry.Register(info2)
+	require.NoError(t, registry.Register(info2))
 
 	// 验证已被覆盖
 	fn, _ := registry.Get("test_func")

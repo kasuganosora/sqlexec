@@ -114,9 +114,12 @@ func TestListBackups(t *testing.T) {
 
 	// Create multiple backups
 	testData := map[string]string{"key": "value"}
-	bm.Backup(BackupTypeFull, []string{"test1"}, testData)
-	bm.Backup(BackupTypeFull, []string{"test2"}, testData)
-	bm.Backup(BackupTypeFull, []string{"test3"}, testData)
+	_, err1 := bm.Backup(BackupTypeFull, []string{"test1"}, testData)
+	require.NoError(t, err1)
+	_, err2 := bm.Backup(BackupTypeFull, []string{"test2"}, testData)
+	require.NoError(t, err2)
+	_, err3 := bm.Backup(BackupTypeFull, []string{"test3"}, testData)
+	require.NoError(t, err3)
 
 	// List all backups
 	backups := bm.ListBackups()
@@ -152,7 +155,7 @@ func TestCleanOldBackups(t *testing.T) {
 	// Create old backups
 	testData := map[string]string{"key": "value"}
 	for i := 0; i < 5; i++ {
-		bm.Backup(BackupTypeFull, []string{"test"}, testData)
+		_, _ = bm.Backup(BackupTypeFull, []string{"test"}, testData)
 	}
 
 	// Clean backups older than 24 hours

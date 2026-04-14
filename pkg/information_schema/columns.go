@@ -228,16 +228,6 @@ func (t *ColumnsTable) applyFilters(rows []domain.Row, filters []domain.Filter) 
 	return utils.ApplyFilters(rows, filters)
 }
 
-// matchesFilter checks if a row matches a filter (using utils package)
-func (t *ColumnsTable) matchesFilter(row domain.Row, filter domain.Filter) (bool, error) {
-	return utils.MatchesFilter(row, filter)
-}
-
-// matchesLike implements simple LIKE pattern matching (using utils package)
-func (t *ColumnsTable) matchesLike(value, pattern string) bool {
-	return utils.MatchesLike(value, pattern)
-}
-
 // getDataType extracts the data type from column type string
 func (t *ColumnsTable) getDataType(columnType string) string {
 	columnType = strings.ToUpper(columnType)
@@ -291,7 +281,7 @@ func (t *ColumnsTable) getCharacterMaxLength(columnType string) int64 {
 		if i := strings.Index(columnType, "("); i > 0 {
 			if j := strings.Index(columnType, ")"); j > i {
 				var length int64
-				fmt.Sscanf(columnType[i+1:j], "%d", &length)
+				_, _ = fmt.Sscanf(columnType[i+1:j], "%d", &length)
 				return length
 			}
 		}
@@ -301,7 +291,7 @@ func (t *ColumnsTable) getCharacterMaxLength(columnType string) int64 {
 		if i := strings.Index(columnType, "("); i > 0 {
 			if j := strings.Index(columnType, ")"); j > i {
 				var length int64
-				fmt.Sscanf(columnType[i+1:j], "%d", &length)
+				_, _ = fmt.Sscanf(columnType[i+1:j], "%d", &length)
 				return length
 			}
 		}
@@ -341,7 +331,7 @@ func (t *ColumnsTable) getNumericPrecision(columnType string) int64 {
 		if i := strings.Index(columnType, "("); i > 0 {
 			if j := strings.Index(columnType, ")"); j > i {
 				var precision int64
-				fmt.Sscanf(columnType[i+1:j], "%d", &precision)
+				_, _ = fmt.Sscanf(columnType[i+1:j], "%d", &precision)
 				return precision
 			}
 		}

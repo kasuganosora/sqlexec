@@ -36,9 +36,7 @@ func ParsePath(pathExpr string) (*Path, error) {
 
 	for pathExpr != "" {
 		// Skip leading dot if present
-		if strings.HasPrefix(pathExpr, ".") {
-			pathExpr = pathExpr[1:]
-		}
+		pathExpr = strings.TrimPrefix(pathExpr, ".")
 
 		if pathExpr == "" {
 			break

@@ -66,7 +66,7 @@ func (s *TestServer) Start(port int) error {
 		DebugMode:    false,
 	})
 	if err != nil {
-		listener.Close()
+		_ = listener.Close()
 		return fmt.Errorf("failed to initialize API DB: %w", err)
 	}
 	s.db = db
@@ -80,12 +80,12 @@ func (s *TestServer) Start(port int) error {
 
 	if db != nil {
 		if err := memoryDS.Connect(s.ctx); err != nil {
-			listener.Close()
+			_ = listener.Close()
 			return fmt.Errorf("failed to connect memory data source: %w", err)
 		}
 
 		if err := db.RegisterDataSource("default", memoryDS); err != nil {
-			listener.Close()
+			_ = listener.Close()
 			return fmt.Errorf("failed to register data source: %w", err)
 		}
 	}
@@ -104,6 +104,7 @@ func (s *TestServer) Start(port int) error {
 	go func() {
 		if err := s.srv.Start(); err != nil {
 			// 服务器停止是正常的
+			_ = err // intentionally ignored
 		}
 	}()
 
@@ -126,10 +127,10 @@ func (s *TestServer) Stop() {
 
 	s.cancel()
 	if s.listener != nil {
-		s.listener.Close()
+		_ = s.listener.Close()
 	}
 	if s.db != nil {
-		s.db.Close()
+		_ = s.db.Close()
 	}
 	s.started = false
 }
@@ -261,7 +262,7 @@ func (s *TestServer) RunWithClient(fn func(*sql.DB) error) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// 测试连接
 	if err := conn.Ping(); err != nil {

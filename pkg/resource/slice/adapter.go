@@ -137,7 +137,7 @@ func NewSliceAdapter(data interface{}, tableName string, databaseName string, wr
 	adapter.MVCCDataSource = memory.NewMVCCDataSource(config)
 
 	// Mark as connected before loading data (in-memory, no external resource)
-	adapter.MVCCDataSource.Connect(context.Background())
+	_ = adapter.MVCCDataSource.Connect(context.Background())
 
 	// 转换并加载数据
 	if err := adapter.loadData(); err != nil {

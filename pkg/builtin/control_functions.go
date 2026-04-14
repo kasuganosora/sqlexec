@@ -99,7 +99,7 @@ func init() {
 	}
 
 	for _, fn := range controlFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 

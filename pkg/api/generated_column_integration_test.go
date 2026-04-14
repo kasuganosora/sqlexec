@@ -15,7 +15,7 @@ func TestGeneratedColumns_BasicCreateTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		ctx := context.Background()
 
@@ -61,7 +61,7 @@ func TestGeneratedColumns_BasicCreateTable(t *testing.T) {
 		ds := memory.NewMVCCDataSource(nil)
 		err := ds.Connect(context.Background())
 		assert.NoError(t, err)
-		defer ds.Close(context.Background())
+		defer func() { _ = ds.Close(context.Background()) }()
 
 		ctx := context.Background()
 
@@ -101,7 +101,7 @@ func TestGeneratedColumns_InsertAndQuery(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	ctx := context.Background()
 
@@ -177,7 +177,7 @@ func TestGeneratedColumns_Update(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	ctx := context.Background()
 
@@ -263,7 +263,7 @@ func TestGeneratedColumns_MySQLExample_Triangle(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	ctx := context.Background()
 
@@ -324,7 +324,7 @@ func TestGeneratedColumns_MySQLExample_FullName(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	ctx := context.Background()
 
@@ -377,7 +377,7 @@ func TestGeneratedColumns_VirtualVsStored(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	ctx := context.Background()
 
@@ -439,7 +439,7 @@ func TestGeneratedColumns_Expressions_Arithmetic(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	ctx := context.Background()
 
@@ -529,7 +529,7 @@ func TestGeneratedColumns_NullPropagation(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	ctx := context.Background()
 
@@ -611,7 +611,7 @@ func TestGeneratedColumns_ErrorScenarios(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	ctx := context.Background()
 
@@ -657,7 +657,7 @@ func TestGeneratedColumns_Cascading(t *testing.T) {
 	ds := memory.NewMVCCDataSource(nil)
 	err := ds.Connect(context.Background())
 	assert.NoError(t, err)
-	defer ds.Close(context.Background())
+	defer func() { _ = ds.Close(context.Background()) }()
 
 	ctx := context.Background()
 

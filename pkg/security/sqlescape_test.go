@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestEscapeSQL_Basic(t *testing.T) {
@@ -394,12 +396,12 @@ func TestComplexQuery(t *testing.T) {
 	var buf strings.Builder
 
 	// 构建 SELECT 语句
-	FormatSQL(&buf, "SELECT %n, %n, %n FROM %n WHERE %n = %? AND %n > %?",
-		"id", "name", "email", "users", "status", "active", "age", 18)
+	require.NoError(t, FormatSQL(&buf, "SELECT %n, %n, %n FROM %n WHERE %n = %? AND %n > %?",
+		"id", "name", "email", "users", "status", "active", "age", 18))
 
 	// 构建子查询
-	FormatSQL(&buf, " AND id IN (SELECT user_id FROM %n WHERE %n = %?)",
-		"orders", "status", "completed")
+	require.NoError(t, FormatSQL(&buf, " AND id IN (SELECT user_id FROM %n WHERE %n = %?)",
+		"orders", "status", "completed"))
 
 	want := "SELECT `id`, `name`, `email` FROM `users` WHERE `status` = 'active' AND `age` > 18" +
 		" AND id IN (SELECT user_id FROM `orders` WHERE `status` = 'completed')"

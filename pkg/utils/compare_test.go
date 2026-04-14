@@ -358,33 +358,33 @@ func genArray(n int) []interface{} {
 
 func BenchmarkCompareValuesInt(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		CompareValues(10, 20, ">")
+		_, _ = CompareValues(10, 20, ">")
 	}
 }
 
 func BenchmarkCompareValuesString(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		CompareValues("hello", "world", "<")
+		_, _ = CompareValues("hello", "world", "<")
 	}
 }
 
 func BenchmarkCompareValuesIn(b *testing.B) {
 	arr := []interface{}{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	for i := 0; i < b.N; i++ {
-		CompareValues(5, arr, "IN")
+		_, _ = CompareValues(5, arr, "IN")
 	}
 }
 
 func BenchmarkCompareValuesBetween(b *testing.B) {
 	arr := []interface{}{1, 10}
 	for i := 0; i < b.N; i++ {
-		CompareValues(5, arr, "BETWEEN")
+		_, _ = CompareValues(5, arr, "BETWEEN")
 	}
 }
 
 func BenchmarkCompareValuesLike(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		CompareValues("hello world", "hel%", "LIKE")
+		_, _ = CompareValues("hello world", "hel%", "LIKE")
 	}
 }
 

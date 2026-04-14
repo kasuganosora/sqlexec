@@ -484,8 +484,6 @@ func toBoundingBox(key interface{}) (builtin.BoundingBox, error) {
 		return v, nil
 	case *builtin.BoundingBox:
 		return *v, nil
-	case builtin.Geometry:
-		return v.Envelope(), nil
 	case *builtin.GeoPoint:
 		return v.Envelope(), nil
 	case *builtin.GeoLineString:
@@ -499,6 +497,8 @@ func toBoundingBox(key interface{}) (builtin.BoundingBox, error) {
 	case *builtin.GeoMultiPolygon:
 		return v.Envelope(), nil
 	case *builtin.GeoCollection:
+		return v.Envelope(), nil
+	case builtin.Geometry:
 		return v.Envelope(), nil
 	default:
 		return builtin.BoundingBox{}, fmt.Errorf("cannot convert %T to BoundingBox", key)

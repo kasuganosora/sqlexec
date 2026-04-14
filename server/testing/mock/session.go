@@ -86,9 +86,7 @@ func (m *MockSession) GetNextSequenceID() uint8 {
 
 	current := m.SequenceID
 	m.SequenceID++
-	if m.SequenceID > 255 {
-		m.SequenceID = 0
-	}
+	// uint8 wraps naturally from 255 to 0, no explicit reset needed
 	return current
 }
 

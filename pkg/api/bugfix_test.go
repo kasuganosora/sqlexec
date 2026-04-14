@@ -8,6 +8,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ==========================================================================
@@ -69,7 +70,7 @@ func TestBug4_DBSession_NoLock_Race(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDB failed: %v", err)
 	}
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	// Register a datasource so Session() can work
 	mockDS := &mockDataSourceForRace{}
@@ -140,7 +141,7 @@ func TestBug5_NewDB_NilConfig_UseEnhancedOptimizer_Default(t *testing.T) {
 	// was unreachable — config is never nil after the nil check at line 38.
 	db, err := NewDB(nil)
 	assert.NoError(t, err)
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	assert.True(t, db.config.UseEnhancedOptimizer,
 		"UseEnhancedOptimizer should default to true when config is nil")
@@ -152,7 +153,7 @@ func TestBug5_NewDB_ExplicitConfig_UseEnhancedOptimizer(t *testing.T) {
 		UseEnhancedOptimizer: true,
 	})
 	assert.NoError(t, err)
-	defer db.Close()
+	defer func() { require.NoError(t, db.Close()) }()
 
 	assert.True(t, db.config.UseEnhancedOptimizer)
 }

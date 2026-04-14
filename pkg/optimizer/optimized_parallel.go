@@ -46,7 +46,7 @@ func NewOptimizedParallelScanner(dataSource domain.DataSource, parallelism int) 
 	// 根据数据大小设置批量大小（自适应）
 	// 较低并行度使用较大批量，减少调度开销
 	// 较高并行度使用较小批量，提高负载均衡
-	batchSize := 1000 // 默认批量大小
+	var batchSize int
 	switch {
 	case parallelism >= 8:
 		batchSize = 500
@@ -73,7 +73,7 @@ func (ops *OptimizedParallelScanner) initPool() {
 			EnableDynamicScaling: false,
 		})
 		if err == nil {
-			pool.Start()
+			_ = pool.Start()
 			ops.scanPool = pool
 		}
 		ops.rowPool = workerpool.NewRowPool()

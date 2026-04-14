@@ -5,6 +5,7 @@ import (
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestInformationSchema_Schemata 测试 information_schema.schemata 表
@@ -43,7 +44,7 @@ func TestInformationSchema_Schemata(t *testing.T) {
 	}
 	assert.True(t, found, "Should find 'testdb' in schemata")
 
-	session.Close()
+	require.NoError(t, session.Close())
 }
 
 // TestInformationSchema_Tables 测试 information_schema.tables 表
@@ -78,7 +79,7 @@ func TestInformationSchema_Tables(t *testing.T) {
 		assert.NotEmpty(t, row["table_name"])
 	}
 
-	session.Close()
+	require.NoError(t, session.Close())
 }
 
 // TestInformationSchema_Columns 测试 information_schema.columns 表
@@ -122,7 +123,7 @@ func TestInformationSchema_Columns(t *testing.T) {
 	assert.True(t, foundColumns["name"], "Should find 'name' column")
 	assert.True(t, foundColumns["email"], "Should find 'email' column")
 
-	session.Close()
+	require.NoError(t, session.Close())
 }
 
 // TestInformationSchema_TableConstraints 测试 information_schema.table_constraints 表
@@ -159,7 +160,7 @@ func TestInformationSchema_TableConstraints(t *testing.T) {
 		assert.Contains(t, []string{"PRIMARY KEY", "UNIQUE"}, constraintType)
 	}
 
-	session.Close()
+	require.NoError(t, session.Close())
 }
 
 // TestInformationSchema_KeyColumnUsage 测试 information_schema.key_column_usage 表
@@ -199,7 +200,7 @@ func TestInformationSchema_KeyColumnUsage(t *testing.T) {
 	}
 	assert.True(t, foundIDKey, "Should find PRIMARY key for 'id' column")
 
-	session.Close()
+	require.NoError(t, session.Close())
 }
 
 // TestInformationSchema_SelectAll 测试 SELECT * FROM information_schema.schemata
@@ -232,7 +233,7 @@ func TestInformationSchema_SelectAll(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, rows, 3) // Should have 3 databases (information_schema, db1 and db2) - config only when registry is set
 
-	session.Close()
+	require.NoError(t, session.Close())
 }
 
 // TestInformationSchema_WhereClause 测试 WHERE 子句
@@ -266,7 +267,7 @@ func TestInformationSchema_WhereClause(t *testing.T) {
 	assert.Len(t, rows, 1) // Should only return db1
 	assert.Equal(t, "db1", rows[0]["schema_name"])
 
-	session.Close()
+	require.NoError(t, session.Close())
 }
 
 // TestInformationSchema_ReadOnly 测试 information_schema 只读特性
@@ -304,7 +305,7 @@ func TestInformationSchema_ReadOnly(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "read-only")
 
-	session.Close()
+	require.NoError(t, session.Close())
 }
 
 // createTestDataSource 创建一个简单的测试数据源

@@ -26,7 +26,7 @@ func TestE2E_PrivilegeTablesVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open connection: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Test connection
 	if err := conn.Ping(); err != nil {
@@ -45,7 +45,7 @@ func TestE2E_PrivilegeTablesVisibility(t *testing.T) {
 		if err != nil {
 			t.Fatalf("SHOW TABLES failed: %v", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		var tables []string
 		for rows.Next() {

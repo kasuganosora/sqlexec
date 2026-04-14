@@ -157,7 +157,7 @@ func (e *FormatDescriptionEvent) Marshal() ([]byte, error) {
 	buf.Write(headerBytes)
 
 	// 写入二进制日志格式版本
-	binary.Write(buf, binary.LittleEndian, e.BinlogFormatVersion)
+	_ = binary.Write(buf, binary.LittleEndian, e.BinlogFormatVersion)
 
 	// 写入服务器版本（50字节，以 NULL 填充）
 	serverVersion := make([]byte, 50)
@@ -165,7 +165,7 @@ func (e *FormatDescriptionEvent) Marshal() ([]byte, error) {
 	buf.Write(serverVersion)
 
 	// 写入创建时间戳
-	binary.Write(buf, binary.LittleEndian, e.CreateTimestamp)
+	_ = binary.Write(buf, binary.LittleEndian, e.CreateTimestamp)
 
 	// 写入事件头长度
 	buf.WriteByte(e.HeaderLength)
@@ -178,7 +178,7 @@ func (e *FormatDescriptionEvent) Marshal() ([]byte, error) {
 
 	// 写入 CRC32 校验和（如果算法类型为 CRC32）
 	if e.ChecksumAlgorithm == BINLOG_CHECKSUM_ALG_CRC32 {
-		binary.Write(buf, binary.LittleEndian, e.ChecksumValue)
+		_ = binary.Write(buf, binary.LittleEndian, e.ChecksumValue)
 	}
 
 	return buf.Bytes(), nil
@@ -234,12 +234,12 @@ func (e *GtidEvent) Unmarshal(r io.Reader) error {
 		if gtridLen+bqualLen > 0 {
 			totalLen := int(gtridLen) + int(bqualLen)
 			e.XidData = make([]byte, totalLen)
-			io.ReadFull(reader, e.XidData)
+			_, _ = io.ReadFull(reader, e.XidData)
 		}
 	} else {
 		// 其他情况：读取6字节的 0 填充
 		padding := make([]byte, 6)
-		io.ReadFull(reader, padding)
+		_, _ = io.ReadFull(reader, padding)
 	}
 
 	return nil
@@ -254,18 +254,18 @@ func (e *GtidEvent) Marshal() ([]byte, error) {
 	buf.Write(headerBytes)
 
 	// 写入固定字段
-	binary.Write(buf, binary.LittleEndian, e.GtidSeqNo)
-	binary.Write(buf, binary.LittleEndian, e.DomainID)
+	_ = binary.Write(buf, binary.LittleEndian, e.GtidSeqNo)
+	_ = binary.Write(buf, binary.LittleEndian, e.DomainID)
 	buf.WriteByte(e.Flags)
 
 	// 根据标志位写入可选字段
 	if e.Flags&GTID_FL_GROUP_COMMIT_ID != 0 && e.CommitID != nil {
-		binary.Write(buf, binary.LittleEndian, *e.CommitID)
+		_ = binary.Write(buf, binary.LittleEndian, *e.CommitID)
 	}
 
 	if e.Flags&(GTID_FL_PREPARED_XA|GTID_FL_COMPLETED_XA) != 0 {
 		if e.XaFormatID != nil {
-			binary.Write(buf, binary.LittleEndian, *e.XaFormatID)
+			_ = binary.Write(buf, binary.LittleEndian, *e.XaFormatID)
 		}
 		if e.GtridLength != nil {
 			buf.WriteByte(*e.GtridLength)
@@ -307,7 +307,7 @@ func (e *RotateEvent) Unmarshal(r io.Reader) error {
 
 	// 读取下一个位置（8字节）
 	nextPosBuf := make([]byte, 8)
-	io.ReadFull(reader, nextPosBuf)
+	_, _ = io.ReadFull(reader, nextPosBuf)
 	e.NextPosition = uint64(nextPosBuf[0]) | uint64(nextPosBuf[1])<<8 |
 		uint64(nextPosBuf[2])<<16 | uint64(nextPosBuf[3])<<24 |
 		uint64(nextPosBuf[4])<<32 | uint64(nextPosBuf[5])<<40 |
@@ -339,7 +339,7 @@ func (e *RotateEvent) Marshal() ([]byte, error) {
 	buf.Write(headerBytes)
 
 	// 写入下一个位置（8字节）
-	binary.Write(buf, binary.LittleEndian, e.NextPosition)
+	_ = binary.Write(buf, binary.LittleEndian, e.NextPosition)
 
 	// 写入日志文件名
 	buf.WriteString(e.BinlogFile)
@@ -421,13 +421,13 @@ func (e *QueryEvent) Unmarshal(r io.Reader) error {
 	// 读取状态变量
 	if e.StatusVarLen > 0 {
 		e.StatusVariables = make([]byte, e.StatusVarLen)
-		io.ReadFull(reader, e.StatusVariables)
+		_, _ = io.ReadFull(reader, e.StatusVariables)
 	}
 
 	// 读取数据库名（即使长度为0，也读取NULL终止符）
 	e.DatabaseName, _ = ReadStringFixedFromReader(reader, int(e.DatabaseNameLen))
 	// 读取 NULL 终止符（MariaDB规范：即使db_len=0，也要跳过1字节NULL）
-	reader.ReadByte()
+	_, _ = reader.ReadByte()
 
 	// 读取 SQL 语句（使用单一 reader，避免创建新的 bufio.Reader）
 	var buf []byte
@@ -455,11 +455,11 @@ func (e *QueryEvent) Marshal() ([]byte, error) {
 	buf.Write(headerBytes)
 
 	// 写入固定字段
-	binary.Write(buf, binary.LittleEndian, e.ThreadID)
-	binary.Write(buf, binary.LittleEndian, e.ExecutionTime)
+	_ = binary.Write(buf, binary.LittleEndian, e.ThreadID)
+	_ = binary.Write(buf, binary.LittleEndian, e.ExecutionTime)
 	buf.WriteByte(e.DatabaseNameLen)
-	binary.Write(buf, binary.LittleEndian, e.ErrorCode)
-	binary.Write(buf, binary.LittleEndian, e.StatusVarLen)
+	_ = binary.Write(buf, binary.LittleEndian, e.ErrorCode)
+	_ = binary.Write(buf, binary.LittleEndian, e.StatusVarLen)
 
 	// 写入状态变量
 	buf.Write(e.StatusVariables)
@@ -518,11 +518,11 @@ func (e *TableMapEvent) Unmarshal(r io.Reader) error {
 	// 读取可变数据部分
 	e.DatabaseNameLen, _ = ReadNumber[uint8](reader, 1)
 	e.DatabaseName, _ = ReadStringFixedFromReader(reader, int(e.DatabaseNameLen))
-	reader.ReadByte() // 读取 NULL 终止符
+	_, _ = reader.ReadByte() // 读取 NULL 终止符
 
 	e.TableNameLen, _ = ReadNumber[uint8](reader, 1)
 	e.TableName, _ = ReadStringFixedFromReader(reader, int(e.TableNameLen))
-	reader.ReadByte() // 读取 NULL 终止符
+	_, _ = reader.ReadByte() // 读取 NULL 终止符
 
 	// 读取列数（长度编码）
 	colCount, _ := ReadLenencNumber[uint64](reader)
@@ -530,7 +530,7 @@ func (e *TableMapEvent) Unmarshal(r io.Reader) error {
 
 	// 读取列类型数组
 	e.ColumnTypes = make([]uint8, e.ColumnCount)
-	io.ReadFull(reader, e.ColumnTypes)
+	_, _ = io.ReadFull(reader, e.ColumnTypes)
 
 	// 读取元数据块长度（长度编码）
 	metadataLen, _ := ReadLenencNumber[uint64](reader)
@@ -539,13 +539,13 @@ func (e *TableMapEvent) Unmarshal(r io.Reader) error {
 	// 读取元数据块
 	if e.MetadataLen > 0 {
 		e.Metadata = make([]byte, e.MetadataLen)
-		io.ReadFull(reader, e.Metadata)
+		_, _ = io.ReadFull(reader, e.Metadata)
 	}
 
 	// 读取 NULL 位图（长度 = (n + 7) / 8）
 	nullBitmapLen := (e.ColumnCount + 7) / 8
 	e.NullBitmap = make([]byte, nullBitmapLen)
-	io.ReadFull(reader, e.NullBitmap)
+	_, _ = io.ReadFull(reader, e.NullBitmap)
 
 	// 读取可选元数据块（如果有剩余数据）
 	remaining, _ := io.ReadAll(reader)
@@ -565,8 +565,8 @@ func (e *TableMapEvent) Marshal() ([]byte, error) {
 	buf.Write(headerBytes)
 
 	// 写入固定字段
-	binary.Write(buf, binary.LittleEndian, e.TableID)
-	binary.Write(buf, binary.LittleEndian, e.Reserved)
+	_ = binary.Write(buf, binary.LittleEndian, e.TableID)
+	_ = binary.Write(buf, binary.LittleEndian, e.Reserved)
 
 	// 写入数据库名
 	buf.WriteByte(e.DatabaseNameLen)
@@ -579,13 +579,13 @@ func (e *TableMapEvent) Marshal() ([]byte, error) {
 	buf.WriteByte(0x00)
 
 	// 写入列数
-	WriteLenencNumber(buf, uint64(e.ColumnCount))
+	_ = WriteLenencNumber(buf, uint64(e.ColumnCount))
 
 	// 写入列类型数组
 	buf.Write(e.ColumnTypes)
 
 	// 写入元数据块
-	WriteLenencNumber(buf, uint64(e.MetadataLen))
+	_ = WriteLenencNumber(buf, uint64(e.MetadataLen))
 	buf.Write(e.Metadata)
 
 	// 写入 NULL 位图
@@ -631,7 +631,7 @@ func (e *XidEvent) Marshal() ([]byte, error) {
 	buf.Write(headerBytes)
 
 	// 写入 XID（8字节）
-	binary.Write(buf, binary.LittleEndian, e.XID)
+	_ = binary.Write(buf, binary.LittleEndian, e.XID)
 
 	return buf.Bytes(), nil
 }
@@ -643,9 +643,6 @@ func (e *XidEvent) Marshal() ([]byte, error) {
 type ReplicationNetworkStream struct {
 	reader        *bufio.Reader
 	lastPacket    Packet
-	statusByte    uint8
-	currentEvent  []byte
-	eventPosition int
 }
 
 // NewReplicationNetworkStream 创建新的复制网络流解析器
@@ -699,11 +696,8 @@ func (s *ReplicationNetworkStream) ReadEvent() (BinlogEventHeader, []byte, uint8
 	if len(payload) > 0 && payload[0] == 0x00 {
 		// 标准 MySQL 格式，跳过 OK 标记
 		payload = payload[1:]
-	} else if len(payload) >= 4 {
-		// MariaDB 原始格式，检查是否是 binlog 文件内容
-		// 可能是 Rotate Event 或其他 binlog 事件
-		// 不跳过任何字节，直接解析
 	}
+	// Note: MariaDB binlog format (payload >= 4 bytes without 0x00 prefix) is parsed directly below
 
 	// 5. 解析事件头（前19字节）
 	if len(payload) < 19 {

@@ -28,7 +28,7 @@ func TestHybridDataSource_BasicCRUD_Memory(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	assert.True(t, ds.IsConnected())
 	assert.True(t, ds.IsWritable())
@@ -136,7 +136,7 @@ func TestHybridDataSource_PersistenceControl(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -196,7 +196,7 @@ func TestHybridDataSource_WithBadger(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create memory table (default, non-persistent)
 	memTableInfo := &domain.TableInfo{
@@ -295,7 +295,7 @@ func TestDataSourceRouter(t *testing.T) {
 	router := NewDataSourceRouter(tableConfig, nil, nil, nil)
 
 	// Test default routing (no persistence)
-	tableConfig.SetConfig(context.Background(), &TableConfig{
+	_ = tableConfig.SetConfig(context.Background(), &TableConfig{
 		TableName:  "memory_table",
 		Persistent: false,
 	})
@@ -307,7 +307,7 @@ func TestDataSourceRouter(t *testing.T) {
 	assert.Equal(t, RouteMemoryOnly, decision)
 
 	// Test persistent routing (without Badger - should fall back to memory)
-	tableConfig.SetConfig(context.Background(), &TableConfig{
+	_ = tableConfig.SetConfig(context.Background(), &TableConfig{
 		TableName:  "persistent_table",
 		Persistent: true,
 	})
@@ -345,7 +345,7 @@ func TestHybridDataSource_Transaction(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -399,7 +399,7 @@ func TestHybridDataSource_TruncateTable(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -462,7 +462,7 @@ func TestHybridDataSource_DBSharing(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// After Connect, badgerDB should be set (retrieved from BadgerDataSource.GetDB())
 	assert.NotNil(t, ds.badgerDB, "badgerDB should be set after Connect when Badger is enabled")
@@ -490,7 +490,7 @@ func TestHybridTransaction_MemoryOnly_Commit(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -545,7 +545,7 @@ func TestHybridTransaction_MemoryOnly_Rollback(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -588,7 +588,7 @@ func TestHybridTransaction_WithBadger_Commit(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table (memory-only by default)
 	tableInfo := &domain.TableInfo{
@@ -642,7 +642,7 @@ func TestHybridTransaction_Query(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -713,7 +713,7 @@ func TestHybridTransaction_InsertUpdateDelete(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Create table
 	tableInfo := &domain.TableInfo{
@@ -874,7 +874,7 @@ func TestHybridDataSource_EnablePersistence(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Before enabling persistence, table should use default (non-persistent)
 	cfg, ok := ds.GetPersistenceConfig("persist_test")
@@ -926,7 +926,7 @@ func TestHybridDataSource_Stats(t *testing.T) {
 	ctx := context.Background()
 	err := ds.Connect(ctx)
 	require.NoError(t, err)
-	defer ds.Close(ctx)
+	defer func() { _ = ds.Close(ctx) }()
 
 	// Initial stats should be zero
 	stats := ds.Stats()

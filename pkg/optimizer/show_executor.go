@@ -210,9 +210,10 @@ func (e *ShowExecutor) executeShowProcessList(ctx context.Context, full bool) (*
 
 		// 构建 State
 		state := "executing"
-		if status == "canceled" {
+		switch status {
+		case "canceled":
 			state = "killed"
-		} else if status == "timeout" {
+		case "timeout":
 			state = "timeout"
 		}
 
@@ -336,7 +337,8 @@ func matchLike(s, pattern string) bool {
 	// % matches any sequence, _ matches single character
 	i, j := 0, 0
 	for i < len(s) && j < len(pattern) {
-		if pattern[j] == '%' {
+		switch {
+		case pattern[j] == '%':
 			// Skip consecutive %
 			for j < len(pattern) && pattern[j] == '%' {
 				j++
@@ -352,10 +354,10 @@ func matchLike(s, pattern string) bool {
 				i++
 			}
 			return false
-		} else if pattern[j] == '_' || pattern[j] == s[i] {
+		case pattern[j] == '_' || pattern[j] == s[i]:
 			i++
 			j++
-		} else {
+		default:
 			return false
 		}
 	}

@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestNew tests pool creation
@@ -80,7 +82,7 @@ func TestNew(t *testing.T) {
 				t.Error("New() returned nil pool")
 				return
 			}
-			p.Close()
+			_ = p.Close()
 		})
 	}
 }
@@ -94,7 +96,7 @@ func TestNewWithSize(t *testing.T) {
 	if p == nil {
 		t.Fatal("NewWithSize() returned nil pool")
 	}
-	p.Close()
+	_ = p.Close()
 
 	_, err = NewWithSize(0)
 	if !errors.Is(err, ErrInvalidSize) {
@@ -133,7 +135,7 @@ func TestPool_Start(t *testing.T) {
 		t.Errorf("second Start() error = %v, want %v", err, ErrPoolRunning)
 	}
 
-	p.Close()
+	_ = p.Close()
 }
 
 // TestPool_Close tests pool close
@@ -168,7 +170,7 @@ func TestPool_Submit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -203,7 +205,7 @@ func TestPool_SubmitWait(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -228,7 +230,7 @@ func TestPool_SubmitBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -272,7 +274,7 @@ func TestPool_SubmitClosed(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	p.Close()
+	_ = p.Close()
 
 	_, err = p.Submit(context.Background(), func(ctx context.Context) error {
 		return nil
@@ -300,7 +302,7 @@ func TestPool_SubmitBeforeStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	_, err = p.Submit(context.Background(), func(ctx context.Context) error {
 		return nil
@@ -316,7 +318,7 @@ func TestPool_TaskError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -346,7 +348,7 @@ func TestPool_TaskPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -375,7 +377,7 @@ func TestPool_CanceledTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -460,7 +462,7 @@ func TestPool_Stats(t *testing.T) {
 		t.Error("Stats().IsRunning should be true")
 	}
 
-	p.Close()
+	_ = p.Close()
 
 	stats = p.Stats()
 	if !stats.IsClosed {
@@ -487,7 +489,7 @@ func TestPool_WorkerCount(t *testing.T) {
 		t.Errorf("WorkerCount() = %d, want > 0", count)
 	}
 
-	p.Close()
+	_ = p.Close()
 }
 
 // TestPool_QueueLen tests QueueLen
@@ -496,7 +498,7 @@ func TestPool_QueueLen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -514,7 +516,7 @@ func TestPool_Results(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -532,7 +534,7 @@ func TestPool_SubmitFunc(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -558,7 +560,7 @@ func TestPool_StartAfterClose(t *testing.T) {
 		t.Fatalf("Start() error = %v", err)
 	}
 
-	p.Close()
+	_ = p.Close()
 
 	if err := p.Start(); !errors.Is(err, ErrPoolClosed) {
 		t.Errorf("Start() after close error = %v, want %v", err, ErrPoolClosed)
@@ -571,7 +573,7 @@ func TestPool_ConcurrentSubmit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -611,7 +613,7 @@ func TestPool_DynamicScaling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -641,8 +643,8 @@ func TestPool_DynamicScaling(t *testing.T) {
 // BenchmarkPool_Submit benchmarks task submission
 func BenchmarkPool_Submit(b *testing.B) {
 	p, _ := New(Config{Size: 4, QueueSize: 1000})
-	p.Start()
-	defer p.Close()
+	_ = p.Start()
+	defer func() { _ = p.Close() }()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -655,8 +657,8 @@ func BenchmarkPool_Submit(b *testing.B) {
 // BenchmarkPool_SubmitWait benchmarks synchronous task submission
 func BenchmarkPool_SubmitWait(b *testing.B) {
 	p, _ := New(Config{Size: 4, QueueSize: 1000})
-	p.Start()
-	defer p.Close()
+	_ = p.Start()
+	defer func() { _ = p.Close() }()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -669,8 +671,8 @@ func BenchmarkPool_SubmitWait(b *testing.B) {
 // BenchmarkPool_Parallel benchmarks parallel submissions
 func BenchmarkPool_Parallel(b *testing.B) {
 	p, _ := New(Config{Size: 8, QueueSize: 1000})
-	p.Start()
-	defer p.Close()
+	_ = p.Start()
+	defer func() { _ = p.Close() }()
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -687,7 +689,7 @@ func TestPool_SubmitWithContextCancel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -724,7 +726,7 @@ func TestPool_SendResultDuringClose(t *testing.T) {
 	// Close while waiting for result
 	go func() {
 		time.Sleep(time.Millisecond * 10)
-		p.Close()
+		require.NoError(t, p.Close())
 	}()
 
 	// Wait for result or close
@@ -742,7 +744,7 @@ func TestPool_SubmitBatchWithErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -776,7 +778,7 @@ func TestPool_SubmitBatchWithContextCancel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -843,7 +845,7 @@ func TestPool_ExecuteTaskContextCanceled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -884,7 +886,7 @@ func TestPool_ShouldScaleDown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -914,7 +916,7 @@ func TestPool_MaybeScaleUpEdgeCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -939,7 +941,7 @@ func TestPool_SubmitWaitContextCanceled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)
@@ -963,7 +965,7 @@ func TestPool_NilResultChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("Start() error = %v", err)

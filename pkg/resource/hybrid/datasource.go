@@ -75,7 +75,7 @@ func (ds *HybridDataSource) Connect(ctx context.Context) error {
 
 		ds.badgerDS = badgerds.NewBadgerDataSourceWithConfig(ds.domainCfg, badgerCfg)
 		if err := ds.badgerDS.Connect(ctx); err != nil {
-			ds.memory.Close(ctx)
+			_ = ds.memory.Close(ctx)
 			return fmt.Errorf("failed to connect Badger data source: %w", err)
 		}
 
@@ -94,9 +94,7 @@ func (ds *HybridDataSource) Connect(ctx context.Context) error {
 	// Load table configs from Badger if available
 	if ds.badgerDB != nil {
 		ds.tableConfig.SetBadgerDB(ds.badgerDB)
-		if err := ds.tableConfig.LoadFromDB(ctx); err != nil {
-			// Non-fatal: continue with empty config
-		}
+		_ = ds.tableConfig.LoadFromDB(ctx) // Non-fatal: continue with empty config
 	}
 
 	ds.connected = true
@@ -259,7 +257,7 @@ func (ds *HybridDataSource) DropTable(ctx context.Context, tableName string) err
 	}
 
 	// Also remove table config
-	defer ds.tableConfig.RemoveConfig(ctx, tableName)
+	defer func() { _ = ds.tableConfig.RemoveConfig(ctx, tableName) }()
 
 	return source.DropTable(ctx, tableName)
 }
@@ -680,14 +678,14 @@ func (ds *HybridDataSource) MigrateToPersistent(ctx context.Context, tableName s
 	// Query all rows from memory
 	result, err := ds.memory.Query(ctx, tableName, &domain.QueryOptions{})
 	if err != nil {
-		ds.badgerDS.DropTable(ctx, tableName)
+		_ = ds.badgerDS.DropTable(ctx, tableName)
 		return fmt.Errorf("failed to query rows from memory: %w", err)
 	}
 
 	// Insert all rows to Badger
 	if len(result.Rows) > 0 {
 		if _, err := ds.badgerDS.Insert(ctx, tableName, result.Rows, nil); err != nil {
-			ds.badgerDS.DropTable(ctx, tableName)
+			_ = ds.badgerDS.DropTable(ctx, tableName)
 			return fmt.Errorf("failed to insert rows to Badger: %w", err)
 		}
 	}
@@ -699,10 +697,10 @@ func (ds *HybridDataSource) MigrateToPersistent(ctx context.Context, tableName s
 		SyncOnWrite:   false,
 		CacheInMemory: true,
 	}
-	ds.tableConfig.SetConfig(ctx, config)
+	_ = ds.tableConfig.SetConfig(ctx, config)
 
 	// Drop table from memory
-	ds.memory.DropTable(ctx, tableName)
+	_ = ds.memory.DropTable(ctx, tableName)
 
 	return nil
 }
@@ -734,14 +732,14 @@ func (ds *HybridDataSource) LoadToMemory(ctx context.Context, tableName string) 
 	// Query all rows from Badger
 	result, err := ds.badgerDS.Query(ctx, tableName, &domain.QueryOptions{})
 	if err != nil {
-		ds.memory.DropTable(ctx, tableName)
+		_ = ds.memory.DropTable(ctx, tableName)
 		return fmt.Errorf("failed to query rows from Badger: %w", err)
 	}
 
 	// Insert all rows to memory
 	if len(result.Rows) > 0 {
 		if _, err := ds.memory.Insert(ctx, tableName, result.Rows, nil); err != nil {
-			ds.memory.DropTable(ctx, tableName)
+			_ = ds.memory.DropTable(ctx, tableName)
 			return fmt.Errorf("failed to insert rows to memory: %w", err)
 		}
 	}
@@ -753,7 +751,7 @@ func (ds *HybridDataSource) LoadToMemory(ctx context.Context, tableName string) 
 		SyncOnWrite:   false,
 		CacheInMemory: true,
 	}
-	ds.tableConfig.SetConfig(ctx, config)
+	_ = ds.tableConfig.SetConfig(ctx, config)
 
 	return nil
 }

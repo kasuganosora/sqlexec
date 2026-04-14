@@ -22,7 +22,7 @@ func NewBatchExecutor(batchSize int, flushInterval time.Duration, flushFunc func
 		flushInterval: flushInterval,
 		flushFunc:     flushFunc,
 	}
-	be.timer = time.AfterFunc(flushInterval, func() { be.flush() })
+	be.timer = time.AfterFunc(flushInterval, func() { _ = be.flush() })
 	return be
 }
 

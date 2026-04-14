@@ -6,20 +6,21 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/api"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
 func TestMigrator_HasTable(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -35,15 +36,15 @@ func TestMigrator_HasTable(t *testing.T) {
 
 func TestMigrator_CreateTable(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -59,15 +60,15 @@ func TestMigrator_CreateTable(t *testing.T) {
 
 func TestMigrator_DropTable(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -83,15 +84,15 @@ func TestMigrator_DropTable(t *testing.T) {
 
 func TestMigrator_RenameTable(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -102,15 +103,15 @@ func TestMigrator_RenameTable(t *testing.T) {
 
 func TestMigrator_AddColumn(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -126,15 +127,15 @@ func TestMigrator_AddColumn(t *testing.T) {
 
 func TestMigrator_DropColumn(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -150,15 +151,15 @@ func TestMigrator_DropColumn(t *testing.T) {
 
 func TestMigrator_AlterColumn(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -174,15 +175,15 @@ func TestMigrator_AlterColumn(t *testing.T) {
 
 func TestMigrator_RenameColumn(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -198,15 +199,15 @@ func TestMigrator_RenameColumn(t *testing.T) {
 
 func TestMigrator_ColumnTypes(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -216,7 +217,7 @@ func TestMigrator_ColumnTypes(t *testing.T) {
 	}
 
 	migrator := gormDB.Migrator()
-	migrator.CreateTable(&TestModel{})
+	require.NoError(t, migrator.CreateTable(&TestModel{}))
 	columnTypes, err := migrator.ColumnTypes(&TestModel{})
 	if err != nil {
 		t.Errorf("Failed to get column types: %v", err)
@@ -228,15 +229,15 @@ func TestMigrator_ColumnTypes(t *testing.T) {
 
 func TestMigrator_CreateIndex(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -252,15 +253,15 @@ func TestMigrator_CreateIndex(t *testing.T) {
 
 func TestMigrator_DropIndex(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -276,15 +277,15 @@ func TestMigrator_DropIndex(t *testing.T) {
 
 func TestMigrator_HasIndex(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -294,21 +295,21 @@ func TestMigrator_HasIndex(t *testing.T) {
 	}
 
 	migrator := gormDB.Migrator()
-	migrator.CreateTable(&TestModel{})
+	require.NoError(t, migrator.CreateTable(&TestModel{}))
 	_ = migrator.HasIndex(&TestModel{}, "idx_name")
 }
 
 func TestMigrator_RenameIndex(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -339,15 +340,15 @@ func TestMigrator_RenameIndex(t *testing.T) {
 
 func TestMigrator_AutoMigrate(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -367,15 +368,15 @@ func TestMigrator_AutoMigrate(t *testing.T) {
 // with empty DBName are handled correctly (fallback to field name or skip)
 func TestMigrator_AutoMigrate_EmbeddedStruct(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -401,15 +402,15 @@ func TestMigrator_AutoMigrate_EmbeddedStruct(t *testing.T) {
 
 func TestMigrator_HasColumn(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -419,21 +420,21 @@ func TestMigrator_HasColumn(t *testing.T) {
 	}
 
 	migrator := gormDB.Migrator()
-	migrator.CreateTable(&TestModel{})
+	require.NoError(t, migrator.CreateTable(&TestModel{}))
 	_ = migrator.HasColumn(&TestModel{}, "name")
 }
 
 func TestMigrator_GetTables(t *testing.T) {
 	db, _ := api.NewDB(&api.DBConfig{DebugMode: false})
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	config := &domain.DataSourceConfig{Type: domain.DataSourceTypeMemory, Name: "test", Writable: true}
 	memoryDS := memory.NewMVCCDataSource(config)
-	db.RegisterDataSource("test", memoryDS)
+	require.NoError(t, db.RegisterDataSource("test", memoryDS))
 	dialector := NewDialector(db.Session())
 	gormDB, _ := gorm.Open(dialector, &gorm.Config{})
 	defer func() {
 		if sqlDB, _ := gormDB.DB(); sqlDB != nil {
-			sqlDB.Close()
+			require.NoError(t, sqlDB.Close())
 		}
 	}()
 
@@ -443,7 +444,7 @@ func TestMigrator_GetTables(t *testing.T) {
 	}
 
 	migrator := gormDB.Migrator()
-	migrator.CreateTable(&TestModel{})
+	require.NoError(t, migrator.CreateTable(&TestModel{}))
 	tables, err := migrator.GetTables()
 	if err != nil {
 		t.Errorf("Failed to get tables: %v", err)

@@ -108,7 +108,7 @@ func (m *MaintenanceManager) runGC(config *MaintenanceConfig) {
 		case <-m.stopCh:
 			return
 		case <-ticker.C:
-			m.RunGC(config.GCDiscardRatio)
+			_ = m.RunGC(config.GCDiscardRatio)
 		}
 	}
 }
@@ -123,7 +123,7 @@ func (m *MaintenanceManager) runCompaction(config *MaintenanceConfig) {
 		case <-m.stopCh:
 			return
 		case <-ticker.C:
-			m.RunCompaction()
+			_ = m.RunCompaction()
 		}
 	}
 }
@@ -207,7 +207,7 @@ func (m *MaintenanceManager) GetStats() (*DatabaseStats, error) {
 
 		// Estimate LSM and VLog sizes from directory
 		lsmDir := filepath.Join(m.ds.badgerCfg.DataDir, "")
-		filepath.Walk(lsmDir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(lsmDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() {
 				return nil
 			}
@@ -219,12 +219,12 @@ func (m *MaintenanceManager) GetStats() (*DatabaseStats, error) {
 				stats.VLogSize += info.Size()
 			}
 			return nil
-		})
+		}) // non-fatal: skip size estimation on walk error
 	}
 
 	// Count keys by iterating
 	keyCount := int64(0)
-	m.ds.db.View(func(txn *badger.Txn) error {
+	if err := m.ds.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
 		it := txn.NewIterator(opts)
@@ -234,7 +234,9 @@ func (m *MaintenanceManager) GetStats() (*DatabaseStats, error) {
 			keyCount++
 		}
 		return nil
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("failed to count keys: %w", err)
+	}
 	stats.KeyCount = keyCount
 
 	return stats, nil
@@ -248,7 +250,7 @@ func (m *MaintenanceManager) calculateDiskUsage() int64 {
 	}
 
 	var size int64
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -281,7 +283,7 @@ func (m *MaintenanceManager) Backup(ctx context.Context, backupPath string) erro
 	if err != nil {
 		return fmt.Errorf("failed to create backup file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Run backup
 	since := uint64(0)
@@ -306,7 +308,7 @@ func (m *MaintenanceManager) Restore(ctx context.Context, backupFile string) err
 	if err != nil {
 		return fmt.Errorf("failed to open backup file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Run restore
 	if err := m.ds.db.Load(f, 100); err != nil {
@@ -343,7 +345,7 @@ func (m *MaintenanceManager) StreamBackup(ctx context.Context, outputPath string
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Use backup API
 	_, err = m.ds.db.Backup(f, 0)

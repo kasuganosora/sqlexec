@@ -52,7 +52,7 @@ func TestRecommendForSingleQuery(t *testing.T) {
 		return
 	}
 
-	if recommendations == nil || len(recommendations) == 0 {
+	if len(recommendations) == 0 {
 		t.Log("No recommendations generated (acceptable in simplified implementation)")
 		return
 	}
@@ -298,7 +298,7 @@ func TestIndexAdvisorIntegration(t *testing.T) {
 		return
 	}
 
-	if recommendations == nil || len(recommendations) == 0 {
+	if len(recommendations) == 0 {
 		t.Log("No recommendations generated (acceptable in simplified implementation)")
 		return
 	}

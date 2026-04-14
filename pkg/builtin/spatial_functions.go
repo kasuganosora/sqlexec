@@ -15,7 +15,7 @@ func init() {
 func registerSpatialFunctions() {
 	// ==================== Constructors ====================
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_point",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -25,7 +25,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Point(1.0, 2.0)",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_geomfromtext",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -35,7 +35,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_GeomFromText('POINT(1 2)')",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_makeenvelope",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -47,7 +47,7 @@ func registerSpatialFunctions() {
 
 	// ==================== Output ====================
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_astext",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -57,7 +57,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_AsText(location) FROM places",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_aswkt",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -69,7 +69,7 @@ func registerSpatialFunctions() {
 
 	// ==================== Properties ====================
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_x",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -79,7 +79,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_X(ST_Point(1, 2))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_y",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -89,7 +89,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Y(ST_Point(1, 2))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_srid",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -99,7 +99,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_SRID(location) FROM places",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_geometrytype",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -109,7 +109,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_GeometryType(ST_Point(1, 2))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_dimension",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -119,7 +119,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Dimension(ST_Point(1, 2))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_isempty",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -129,7 +129,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_IsEmpty(ST_GeomFromText('POINT EMPTY'))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_isvalid",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -139,7 +139,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_IsValid(ST_Point(1, 2))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_numpoints",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -149,7 +149,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_NumPoints(ST_GeomFromText('LINESTRING(0 0, 1 1, 2 2)'))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_envelope",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -161,7 +161,7 @@ func registerSpatialFunctions() {
 
 	// ==================== Measurements ====================
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_distance",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -171,7 +171,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Distance(ST_Point(0, 0), ST_Point(3, 4))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_area",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -181,7 +181,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Area(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_length",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -191,7 +191,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Length(ST_GeomFromText('LINESTRING(0 0, 3 4)'))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_perimeter",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -201,7 +201,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Perimeter(ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_centroid",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -213,7 +213,7 @@ func registerSpatialFunctions() {
 
 	// ==================== Spatial Relationships ====================
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_contains",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -223,7 +223,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Contains(ST_MakeEnvelope(0, 0, 10, 10), ST_Point(5, 5))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_within",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -233,7 +233,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Within(ST_Point(5, 5), ST_MakeEnvelope(0, 0, 10, 10))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_intersects",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -243,7 +243,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Intersects(ST_MakeEnvelope(0, 0, 5, 5), ST_MakeEnvelope(3, 3, 8, 8))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_disjoint",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -253,7 +253,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Disjoint(ST_Point(0, 0), ST_Point(5, 5))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_equals",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -263,7 +263,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Equals(ST_Point(1, 2), ST_GeomFromText('POINT(1 2)'))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_touches",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -273,7 +273,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Touches(ST_MakeEnvelope(0, 0, 5, 5), ST_MakeEnvelope(5, 0, 10, 5))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_overlaps",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -283,7 +283,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_Overlaps(ST_MakeEnvelope(0, 0, 5, 5), ST_MakeEnvelope(3, 3, 8, 8))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_crosses",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -295,7 +295,7 @@ func registerSpatialFunctions() {
 
 	// ==================== Operations ====================
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_buffer",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -305,7 +305,7 @@ func registerSpatialFunctions() {
 		Example:     "SELECT ST_AsText(ST_Buffer(ST_Point(0, 0), 5))",
 	})
 
-	RegisterGlobal(&FunctionInfo{
+	_ = RegisterGlobal(&FunctionInfo{
 		Name:        "st_union",
 		Type:        FunctionTypeScalar,
 		Category:    "spatial",
@@ -784,10 +784,11 @@ func stUnionHandler(args []interface{}) (interface{}, error) {
 func geometryDistance(g1, g2 Geometry) float64 {
 	// Quick bounding box check
 	bb1, bb2 := g1.Envelope(), g2.Envelope()
-	if !bb1.Intersects(bb2) {
-		// Minimum distance between bounding boxes as lower bound
-		// Still need precise distance below
-	}
+	// Quick bounding box check - bounding boxes that don't intersect
+	// don't guarantee non-zero distance (e.g., polygons can overlap
+	// even when bounding boxes don't), so we skip this optimization
+	// and always compute precise distance below.
+	_, _ = bb1, bb2
 
 	pts1 := extractPoints(g1)
 	pts2 := extractPoints(g2)
@@ -1256,7 +1257,7 @@ func toFloat64Arg(arg interface{}) (float64, error) {
 			return 0, fmt.Errorf("cannot convert %q to float64", v)
 		}
 		var val float64
-		fmt.Sscanf(v, "%f", &val)
+		_, _ = fmt.Sscanf(v, "%f", &val)
 		return val, nil
 	default:
 		return 0, fmt.Errorf("cannot convert %T to float64", arg)

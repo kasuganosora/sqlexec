@@ -125,7 +125,7 @@ func init() {
 	}
 
 	for _, fn := range icuFunctions {
-		RegisterGlobal(fn)
+		_ = RegisterGlobal(fn)
 	}
 }
 

@@ -65,7 +65,7 @@ func (a *ExcelAdapter) Connect(ctx context.Context) error {
 	success := false
 	defer func() {
 		if !success {
-			file.Close()
+			_ = file.Close()
 		}
 	}()
 
@@ -146,7 +146,7 @@ func (a *ExcelAdapter) Close(ctx context.Context) error {
 
 	// 始终关闭Excel文件
 	if a.file != nil {
-		a.file.Close()
+		_ = a.file.Close()
 		a.file = nil
 	}
 

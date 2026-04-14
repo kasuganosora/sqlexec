@@ -303,7 +303,7 @@ func TestJSONAdapter_DeterministicColumnOrder(t *testing.T) {
 			}
 		}
 
-		adapter.Close(ctx)
+		_ = adapter.Close(ctx)
 	}
 }
 
@@ -408,7 +408,7 @@ func TestJSONAdapter_Connect_EmptyArray(t *testing.T) {
 		t.Errorf("Expected 0 rows, got %d", len(result.Rows))
 	}
 
-	adapter.Close(ctx)
+	_ = adapter.Close(ctx)
 }
 
 // TestJSONAdapter_Connect_NotArray 测试连接非数组JSON
@@ -522,7 +522,7 @@ func TestJSONAdapter_writeBack_WithArrayRoot(t *testing.T) {
 		t.Errorf("Expected 2 records, got %d", len(arr))
 	}
 
-	adapter.Close(ctx)
+	_ = adapter.Close(ctx)
 }
 
 // TestJSONAdapter_writeBack_NilValues 测试写回时nil值处理
@@ -574,7 +574,7 @@ func TestJSONAdapter_writeBack_NilValues(t *testing.T) {
 		t.Errorf("Expected 2 rows, got %d", len(arr))
 	}
 
-	adapter.Close(ctx)
+	_ = adapter.Close(ctx)
 }
 
 // TestJSONAdapter_writeBack_AtomicWrite 测试写回的原子性（不会产生残留临时文件）
@@ -626,7 +626,7 @@ func TestJSONAdapter_writeBack_AtomicWrite(t *testing.T) {
 		t.Fatalf("File content is not valid JSON after writeBack: %v", err)
 	}
 
-	adapter.Close(ctx)
+	_ = adapter.Close(ctx)
 }
 
 // TestJSONAdapter_Connect_EmptyArrayRoot 测试连接带array_root的空数组
@@ -661,7 +661,7 @@ func TestJSONAdapter_Connect_EmptyArrayRoot(t *testing.T) {
 		t.Errorf("Expected 0 rows, got %d", len(result.Rows))
 	}
 
-	adapter.Close(ctx)
+	_ = adapter.Close(ctx)
 }
 
 // Helper function to check if string contains substring

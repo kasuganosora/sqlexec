@@ -12,7 +12,6 @@ import (
 
 // 生成测试数据
 func generateTestData(rowCount int) []domain.Row {
-	rand.Seed(time.Now().UnixNano())
 
 	rows := make([]domain.Row, rowCount)
 	for i := 0; i < rowCount; i++ {

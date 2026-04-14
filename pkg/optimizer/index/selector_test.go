@@ -595,10 +595,6 @@ func (m *mockCardinalityEstimator) GetStatistics(tableName string) (*statistics.
 	}, nil
 }
 
-type mockTableStatistics struct {
-	statistics.TableStatistics
-}
-
 // NewMockTableStatistics creates a mock TableStatistics for testing
 func NewMockTableStatistics() *statistics.TableStatistics {
 	return &statistics.TableStatistics{

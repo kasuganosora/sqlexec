@@ -49,7 +49,7 @@ func newTestServer() *httptest.Server {
 
 	// 健康检查
 	mux.HandleFunc("GET /_health", func(w gohttp.ResponseWriter, r *gohttp.Request) {
-		json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
+		_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
 	})
 
 	// 表列表
@@ -58,7 +58,7 @@ func newTestServer() *httptest.Server {
 		for name := range tables {
 			names = append(names, name)
 		}
-		json.NewEncoder(w).Encode(TablesResponse{Tables: names})
+		_ = json.NewEncoder(w).Encode(TablesResponse{Tables: names})
 	})
 
 	// 表结构
@@ -67,13 +67,13 @@ func newTestServer() *httptest.Server {
 		tbl, ok := tables[tableName]
 		if !ok {
 			w.WriteHeader(404)
-			json.NewEncoder(w).Encode(ErrorResponse{Error: struct {
+			_ = json.NewEncoder(w).Encode(ErrorResponse{Error: struct {
 				Code    string `json:"code"`
 				Message string `json:"message"`
 			}{Code: "TABLE_NOT_FOUND", Message: fmt.Sprintf("table '%s' not found", tableName)}})
 			return
 		}
-		json.NewEncoder(w).Encode(SchemaResponse{Name: tableName, Columns: tbl.Columns})
+		_ = json.NewEncoder(w).Encode(SchemaResponse{Name: tableName, Columns: tbl.Columns})
 	})
 
 	// 查询
@@ -82,7 +82,7 @@ func newTestServer() *httptest.Server {
 		tbl, ok := tables[tableName]
 		if !ok {
 			w.WriteHeader(404)
-			json.NewEncoder(w).Encode(ErrorResponse{Error: struct {
+			_ = json.NewEncoder(w).Encode(ErrorResponse{Error: struct {
 				Code    string `json:"code"`
 				Message string `json:"message"`
 			}{Code: "TABLE_NOT_FOUND", Message: fmt.Sprintf("table '%s' not found", tableName)}})
@@ -90,7 +90,7 @@ func newTestServer() *httptest.Server {
 		}
 
 		var req QueryRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		rows := tbl.Rows
 
@@ -136,7 +136,7 @@ func newTestServer() *httptest.Server {
 			rows = rows[:req.Limit]
 		}
 
-		json.NewEncoder(w).Encode(QueryResponse{
+		_ = json.NewEncoder(w).Encode(QueryResponse{
 			Columns: tbl.Columns,
 			Rows:    rows,
 			Total:   total,
@@ -152,9 +152,9 @@ func newTestServer() *httptest.Server {
 			return
 		}
 		var req InsertRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 		tbl.Rows = append(tbl.Rows, req.Rows...)
-		json.NewEncoder(w).Encode(MutationResponse{Affected: int64(len(req.Rows))})
+		_ = json.NewEncoder(w).Encode(MutationResponse{Affected: int64(len(req.Rows))})
 	})
 
 	// 更新
@@ -166,7 +166,7 @@ func newTestServer() *httptest.Server {
 			return
 		}
 		var req UpdateRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 
 		affected := int64(0)
 		for i, row := range tbl.Rows {
@@ -184,7 +184,7 @@ func newTestServer() *httptest.Server {
 				affected++
 			}
 		}
-		json.NewEncoder(w).Encode(MutationResponse{Affected: affected})
+		_ = json.NewEncoder(w).Encode(MutationResponse{Affected: affected})
 	})
 
 	// 删除
@@ -196,7 +196,9 @@ func newTestServer() *httptest.Server {
 			return
 		}
 		var req DeleteRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return
+		}
 
 		var kept []domain.Row
 		affected := int64(0)
@@ -215,7 +217,7 @@ func newTestServer() *httptest.Server {
 			}
 		}
 		tbl.Rows = kept
-		json.NewEncoder(w).Encode(MutationResponse{Affected: affected})
+		_ = json.NewEncoder(w).Encode(MutationResponse{Affected: affected})
 	})
 
 	return httptest.NewServer(mux)
@@ -526,10 +528,10 @@ func TestHTTPDataSource_CustomHeaders(t *testing.T) {
 	ts := httptest.NewServer(gohttp.HandlerFunc(func(w gohttp.ResponseWriter, r *gohttp.Request) {
 		receivedHeaders = r.Header
 		if r.URL.Path == "/_health" {
-			json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
+			_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
 			return
 		}
-		json.NewEncoder(w).Encode(QueryResponse{Total: 0})
+		_ = json.NewEncoder(w).Encode(QueryResponse{Total: 0})
 	}))
 	defer ts.Close()
 
@@ -570,10 +572,10 @@ func TestHTTPDataSource_Retry(t *testing.T) {
 		if r.URL.Path == "/_health" {
 			if attempts <= 2 {
 				w.WriteHeader(500)
-				w.Write([]byte("server error"))
+				_, _ = w.Write([]byte("server error"))
 				return
 			}
-			json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
+			_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok"})
 			return
 		}
 	}))

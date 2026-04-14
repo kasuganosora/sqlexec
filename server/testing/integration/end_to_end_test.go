@@ -8,6 +8,7 @@ import (
 	"github.com/kasuganosora/sqlexec/pkg/mysqltest"
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestE2E_COM_INIT_DB 测试 COM_INIT_DB 命令
@@ -148,7 +149,7 @@ func TestE2E_InformationSchemaQuery(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SELECT * FROM information_schema.schemata failed: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		// 验证有数据返回
 		hasData := false
@@ -165,7 +166,7 @@ func TestE2E_InformationSchemaQuery(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SELECT * FROM information_schema.tables failed: %w", err)
 		}
-		defer rows2.Close()
+		defer func() { _ = rows2.Close() }()
 
 		// 验证有数据返回
 		hasData2 := false
@@ -185,7 +186,7 @@ func TestE2E_InformationSchemaQuery(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SELECT * FROM columns failed: %w", err)
 		}
-		defer rows3.Close()
+		defer func() { _ = rows3.Close() }()
 
 		// 验证有数据返回
 		hasData3 := false
@@ -205,7 +206,7 @@ func TestE2E_InformationSchemaQuery(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SELECT * FROM information_schema.schemata failed: %w", err)
 		}
-		defer rows4.Close()
+		defer func() { _ = rows4.Close() }()
 
 		// 验证有数据返回
 		hasData4 := false
@@ -380,7 +381,7 @@ func TestE2E_ConnectionRecovery(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SELECT from schemata failed: %w", err)
 		}
-		rows.Close()
+		require.NoError(t, rows.Close())
 
 		// 9. 验证数据库仍然是 information_schema
 		err = conn.QueryRow("SELECT DATABASE()").Scan(&dbName)
@@ -442,7 +443,7 @@ func TestE2E_InformationSchemaWithRealData(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SELECT from tables failed: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		found := false
 		for rows.Next() {
@@ -467,7 +468,7 @@ func TestE2E_InformationSchemaWithRealData(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SELECT from columns failed: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		columnCount := 0
 		for rows.Next() {
@@ -576,7 +577,7 @@ func TestE2E_ShowDatabases(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("SHOW DATABASES failed: %w", err)
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 
 		// 验证有数据库返回
 		foundDBs := make(map[string]bool)

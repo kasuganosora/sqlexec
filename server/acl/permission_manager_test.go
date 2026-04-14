@@ -3,6 +3,8 @@ package acl
 import (
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewPermissionManager(t *testing.T) {
@@ -557,9 +559,9 @@ func TestExportPermissions(t *testing.T) {
 	pm := NewPermissionManager()
 
 	// Grant some permissions
-	pm.Grant("%", "testuser", []PermissionType{PrivSelect, PrivInsert}, PermissionLevelDatabase, "testdb", "", "")
-	pm.Grant("%", "testuser", []PermissionType{PrivUpdate}, PermissionLevelTable, "testdb", "testtable", "")
-	pm.Grant("%", "testuser", []PermissionType{PrivReferences}, PermissionLevelColumn, "testdb", "testtable", "col1")
+	require.NoError(t, pm.Grant("%", "testuser", []PermissionType{PrivSelect, PrivInsert}, PermissionLevelDatabase, "testdb", "", ""))
+	require.NoError(t, pm.Grant("%", "testuser", []PermissionType{PrivUpdate}, PermissionLevelTable, "testdb", "testtable", ""))
+	require.NoError(t, pm.Grant("%", "testuser", []PermissionType{PrivReferences}, PermissionLevelColumn, "testdb", "testtable", "col1"))
 
 	// Export permissions
 	dbPerms, tablePerms, colPerms := pm.ExportPermissions()

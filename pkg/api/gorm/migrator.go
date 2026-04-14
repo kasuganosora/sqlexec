@@ -61,11 +61,11 @@ func (m *Migrator) HasTable(value interface{}) bool {
 	if err != nil {
 		return false
 	}
-	defer result.Close()
+	defer func() { _ = result.Close() }()
 
 	if result.Next() {
 		var count int
-		result.Scan(&count)
+		_ = result.Scan(&count)
 		return count > 0
 	}
 	return false
@@ -122,7 +122,7 @@ func (m *Migrator) GetTables() (tableList []string, err error) {
 	if err != nil {
 		return []string{}, err
 	}
-	defer result.Close()
+	defer func() { _ = result.Close() }()
 
 	var tables []string
 	for result.Next() {
@@ -190,11 +190,11 @@ func (m *Migrator) HasColumn(value interface{}, name string) bool {
 	if err != nil {
 		return false
 	}
-	defer result.Close()
+	defer func() { _ = result.Close() }()
 
 	if result.Next() {
 		var count int
-		result.Scan(&count)
+		_ = result.Scan(&count)
 		return count > 0
 	}
 	return false
@@ -230,11 +230,11 @@ func (m *Migrator) HasConstraint(value interface{}, name string) bool {
 	if err != nil {
 		return false
 	}
-	defer result.Close()
+	defer func() { _ = result.Close() }()
 
 	if result.Next() {
 		var count int
-		result.Scan(&count)
+		_ = result.Scan(&count)
 		return count > 0
 	}
 	return false
@@ -275,11 +275,11 @@ func (m *Migrator) HasIndex(value interface{}, name string) bool {
 	if err != nil {
 		return false
 	}
-	defer result.Close()
+	defer func() { _ = result.Close() }()
 
 	if result.Next() {
 		var count int
-		result.Scan(&count)
+		_ = result.Scan(&count)
 		return count > 0
 	}
 	return false
@@ -304,7 +304,7 @@ func (m *Migrator) CurrentDatabase() (name string) {
 	if err != nil {
 		return ""
 	}
-	defer result.Close()
+	defer func() { _ = result.Close() }()
 	if result.Next() {
 		var dbName string
 		if err := result.Scan(&dbName); err == nil {
@@ -422,13 +422,6 @@ func (m *Migrator) resolveColumnType(value interface{}, fieldName string) string
 	return "VARCHAR(255)"
 }
 
-// resolveIndexColumns looks up an index definition in the model's schema and
-// returns the comma-separated quoted column list. Falls back to "id".
-func (m *Migrator) resolveIndexColumns(value interface{}, indexName string) string {
-	cols, _ := m.resolveIndexInfo(value, indexName)
-	return cols
-}
-
 // resolveIndexInfo looks up an index definition in the model's schema and
 // returns the comma-separated quoted column list and whether it is unique.
 func (m *Migrator) resolveIndexInfo(value interface{}, indexName string) (columns string, unique bool) {
@@ -441,7 +434,7 @@ func (m *Migrator) resolveIndexInfo(value interface{}, indexName string) (column
 		if idx.Name == indexName {
 			cols := make([]string, 0, len(idx.Fields))
 			for _, f := range idx.Fields {
-				cols = append(cols, quoteIdentifier(f.Field.DBName))
+				cols = append(cols, quoteIdentifier(f.DBName))
 			}
 			if len(cols) > 0 {
 				return strings.Join(cols, ", "), idx.Class == "UNIQUE"
