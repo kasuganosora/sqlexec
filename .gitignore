@@ -72,3 +72,10 @@ users.json
 
 # Coverage reports
 coverage_*.html
+
+# Temporary scripts and lint output
+clean_output.js
+debug_parse.js
+fix_errcheck.js
+fix_errcheck.py
+lint_out*.txt
