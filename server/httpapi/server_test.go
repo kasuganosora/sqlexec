@@ -955,8 +955,53 @@ func TestQueryResponse_TruncatedField(t *testing.T) {
 }
 
 func TestMaxResultRows_Constant(t *testing.T) {
-	// Verify the constant is set to a reasonable value
 	assert.Equal(t, 10000, maxResultRows)
+}
+
+func TestQueryResponse_TruncatedWhenOverLimit(t *testing.T) {
+	env := setupTestEnv(t)
+
+	orig := maxResultRows
+	maxResultRows = 2
+	t.Cleanup(func() { maxResultRows = orig })
+
+	session := env.db.Session()
+	_, err := session.Execute("CREATE TABLE truncate_limit (id INT)")
+	require.NoError(t, err)
+	_, err = session.Execute("INSERT INTO truncate_limit (id) VALUES (1), (2), (3), (4), (5)")
+	require.NoError(t, err)
+	require.NoError(t, session.Close())
+
+	queryHandler := NewQueryHandler(env.db, env.configDir, env.auditLogger)
+	clientStore := NewClientStore(env.configDir)
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/v1/query", AuthMiddleware(clientStore)(queryHandler))
+	handler := RecoveryMiddleware(mux)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	body := `{"sql":"SELECT * FROM truncate_limit"}`
+	path := "/api/v1/query"
+	ts, nonce, sig := signRequest("POST", path, body, env.client.APISecret)
+
+	req, err := http.NewRequest("POST", server.URL+path, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("X-API-Key", env.client.APIKey)
+	req.Header.Set("X-Timestamp", ts)
+	req.Header.Set("X-Nonce", nonce)
+	req.Header.Set("X-Signature", sig)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var queryResp QueryResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&queryResp))
+	assert.True(t, queryResp.Truncated)
+	assert.Equal(t, int64(2), queryResp.Total)
+	assert.Len(t, queryResp.Rows, 2)
 }
 
 func TestWriteJSON_ErrorHandling(t *testing.T) {

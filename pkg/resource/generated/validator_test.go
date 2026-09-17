@@ -222,7 +222,6 @@ func TestCheckAutoIncrementReference_WithAutoIncRef(t *testing.T) {
 }
 
 func TestValidateSchema_ValidSchema(t *testing.T) {
-	t.Skip("暂时跳过，简化版的拓扑排序不支持级联依赖")
 	validator := &GeneratedColumnValidator{}
 
 	tableInfo := &domain.TableInfo{

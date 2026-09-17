@@ -60,14 +60,15 @@ func TestDefaultContainer_Adapters(t *testing.T) {
 		costModel := container.MustGet("cost.model.adaptive")
 		adapter := &joinCostAdapter{costModel: costModel}
 
-		// Test ScanCost with valid cost model
 		result := adapter.ScanCost("test_table", 1000, true)
-		// May return 0 or a value depending on the cost model implementation
-		t.Logf("ScanCost returned: %f", result)
+		if result < 0 {
+			t.Errorf("ScanCost should be non-negative, got %f", result)
+		}
 
-		// Test JoinCost with valid cost model
 		result2 := adapter.JoinCost(nil, nil, 0, nil)
-		t.Logf("JoinCost returned: %f", result2)
+		if result2 < 0 {
+			t.Errorf("JoinCost should be non-negative, got %f", result2)
+		}
 	})
 
 	// Test joinCostAdapter with nil cost model

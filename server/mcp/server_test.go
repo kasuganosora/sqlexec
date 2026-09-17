@@ -94,6 +94,32 @@ func TestHandleQuery_Select(t *testing.T) {
 	assert.Contains(t, textContent.Text, "(2 rows)")
 }
 
+func TestHandleQuery_TruncatesLargeResult(t *testing.T) {
+	deps := setupTestDeps(t)
+
+	orig := maxResultRows
+	maxResultRows = 2
+	t.Cleanup(func() { maxResultRows = orig })
+
+	session := deps.DB.Session()
+	_, err := session.Execute("CREATE TABLE many_rows (id INT)")
+	require.NoError(t, err)
+	_, err = session.Execute("INSERT INTO many_rows (id) VALUES (1), (2), (3), (4), (5)")
+	require.NoError(t, err)
+	require.NoError(t, session.Close())
+
+	result, err := deps.HandleQuery(authedCtx(), makeCallToolRequest(map[string]interface{}{
+		"sql": "SELECT * FROM many_rows",
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.False(t, result.IsError)
+
+	textContent, ok := result.Content[0].(mcp.TextContent)
+	require.True(t, ok)
+	assert.Contains(t, textContent.Text, "truncated at 2")
+}
+
 func TestHandleQuery_Insert(t *testing.T) {
 	deps := setupTestDeps(t)
 

@@ -45,19 +45,9 @@ func TestRecommendForSingleQuery(t *testing.T) {
 
 	ctx := context.Background()
 	recommendations, err := advisor.RecommendForSingleQuery(ctx, query, tableInfo)
+	require.NoError(t, err)
+	require.NotEmpty(t, recommendations, "WHERE a = 1 AND b = 2 should produce index recommendations")
 
-	// 注意：简化实现可能返回错误或空结果
-	if err != nil {
-		t.Logf("Warning: Single query recommendation returned error (expected in simplified implementation): %v", err)
-		return
-	}
-
-	if len(recommendations) == 0 {
-		t.Log("No recommendations generated (acceptable in simplified implementation)")
-		return
-	}
-
-	// 验证推荐结果
 	for _, rec := range recommendations {
 		assert.NotEmpty(t, rec.TableName)
 		assert.NotEmpty(t, rec.Columns)
@@ -98,19 +88,14 @@ func TestRecommendForWorkload(t *testing.T) {
 
 	ctx := context.Background()
 	recommendations, err := advisor.RecommendForWorkload(ctx, queries, tableInfo)
+	require.NoError(t, err)
+	require.NotNil(t, recommendations)
 
-	// 注意：简化实现可能返回错误
-	if err != nil {
-		t.Logf("Warning: Workload recommendation returned error (expected in simplified implementation): %v", err)
-		return
+	for _, rec := range recommendations {
+		assert.NotEmpty(t, rec.TableName)
+		assert.NotEmpty(t, rec.Columns)
+		assert.GreaterOrEqual(t, rec.EstimatedBenefit, 0.0)
 	}
-
-	if recommendations == nil {
-		t.Log("No recommendations generated (acceptable in simplified implementation)")
-		return
-	}
-
-	t.Logf("Generated %d recommendations for workload", len(recommendations))
 }
 
 // TestEvaluateCandidateBenefits 测试候选索引收益评估
@@ -288,26 +273,14 @@ func TestIndexAdvisorIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// 注意：简化实现中，可能会返回错误或空结果
-	// 这是一个已知的限制，未来需要完善
 	recommendations, err := advisor.Run(ctx, query, tableInfo)
-
-	if err != nil {
-		// 如果失败，记录日志但不让测试失败
-		t.Logf("Warning: Index advisor returned error (expected in simplified implementation): %v", err)
-		return
-	}
-
-	if len(recommendations) == 0 {
-		t.Log("No recommendations generated (acceptable in simplified implementation)")
-		return
-	}
-
-	t.Logf("Generated %d recommendations", len(recommendations))
-	for i, rec := range recommendations {
-		t.Logf("  [%d] Table: %s, Columns: %v, Benefit: %.2f%%, Reason: %s",
-			i+1, rec.TableName, rec.Columns, rec.EstimatedBenefit*100, rec.Reason)
-		t.Logf("      SQL: %s", rec.CreateStatement)
+	require.NoError(t, err)
+	require.NotNil(t, recommendations)
+	for _, rec := range recommendations {
+		assert.GreaterOrEqual(t, rec.EstimatedBenefit, 0.0)
+		if rec.TableName != "" {
+			assert.NotEmpty(t, rec.Columns)
+		}
 	}
 }
 

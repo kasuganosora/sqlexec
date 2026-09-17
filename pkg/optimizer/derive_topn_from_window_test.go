@@ -43,6 +43,25 @@ func TestDeriveTopNFromWindowRule_Match(t *testing.T) {
 			plan:     createSimpleWindowPlan("count", false),
 			expected: false,
 		},
+		{
+			name:     "Limit over ROW_NUMBER window with ORDER BY",
+			plan:     NewLogicalLimit(10, 0, createRowNumberWindow(true)),
+			expected: true,
+		},
+		{
+			name: "Limit over projection over ROW_NUMBER window",
+			plan: NewLogicalLimit(10, 0, NewLogicalProjection(
+				[]*parser.Expression{{Type: parser.ExprTypeColumn, Column: "name"}},
+				[]string{"name"},
+				createRowNumberWindow(true),
+			)),
+			expected: true,
+		},
+		{
+			name:     "ROW_NUMBER window without ORDER BY - no match",
+			plan:     NewLogicalLimit(10, 0, createRowNumberWindow(false)),
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -84,7 +103,9 @@ func TestDeriveTopNFromWindowRule_Apply(t *testing.T) {
 			if err != nil {
 				t.Errorf("Apply() returned error: %v", err)
 			}
-			_ = result
+			if result != tt.plan {
+				t.Errorf("expected original plan for non-matching input, got %T", result)
+			}
 		})
 	}
 }
@@ -158,8 +179,11 @@ func TestDeriveTopNFromWindowRule_extractSortItems(t *testing.T) {
 	}
 }
 
-// Helper function to create a simple window plan
-func createSimpleWindowPlan(funcName string, hasOrderBy bool) LogicalPlan {
+func createRowNumberWindow(hasOrderBy bool) *LogicalWindow {
+	return createNamedWindow("row_number", hasOrderBy)
+}
+
+func createNamedWindow(funcName string, hasOrderBy bool) *LogicalWindow {
 	windowFunc := &WindowFunctionItem{
 		Func: &parser.Expression{
 			Type:     parser.ExprTypeFunction,
@@ -173,9 +197,12 @@ func createSimpleWindowPlan(funcName string, hasOrderBy bool) LogicalPlan {
 		}
 	}
 
-	window := NewLogicalWindow([]*WindowFunctionItem{windowFunc}, NewLogicalDataSource("test", createMockTableInfo("test", []string{"id"})))
+	return NewLogicalWindow([]*WindowFunctionItem{windowFunc}, NewLogicalDataSource("test", createMockTableInfo("test", []string{"id", "name"})))
+}
 
-	return NewLogicalLimit(10, 0, window)
+// Helper function to create a Limit wrapping a window plan (used by Match negative cases)
+func createSimpleWindowPlan(funcName string, hasOrderBy bool) LogicalPlan {
+	return NewLogicalLimit(10, 0, createNamedWindow(funcName, hasOrderBy))
 }
 
 // Helper function to create a mock table info
@@ -195,23 +222,19 @@ func createMockTableInfo(tableName string, columnNames []string) *domain.TableIn
 }
 
 func TestDeriveTopNFromWindowRule_Apply_WindowToTopN(t *testing.T) {
-	t.Skip("Skipping due to nil pointer dereference - needs investigation")
 	rule := NewDeriveTopNFromWindowRule()
 	ctx := context.Background()
 	optCtx := &OptimizationContext{}
 
-	// Test: Limit -> Window with ROW_NUMBER and ORDER BY
-	windowPlan := NewLogicalLimit(10, 0,
-		createSimpleWindowPlan("row_number", true))
-	plan, err := rule.Apply(ctx, windowPlan, optCtx)
+	// Limit -> Window(ROW_NUMBER + ORDER BY)
+	plan, err := rule.Apply(ctx, NewLogicalLimit(10, 0, createRowNumberWindow(true)), optCtx)
 	if err != nil {
-		t.Errorf("Apply() returned error: %v", err)
+		t.Fatalf("Apply() returned error: %v", err)
 	}
 
-	// Verify TopN plan was created
 	topN, ok := plan.(*LogicalTopN)
 	if !ok {
-		t.Errorf("Expected LogicalTopN plan, got %T", plan)
+		t.Fatalf("Expected LogicalTopN plan, got %T", plan)
 	}
 
 	if topN.GetLimit() != 10 {
@@ -222,36 +245,44 @@ func TestDeriveTopNFromWindowRule_Apply_WindowToTopN(t *testing.T) {
 		t.Errorf("Expected offset 0, got %d", topN.GetOffset())
 	}
 
-	// Verify sort items
 	if len(topN.SortItems()) != 1 {
 		t.Errorf("Expected 1 sort item, got %d", len(topN.SortItems()))
 	}
 }
 
 func TestDeriveTopNFromWindowRule_Apply_ProjectionToTopN(t *testing.T) {
-	t.Skip("Skipping due to potential nil pointer dereference - needs investigation")
 	rule := NewDeriveTopNFromWindowRule()
 	ctx := context.Background()
 	optCtx := &OptimizationContext{}
 
-	// Test: Limit -> Projection -> Window with ROW_NUMBER and ORDER BY
-	windowPlan := createSimpleWindowPlan("row_number", true)
+	// Limit -> Projection -> Window(ROW_NUMBER + ORDER BY)
 	projection := NewLogicalProjection(
 		[]*parser.Expression{{Type: parser.ExprTypeColumn, Column: "name"}},
 		[]string{"name"},
-		windowPlan,
+		createRowNumberWindow(true),
 	)
 	limitPlan := NewLogicalLimit(10, 0, projection)
 
 	plan, err := rule.Apply(ctx, limitPlan, optCtx)
 	if err != nil {
-		t.Errorf("Apply() returned error: %v", err)
+		t.Fatalf("Apply() returned error: %v", err)
 	}
 
-	// Verify TopN plan was created
-	_, ok := plan.(*LogicalTopN)
+	// Projection is preserved on top of TopN so the ROW_NUMBER column can stay in the schema.
+	proj, ok := plan.(*LogicalProjection)
 	if !ok {
-		t.Errorf("Expected LogicalTopN plan, got %T", plan)
+		t.Fatalf("Expected LogicalProjection wrapping TopN, got %T", plan)
+	}
+	children := proj.Children()
+	if len(children) != 1 {
+		t.Fatalf("Expected 1 child under projection, got %d", len(children))
+	}
+	topN, ok := children[0].(*LogicalTopN)
+	if !ok {
+		t.Fatalf("Expected LogicalTopN under projection, got %T", children[0])
+	}
+	if topN.GetLimit() != 10 {
+		t.Errorf("Expected limit 10, got %d", topN.GetLimit())
 	}
 }
 

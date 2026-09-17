@@ -14,7 +14,8 @@ import (
 )
 
 // maxResultRows limits the number of rows returned by read queries to prevent OOM.
-const maxResultRows = 10000
+// Tests may temporarily lower this value.
+var maxResultRows = 10000
 
 // QueryHandler handles SQL query execution via HTTP
 type QueryHandler struct {

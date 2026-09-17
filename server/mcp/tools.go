@@ -19,10 +19,11 @@ type contextKey string
 const (
 	ctxKeyMCPClient  contextKey = "mcp_client"
 	ctxKeyMCPRequest contextKey = "mcp_http_request"
-
-	// maxResultRows limits the number of rows returned by read queries to prevent OOM.
-	maxResultRows = 10000
 )
+
+// maxResultRows limits the number of rows returned by read queries to prevent OOM.
+// Tests may temporarily lower this value.
+var maxResultRows = 10000
 
 // ToolDeps holds shared dependencies for MCP tool handlers
 type ToolDeps struct {

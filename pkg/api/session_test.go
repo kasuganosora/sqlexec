@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
+	"github.com/kasuganosora/sqlexec/pkg/resource/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,15 +52,36 @@ func TestSession_GetDB(t *testing.T) {
 }
 
 func TestSession_Query_CacheDisabled(t *testing.T) {
-	db, _ := NewDB(nil)
-	session := &Session{
-		db:           db,
-		cacheEnabled: false,
-		logger:       NewNoOpLogger(),
-	}
+	ds := memory.NewMVCCDataSource(nil)
+	require.NoError(t, ds.Connect(context.Background()))
+	t.Cleanup(func() { _ = ds.Close(context.Background()) })
 
-	// Cache disabled should not cache
-	_ = session
+	db, err := NewDB(&DBConfig{CacheEnabled: false})
+	require.NoError(t, err)
+	require.NoError(t, db.RegisterDataSource("test", ds))
+	require.NoError(t, db.SetDefaultDataSource("test"))
+
+	session := db.SessionWithOptions(&SessionOptions{
+		DataSourceName: "test",
+		CacheEnabled:   false,
+	})
+	t.Cleanup(func() { _ = session.Close() })
+
+	_, err = session.Execute("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100))")
+	require.NoError(t, err)
+	_, err = session.Execute("INSERT INTO users (id, name) VALUES (1, 'Alice')")
+	require.NoError(t, err)
+
+	row, err := session.QueryOne("SELECT name FROM users WHERE id = 1")
+	require.NoError(t, err)
+	assert.Equal(t, "Alice", row["name"])
+
+	_, err = session.Execute("UPDATE users SET name = 'Bob' WHERE id = 1")
+	require.NoError(t, err)
+
+	row, err = session.QueryOne("SELECT name FROM users WHERE id = 1")
+	require.NoError(t, err)
+	assert.Equal(t, "Bob", row["name"])
 }
 
 func TestSession_Query_CacheHit(t *testing.T) {
@@ -215,10 +238,10 @@ func TestSession_QueryAll_Success(t *testing.T) {
 		query := NewQuery(session, mockResult, "SELECT * FROM users", nil)
 		query.err = NewError(ErrCodeInternal, "query error", nil)
 
-			// Simulate QueryAll logic with error
-			for query.Next() {
+		// Simulate QueryAll logic with error
+		for query.Next() {
 			_ = query.Row()
-			}
+		}
 
 		// This tests to path where query.Err() returns error
 		if query.Err() != nil {
@@ -323,21 +346,33 @@ func TestSession_QueryOne_Success(t *testing.T) {
 }
 
 func TestSession_Execute_Success(t *testing.T) {
-	db, _ := NewDB(nil)
-	mockDS := newMockDataSource()
-	_ = db.RegisterDataSource("test", mockDS)
-	_ = db.SetDefaultDataSource("test")
+	ds := memory.NewMVCCDataSource(nil)
+	require.NoError(t, ds.Connect(context.Background()))
+	t.Cleanup(func() { _ = ds.Close(context.Background()) })
+
+	db, err := NewDB(nil)
+	require.NoError(t, err)
+	require.NoError(t, db.RegisterDataSource("test", ds))
+	require.NoError(t, db.SetDefaultDataSource("test"))
 
 	session := db.SessionWithOptions(&SessionOptions{
 		DataSourceName: "test",
 		CacheEnabled:   true,
 	})
+	t.Cleanup(func() { _ = session.Close() })
 
-	// Test INSERT - should clear cache for the table
-	// Note: May error due to mock limitations, but code path is tested
-	result, err := session.Execute("INSERT INTO users (name, age) VALUES ('Alice', 30)")
-	_ = result
-	_ = err
+	_, err = session.Execute("CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100), age INT)")
+	require.NoError(t, err)
+
+	result, err := session.Execute("INSERT INTO users (id, name, age) VALUES (1, 'Alice', 30)")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int64(1), result.RowsAffected)
+
+	row, err := session.QueryOne("SELECT name, age FROM users WHERE id = 1")
+	require.NoError(t, err)
+	assert.Equal(t, "Alice", row["name"])
+	assert.Equal(t, int64(30), toInt64(t, row["age"]))
 }
 
 func TestSession_Begin_NestedTransaction(t *testing.T) {

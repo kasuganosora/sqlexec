@@ -118,19 +118,12 @@ func TestQueryCache_ClearTable(t *testing.T) {
 	cache.Set("SELECT * FROM users", nil, result1)
 	cache.Set("SELECT * FROM posts", nil, result2)
 
-	// Clear cache for users table
-	// Note: The current ClearTable implementation uses simple string matching
-	// which may not work correctly with hashed keys. This is a known limitation.
 	cache.ClearTable("users")
 
-	// The ClearTable implementation is simple and may not clear entries correctly
-	// For now, we just verify that it doesn't panic
-	_, found1 := cache.Get("SELECT * FROM users", nil)
-	_, found2 := cache.Get("SELECT * FROM posts", nil)
-
-	// Both may still be cached due to simple implementation
-	_ = found1
-	_ = found2
+	_, foundUsers := cache.Get("SELECT * FROM users", nil)
+	_, foundPosts := cache.Get("SELECT * FROM posts", nil)
+	assert.False(t, foundUsers, "users cache should be cleared")
+	assert.True(t, foundPosts, "posts cache should be preserved")
 }
 
 func TestQueryCache_ClearExpired(t *testing.T) {
