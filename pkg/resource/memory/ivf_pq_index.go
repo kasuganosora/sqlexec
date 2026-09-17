@@ -434,31 +434,15 @@ func (i *IVFPQIndex) Search(ctx context.Context, query []float32, k int, filter 
 	}
 
 	// 阶段1: 找到 nprobe 个最近的聚类中心
-	type clusterDist struct {
-		clusterID int
-		distance  float32
-	}
-
-	clusterDists := make([]clusterDist, i.nlist)
-	for j, center := range i.ivfCentroids {
-		if i.clusterCounts[j] == 0 {
-			continue
-		}
-		dist := i.distFunc.Compute(query, center)
-		clusterDists[j] = clusterDist{clusterID: j, distance: dist}
-	}
-
-	// 按距离排序
-	sort.Slice(clusterDists, func(a, b int) bool {
-		return clusterDists[a].distance < clusterDists[b].distance
+	probed := selectProbedClusters(i.nlist, nprobe, i.clusterCounts, func(j int) float32 {
+		return i.distFunc.Compute(query, i.ivfCentroids[j])
 	})
 
 	// 收集候选向量
 	candidates := make([]candidateNode, 0, len(i.vectors))
 
 	// 阶段2: 在选中的聚类中搜索
-	for j := 0; j < nprobe; j++ {
-		clusterID := clusterDists[j].clusterID
+	for _, clusterID := range probed {
 
 		// 应用过滤器
 		for _, rec := range i.vectorsByCluster[clusterID] {
@@ -520,6 +504,14 @@ func (i *IVFPQIndex) Insert(id int64, vector []float32) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
+	if !pqCodebooksTrained(i.codebooks) {
+		return fmt.Errorf("IVF-PQ index is not trained; call Build first")
+	}
+
+	if old, exists := i.assignments[id]; exists {
+		removeRecordFromCluster(i.vectorsByCluster, i.clusterCounts, old, id)
+	}
+
 	vec := make([]float32, len(vector))
 	copy(vec, vector)
 	i.vectors[id] = vec
@@ -528,16 +520,7 @@ func (i *IVFPQIndex) Insert(id int64, vector []float32) error {
 	code := i.encode(vec)
 	i.codes[id] = code
 
-	// 找到最近的聚类
-	bestCluster := 0
-	minDist := float32(math.MaxFloat32)
-	for j, center := range i.ivfCentroids {
-		dist := i.distFunc.Compute(vector, center)
-		if dist < minDist {
-			minDist = dist
-			bestCluster = j
-		}
-	}
+	bestCluster := nearestCentroid(i.ivfCentroids, vector, i.distFunc)
 
 	// 添加到聚类
 	i.vectorsByCluster[bestCluster] = append(i.vectorsByCluster[bestCluster], VectorRecord{

@@ -114,6 +114,11 @@ func NewHNSWSQIndex(columnName string, config *VectorIndexConfig) (*HNSWSQIndex,
 		ef = val
 	}
 
+	layers := make([]map[int64]*hnswNodeSQ, maxLevel)
+	for l := range layers {
+		layers[l] = make(map[int64]*hnswNodeSQ)
+	}
+
 	return &HNSWSQIndex{
 		columnName:       columnName,
 		config:           config,
@@ -122,7 +127,7 @@ func NewHNSWSQIndex(columnName string, config *VectorIndexConfig) (*HNSWSQIndex,
 		quantizedVectors: make(map[int64][]int8),
 		scale:            make([]float32, config.Dimension),
 		shift:            make([]float32, config.Dimension),
-		layers:           make([]map[int64]*hnswNodeSQ, maxLevel),
+		layers:           layers,
 		maxLevel:         maxLevel,
 		ml:               ml,
 		efConstruction:   efConstruction,
@@ -274,17 +279,24 @@ func (h *HNSWSQIndex) insertNoLock(id int64, vector []float32) {
 	// 从顶层开始逐层插入
 	// 从最高层到当前层，使用贪心搜索
 	enterPoint := int64(-1)
-	if len(h.layers[0]) > 0 {
-		// 找到入口点（第0层的第一个节点）
-		for nid := range h.layers[0] {
+	for l := h.maxLevel - 1; l >= 0; l-- {
+		if len(h.layers[l]) == 0 {
+			continue
+		}
+		for nid := range h.layers[l] {
 			enterPoint = nid
 			break
 		}
+		break
 	}
 
 	// 从最高层到当前层+1，只做搜索更新
 	for l := h.maxLevel - 1; l > level; l-- {
 		if enterPoint == -1 || len(h.layers[l]) == 0 {
+			continue
+		}
+		enterNode := h.layers[l][enterPoint]
+		if enterNode == nil {
 			continue
 		}
 		// 在第 l 层搜索
@@ -296,7 +308,7 @@ func (h *HNSWSQIndex) insertNoLock(id int64, vector []float32) {
 		heap.Init(&pq)
 
 		// 计算入口点的距离
-		enterDist := h.computeQuantizedDistance(vector, h.layers[l][enterPoint].vector)
+		enterDist := h.computeQuantizedDistance(vector, enterNode.vector)
 		heap.Push(&pq, &heapNodeSQ{id: enterPoint, distance: enterDist})
 
 		for len(pq) > 0 && len(candidates) < h.efConstruction {
@@ -308,9 +320,16 @@ func (h *HNSWSQIndex) insertNoLock(id int64, vector []float32) {
 			candidates = append(candidates, current.id)
 
 			nodeL := h.layers[l][current.id]
+			if nodeL == nil || l >= len(nodeL.neighbors) {
+				continue
+			}
 			for _, neighborID := range nodeL.neighbors[l] {
 				if !visited[neighborID] {
-					neighborDist := h.computeQuantizedDistance(vector, h.layers[l][neighborID].vector)
+					neighbor := h.layers[l][neighborID]
+					if neighbor == nil {
+						continue
+					}
+					neighborDist := h.computeQuantizedDistance(vector, neighbor.vector)
 					heap.Push(&pq, &heapNodeSQ{id: neighborID, distance: neighborDist})
 				}
 			}
@@ -321,7 +340,11 @@ func (h *HNSWSQIndex) insertNoLock(id int64, vector []float32) {
 			// 找到距离最近的节点
 			bestDist := float32(math.MaxFloat32)
 			for _, cid := range candidates {
-				dist := h.computeQuantizedDistance(vector, h.layers[l][cid].vector)
+				cand := h.layers[l][cid]
+				if cand == nil {
+					continue
+				}
+				dist := h.computeQuantizedDistance(vector, cand.vector)
 				if dist < bestDist {
 					bestDist = dist
 					enterPoint = cid
@@ -356,11 +379,14 @@ func (h *HNSWSQIndex) insertNoLock(id int64, vector []float32) {
 		node.neighbors[l] = make([]int64, 0, len(nearest))
 		for _, nid := range nearest {
 			node.neighbors[l] = append(node.neighbors[l], nid)
-			h.layers[l][nid].neighbors[l] = append(h.layers[l][nid].neighbors[l], id)
+			neighborNode := h.layers[l][nid]
+			if neighborNode == nil || l >= len(neighborNode.neighbors) {
+				continue
+			}
+			neighborNode.neighbors[l] = append(neighborNode.neighbors[l], id)
 
 			// 裁剪邻居节点（如果超过最大连接数）
-			if len(h.layers[l][nid].neighbors[l]) > maxNeighbors {
-				// 按距离排序并保留最近的
+			if len(neighborNode.neighbors[l]) > maxNeighbors {
 				h.pruneNeighbors(l, nid, maxNeighbors)
 			}
 		}
@@ -381,6 +407,18 @@ func (h *HNSWSQIndex) searchLayerSQ(query []float32, level, ef int, enterPoint i
 		return nil
 	}
 
+	enterNode := h.layers[level][enterPoint]
+	if enterNode == nil {
+		for nid, n := range h.layers[level] {
+			enterPoint = nid
+			enterNode = n
+			break
+		}
+	}
+	if enterNode == nil {
+		return nil
+	}
+
 	// 贪心搜索
 	nearest := make([]int64, 0, ef)
 	visited := make(map[int64]bool)
@@ -389,7 +427,7 @@ func (h *HNSWSQIndex) searchLayerSQ(query []float32, level, ef int, enterPoint i
 	heap.Init(&pq)
 
 	// 添加入口点
-	enterDist := h.computeQuantizedDistance(query, h.layers[level][enterPoint].vector)
+	enterDist := h.computeQuantizedDistance(query, enterNode.vector)
 	heap.Push(&pq, &heapNodeSQ{id: enterPoint, distance: enterDist})
 
 	for len(pq) > 0 {
@@ -406,7 +444,11 @@ func (h *HNSWSQIndex) searchLayerSQ(query []float32, level, ef int, enterPoint i
 			// 找到最远的距离
 			maxDist := float32(-1)
 			for _, nid := range nearest {
-				dist := h.computeQuantizedDistance(query, h.layers[level][nid].vector)
+				n := h.layers[level][nid]
+				if n == nil {
+					continue
+				}
+				dist := h.computeQuantizedDistance(query, n.vector)
 				if dist > maxDist {
 					maxDist = dist
 				}
@@ -420,9 +462,16 @@ func (h *HNSWSQIndex) searchLayerSQ(query []float32, level, ef int, enterPoint i
 
 		// 扩展邻居
 		node := h.layers[level][current.id]
+		if node == nil || level >= len(node.neighbors) {
+			continue
+		}
 		for _, neighborID := range node.neighbors[level] {
 			if !visited[neighborID] {
-				neighborDist := h.computeQuantizedDistance(query, h.layers[level][neighborID].vector)
+				neighbor := h.layers[level][neighborID]
+				if neighbor == nil {
+					continue
+				}
+				neighborDist := h.computeQuantizedDistance(query, neighbor.vector)
 				heap.Push(&pq, &heapNodeSQ{id: neighborID, distance: neighborDist})
 			}
 		}
@@ -434,7 +483,7 @@ func (h *HNSWSQIndex) searchLayerSQ(query []float32, level, ef int, enterPoint i
 // pruneNeighbors 裁剪邻居节点
 func (h *HNSWSQIndex) pruneNeighbors(level int, id int64, maxNeighbors int) {
 	node := h.layers[level][id]
-	if len(node.neighbors[level]) <= maxNeighbors {
+	if node == nil || level >= len(node.neighbors) || len(node.neighbors[level]) <= maxNeighbors {
 		return
 	}
 
@@ -488,11 +537,15 @@ func (h *HNSWSQIndex) Search(ctx context.Context, query []float32, k int, filter
 
 	// 从顶层开始搜索
 	enterPoint := int64(-1)
-	if len(h.layers[0]) > 0 {
-		for nid := range h.layers[0] {
+	for l := h.maxLevel - 1; l >= 0; l-- {
+		if len(h.layers[l]) == 0 {
+			continue
+		}
+		for nid := range h.layers[l] {
 			enterPoint = nid
 			break
 		}
+		break
 	}
 
 	if enterPoint == -1 {
@@ -507,6 +560,10 @@ func (h *HNSWSQIndex) Search(ctx context.Context, query []float32, k int, filter
 		if len(h.layers[l]) == 0 {
 			continue
 		}
+		enterNode := h.layers[l][enterPoint]
+		if enterNode == nil {
+			continue
+		}
 		// 在第 l 层搜索
 		candidates := []int64{enterPoint}
 		visited := make(map[int64]bool)
@@ -514,7 +571,7 @@ func (h *HNSWSQIndex) Search(ctx context.Context, query []float32, k int, filter
 		pq := make(minHeapSQ, 0)
 		heap.Init(&pq)
 
-		enterDist := h.computeQuantizedDistance(query, h.layers[l][enterPoint].vector)
+		enterDist := h.computeQuantizedDistance(query, enterNode.vector)
 		heap.Push(&pq, &heapNodeSQ{id: enterPoint, distance: enterDist})
 
 		for len(pq) > 0 && len(candidates) < h.ef {
@@ -526,9 +583,16 @@ func (h *HNSWSQIndex) Search(ctx context.Context, query []float32, k int, filter
 			candidates = append(candidates, current.id)
 
 			nodeL := h.layers[l][current.id]
+			if nodeL == nil || l >= len(nodeL.neighbors) {
+				continue
+			}
 			for _, neighborID := range nodeL.neighbors[l] {
 				if !visited[neighborID] {
-					neighborDist := h.computeQuantizedDistance(query, h.layers[l][neighborID].vector)
+					neighbor := h.layers[l][neighborID]
+					if neighbor == nil {
+						continue
+					}
+					neighborDist := h.computeQuantizedDistance(query, neighbor.vector)
 					heap.Push(&pq, &heapNodeSQ{id: neighborID, distance: neighborDist})
 				}
 			}
@@ -538,13 +602,28 @@ func (h *HNSWSQIndex) Search(ctx context.Context, query []float32, k int, filter
 		if len(candidates) > 0 {
 			bestDist := float32(math.MaxFloat32)
 			for _, cid := range candidates {
-				dist := h.computeQuantizedDistance(query, h.layers[l][cid].vector)
+				cand := h.layers[l][cid]
+				if cand == nil {
+					continue
+				}
+				dist := h.computeQuantizedDistance(query, cand.vector)
 				if dist < bestDist {
 					bestDist = dist
 					enterPoint = cid
 				}
 			}
 		}
+	}
+
+	if h.layers[0][enterPoint] == nil {
+		enterPoint = -1
+		for nid := range h.layers[0] {
+			enterPoint = nid
+			break
+		}
+	}
+	if enterPoint == -1 || h.layers[0][enterPoint] == nil {
+		return &VectorSearchResult{IDs: []int64{}, Distances: []float32{}}, nil
 	}
 
 	// 在第0层进行优先队列扩展搜索
@@ -568,9 +647,16 @@ func (h *HNSWSQIndex) Search(ctx context.Context, query []float32, k int, filter
 		candidates = append(candidates, current.id)
 
 		node := h.layers[0][current.id]
+		if node == nil || len(node.neighbors) == 0 {
+			continue
+		}
 		for _, neighborID := range node.neighbors[0] {
 			if !visited[neighborID] {
-				neighborDist := h.computeQuantizedDistance(query, h.layers[0][neighborID].vector)
+				neighbor := h.layers[0][neighborID]
+				if neighbor == nil {
+					continue
+				}
+				neighborDist := h.computeQuantizedDistance(query, neighbor.vector)
 				heap.Push(&pq, &heapNodeSQ{id: neighborID, distance: neighborDist})
 			}
 		}
@@ -596,12 +682,16 @@ func (h *HNSWSQIndex) Search(ctx context.Context, query []float32, k int, filter
 		id   int64
 		dist float32
 	}
-	results := make([]resultItem, len(candidates))
-	for i, cid := range candidates {
-		results[i] = resultItem{
-			id:   cid,
-			dist: h.computeQuantizedDistance(query, h.layers[0][cid].vector),
+	results := make([]resultItem, 0, len(candidates))
+	for _, cid := range candidates {
+		node := h.layers[0][cid]
+		if node == nil {
+			continue
 		}
+		results = append(results, resultItem{
+			id:   cid,
+			dist: h.computeQuantizedDistance(query, node.vector),
+		})
 	}
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].dist < results[j].dist

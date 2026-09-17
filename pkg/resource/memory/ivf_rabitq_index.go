@@ -296,22 +296,8 @@ func (i *IVFRabitQIndex) Search(ctx context.Context, query []float32, k int, fil
 	quantizedQuery := i.rabitqQuantize(query)
 
 	// 找到 nprobe 个最近的聚类中心
-	type clusterDist struct {
-		clusterID int
-		distance  float32
-	}
-
-	clusterDists := make([]clusterDist, i.nlist)
-	for j, center := range i.centroids {
-		if i.clusterCounts[j] == 0 {
-			continue
-		}
-		dist := i.distFunc.Compute(query, center)
-		clusterDists[j] = clusterDist{clusterID: j, distance: dist}
-	}
-
-	sort.Slice(clusterDists, func(a, b int) bool {
-		return clusterDists[a].distance < clusterDists[b].distance
+	probed := selectProbedClusters(i.nlist, nprobe, i.clusterCounts, func(j int) float32 {
+		return i.distFunc.Compute(query, i.centroids[j])
 	})
 
 	// 收集候选向量
@@ -322,8 +308,7 @@ func (i *IVFRabitQIndex) Search(ctx context.Context, query []float32, k int, fil
 	candidates := make([]candidate, 0, len(i.vectors))
 
 	// 在选中的聚类中搜索
-	for j := 0; j < nprobe; j++ {
-		clusterID := clusterDists[j].clusterID
+	for _, clusterID := range probed {
 
 		for _, rec := range i.vectorsByCluster[clusterID] {
 			if filter != nil && len(filter.IDs) > 0 {
@@ -386,6 +371,10 @@ func (i *IVFRabitQIndex) Insert(id int64, vector []float32) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
+	if old, exists := i.assignments[id]; exists {
+		removeRecordFromCluster(i.vectorsByCluster, i.clusterCounts, old, id)
+	}
+
 	vec := make([]float32, len(vector))
 	copy(vec, vector)
 	i.vectors[id] = vec
@@ -394,16 +383,7 @@ func (i *IVFRabitQIndex) Insert(id int64, vector []float32) error {
 	quantized := i.rabitqQuantize(vec)
 	i.quantizedVectors[id] = quantized
 
-	// 找到最近的聚类
-	bestCluster := 0
-	minDist := float32(math.MaxFloat32)
-	for j, center := range i.centroids {
-		dist := i.distFunc.Compute(vector, center)
-		if dist < minDist {
-			minDist = dist
-			bestCluster = j
-		}
-	}
+	bestCluster := nearestCentroid(i.centroids, vector, i.distFunc)
 
 	// 添加到聚类
 	i.vectorsByCluster[bestCluster] = append(i.vectorsByCluster[bestCluster], VectorRecord{

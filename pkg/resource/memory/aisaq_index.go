@@ -285,58 +285,79 @@ func (a *AISAQIndex) beamSearch(query []int8, beamWidth int) []int64 {
 	if len(a.graph) == 0 {
 		return nil
 	}
-
-	// 任意选择一个节点作为起点
-	var startID int64
-	for id := range a.graph {
-		startID = id
-		break
+	if beamWidth < 1 {
+		beamWidth = 1
 	}
 
-	// beam search
+	var startID int64
+	var startNode *vamanaNode
+	for id, node := range a.graph {
+		if node == nil {
+			continue
+		}
+		startID = id
+		startNode = node
+		break
+	}
+	if startNode == nil {
+		return nil
+	}
+
 	type candidate struct {
 		id       int64
 		distance float32
 	}
 
-	beam := make([]candidate, 0, beamWidth)
-	visited := make(map[int64]bool)
-
-	// 添加起点
-	startDist := a.computeAdaptiveDistance(query, a.graph[startID].vector)
-	beam = append(beam, candidate{id: startID, distance: startDist})
+	visited := make(map[int64]bool, len(a.graph))
+	best := make([]candidate, 0, beamWidth)
+	frontier := []candidate{{
+		id:       startID,
+		distance: a.computeAdaptiveDistance(query, startNode.vector),
+	}}
 	visited[startID] = true
 
-	for len(beam) < beamWidth {
-		if len(beam) == 0 {
+	for len(frontier) > 0 {
+		sort.Slice(frontier, func(i, j int) bool {
+			return frontier[i].distance < frontier[j].distance
+		})
+		current := frontier[0]
+		frontier = frontier[1:]
+		best = append(best, current)
+
+		node := a.graph[current.id]
+		if node == nil {
+			continue
+		}
+		for _, neighborID := range node.neighbors {
+			if visited[neighborID] {
+				continue
+			}
+			neighbor := a.graph[neighborID]
+			if neighbor == nil {
+				continue
+			}
+			visited[neighborID] = true
+			frontier = append(frontier, candidate{
+				id:       neighborID,
+				distance: a.computeAdaptiveDistance(query, neighbor.vector),
+			})
+		}
+		if len(best) >= beamWidth {
 			break
 		}
-
-		// 找到 beam 中距离最近的节点
-		sort.Slice(beam, func(i, j int) bool {
-			return beam[i].distance < beam[j].distance
-		})
-
-		// 扩展最近的节点
-		current := beam[0]
-		beam = beam[1:]
-
-		// 添加未访问的邻居
-		for _, neighborID := range a.graph[current.id].neighbors {
-			if !visited[neighborID] {
-				visited[neighborID] = true
-				dist := a.computeAdaptiveDistance(query, a.graph[neighborID].vector)
-				beam = append(beam, candidate{id: neighborID, distance: dist})
-			}
-		}
 	}
 
-	// 返回 beam 中的所有节点
-	result := make([]int64, 0, len(beam))
-	for _, c := range beam {
-		result = append(result, c.id)
+	sort.Slice(best, func(i, j int) bool {
+		return best[i].distance < best[j].distance
+	})
+	if len(best) > beamWidth {
+		best = best[:beamWidth]
 	}
 
+	result := make([]int64, len(best))
+	for i, c := range best {
+		result[i] = c.id
+	}
 	return result
 }
 
@@ -426,7 +447,11 @@ func (a *AISAQIndex) Search(ctx context.Context, query []float32, k int, filter 
 
 	results := make([]resultItem, 0, len(candidates))
 	for _, cid := range candidates {
-		dist := a.distFunc.Compute(query, a.vectors[cid])
+		vec, ok := a.vectors[cid]
+		if !ok {
+			continue
+		}
+		dist := a.distFunc.Compute(query, vec)
 		results = append(results, resultItem{id: cid, dist: dist})
 	}
 
