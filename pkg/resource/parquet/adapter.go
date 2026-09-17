@@ -90,6 +90,7 @@ func (a *ParquetAdapter) Connect(ctx context.Context) error {
 	if err := os.MkdirAll(a.dataDir, 0755); err != nil {
 		return fmt.Errorf("failed to create data directory %q: %w", a.dataDir, err)
 	}
+	a.SetVectorSnapshotStore(memory.NewDirVectorSnapshotStore(filepath.Join(a.dataDir, ".sqlexec_vec")))
 
 	// Scan for .parquet files
 	entries, err := os.ReadDir(a.dataDir)
@@ -185,8 +186,8 @@ func (a *ParquetAdapter) loadIndexMeta() {
 		return
 	}
 
-	for _, idx := range meta.Indexes {
-		if err := a.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
+	for _, idx := range filemeta.IndexesToDomain(meta.Indexes) {
+		if err := a.RestorePersistedIndex(idx); err != nil {
 			log.Printf("warning: failed to rebuild index %s on %s: %v", idx.Name, idx.Table, err)
 		}
 	}
@@ -451,6 +452,7 @@ func (a *ParquetAdapter) Close(ctx context.Context) error {
 	if a.writable {
 		a.flushDirtyTables()
 		a.persistAllIndexMeta()
+		_ = a.FlushVectorSnapshots()
 	}
 
 	// Close WAL
@@ -473,13 +475,7 @@ func (a *ParquetAdapter) PersistIndexMeta(indexes []domain.IndexMetaInfo) error 
 	}
 
 	for i, idx := range indexes {
-		fm.Indexes[i] = filemeta.IndexMeta{
-			Name:    idx.Name,
-			Table:   idx.Table,
-			Type:    idx.Type,
-			Unique:  idx.Unique,
-			Columns: idx.Columns,
-		}
+		fm.Indexes[i] = filemeta.FromDomainIndex(idx)
 	}
 
 	return filemeta.Save(metaPath, fm)
@@ -495,19 +491,11 @@ func (a *ParquetAdapter) persistAllIndexMeta() {
 
 	var allIndexes []domain.IndexMetaInfo
 	for _, table := range tables {
-		indexes, err := a.GetTableIndexes(table)
+		indexes, err := a.CollectIndexMeta(table)
 		if err != nil {
 			continue
 		}
-		for _, idx := range indexes {
-			allIndexes = append(allIndexes, domain.IndexMetaInfo{
-				Name:    idx.Name,
-				Table:   table,
-				Type:    string(idx.Type),
-				Unique:  idx.Unique,
-				Columns: idx.Columns,
-			})
-		}
+		allIndexes = append(allIndexes, indexes...)
 	}
 
 	if len(allIndexes) > 0 {

@@ -18,6 +18,8 @@ func (m *MVCCDataSource) Connect(ctx context.Context) error {
 
 // Close closes the connection
 func (m *MVCCDataSource) Close(ctx context.Context) error {
+	_ = m.FlushVectorSnapshots()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

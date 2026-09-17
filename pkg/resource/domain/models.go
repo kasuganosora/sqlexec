@@ -230,11 +230,15 @@ type Schema struct {
 
 // IndexMetaInfo holds index metadata for persistence by file-based datasources.
 type IndexMetaInfo struct {
-	Name    string
-	Table   string
-	Type    string
-	Unique  bool
-	Columns []string
+	Name       string
+	Table      string
+	Type       string
+	Unique     bool
+	Columns    []string
+	IsVector   bool
+	Metric     string
+	Dimension  int
+	ParamsJSON string
 }
 
 // IndexPersister is implemented by datasources that can persist index metadata

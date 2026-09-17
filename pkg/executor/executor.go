@@ -28,18 +28,48 @@ type BaseExecutor struct {
 func NewExecutor(dataAccessService dataaccess.Service) Executor {
 	return &BaseExecutor{
 		dataAccessService: dataAccessService,
-		indexManager:      memory.NewIndexManager(),
+		indexManager:      indexManagerFromDAS(dataAccessService),
 		runtime:           NewRuntime(),
 	}
 }
 
 // NewExecutorWithIndexManager 创建带索引管理器的执行器
 func NewExecutorWithIndexManager(dataAccessService dataaccess.Service, indexManager *memory.IndexManager) Executor {
+	if indexManager == nil {
+		indexManager = indexManagerFromDAS(dataAccessService)
+	}
 	return &BaseExecutor{
 		dataAccessService: dataAccessService,
 		indexManager:      indexManager,
 		runtime:           NewRuntime(),
 	}
+}
+
+type vectorIndexManagerProvider interface {
+	GetIndexManager() *memory.IndexManager
+}
+
+type dataSourceHolder interface {
+	UnderlyingDataSource() domain.DataSource
+}
+
+func indexManagerFromDAS(das dataaccess.Service) *memory.IndexManager {
+	if das == nil {
+		return memory.NewIndexManager()
+	}
+	if p, ok := das.(vectorIndexManagerProvider); ok {
+		if m := p.GetIndexManager(); m != nil {
+			return m
+		}
+	}
+	if h, ok := das.(dataSourceHolder); ok {
+		if p, ok := h.UnderlyingDataSource().(vectorIndexManagerProvider); ok {
+			if m := p.GetIndexManager(); m != nil {
+				return m
+			}
+		}
+	}
+	return memory.NewIndexManager()
 }
 
 // Execute 执行计划

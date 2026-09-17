@@ -1036,8 +1036,8 @@ func (h *HNSWPRQIndex) Stats() VectorIndexStats {
 	}
 
 	// 残差 PQ 码本
-	for subq := 0; subq < h.nsubq; subq++ {
-		for c := 0; c < h.ksubq; c++ {
+	for subq := 0; subq < len(h.residualCodebooks); subq++ {
+		for c := 0; c < len(h.residualCodebooks[subq]); c++ {
 			memorySize += int64(len(h.residualCodebooks[subq][c])) * 4
 		}
 	}

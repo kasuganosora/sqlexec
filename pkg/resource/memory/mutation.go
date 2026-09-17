@@ -253,6 +253,7 @@ func (m *MVCCDataSource) BulkLoad(tableName string, loadFn func(addPage func(row
 		m.bufferPool.UpdateLatestVersion(tableName, newVer)
 	}
 
+	m.rebuildTableIndexes(tableName, versionData.schema, versionData.Rows())
 	return nil
 }
 
@@ -613,6 +614,7 @@ func (m *MVCCDataSource) removeVirtualColumns(row domain.Row, schema *domain.Tab
 // This is called after each non-transaction mutation to keep indexes in sync.
 func (m *MVCCDataSource) rebuildTableIndexes(tableName string, schema *domain.TableInfo, rows []domain.Row) {
 	_ = m.indexManager.RebuildIndex(tableName, schema, rows)
+	m.markVectorDirty(tableName)
 }
 
 // checkUniqueConstraints verifies that no row in newRows would violate a unique

@@ -45,6 +45,45 @@ func TestSaveLoad_Roundtrip(t *testing.T) {
 	assert.Equal(t, original.Indexes, loaded.Indexes)
 }
 
+func TestSaveLoad_VectorIndexMeta(t *testing.T) {
+	dir := t.TempDir()
+	metaPath := filepath.Join(dir, "docs.json.sqlexec_meta")
+
+	original := &FileMeta{
+		Schema: SchemaMeta{
+			TableName: "docs",
+			Columns: []ColumnMeta{
+				{Name: "id", Type: "int64", Nullable: false},
+				{Name: "embedding", Type: "VECTOR", Nullable: true},
+			},
+		},
+		Indexes: []IndexMeta{
+			{
+				Name:       "vec_embedding",
+				Table:      "docs",
+				Type:       "vector_hnsw",
+				Columns:    []string{"embedding"},
+				IsVector:   true,
+				Metric:     "l2",
+				Dimension:  8,
+				ParamsJSON: `{"M":16}`,
+			},
+		},
+	}
+
+	require.NoError(t, Save(metaPath, original))
+	loaded, err := Load(metaPath)
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+	require.Len(t, loaded.Indexes, 1)
+	assert.True(t, loaded.Indexes[0].IsVector)
+	assert.Equal(t, "vector_hnsw", loaded.Indexes[0].Type)
+	assert.Equal(t, "l2", loaded.Indexes[0].Metric)
+	assert.Equal(t, 8, loaded.Indexes[0].Dimension)
+	assert.Equal(t, `{"M":16}`, loaded.Indexes[0].ParamsJSON)
+	assert.Equal(t, original.Indexes[0].ToDomain(), loaded.Indexes[0].ToDomain())
+}
+
 func TestLoad_NonExistent(t *testing.T) {
 	meta, err := Load(filepath.Join(t.TempDir(), "nonexistent.sqlexec_meta"))
 	assert.NoError(t, err)

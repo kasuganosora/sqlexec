@@ -439,8 +439,9 @@ func (i *IVFRabitQIndex) Stats() VectorIndexStats {
 		memorySize += int64(len(vec)) * 8 // 每个 uint64 是 8 字节
 	}
 
-	// 投影矩阵
-	memorySize += int64(len(i.projectionMatrix)*len(i.projectionMatrix[0])) * 4
+	if len(i.projectionMatrix) > 0 {
+		memorySize += int64(len(i.projectionMatrix)*len(i.projectionMatrix[0])) * 4
+	}
 
 	// 聚类中心
 	for _, centroid := range i.centroids {

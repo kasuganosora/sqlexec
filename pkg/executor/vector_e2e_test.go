@@ -38,19 +38,6 @@ func TestVectorSearchEndToEnd(t *testing.T) {
 	err := mvccDs.CreateTable(ctx, tableInfo)
 	require.NoError(t, err)
 
-	// 2. 创建索引管理器并添加向量索引
-	idxMgr := memory.NewIndexManager()
-	vectorIdx, err := idxMgr.CreateVectorIndex(
-		"articles",
-		"embedding",
-		memory.VectorMetricCosine,
-		memory.IndexTypeVectorHNSW,
-		128,
-		nil,
-	)
-	require.NoError(t, err)
-
-	// 3. 插入测试数据
 	numArticles := 100
 	for i := 0; i < numArticles; i++ {
 		vec := randomVector(128)
@@ -61,15 +48,18 @@ func TestVectorSearchEndToEnd(t *testing.T) {
 		}
 		_, err := das.Insert(ctx, "articles", row)
 		require.NoError(t, err)
-
-		// 同时插入向量索引
-		err = vectorIdx.Insert(int64(i), vec)
-		require.NoError(t, err)
 	}
 
-	// 4. 测试向量扫描算子
+	require.NoError(t, mvccDs.CreateVectorIndex(
+		"articles",
+		"embedding",
+		string(memory.VectorMetricCosine),
+		"hnsw",
+		128,
+		nil,
+	))
+
 	t.Run("VectorScanOperator", func(t *testing.T) {
-		// 创建向量扫描配置
 		queryVector := randomVector(128)
 		vectorConfig := &plan.VectorScanConfig{
 			TableName:   "articles",
@@ -80,23 +70,18 @@ func TestVectorSearchEndToEnd(t *testing.T) {
 			MetricType:  "cosine",
 		}
 
-		// 创建计划
 		vectorPlan := &plan.Plan{
 			ID:     "vector_scan_test",
 			Type:   plan.TypeVectorScan,
 			Config: vectorConfig,
 		}
 
-		// 创建执行器
-		executor := NewExecutorWithIndexManager(das, idxMgr)
-
-		// 执行查询
-		result, err := executor.Execute(ctx, vectorPlan)
+		exec := NewExecutor(das)
+		result, err := exec.Execute(ctx, vectorPlan)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.Len(t, result.Rows, 10)
 
-		// 验证结果包含距离列
 		hasDistance := false
 		for _, col := range result.Columns {
 			if col.Name == "_distance" {
@@ -106,7 +91,6 @@ func TestVectorSearchEndToEnd(t *testing.T) {
 		}
 		require.True(t, hasDistance, "结果应该包含_distance列")
 
-		// 验证每行都有距离值
 		for _, row := range result.Rows {
 			_, hasDist := row["_distance"]
 			require.True(t, hasDist, "每行应该包含_distance字段")

@@ -2,6 +2,8 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -232,6 +234,7 @@ func (m *MVCCDataSource) TruncateTable(ctx context.Context, tableName string) er
 	tableVer.versions[m.currentVer] = versionData
 	tableVer.latest = m.currentVer
 
+	m.rebuildTableIndexes(tableName, versionData.schema, nil)
 	return nil
 }
 
@@ -277,4 +280,216 @@ func (m *MVCCDataSource) DropIndex(tableName, indexName string) error {
 // GetTableIndexes returns index metadata for all indexes on a table
 func (m *MVCCDataSource) GetTableIndexes(tableName string) ([]*IndexInfo, error) {
 	return m.indexManager.GetTableIndexes(tableName)
+}
+
+// GetIndexManager returns the in-process index manager used for btree/vector indexes.
+func (m *MVCCDataSource) GetIndexManager() *IndexManager {
+	return m.indexManager
+}
+
+// CreateVectorIndex creates a vector index and builds it from current table rows.
+func (m *MVCCDataSource) CreateVectorIndex(tableName, columnName string, metricType string, indexType string, dimension int, params map[string]interface{}) error {
+	if tableName == "" || columnName == "" {
+		return fmt.Errorf("vector index requires table and column")
+	}
+
+	schema, rows, err := m.snapshotTable(tableName)
+	if err != nil {
+		return err
+	}
+
+	colFound := false
+	for _, col := range schema.Columns {
+		if col.Name == columnName {
+			colFound = true
+			if dimension <= 0 {
+				dimension = col.VectorDim
+			}
+			break
+		}
+	}
+	if !colFound {
+		return fmt.Errorf("column %s not found on table %s", columnName, tableName)
+	}
+	if dimension <= 0 {
+		return fmt.Errorf("vector dimension is required for column %s", columnName)
+	}
+	if params == nil {
+		params = map[string]interface{}{}
+	}
+
+	idx, err := m.indexManager.CreateVectorIndex(
+		tableName,
+		columnName,
+		ParseVectorMetricType(metricType),
+		ParseVectorIndexType(indexType),
+		dimension,
+		params,
+	)
+	if err != nil {
+		return err
+	}
+
+	records := ExtractVectorRecords(schema, rows, columnName, dimension)
+	if m.tryRestoreVectorSnapshot(idx, tableName, columnName, int64(len(records))) {
+		return nil
+	}
+	if len(records) > 0 {
+		if err := idx.Build(context.Background(), &sliceVectorLoader{records: records}); err != nil {
+			return err
+		}
+	}
+	m.saveVectorSnapshot(tableName, columnName, idx)
+	return nil
+}
+
+func (m *MVCCDataSource) snapshotTable(tableName string) (*domain.TableInfo, []domain.Row, error) {
+	m.mu.RLock()
+	tableVer, ok := m.tables[tableName]
+	if !ok {
+		m.mu.RUnlock()
+		return nil, nil, domain.NewErrTableNotFound(tableName)
+	}
+	tableVer.mu.RLock()
+	latest := tableVer.versions[tableVer.latest]
+	tableVer.mu.RUnlock()
+	m.mu.RUnlock()
+	if latest == nil {
+		return nil, nil, domain.NewErrTableNotFound(tableName)
+	}
+	return deepCopySchema(latest.schema), latest.Rows(), nil
+}
+
+// SetVectorSnapshotStore attaches durable storage for built vector indexes.
+func (m *MVCCDataSource) SetVectorSnapshotStore(store VectorSnapshotStore) {
+	m.snapshotStore = store
+}
+
+func (m *MVCCDataSource) markVectorDirty(tableName string) {
+	m.vectorDirtyMu.Lock()
+	m.vectorDirty[tableName] = struct{}{}
+	m.vectorDirtyMu.Unlock()
+}
+
+func (m *MVCCDataSource) tryRestoreVectorSnapshot(idx VectorIndex, table, column string, expectCount int64) bool {
+	if m.snapshotStore == nil {
+		return false
+	}
+	data, err := m.snapshotStore.LoadVectorSnapshot(table, column)
+	if err != nil || len(data) == 0 {
+		return false
+	}
+	if err := ApplyVectorSnapshot(idx, data, expectCount); err != nil {
+		return false
+	}
+	return true
+}
+
+func (m *MVCCDataSource) saveVectorSnapshot(table, column string, idx VectorIndex) {
+	if m.snapshotStore == nil || idx == nil {
+		return
+	}
+	data, err := EncodeVectorSnapshot(idx)
+	if err != nil {
+		return
+	}
+	_ = m.snapshotStore.SaveVectorSnapshot(table, column, data)
+}
+
+// FlushVectorSnapshots writes dirty vector indexes to the snapshot store.
+func (m *MVCCDataSource) FlushVectorSnapshots() error {
+	if m.snapshotStore == nil {
+		return nil
+	}
+	m.vectorDirtyMu.Lock()
+	tables := make([]string, 0, len(m.vectorDirty))
+	for t := range m.vectorDirty {
+		tables = append(tables, t)
+	}
+	m.vectorDirty = make(map[string]struct{})
+	m.vectorDirtyMu.Unlock()
+
+	for _, table := range tables {
+		for _, info := range m.indexManager.GetVectorIndexInfos(table) {
+			idx, err := m.indexManager.GetVectorIndex(table, info.ColumnName)
+			if err != nil {
+				continue
+			}
+			m.saveVectorSnapshot(table, info.ColumnName, idx)
+		}
+	}
+	return nil
+}
+
+// CollectIndexMeta returns btree and vector index metadata for persistence.
+func (m *MVCCDataSource) CollectIndexMeta(tableName string) ([]domain.IndexMetaInfo, error) {
+	var out []domain.IndexMetaInfo
+	if infos, err := m.GetTableIndexes(tableName); err == nil {
+		for _, info := range infos {
+			out = append(out, domain.IndexMetaInfo{
+				Name:    info.Name,
+				Table:   info.TableName,
+				Type:    string(info.Type),
+				Unique:  info.Unique,
+				Columns: info.Columns,
+			})
+		}
+	}
+	for _, v := range m.indexManager.GetVectorIndexInfos(tableName) {
+		paramsJSON := ""
+		if v.Params != nil {
+			if b, err := json.Marshal(v.Params); err == nil {
+				paramsJSON = string(b)
+			}
+		}
+		out = append(out, domain.IndexMetaInfo{
+			Name:       "vec_" + v.ColumnName,
+			Table:      tableName,
+			Type:       string(v.Type),
+			Columns:    []string{v.ColumnName},
+			IsVector:   true,
+			Metric:     string(v.Metric),
+			Dimension:  v.Dimension,
+			ParamsJSON: paramsJSON,
+		})
+	}
+	return out, nil
+}
+
+// RestorePersistedIndex recreates a btree or vector index from sidecar metadata.
+func (m *MVCCDataSource) RestorePersistedIndex(info domain.IndexMetaInfo) error {
+	if info.IsVector || IndexType(info.Type).IsVectorIndex() {
+		column := ""
+		if len(info.Columns) > 0 {
+			column = info.Columns[0]
+		}
+		var params map[string]interface{}
+		if info.ParamsJSON != "" {
+			_ = json.Unmarshal([]byte(info.ParamsJSON), &params)
+			coerceJSONParams(params)
+		}
+		return m.CreateVectorIndex(info.Table, column, info.Metric, info.Type, info.Dimension, params)
+	}
+	return m.CreateIndexWithColumns(info.Table, info.Columns, info.Type, info.Unique)
+}
+
+func coerceJSONParams(params map[string]interface{}) {
+	for k, v := range params {
+		n, ok := v.(float64)
+		if !ok || n != float64(int64(n)) {
+			continue
+		}
+		params[k] = int(n)
+	}
+}
+
+// DropVectorIndex drops a vector index and removes its durable snapshot.
+func (m *MVCCDataSource) DropVectorIndex(tableName, columnName string) error {
+	if err := m.indexManager.DropVectorIndex(tableName, columnName); err != nil {
+		return err
+	}
+	if m.snapshotStore != nil {
+		_ = m.snapshotStore.RemoveVectorSnapshot(tableName, columnName)
+	}
+	return nil
 }

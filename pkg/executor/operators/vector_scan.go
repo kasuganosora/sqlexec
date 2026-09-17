@@ -85,11 +85,19 @@ func (v *VectorScanOperator) Execute(ctx context.Context) (*domain.QueryResult, 
 // fetchRowsByIDs 根据ID列表获取行数据
 func (v *VectorScanOperator) fetchRowsByIDs(ctx context.Context, ids []int64) ([]domain.Row, error) {
 	rows := make([]domain.Row, 0, len(ids))
+	idField := "id"
+	if tableInfo, err := v.dataAccessService.GetTableInfo(ctx, v.config.TableName); err == nil {
+		for _, col := range tableInfo.Columns {
+			if col.Primary {
+				idField = col.Name
+				break
+			}
+		}
+	}
 
 	for _, id := range ids {
-		// 使用Filter接口获取行数据
 		filter := domain.Filter{
-			Field:    "id",
+			Field:    idField,
 			Operator: "=",
 			Value:    id,
 		}

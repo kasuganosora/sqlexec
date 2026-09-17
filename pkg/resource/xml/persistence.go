@@ -41,11 +41,15 @@ func (c *TablePersistConfig) TableDir() string {
 
 // IndexMeta holds serializable index metadata
 type IndexMeta struct {
-	Name    string   `xml:"name,attr"`
-	Table   string   `xml:"table,attr"`
-	Type    string   `xml:"type,attr"`
-	Unique  bool     `xml:"unique,attr"`
-	Columns []string `xml:"Column"`
+	Name       string   `xml:"name,attr"`
+	Table      string   `xml:"table,attr"`
+	Type       string   `xml:"type,attr"`
+	Unique     bool     `xml:"unique,attr"`
+	Columns    []string `xml:"Column"`
+	IsVector   bool     `xml:"isVector,attr,omitempty"`
+	Metric     string   `xml:"metric,attr,omitempty"`
+	Dimension  int      `xml:"dimension,attr,omitempty"`
+	ParamsJSON string   `xml:"params,attr,omitempty"`
 }
 
 // --- Schema XML types for encoding/xml ---

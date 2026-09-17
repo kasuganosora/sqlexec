@@ -223,6 +223,11 @@ func (s *DataService) GetTableInfo(ctx context.Context, tableName string) (*doma
 	return ds.GetTableInfo(ctx, tableName)
 }
 
+// UnderlyingDataSource returns the wrapped data source.
+func (s *DataService) UnderlyingDataSource() domain.DataSource {
+	return s.dataSource
+}
+
 // selectColumns 选择指定列
 func (s *DataService) selectColumns(result *domain.QueryResult, selectColumns []string, tableInfo *domain.TableInfo) *domain.QueryResult {
 	// 如果选择所有列，直接返回

@@ -59,6 +59,7 @@ func NewJSONLAdapter(config *domain.DataSourceConfig, filePath string) *JSONLAda
 func (a *JSONLAdapter) Connect(ctx context.Context) error {
 	// Check for sidecar metadata
 	meta, _ := filemeta.Load(filemeta.MetaPath(a.filePath))
+	a.SetVectorSnapshotStore(memory.NewDirVectorSnapshotStore(filepath.Join(filepath.Dir(a.filePath), filepath.Base(a.filePath)+".vecidx.d")))
 
 	f, err := os.Open(a.filePath)
 	if err != nil {
@@ -130,8 +131,8 @@ func (a *JSONLAdapter) Connect(ctx context.Context) error {
 
 	// Rebuild indexes from sidecar metadata
 	if meta != nil {
-		for _, idx := range meta.Indexes {
-			if err := a.MVCCDataSource.CreateIndexWithColumns(idx.Table, idx.Columns, idx.Type, idx.Unique); err != nil {
+		for _, idx := range filemeta.IndexesToDomain(meta.Indexes) {
+			if err := a.RestorePersistedIndex(idx); err != nil {
 				log.Printf("warning: failed to rebuild index %s on %s: %v", idx.Name, idx.Table, err)
 			}
 		}
@@ -191,13 +192,7 @@ func (a *JSONLAdapter) PersistIndexMeta(indexes []domain.IndexMetaInfo) error {
 		}
 	}
 	for i, idx := range indexes {
-		fm.Indexes[i] = filemeta.IndexMeta{
-			Name:    idx.Name,
-			Table:   idx.Table,
-			Type:    idx.Type,
-			Unique:  idx.Unique,
-			Columns: idx.Columns,
-		}
+		fm.Indexes[i] = filemeta.FromDomainIndex(idx)
 	}
 
 	return filemeta.Save(filemeta.MetaPath(a.filePath), fm)
@@ -210,6 +205,7 @@ func (a *JSONLAdapter) Close(ctx context.Context) error {
 		if err := a.writeBack(); err != nil {
 			writeBackErr = fmt.Errorf("failed to write back JSONL file: %w", err)
 		}
+		_ = a.FlushVectorSnapshots()
 	}
 
 	closeErr := a.MVCCDataSource.Close(ctx)

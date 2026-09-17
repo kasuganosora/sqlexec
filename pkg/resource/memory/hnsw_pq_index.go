@@ -869,8 +869,8 @@ func (h *HNSWPQIndex) Stats() VectorIndexStats {
 	}
 
 	// 码本
-	for subq := 0; subq < h.nsubq; subq++ {
-		for c := 0; c < h.ksubq; c++ {
+	for subq := 0; subq < len(h.codebooks); subq++ {
+		for c := 0; c < len(h.codebooks[subq]); c++ {
 			memorySize += int64(len(h.codebooks[subq][c])) * 4
 		}
 	}

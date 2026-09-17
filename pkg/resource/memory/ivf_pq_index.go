@@ -578,8 +578,8 @@ func (i *IVFPQIndex) Stats() VectorIndexStats {
 	}
 
 	// 码本
-	for subq := 0; subq < i.m; subq++ {
-		for c := 0; c < i.ksubq; c++ {
+	for subq := 0; subq < len(i.codebooks); subq++ {
+		for c := 0; c < len(i.codebooks[subq]); c++ {
 			memorySize += int64(len(i.codebooks[subq][c])) * 4
 		}
 	}

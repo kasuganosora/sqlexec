@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+
+	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
 )
 
 // FileMeta holds both schema and index information for a file datasource.
@@ -29,11 +31,59 @@ type ColumnMeta struct {
 
 // IndexMeta stores a single index definition.
 type IndexMeta struct {
-	Name    string
-	Table   string
-	Type    string // "btree", "hash", "fulltext", "spatial_rtree"
-	Unique  bool
-	Columns []string
+	Name       string
+	Table      string
+	Type       string // "btree", "hash", "fulltext", "spatial_rtree", "vector_hnsw", ...
+	Unique     bool
+	Columns    []string
+	IsVector   bool
+	Metric     string
+	Dimension  int
+	ParamsJSON string
+}
+
+func FromDomainIndex(idx domain.IndexMetaInfo) IndexMeta {
+	return IndexMeta{
+		Name:       idx.Name,
+		Table:      idx.Table,
+		Type:       idx.Type,
+		Unique:     idx.Unique,
+		Columns:    idx.Columns,
+		IsVector:   idx.IsVector,
+		Metric:     idx.Metric,
+		Dimension:  idx.Dimension,
+		ParamsJSON: idx.ParamsJSON,
+	}
+}
+
+func (m IndexMeta) ToDomain() domain.IndexMetaInfo {
+	return domain.IndexMetaInfo{
+		Name:       m.Name,
+		Table:      m.Table,
+		Type:       m.Type,
+		Unique:     m.Unique,
+		Columns:    m.Columns,
+		IsVector:   m.IsVector,
+		Metric:     m.Metric,
+		Dimension:  m.Dimension,
+		ParamsJSON: m.ParamsJSON,
+	}
+}
+
+func IndexesFromDomain(indexes []domain.IndexMetaInfo) []IndexMeta {
+	out := make([]IndexMeta, len(indexes))
+	for i, idx := range indexes {
+		out[i] = FromDomainIndex(idx)
+	}
+	return out
+}
+
+func IndexesToDomain(indexes []IndexMeta) []domain.IndexMetaInfo {
+	out := make([]domain.IndexMetaInfo, len(indexes))
+	for i, idx := range indexes {
+		out[i] = idx.ToDomain()
+	}
+	return out
 }
 
 // MetaPath returns the sidecar metadata path for a data file.

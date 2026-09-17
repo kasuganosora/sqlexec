@@ -134,7 +134,13 @@ func (s *CoreSession) persistTableData(ctx context.Context, dbName string, cfg *
 		return fmt.Errorf("failed to query table data: %w", err)
 	}
 
-	return xmlpersist.PersistTableData(cfg, tableInfo, result.Rows)
+	if err := xmlpersist.PersistTableData(cfg, tableInfo, result.Rows); err != nil {
+		return err
+	}
+	if flusher, ok := ds.(interface{ FlushVectorSnapshots() error }); ok {
+		_ = flusher.FlushVectorSnapshots()
+	}
+	return nil
 }
 
 // SetQueryTimeout 设置查询超时时间
@@ -729,7 +735,7 @@ func (s *CoreSession) persistIndexMetaIfNeeded(ctx context.Context, tableName st
 			return
 		}
 
-		indexInfos, err := mvccDS.GetTableIndexes(tableName)
+		indexInfos, err := mvccDS.CollectIndexMeta(tableName)
 		if err != nil {
 			return
 		}
@@ -737,11 +743,15 @@ func (s *CoreSession) persistIndexMetaIfNeeded(ctx context.Context, tableName st
 		indexes := make([]*xmlpersist.IndexMeta, 0, len(indexInfos))
 		for _, info := range indexInfos {
 			indexes = append(indexes, &xmlpersist.IndexMeta{
-				Name:    info.Name,
-				Table:   info.TableName,
-				Type:    string(info.Type),
-				Unique:  info.Unique,
-				Columns: info.Columns,
+				Name:       info.Name,
+				Table:      info.Table,
+				Type:       info.Type,
+				Unique:     info.Unique,
+				Columns:    info.Columns,
+				IsVector:   info.IsVector,
+				Metric:     info.Metric,
+				Dimension:  info.Dimension,
+				ParamsJSON: info.ParamsJSON,
 			})
 		}
 
@@ -757,16 +767,29 @@ func (s *CoreSession) persistIndexMetaIfNeeded(ctx context.Context, tableName st
 		return
 	}
 
+	indexes := collectIndexMeta(ds, tableName)
+	if err := persister.PersistIndexMeta(indexes); err != nil {
+		log.Printf("warning: failed to persist index metadata for %s: %v", tableName, err)
+	}
+}
+
+func collectIndexMeta(ds domain.DataSource, tableName string) []domain.IndexMetaInfo {
+	type collector interface {
+		CollectIndexMeta(tableName string) ([]domain.IndexMetaInfo, error)
+	}
+	if c, ok := ds.(collector); ok {
+		if indexes, err := c.CollectIndexMeta(tableName); err == nil {
+			return indexes
+		}
+	}
 	lister, ok := ds.(tableIndexLister)
 	if !ok {
-		return
+		return nil
 	}
-
 	indexInfos, err := lister.GetTableIndexes(tableName)
 	if err != nil {
-		return
+		return nil
 	}
-
 	indexes := make([]domain.IndexMetaInfo, 0, len(indexInfos))
 	for _, info := range indexInfos {
 		indexes = append(indexes, domain.IndexMetaInfo{
@@ -777,10 +800,7 @@ func (s *CoreSession) persistIndexMetaIfNeeded(ctx context.Context, tableName st
 			Columns: info.Columns,
 		})
 	}
-
-	if err := persister.PersistIndexMeta(indexes); err != nil {
-		log.Printf("warning: failed to persist index metadata for %s: %v", tableName, err)
-	}
+	return indexes
 }
 
 // BeginTx 开始事务（底层实现）
@@ -1106,6 +1126,7 @@ func (s *CoreSession) executeUseStatement(useStmt *parser.UseStatement) (*domain
 					Name:     dbName,
 					Writable: true,
 				})
+				memoryDS.SetVectorSnapshotStore(memory.NewDirVectorSnapshotStore(filepath.Join(s.databaseDir, dbName, ".sqlexec_vec")))
 				if err := memoryDS.Connect(context.Background()); err != nil {
 					return nil, fmt.Errorf("failed to create database '%s': %w", dbName, err)
 				}
@@ -1143,6 +1164,9 @@ func (s *CoreSession) loadPersistedTables(dbName string) {
 	ds, err := s.dsManager.Get(dbName)
 	if err != nil {
 		return
+	}
+	if mvccDS, ok := ds.(*memory.MVCCDataSource); ok {
+		mvccDS.SetVectorSnapshotStore(memory.NewDirVectorSnapshotStore(filepath.Join(basePath, ".sqlexec_vec")))
 	}
 
 	ctx := context.Background()
@@ -1186,7 +1210,7 @@ func (s *CoreSession) loadPersistedTables(dbName string) {
 
 			// Rebuild indexes
 			for _, idx := range indexes {
-				if err := mvccDS.CreateIndexWithColumns(cfg.TableName, idx.Columns, idx.Type, idx.Unique); err != nil {
+				if err := mvccDS.RestorePersistedIndex(xmlIndexToDomain(idx, cfg.TableName)); err != nil {
 					log.Printf("warning: failed to create index %s on %s: %v", idx.Name, cfg.TableName, err)
 				}
 			}
@@ -1216,6 +1240,27 @@ func (s *CoreSession) loadPersistedTables(dbName string) {
 
 		s.registerTablePersistence(dbName, cfg.TableName, cfg)
 		log.Printf("loaded persisted table: %s.%s (%d rows, %d indexes)", dbName, cfg.TableName, len(rows), len(indexes))
+	}
+}
+
+func xmlIndexToDomain(idx *xmlpersist.IndexMeta, tableName string) domain.IndexMetaInfo {
+	if idx == nil {
+		return domain.IndexMetaInfo{Table: tableName}
+	}
+	table := idx.Table
+	if table == "" {
+		table = tableName
+	}
+	return domain.IndexMetaInfo{
+		Name:       idx.Name,
+		Table:      table,
+		Type:       idx.Type,
+		Unique:     idx.Unique,
+		Columns:    idx.Columns,
+		IsVector:   idx.IsVector,
+		Metric:     idx.Metric,
+		Dimension:  idx.Dimension,
+		ParamsJSON: idx.ParamsJSON,
 	}
 }
 

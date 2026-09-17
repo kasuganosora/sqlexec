@@ -36,6 +36,10 @@ type MVCCDataSource struct {
 
 	// Auto-increment counters: tableName.columnName -> next value
 	autoIncCounters map[string]int64
+
+	snapshotStore VectorSnapshotStore
+	vectorDirty   map[string]struct{}
+	vectorDirtyMu sync.Mutex
 }
 
 
@@ -70,6 +74,7 @@ func NewMVCCDataSource(config *domain.DataSourceConfig, opts ...*PagingConfig) *
 		tables:          make(map[string]*TableVersions),
 		tempTables:      make(map[string]bool),
 		autoIncCounters: make(map[string]int64),
+		vectorDirty:     make(map[string]struct{}),
 	}
 }
 

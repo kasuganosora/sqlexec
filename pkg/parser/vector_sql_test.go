@@ -225,20 +225,26 @@ func TestVectorIndexCreationIntegration(t *testing.T) {
 	require.Equal(t, 16, createIndexStmt.VectorParams["M"])
 	require.Equal(t, 200, createIndexStmt.VectorParams["ef"])
 
-	// 3. 创建数据源
 	mvccDs := memory.NewMVCCDataSource(&domain.DataSourceConfig{
-		Type: domain.DataSourceTypeMemory,
-		Name: "test_memory",
+		Type:     domain.DataSourceTypeMemory,
+		Name:     "test_memory",
+		Writable: true,
 	})
+	require.NoError(t, mvccDs.Connect(ctx))
+	require.NoError(t, mvccDs.CreateTable(ctx, &domain.TableInfo{
+		Name: "articles",
+		Columns: []domain.ColumnInfo{
+			{Name: "id", Type: "INT", Primary: true},
+			{Name: "embedding", Type: "VECTOR", VectorDim: 768, VectorType: "float32"},
+		},
+	}))
 
-	// 4. 创建查询构建器
 	builder := NewQueryBuilder(mvccDs)
-
-	// 5. 执行创建索引（这里只测试不报错，实际执行需要完整的集成）
 	_, err = builder.executeCreateVectorIndex(ctx, createIndexStmt)
-	// 由于数据源没有实现完整的接口，可能会返回错误
-	// 但我们验证了解析部分的正确性
-	t.Logf("执行结果: %v", err)
+	require.NoError(t, err)
+	idx, err := mvccDs.GetIndexManager().GetVectorIndex("articles", "embedding")
+	require.NoError(t, err)
+	require.NotNil(t, idx)
 }
 
 // TestConvertToVectorMetricType 测试度量类型转换

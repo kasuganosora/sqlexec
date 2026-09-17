@@ -44,6 +44,44 @@ func (t IndexType) IsVectorIndex() bool {
 	}
 }
 
+// ParseVectorIndexType maps SQL/USING names onto IndexType.
+func ParseVectorIndexType(s string) IndexType {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "flat", "vector_flat":
+		return IndexTypeVectorFlat
+	case "ivf_flat", "vector_ivf_flat":
+		return IndexTypeVectorIVFFlat
+	case "ivf_sq8", "vector_ivf_sq8":
+		return IndexTypeVectorIVFSQ8
+	case "ivf_pq", "vector_ivf_pq":
+		return IndexTypeVectorIVFPQ
+	case "hnsw_sq", "vector_hnsw_sq":
+		return IndexTypeVectorHNSWSQ
+	case "hnsw_pq", "vector_hnsw_pq":
+		return IndexTypeVectorHNSWPQ
+	case "ivf_rabitq", "vector_ivf_rabitq":
+		return IndexTypeVectorIVFRabitQ
+	case "hnsw_prq", "vector_hnsw_prq":
+		return IndexTypeVectorHNSWPRQ
+	case "aisaq", "vector_aisaq":
+		return IndexTypeVectorAISAQ
+	default:
+		return IndexTypeVectorHNSW
+	}
+}
+
+// ParseVectorMetricType maps SQL metric names onto VectorMetricType.
+func ParseVectorMetricType(s string) VectorMetricType {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "l2", "euclidean":
+		return VectorMetricL2
+	case "ip", "inner_product", "inner":
+		return VectorMetricIP
+	default:
+		return VectorMetricCosine
+	}
+}
+
 // VectorMetricType 距离度量类型
 type VectorMetricType string
 

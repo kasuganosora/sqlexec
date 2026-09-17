@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -139,49 +140,49 @@ func (m *IndexManager) CreateVectorIndex(
 		return nil, fmt.Errorf("vector index already exists for column: %s", columnName)
 	}
 
-	// 创建索引配置
 	config := &VectorIndexConfig{
 		MetricType: metricType,
 		Dimension:  dimension,
 		Params:     params,
 	}
 
-	// 根据类型创建向量索引
-	var idx VectorIndex
-	var err error
-	switch indexType {
-	case IndexTypeVectorHNSW:
-		idx, err = NewHNSWIndex(columnName, config)
-	case IndexTypeVectorFlat:
-		idx, err = NewFlatIndex(columnName, config)
-	case IndexTypeVectorIVFFlat:
-		idx, err = NewIVFFlatIndex(columnName, config)
-	case IndexTypeVectorIVFSQ8:
-		idx, err = NewIVFSQ8Index(columnName, config)
-	case IndexTypeVectorIVFPQ:
-		idx, err = NewIVFPQIndex(columnName, config)
-	case IndexTypeVectorHNSWSQ:
-		idx, err = NewHNSWSQIndex(columnName, config)
-	case IndexTypeVectorHNSWPQ:
-		idx, err = NewHNSWPQIndex(columnName, config)
-	case IndexTypeVectorIVFRabitQ:
-		idx, err = NewIVFRabitQIndex(columnName, config)
-	case IndexTypeVectorHNSWPRQ:
-		idx, err = NewHNSWPRQIndex(columnName, config)
-	case IndexTypeVectorAISAQ:
-		idx, err = NewAISAQIndex(columnName, config)
-	default:
-		return nil, fmt.Errorf("unsupported vector index type: %s", indexType)
-	}
-
+	idx, err := newVectorIndex(columnName, indexType, config)
 	if err != nil {
 		return nil, err
 	}
 
-	// 存储索引
 	tableIdxs.vectorIndexes[columnName] = idx
-
 	return idx, nil
+}
+
+func newVectorIndex(columnName string, indexType IndexType, config *VectorIndexConfig) (VectorIndex, error) {
+	if config == nil {
+		return nil, fmt.Errorf("vector index config is required")
+	}
+	switch indexType {
+	case IndexTypeVectorHNSW:
+		return NewHNSWIndex(columnName, config)
+	case IndexTypeVectorFlat:
+		return NewFlatIndex(columnName, config)
+	case IndexTypeVectorIVFFlat:
+		return NewIVFFlatIndex(columnName, config)
+	case IndexTypeVectorIVFSQ8:
+		return NewIVFSQ8Index(columnName, config)
+	case IndexTypeVectorIVFPQ:
+		return NewIVFPQIndex(columnName, config)
+	case IndexTypeVectorHNSWSQ:
+		return NewHNSWSQIndex(columnName, config)
+	case IndexTypeVectorHNSWPQ:
+		return NewHNSWPQIndex(columnName, config)
+	case IndexTypeVectorIVFRabitQ:
+		return NewIVFRabitQIndex(columnName, config)
+	case IndexTypeVectorHNSWPRQ:
+		return NewHNSWPRQIndex(columnName, config)
+	case IndexTypeVectorAISAQ:
+		return NewAISAQIndex(columnName, config)
+	default:
+		return nil, fmt.Errorf("unsupported vector index type: %s", indexType)
+	}
 }
 
 // GetVectorIndex 获取向量索引
@@ -203,6 +204,12 @@ func (m *IndexManager) GetVectorIndex(tableName, columnName string) (VectorIndex
 	}
 
 	return idx, nil
+}
+
+// HasVectorIndex reports whether a vector index exists for the column.
+func (m *IndexManager) HasVectorIndex(tableName, columnName string) bool {
+	_, err := m.GetVectorIndex(tableName, columnName)
+	return err == nil
 }
 
 // DropVectorIndex 删除向量索引
@@ -354,7 +361,34 @@ func (m *IndexManager) RebuildIndex(tableName string, schema *domain.TableInfo, 
 		}
 	}
 
+	m.rebuildVectorIndexesLocked(tableIdxs, schema, rows)
 	return nil
+}
+
+func (m *IndexManager) rebuildVectorIndexesLocked(tableIdxs *TableIndexes, schema *domain.TableInfo, rows []domain.Row) {
+	if len(tableIdxs.vectorIndexes) == 0 {
+		return
+	}
+	columns := make([]string, 0, len(tableIdxs.vectorIndexes))
+	for col := range tableIdxs.vectorIndexes {
+		columns = append(columns, col)
+	}
+	for _, columnName := range columns {
+		old := tableIdxs.vectorIndexes[columnName]
+		cfg := old.GetConfig()
+		indexType := old.Stats().Type
+		_ = old.Close()
+		fresh, err := newVectorIndex(columnName, indexType, cfg)
+		if err != nil {
+			delete(tableIdxs.vectorIndexes, columnName)
+			continue
+		}
+		records := ExtractVectorRecords(schema, rows, columnName, cfg.Dimension)
+		if len(records) > 0 {
+			_ = fresh.Build(context.Background(), &sliceVectorLoader{records: records})
+		}
+		tableIdxs.vectorIndexes[columnName] = fresh
+	}
 }
 
 // GetTableIndexes 获取表的所有索引信息
@@ -376,6 +410,47 @@ func (m *IndexManager) GetTableIndexes(tableName string) ([]*IndexInfo, error) {
 	}
 
 	return infos, nil
+}
+
+// VectorIndexInfo is durable metadata for a vector index.
+type VectorIndexInfo struct {
+	TableName  string
+	ColumnName string
+	Type       IndexType
+	Metric     VectorMetricType
+	Dimension  int
+	Params     map[string]interface{}
+	Count      int64
+}
+
+// GetVectorIndexInfos lists vector indexes on a table.
+func (m *IndexManager) GetVectorIndexInfos(tableName string) []*VectorIndexInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	tableIdxs, ok := m.tables[tableName]
+	if !ok {
+		return nil
+	}
+	tableIdxs.mu.RLock()
+	defer tableIdxs.mu.RUnlock()
+	out := make([]*VectorIndexInfo, 0, len(tableIdxs.vectorIndexes))
+	for col, idx := range tableIdxs.vectorIndexes {
+		cfg := idx.GetConfig()
+		stats := idx.Stats()
+		info := &VectorIndexInfo{
+			TableName:  tableName,
+			ColumnName: col,
+			Type:       stats.Type,
+			Count:      stats.Count,
+		}
+		if cfg != nil {
+			info.Metric = cfg.MetricType
+			info.Dimension = cfg.Dimension
+			info.Params = cfg.Params
+		}
+		out = append(out, info)
+	}
+	return out
 }
 
 // CreateAdvancedFullTextIndex 创建高级全文索引
