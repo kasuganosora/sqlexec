@@ -57,10 +57,11 @@ type COWTableSnapshot struct {
 
 // Snapshot represents a transaction snapshot (copy-on-write)
 type Snapshot struct {
-	txnID          int64
-	startVer       int64
-	createdAt      time.Time
-	tableSnapshots map[string]*COWTableSnapshot // COW snapshot per table
+	txnID           int64
+	startVer        int64
+	createdAt       time.Time
+	tableSnapshots  map[string]*COWTableSnapshot // COW snapshot per table
+	autoIncReserved map[string]int64             // table.col -> last AUTO_INCREMENT reserved in this txn
 }
 
 // Transaction represents transaction information

@@ -85,30 +85,28 @@ func (m *MVCCDataSource) GetBufferPool() *BufferPool {
 
 // gcOldVersions removes old table versions that are no longer referenced by
 // any active transaction. Must be called while holding m.mu.Lock().
+//
+// Retention is per-table: a transaction pins each table's latest version at
+// BeginTx (COWTableSnapshot.snapshotVer). That pin can be far behind
+// snapshot.startVer / currentVer when other tables have been written, so GC
+// must not use the global startVer as the only watermark.
 func (m *MVCCDataSource) gcOldVersions() {
-	// Find the minimum version still needed by active transactions
-	minRequiredVer := m.currentVer
-	for _, snapshot := range m.snapshots {
-		if snapshot.startVer < minRequiredVer {
-			minRequiredVer = snapshot.startVer
-		}
-	}
-
-	// Clean up old versions from each table
 	for tableName, tableVer := range m.tables {
 		tableVer.mu.Lock()
+		minRequiredVer := tableVer.latest
+		for _, snapshot := range m.snapshots {
+			if cow, ok := snapshot.tableSnapshots[tableName]; ok && cow.snapshotVer < minRequiredVer {
+				minRequiredVer = cow.snapshotVer
+			}
+		}
 		for ver, data := range tableVer.versions {
-			// Keep the latest version, versions needed by active transactions,
-			// and a small buffer of recent versions
 			if ver < minRequiredVer && ver != tableVer.latest {
-				// Release paged rows to free buffer pool memory and spill files
 				if data != nil && data.rows != nil {
 					data.rows.Release()
 				}
 				delete(tableVer.versions, ver)
 			}
 		}
-		// Update buffer pool latest version for eviction priority
 		if m.bufferPool != nil {
 			m.bufferPool.UpdateLatestVersion(tableName, tableVer.latest)
 		}

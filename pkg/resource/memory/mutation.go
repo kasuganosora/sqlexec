@@ -36,34 +36,38 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	schema := deepCopySchema(sourceData.schema) // Deep copy so we can release the lock
 	tableVer.mu.RUnlock()
 
-	// Process auto-increment columns and fill in generated IDs
-	// Note: lastInsertID is tracked but not returned via the interface (interface only returns rowsAffected)
-	// The auto-incremented ID is set in the row map, so callers can read it from there
-	for _, row := range rows {
-		// Convert types based on schema (e.g., int64(0/1) to bool for BOOL columns)
-		convertRowTypesBasedOnSchema(row, schema)
-
-		// Handle auto-increment columns
-		for _, col := range schema.Columns {
-			if col.AutoIncrement {
-				key := tableName + "." + col.Name
-				// Check if the value is missing or is 0/null
-				if val, exists := row[col.Name]; !exists || val == nil || val == int64(0) || val == float64(0) {
-					// Generate next auto-increment ID
-					m.autoIncCounters[key]++
-					nextID := m.autoIncCounters[key]
-					row[col.Name] = nextID
-				} else {
-					// Value was provided, update counter if needed
-					if intVal, ok := val.(int64); ok && intVal > m.autoIncCounters[key] {
-						m.autoIncCounters[key] = intVal
-					} else if floatVal, ok := val.(float64); ok && int64(floatVal) > m.autoIncCounters[key] {
-						m.autoIncCounters[key] = int64(floatVal)
-					}
-				}
-			}
+	var snapshot *Snapshot
+	var cowSnapshot *COWTableSnapshot
+	if hasTxn {
+		var ok bool
+		snapshot, ok = m.snapshots[txnID]
+		if !ok {
+			m.mu.Unlock()
+			return 0, domain.NewErrTransactionNotFound(txnID)
+		}
+		cowSnapshot, ok = snapshot.tableSnapshots[tableName]
+		if !ok {
+			m.mu.Unlock()
+			return 0, domain.NewErrTableNotFound(tableName)
+		}
+		if err := cowSnapshot.ensureCopied(tableVer); err != nil {
+			m.mu.Unlock()
+			return 0, err
 		}
 	}
+
+	for _, row := range rows {
+		convertRowTypesBasedOnSchema(row, schema)
+	}
+
+	// Transaction inserts reserve AUTO_INCREMENT values on the snapshot.
+	// Global counters move only on a successful commit (or immediately for
+	// non-transaction inserts).
+	var autoIncPrev map[string]int64
+	if !hasTxn {
+		autoIncPrev = m.snapshotAutoInc(autoIncKeysForSchema(tableName, schema))
+	}
+	m.assignAutoInc(tableName, schema, rows, snapshot)
 
 	// Process generated columns: distinguish between STORED and VIRTUAL types
 	processedRows := make([]domain.Row, 0, len(rows))
@@ -112,25 +116,6 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 	rows = processedRows
 
 	if hasTxn {
-		// In transaction, use COW snapshot
-		snapshot, ok := m.snapshots[txnID]
-		if !ok {
-			m.mu.Unlock()
-			return 0, domain.NewErrTransactionNotFound(txnID)
-		}
-
-		cowSnapshot, ok := snapshot.tableSnapshots[tableName]
-		if !ok {
-			m.mu.Unlock()
-			return 0, domain.NewErrTableNotFound(tableName)
-		}
-
-		// Ensure data is copied (copy-on-write, row-level COW)
-		if err := cowSnapshot.ensureCopied(tableVer); err != nil {
-			m.mu.Unlock()
-			return 0, err
-		}
-
 		m.mu.Unlock()
 
 		// Row-level COW: don't directly copy entire table, only record newly inserted rows
@@ -153,31 +138,29 @@ func (m *MVCCDataSource) Insert(ctx context.Context, tableName string, rows []do
 		return inserted, nil
 	}
 
-	// Non-transaction mode: lock order: global lock first, then table-level lock
-
-	// Increment global version number first (while holding global lock)
-	m.currentVer++
-	newVer := m.currentVer // Capture before releasing global lock
-
-	// Get table-level lock
+	// Non-transaction mode: lock order: global lock first, then table-level lock.
+	// Validate unique constraints before bumping currentVer / publishing so a
+	// rejected insert does not leak AUTO_INCREMENT values or version numbers.
 	tableVer.mu.Lock()
-
-	// Now safe to release global lock since we hold table lock
-	m.mu.Unlock()
-	defer tableVer.mu.Unlock()
-
 	latestData := tableVer.versions[tableVer.latest]
 	if latestData == nil {
+		tableVer.mu.Unlock()
+		m.restoreAutoInc(autoIncPrev)
+		m.mu.Unlock()
 		return 0, domain.NewErrTableNotFound(tableName)
 	}
-
-	// Non-transaction insert, create new version
 	existingRows := latestData.Rows()
-
-	// Check unique constraints before committing the new version.
 	if err := m.checkUniqueConstraints(tableName, schema, existingRows, rows); err != nil {
+		tableVer.mu.Unlock()
+		m.restoreAutoInc(autoIncPrev)
+		m.mu.Unlock()
 		return 0, err
 	}
+
+	m.currentVer++
+	newVer := m.currentVer
+	m.mu.Unlock()
+	defer tableVer.mu.Unlock()
 
 	newRows := make([]domain.Row, len(existingRows), len(existingRows)+len(rows))
 	copy(newRows, existingRows)
@@ -221,10 +204,10 @@ func (m *MVCCDataSource) BulkLoad(tableName string, loadFn func(addPage func(row
 
 	tableVer.mu.Lock()
 	m.mu.Unlock()
-	defer tableVer.mu.Unlock()
 
 	latestData := tableVer.versions[tableVer.latest]
 	if latestData == nil {
+		tableVer.mu.Unlock()
 		return domain.NewErrTableNotFound(tableName)
 	}
 
@@ -232,6 +215,7 @@ func (m *MVCCDataSource) BulkLoad(tableName string, loadFn func(addPage func(row
 
 	if err := loadFn(pr.AppendPage); err != nil {
 		pr.Release()
+		tableVer.mu.Unlock()
 		return err
 	}
 
@@ -253,7 +237,16 @@ func (m *MVCCDataSource) BulkLoad(tableName string, loadFn func(addPage func(row
 		m.bufferPool.UpdateLatestVersion(tableName, newVer)
 	}
 
-	m.rebuildTableIndexes(tableName, versionData.schema, versionData.Rows())
+	loadedRows := versionData.Rows()
+	m.rebuildTableIndexes(tableName, versionData.schema, loadedRows)
+	autoIncMax := maxAutoIncFromRows(tableName, versionData.schema, loadedRows)
+	tableVer.mu.Unlock()
+
+	if len(autoIncMax) > 0 {
+		m.mu.Lock()
+		m.raiseAutoInc(autoIncMax)
+		m.mu.Unlock()
+	}
 	return nil
 }
 
@@ -326,76 +319,58 @@ func (m *MVCCDataSource) Update(ctx context.Context, tableName string, filters [
 		updated := int64(0)
 		baseRowsCount := int64(cowSnapshot.baseData.RowCount())
 
-		// Helper to apply updates to a row
-		applyUpdates := func(rowID int64, row domain.Row, isBase bool) {
-			if !util.MatchesFilters(row, filters) {
-				return
+		recalcGenerated := func(row domain.Row) {
+			for _, genColName := range affectedGeneratedCols {
+				colInfo := getColumnInfo(genColName, schema)
+				if colInfo != nil && colInfo.IsGenerated {
+					val, err := evaluator.Evaluate(colInfo.GeneratedExpr, row, schema)
+					if err != nil {
+						val = nil
+					}
+					row[genColName] = val
+				}
 			}
-			// Skip deleted rows
+		}
+
+		// Match the transaction-visible row (prior in-txn updates), not the
+		// frozen base snapshot. Otherwise UPDATE/DELETE see stale values.
+		applyUpdates := func(rowID int64, visible domain.Row) {
 			if cowSnapshot.deletedRows[rowID] {
 				return
 			}
+			if !util.MatchesFilters(visible, filters) {
+				return
+			}
 
-			if _, alreadyModified := cowSnapshot.rowLocks[rowID]; !alreadyModified {
-				// First modification of this row, create deep copy (only for base rows)
-				var rowCopy domain.Row
-				if isBase {
-					rowCopy = make(map[string]interface{}, len(row))
-					for k, v := range row {
-						rowCopy[k] = v
-					}
-				} else {
-					// Already a copy in rowCopies, use it directly
-					rowCopy = row
+			if existingRow, ok := cowSnapshot.rowCopies[rowID]; ok {
+				for k, v := range filteredUpdates {
+					existingRow[k] = v
 				}
-				// Apply updates
+				recalcGenerated(existingRow)
+			} else {
+				rowCopy := deepCopyRow(visible)
 				for k, v := range filteredUpdates {
 					rowCopy[k] = v
 				}
-				// Calculate affected generated columns
-				for _, genColName := range affectedGeneratedCols {
-					colInfo := getColumnInfo(genColName, schema)
-					if colInfo != nil && colInfo.IsGenerated {
-						val, err := evaluator.Evaluate(colInfo.GeneratedExpr, rowCopy, schema)
-						if err != nil {
-							val = nil
-						}
-						rowCopy[genColName] = val
-					}
-				}
+				recalcGenerated(rowCopy)
 				cowSnapshot.rowCopies[rowID] = rowCopy
 				cowSnapshot.rowLocks[rowID] = true
-			} else {
-				// Row already modified, directly update existing copy
-				if existingRow, ok := cowSnapshot.rowCopies[rowID]; ok {
-					for k, v := range filteredUpdates {
-						existingRow[k] = v
-					}
-					for _, genColName := range affectedGeneratedCols {
-						colInfo := getColumnInfo(genColName, schema)
-						if colInfo != nil && colInfo.IsGenerated {
-							val, err := evaluator.Evaluate(colInfo.GeneratedExpr, existingRow, schema)
-							if err != nil {
-								val = nil
-							}
-							existingRow[genColName] = val
-						}
-					}
-				}
 			}
 			updated++
 		}
 
-		// Check base data rows
 		for i, row := range cowSnapshot.baseData.Rows() {
 			rowID := int64(i + 1)
-			applyUpdates(rowID, row, true)
+			visible := row
+			if copy, ok := cowSnapshot.rowCopies[rowID]; ok {
+				visible = copy
+			}
+			applyUpdates(rowID, visible)
 		}
 
-		// Check newly inserted rows in this transaction
 		for rowID := baseRowsCount + 1; rowID <= baseRowsCount+cowSnapshot.insertedCount; rowID++ {
 			if row, ok := cowSnapshot.rowCopies[rowID]; ok {
-				applyUpdates(rowID, row, false)
+				applyUpdates(rowID, row)
 			}
 		}
 
@@ -509,26 +484,26 @@ func (m *MVCCDataSource) Delete(ctx context.Context, tableName string, filters [
 		deleted := int64(0)
 		baseRowsCount := int64(cowSnapshot.baseData.RowCount())
 
-		// Check base data rows
+		// Check base data rows against the transaction-visible value
 		for i, row := range cowSnapshot.baseData.Rows() {
 			rowID := int64(i + 1)
 
-			// Skip already deleted rows
 			if cowSnapshot.deletedRows[rowID] {
 				continue
 			}
 
-			// Check if row matches delete condition
-			if util.MatchesFilters(row, filters) {
-				// If this row was already modified, need to remove from rowCopies
-				if _, alreadyModified := cowSnapshot.rowLocks[rowID]; alreadyModified {
-					delete(cowSnapshot.rowCopies, rowID)
-				}
-				// Mark as deleted
-				cowSnapshot.deletedRows[rowID] = true
-				delete(cowSnapshot.rowLocks, rowID)
-				deleted++
+			visible := row
+			if copy, ok := cowSnapshot.rowCopies[rowID]; ok {
+				visible = copy
 			}
+			if !util.MatchesFilters(visible, filters) {
+				continue
+			}
+
+			delete(cowSnapshot.rowCopies, rowID)
+			cowSnapshot.deletedRows[rowID] = true
+			delete(cowSnapshot.rowLocks, rowID)
+			deleted++
 		}
 
 		// Check newly inserted rows in this transaction

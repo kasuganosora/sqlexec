@@ -40,17 +40,17 @@ func (t *MVCCTransaction) Execute(ctx context.Context, sql string) (*domain.Quer
 }
 
 func (t *MVCCTransaction) Query(ctx context.Context, tableName string, options *domain.QueryOptions) (*domain.QueryResult, error) {
-	return t.ds.Query(ctx, tableName, options)
+	return t.ds.Query(t.GetContext(ctx), tableName, options)
 }
 
 func (t *MVCCTransaction) Insert(ctx context.Context, tableName string, rows []domain.Row, options *domain.InsertOptions) (int64, error) {
-	return t.ds.Insert(ctx, tableName, rows, options)
+	return t.ds.Insert(t.GetContext(ctx), tableName, rows, options)
 }
 
 func (t *MVCCTransaction) Update(ctx context.Context, tableName string, filters []domain.Filter, updates domain.Row, options *domain.UpdateOptions) (int64, error) {
-	return t.ds.Update(ctx, tableName, filters, updates, options)
+	return t.ds.Update(t.GetContext(ctx), tableName, filters, updates, options)
 }
 
 func (t *MVCCTransaction) Delete(ctx context.Context, tableName string, filters []domain.Filter, options *domain.DeleteOptions) (int64, error) {
-	return t.ds.Delete(ctx, tableName, filters, options)
+	return t.ds.Delete(t.GetContext(ctx), tableName, filters, options)
 }

@@ -229,3 +229,18 @@ func (e *ErrGeneratedColumnValidation) Error() string {
 func NewErrGeneratedColumnValidation(message string) *ErrGeneratedColumnValidation {
 	return &ErrGeneratedColumnValidation{Message: message}
 }
+
+// ErrWriteConflict is returned when a transaction tries to commit writes
+// against a table version that another commit has already replaced.
+type ErrWriteConflict struct {
+	TableName string
+}
+
+func (e *ErrWriteConflict) Error() string {
+	return fmt.Sprintf("write conflict on table %s: snapshot is stale", e.TableName)
+}
+
+// NewErrWriteConflict creates a first-committer-wins conflict error.
+func NewErrWriteConflict(tableName string) *ErrWriteConflict {
+	return &ErrWriteConflict{TableName: tableName}
+}

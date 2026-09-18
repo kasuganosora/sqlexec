@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -94,95 +95,129 @@ func (m *MVCCDataSource) CommitTx(ctx context.Context, txnID int64) error {
 		return nil
 	}
 
-	// Write transaction: commit only modified tables
-	var commitErr error
-	for tableName, cowSnapshot := range snapshot.tableSnapshots {
-		tableVer := m.tables[tableName]
-		if tableVer != nil && cowSnapshot.copied {
-			// Use closure to ensure locks are released via defer even on panic
-			func() {
-				cowSnapshot.mu.Lock()
-				defer cowSnapshot.mu.Unlock()
-
-				// Check if there are row-level modifications
-				if len(cowSnapshot.rowCopies) == 0 && len(cowSnapshot.deletedRows) == 0 {
-					// No rows modified, no need to create new version
-					return
-				}
-
-				// Row-level COW: merge base data and modified rows
-				tableVer.mu.Lock()
-				defer tableVer.mu.Unlock()
-				m.currentVer++
-
-				// Merge base data and row-level modifications
-				baseRows := cowSnapshot.baseData.Rows()
-				newRows := make([]domain.Row, 0, len(baseRows))
-				for i, row := range baseRows {
-					rowID := int64(i + 1)
-
-					// Skip deleted rows
-					if cowSnapshot.deletedRows[rowID] {
-						continue
-					}
-
-					// Use modified row or deep copy original
-					if modifiedRow, ok := cowSnapshot.rowCopies[rowID]; ok {
-						newRows = append(newRows, modifiedRow)
-					} else {
-						newRows = append(newRows, deepCopyRow(row))
-					}
-				}
-
-				// Append newly inserted rows in order (rowID > base data row count)
-				baseRowsCount := int64(cowSnapshot.baseData.RowCount())
-				for rowID := baseRowsCount + 1; rowID <= baseRowsCount+cowSnapshot.insertedCount; rowID++ {
-					if cowSnapshot.deletedRows[rowID] {
-						continue
-					}
-					if row, ok := cowSnapshot.rowCopies[rowID]; ok {
-						newRows = append(newRows, row)
-					}
-				}
-
-				// Check unique constraints on the final merged rows before committing
-				schema := cowSnapshot.modifiedData.schema
-				if uerr := m.checkUniqueConstraintsFinal(tableName, schema, newRows); uerr != nil {
-					m.currentVer--
-					commitErr = uerr
-					return
-				}
-
-				// Create new version
-				newVersionData := &TableData{
-					version:   m.currentVer,
-					createdAt: time.Now(),
-					schema:    deepCopySchema(schema),
-					rows:      NewPagedRows(m.bufferPool, newRows, 0, tableName, m.currentVer),
-				}
-
-				tableVer.versions[m.currentVer] = newVersionData
-				tableVer.latest = m.currentVer
-
-				// Maintain indexes: rebuild from the committed version's rows
-				_ = m.indexManager.RebuildIndex(tableName, newVersionData.schema, newRows)
-			}()
-			if commitErr != nil {
-				// Unique constraint violation; clean up and return error
-				delete(m.activeTxns, txnID)
-				delete(m.snapshots, txnID)
-				return commitErr
-			}
-		}
+	// Validate every dirty table against the latest committed version, then
+	// publish all new versions. First-committer-wins: if any table advanced
+	// past the snapshot pin, abort without applying any table.
+	type preparedTableCommit struct {
+		tableName string
+		tableVer  *TableVersions
+		cow       *COWTableSnapshot
+		schema    *domain.TableInfo
+		newRows   []domain.Row
 	}
+
+	tableNames := make([]string, 0, len(snapshot.tableSnapshots))
+	for tableName := range snapshot.tableSnapshots {
+		tableNames = append(tableNames, tableName)
+	}
+	sort.Strings(tableNames)
+
+	prepared := make([]preparedTableCommit, 0, len(tableNames))
+	unlockPrepared := func() {
+		for i := len(prepared) - 1; i >= 0; i-- {
+			prepared[i].tableVer.mu.Unlock()
+			prepared[i].cow.mu.Unlock()
+		}
+		prepared = prepared[:0]
+	}
+	abortCommit := func(err error) error {
+		unlockPrepared()
+		delete(m.activeTxns, txnID)
+		delete(m.snapshots, txnID)
+		m.gcOldVersions()
+		return err
+	}
+
+	for _, tableName := range tableNames {
+		cowSnapshot := snapshot.tableSnapshots[tableName]
+		tableVer := m.tables[tableName]
+		if tableVer == nil || !cowSnapshot.copied {
+			continue
+		}
+
+		cowSnapshot.mu.Lock()
+		if !cowSnapshot.hasWrites() {
+			cowSnapshot.mu.Unlock()
+			continue
+		}
+
+		tableVer.mu.Lock()
+		if tableVer.latest != cowSnapshot.snapshotVer {
+			tableVer.mu.Unlock()
+			cowSnapshot.mu.Unlock()
+			return abortCommit(domain.NewErrWriteConflict(tableName))
+		}
+
+		newRows := mergeCOWSnapshotRows(cowSnapshot)
+		schema := cowSnapshot.modifiedData.schema
+		if uerr := m.checkUniqueConstraintsFinal(tableName, schema, newRows); uerr != nil {
+			tableVer.mu.Unlock()
+			cowSnapshot.mu.Unlock()
+			return abortCommit(uerr)
+		}
+
+		prepared = append(prepared, preparedTableCommit{
+			tableName: tableName,
+			tableVer:  tableVer,
+			cow:       cowSnapshot,
+			schema:    schema,
+			newRows:   newRows,
+		})
+	}
+
+	for _, p := range prepared {
+		m.currentVer++
+		newVersionData := &TableData{
+			version:   m.currentVer,
+			createdAt: time.Now(),
+			schema:    deepCopySchema(p.schema),
+			rows:      NewPagedRows(m.bufferPool, p.newRows, 0, p.tableName, m.currentVer),
+		}
+		p.tableVer.versions[m.currentVer] = newVersionData
+		p.tableVer.latest = m.currentVer
+		_ = m.indexManager.RebuildIndex(p.tableName, newVersionData.schema, p.newRows)
+	}
+	unlockPrepared()
+	m.publishAutoInc(snapshot)
 
 	delete(m.activeTxns, txnID)
 	delete(m.snapshots, txnID)
 
-	// Garbage collect old versions no longer needed by any transaction
 	m.gcOldVersions()
 
 	return nil
+}
+
+func (s *COWTableSnapshot) hasWrites() bool {
+	return len(s.rowCopies) > 0 || len(s.deletedRows) > 0 || s.insertedCount > 0
+}
+
+// mergeCOWSnapshotRows builds the committed row set from a dirty COW snapshot.
+// Caller must hold s.mu.
+func mergeCOWSnapshotRows(s *COWTableSnapshot) []domain.Row {
+	baseRows := s.baseData.Rows()
+	newRows := make([]domain.Row, 0, len(baseRows)+int(s.insertedCount))
+	for i, row := range baseRows {
+		rowID := int64(i + 1)
+		if s.deletedRows[rowID] {
+			continue
+		}
+		if modifiedRow, ok := s.rowCopies[rowID]; ok {
+			newRows = append(newRows, modifiedRow)
+		} else {
+			newRows = append(newRows, deepCopyRow(row))
+		}
+	}
+	baseRowsCount := int64(s.baseData.RowCount())
+	for rowID := baseRowsCount + 1; rowID <= baseRowsCount+s.insertedCount; rowID++ {
+		if s.deletedRows[rowID] {
+			continue
+		}
+		if row, ok := s.rowCopies[rowID]; ok {
+			newRows = append(newRows, row)
+		}
+	}
+	return newRows
 }
 
 // RollbackTx rolls back a transaction

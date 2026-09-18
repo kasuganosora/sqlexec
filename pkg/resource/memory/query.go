@@ -115,10 +115,9 @@ func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *d
 				tableData = cowSnapshot.getTableData(tableVer)
 				m.mu.RUnlock()
 			} else {
+				// Table was created after this snapshot was pinned.
 				m.mu.RUnlock()
-				tableVer.mu.RLock()
-				tableData = tableVer.versions[tableVer.latest]
-				tableVer.mu.RUnlock()
+				return nil, domain.NewErrTableNotFound(tableName)
 			}
 		} else {
 			m.mu.RUnlock()
@@ -142,7 +141,9 @@ func (m *MVCCDataSource) Query(ctx context.Context, tableName string, options *d
 	var queryResult *domain.QueryResult
 	var err error
 
-	if options != nil && len(options.Filters) > 0 {
+	// Transactional queries must scan the snapshot rows. Global indexes track
+	// the latest committed version and can return the wrong row IDs.
+	if options != nil && len(options.Filters) > 0 && !hasTxn {
 		// Has filter conditions, use query optimizer
 		plan, planErr := m.queryPlanner.PlanQuery(tableName, options.Filters, options)
 		if planErr != nil {

@@ -183,6 +183,7 @@ func (m *MVCCDataSource) DropTable(ctx context.Context, tableName string) error 
 
 	delete(m.tables, tableName)
 	delete(m.tempTables, tableName)
+	m.clearAutoIncForTable(tableName)
 	// Drop indexes
 	_ = m.indexManager.DropTableIndexes(tableName)
 	return nil
