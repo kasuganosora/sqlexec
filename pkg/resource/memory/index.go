@@ -23,6 +23,7 @@ const (
 	IndexTypeVectorIVFRabitQ IndexType = "vector_ivf_rabitq"
 	IndexTypeVectorHNSWPRQ   IndexType = "vector_hnsw_prq"
 	IndexTypeVectorAISAQ     IndexType = "vector_aisaq"
+	IndexTypeVectorDiskBBQ   IndexType = "vector_diskbbq"
 	IndexTypeSpatialRTree    IndexType = "spatial_rtree"
 )
 
@@ -37,7 +38,8 @@ func (t IndexType) IsVectorIndex() bool {
 	case IndexTypeVectorHNSW, IndexTypeVectorIVFFlat, IndexTypeVectorFlat,
 		IndexTypeVectorIVFSQ8, IndexTypeVectorIVFPQ,
 		IndexTypeVectorHNSWSQ, IndexTypeVectorHNSWPQ,
-		IndexTypeVectorIVFRabitQ, IndexTypeVectorHNSWPRQ, IndexTypeVectorAISAQ:
+		IndexTypeVectorIVFRabitQ, IndexTypeVectorHNSWPRQ, IndexTypeVectorAISAQ,
+		IndexTypeVectorDiskBBQ:
 		return true
 	default:
 		return false
@@ -65,6 +67,8 @@ func ParseVectorIndexType(s string) IndexType {
 		return IndexTypeVectorHNSWPRQ
 	case "aisaq", "vector_aisaq":
 		return IndexTypeVectorAISAQ
+	case "diskbbq", "disk_bbq", "vector_diskbbq", "bbq_disk", "bbqdisk":
+		return IndexTypeVectorDiskBBQ
 	default:
 		return IndexTypeVectorHNSW
 	}

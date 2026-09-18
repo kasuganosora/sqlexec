@@ -31,6 +31,7 @@ func TestEncodeApplyVectorSnapshot_AllTypes(t *testing.T) {
 		IndexTypeVectorIVFRabitQ,
 		IndexTypeVectorHNSWPRQ,
 		IndexTypeVectorAISAQ,
+		IndexTypeVectorDiskBBQ,
 	}
 
 	for _, typ := range types {

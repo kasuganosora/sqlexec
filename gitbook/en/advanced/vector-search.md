@@ -17,7 +17,7 @@ CREATE TABLE documents (
 
 ## Vector Index Types
 
-SQLExec provides 10 vector index types, covering a range of scenarios from exact search to extreme compression:
+SQLExec provides 11 vector index types, covering a range of scenarios from exact search to extreme compression:
 
 | Index Type | Description | Accuracy | Speed | Memory Usage | Use Case |
 |---------|------|------|------|---------|---------|
@@ -31,6 +31,7 @@ SQLExec provides 10 vector index types, covering a range of scenarios from exact
 | HNSW-PRQ | HNSW + progressive residual quantization | Good | Fast | Low | High compression ratio scenarios |
 | IVF-RabitQ | IVF + RabitQ quantization | Fairly good | Fast | Low | Very large-scale datasets |
 | AISAQ | Asymmetric ISAQ | Fairly good | Fast | Very low | Extremely memory-constrained scenarios |
+| DiskBBQ | Hierarchical IVF + BBQ disk blocks | Fairly good (~95% recall) | Fast | Very low | Large-scale, low-memory, disk-first |
 
 > **Recommendation**: For most scenarios, the **HNSW** index is recommended as it achieves the best balance between accuracy and speed.
 
@@ -55,7 +56,9 @@ CREATE VECTOR INDEX idx_embedding ON documents(embedding)
 | `dim` | Vector dimension | Same as column definition |
 | `m` | Maximum number of connections per node in HNSW | `16` |
 | `ef_construction` | Search width during HNSW construction | `200` |
-| `nprobe` | Number of clusters to probe during IVF search | `10` |
+| `nprobe` | Clusters probed during IVF / DiskBBQ search | `10` |
+| `nlist` | IVF / DiskBBQ leaf cluster count | `64` |
+| `ncoarse` | DiskBBQ coarse cluster count | `sqrt(nlist)` |
 | `pq_m` | Number of subspaces for PQ product quantization | `8` |
 
 ## Distance Metrics

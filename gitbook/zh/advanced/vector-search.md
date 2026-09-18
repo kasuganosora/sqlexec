@@ -17,7 +17,7 @@ CREATE TABLE documents (
 
 ## 向量索引类型
 
-SQLExec 提供 10 种向量索引类型，覆盖从精确搜索到极致压缩的各种场景：
+SQLExec 提供 11 种向量索引类型，覆盖从精确搜索到极致压缩的各种场景：
 
 | 索引类型 | 说明 | 精度 | 速度 | 内存占用 | 适用场景 |
 |---------|------|------|------|---------|---------|
@@ -31,6 +31,7 @@ SQLExec 提供 10 种向量索引类型，覆盖从精确搜索到极致压缩�
 | HNSW-PRQ | HNSW + 渐进残差量化 | 好 | 快 | 低 | 高压缩比场景 |
 | IVF-RabitQ | IVF + RabitQ 量化 | 较好 | 快 | 低 | 超大规模数据集 |
 | AISAQ | 非对称 ISAQ | 较好 | 快 | 极低 | 极端内存受限场景 |
+| DiskBBQ | 分层 IVF + BBQ 磁盘块 | 较好（约 95% 召回） | 快 | 极低 | 大规模、低内存、磁盘优先 |
 
 > **推荐**：大多数场景下建议使用 **HNSW** 索引，它在精度和速度之间取得了最佳平衡。
 
@@ -55,7 +56,9 @@ CREATE VECTOR INDEX idx_embedding ON documents(embedding)
 | `dim` | 向量维度 | 与列定义一致 |
 | `m` | HNSW 每个节点的最大连接数 | `16` |
 | `ef_construction` | HNSW 构建时的搜索宽度 | `200` |
-| `nprobe` | IVF 搜索时的聚类探测数 | `10` |
+| `nprobe` | IVF / DiskBBQ 搜索时的聚类探测数 | `10` |
+| `nlist` | IVF / DiskBBQ 叶子簇数量 | `64` |
+| `ncoarse` | DiskBBQ 粗聚类数量 | `sqrt(nlist)` |
 | `pq_m` | PQ 乘积量化的子空间数 | `8` |
 
 ## 距离度量

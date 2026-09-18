@@ -70,6 +70,7 @@ func TestVectorIndexVariants_BuildSearchDelete(t *testing.T) {
 		{"ivf_rabitq", IndexTypeVectorIVFRabitQ, false, 1},
 		{"hnsw_prq", IndexTypeVectorHNSWPRQ, false, 1},
 		{"aisaq", IndexTypeVectorAISAQ, false, 1},
+		{"diskbbq", IndexTypeVectorDiskBBQ, false, 1},
 	}
 
 	for _, tc := range types {
@@ -229,6 +230,7 @@ func TestIndexManager_AllVectorTypes(t *testing.T) {
 		IndexTypeVectorIVFRabitQ,
 		IndexTypeVectorHNSWPRQ,
 		IndexTypeVectorAISAQ,
+		IndexTypeVectorDiskBBQ,
 	}
 	for i, typ := range types {
 		idx, err := mgr.CreateVectorIndex("t", string(typ)+"_col", VectorMetricCosine, typ, 32, params)
@@ -326,6 +328,8 @@ func TestQuantizedIndexes_InsertAfterBuild(t *testing.T) {
 	require.NoError(t, err)
 	aisaq, err := NewAISAQIndex("embedding", &VectorIndexConfig{MetricType: VectorMetricL2, Dimension: dim, Params: smallVectorParams()})
 	require.NoError(t, err)
+	diskbbq, err := NewDiskBBQIndex("embedding", &VectorIndexConfig{MetricType: VectorMetricL2, Dimension: dim, Params: smallVectorParams()})
+	require.NoError(t, err)
 	cases = []struct {
 		name string
 		idx  VectorIndex
@@ -335,6 +339,7 @@ func TestQuantizedIndexes_InsertAfterBuild(t *testing.T) {
 		{"hnsw_prq", prq},
 		{"ivf_pq", ivfpq},
 		{"aisaq", aisaq},
+		{"diskbbq", diskbbq},
 	}
 
 	for _, tc := range cases {

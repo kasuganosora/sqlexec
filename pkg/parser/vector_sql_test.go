@@ -2,6 +2,7 @@ package parser
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/kasuganosora/sqlexec/pkg/resource/domain"
@@ -118,6 +119,14 @@ func TestVectorIndexParsing(t *testing.T) {
 			expectMetric:    "",
 			expectDim:       0,
 		},
+		{
+			name:            "CREATE VECTOR INDEX with USING DISKBBQ",
+			sql:             "CREATE VECTOR INDEX idx_diskbbq ON articles(embedding) USING DISKBBQ WITH (metric='l2', dim=768, nlist=64, nprobe=8)",
+			expectVector:    true,
+			expectIndexType: "diskbbq",
+			expectMetric:    "l2",
+			expectDim:       768,
+		},
 	}
 
 	adapter := NewSQLAdapter()
@@ -141,6 +150,13 @@ func TestVectorIndexParsing(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPreprocessSQL_DiskBBQUsing(t *testing.T) {
+	got := preprocessSQL("CREATE VECTOR INDEX idx ON t(col) USING DISKBBQ WITH (metric='l2', dim=8)")
+	require.Contains(t, strings.ToUpper(got), "USING HNSW")
+	require.Contains(t, strings.ToLower(got), "index_type=diskbbq")
+	require.Contains(t, strings.ToLower(got), "metric=l2")
 }
 
 // TestParseWithClause 测试 WITH 子句解析
@@ -287,6 +303,10 @@ func TestConvertToVectorIndexType(t *testing.T) {
 		{"ivf_flat", memory.IndexTypeVectorIVFFlat},
 		{"IVF_FLAT", memory.IndexTypeVectorIVFFlat},
 		{"vector_ivf_flat", memory.IndexTypeVectorIVFFlat},
+		{"diskbbq", memory.IndexTypeVectorDiskBBQ},
+		{"DISKBBQ", memory.IndexTypeVectorDiskBBQ},
+		{"vector_diskbbq", memory.IndexTypeVectorDiskBBQ},
+		{"bbq_disk", memory.IndexTypeVectorDiskBBQ},
 		{"unknown", memory.IndexTypeVectorHNSW}, // 默认
 	}
 

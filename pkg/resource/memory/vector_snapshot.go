@@ -168,6 +168,21 @@ type aisaqDump struct {
 	SearchList int
 }
 
+type diskBBQDump struct {
+	CoarseCentroids [][]float32
+	FineCentroids   [][]float32
+	FineParent      []int
+	ClusterCounts   []int
+	Blocks          map[int][]diskBBQEntry
+	Assignments     map[int64]int
+	RotSigns        []float32
+	RotPerm         []int
+	Ncoarse         int
+	Nleaf           int
+	Nprobe          int
+	NprobeCoarse    int
+}
+
 // EncodeVectorSnapshot serializes a built vector index.
 func EncodeVectorSnapshot(idx VectorIndex) ([]byte, error) {
 	if idx == nil {
@@ -280,6 +295,10 @@ func encodeVectorPayload(idx VectorIndex) ([]byte, error) {
 		v.mu.RLock()
 		payload = dumpAISAQ(v)
 		v.mu.RUnlock()
+	case *DiskBBQIndex:
+		v.mu.RLock()
+		payload = dumpDiskBBQ(v)
+		v.mu.RUnlock()
 	default:
 		return nil, fmt.Errorf("unsupported vector index type %T", idx)
 	}
@@ -377,6 +396,33 @@ func dumpHNSWPRQ(h *HNSWPRQIndex) hnswQuantDump {
 		Nsubq:          h.nsubq,
 		Ksubq:          h.ksubq,
 		Kcoarse:        h.kcoarse,
+	}
+}
+
+func dumpDiskBBQ(d *DiskBBQIndex) diskBBQDump {
+	blocks := make(map[int][]diskBBQEntry, len(d.blocks))
+	for leaf, entries := range d.blocks {
+		cp := make([]diskBBQEntry, len(entries))
+		for i, e := range entries {
+			bits := make([]uint64, len(e.Bits))
+			copy(bits, e.Bits)
+			cp[i] = diskBBQEntry{ID: e.ID, Bits: bits, ResNorm: e.ResNorm, VecNorm: e.VecNorm}
+		}
+		blocks[leaf] = cp
+	}
+	return diskBBQDump{
+		CoarseCentroids: d.coarseCentroids,
+		FineCentroids:   d.fineCentroids,
+		FineParent:      append([]int(nil), d.fineParent...),
+		ClusterCounts:   append([]int(nil), d.clusterCounts...),
+		Blocks:          blocks,
+		Assignments:     cloneIntMap(d.assignments),
+		RotSigns:        append([]float32(nil), d.rotSigns...),
+		RotPerm:         append([]int(nil), d.rotPerm...),
+		Ncoarse:         d.ncoarse,
+		Nleaf:           d.nleaf,
+		Nprobe:          d.nprobe,
+		NprobeCoarse:    d.nprobeCoarse,
 	}
 }
 
@@ -589,6 +635,32 @@ func ApplyVectorSnapshot(idx VectorIndex, data []byte, expectCount int64) error 
 		}
 		v.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 		v.mu.Unlock()
+	case *DiskBBQIndex:
+		var dump diskBBQDump
+		if err := dec.Decode(&dump); err != nil {
+			return err
+		}
+		v.mu.Lock()
+		if dump.Blocks == nil {
+			dump.Blocks = make(map[int][]diskBBQEntry)
+		}
+		if dump.Assignments == nil {
+			dump.Assignments = make(map[int64]int)
+		}
+		v.coarseCentroids = dump.CoarseCentroids
+		v.fineCentroids = dump.FineCentroids
+		v.fineParent = dump.FineParent
+		v.clusterCounts = dump.ClusterCounts
+		v.blocks = dump.Blocks
+		v.assignments = dump.Assignments
+		v.rotSigns = dump.RotSigns
+		v.rotPerm = dump.RotPerm
+		v.ncoarse = dump.Ncoarse
+		v.nleaf = dump.Nleaf
+		v.nprobe = dump.Nprobe
+		v.nprobeCoarse = dump.NprobeCoarse
+		v.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+		v.mu.Unlock()
 	default:
 		return fmt.Errorf("unsupported vector index type %T", idx)
 	}
@@ -637,6 +709,8 @@ func vectorIndexConcreteType(idx VectorIndex) IndexType {
 		return IndexTypeVectorHNSWPRQ
 	case *AISAQIndex:
 		return IndexTypeVectorAISAQ
+	case *DiskBBQIndex:
+		return IndexTypeVectorDiskBBQ
 	default:
 		return ""
 	}

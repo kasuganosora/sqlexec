@@ -773,7 +773,7 @@ IndexScanCost = IndexHeight + EstimatedRows * 0.01
 
 此外，系统还支持：
 - **空间索引**（`pkg/optimizer/spatial_index_support.go`）：用于地理空间查询（ST_Contains、ST_Intersects 等）。
-- **向量索引**（`pkg/optimizer/rules_vector.go`）：用于向量相似度搜索，支持 HNSW、Flat、IVF-Flat 三种索引类型。
+- **向量索引**（`pkg/optimizer/rules_vector.go`）：用于向量相似度搜索，支持 HNSW、Flat、IVF-*、DiskBBQ 等多种索引类型。
 
 ### 7.3 索引建议器
 

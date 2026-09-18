@@ -1516,6 +1516,8 @@ func convertToVectorIndexType(indexType string) memory.IndexType {
 		return memory.IndexTypeVectorHNSWPRQ
 	case "aisaq", "vector_aisaq":
 		return memory.IndexTypeVectorAISAQ
+	case "diskbbq", "disk_bbq", "vector_diskbbq", "bbq_disk", "bbqdisk":
+		return memory.IndexTypeVectorDiskBBQ
 	default:
 		return memory.IndexTypeVectorHNSW
 	}

@@ -198,6 +198,7 @@ type VectorIndex interface {
 | IVF-PQ | `vector_ivf_pq` | `ivf_pq_index.go` | 倒排索引+乘积量化 | 低 | 超大数据集 |
 | IVF-RaBitQ | `vector_ivf_rabitq` | `ivf_rabitq_index.go` | 倒排索引+二进制量化 | 极低（1 bit/维度） | 超大数据集、极致压缩 |
 | AISAQ | `vector_aisaq` | `aisaq_index.go` | Vamana图+自适应量化 | 中 | 自适应场景 |
+| DiskBBQ | `vector_diskbbq` | `diskbbq_index.go` | 分层K-Means + BBQ 磁盘块 | 极低（1 bit/维度） | 大规模、低内存、磁盘优先 |
 
 ### 4.1 Flat 索引（精确搜索）
 
@@ -539,6 +540,33 @@ var DefaultAISAQParams = AISAQParams{
 
 Vamana 图是一种单层图结构（相比 HNSW 的多层），具有更简单的实现和更可控的内存占用。
 
+### 4.9 DiskBBQ 索引
+
+DiskBBQ 是面向磁盘的 HNSW 替代方案：用两层分层 K-Means 把向量划成小簇，簇内向量用 Better Binary Quantization（BBQ，每维 1 bit + 残差范数）压缩成可按块加载的编码。查询最多探测两层质心，再只对命中的叶子块做批量打分，适合大规模、内存受限、可接受约 95% 召回的场景。
+
+```go
+// 文件: pkg/resource/memory/diskbbq_index.go
+
+type DiskBBQIndex struct {
+    coarseCentroids [][]float32
+    fineCentroids   [][]float32
+    blocks          map[int][]diskBBQEntry // 每个叶子簇一块 BBQ 编码
+}
+
+var DefaultDiskBBQParams = DiskBBQParams{
+    Ncoarse:      16,
+    Nlist:        64,
+    Nprobe:       8,
+    NprobeCoarse: 4,
+}
+```
+
+```sql
+CREATE VECTOR INDEX idx_emb ON articles(embedding)
+    USING DISKBBQ
+    WITH (metric='l2', dim=768, nlist=64, ncoarse=16, nprobe=8);
+```
+
 ---
 
 ## SQL 接口
@@ -638,6 +666,7 @@ CREATE VECTOR INDEX idx_emb ON articles((VEC_COSINE_DISTANCE(embedding)))
 | `IVF_RABITQ` | IVF-RaBitQ |
 | `HNSW_PRQ` | HNSW-PRQ |
 | `AISAQ` | AISAQ |
+| `DISKBBQ` / `BBQ_DISK` | DiskBBQ |
 
 ### 5.3 向量相似搜索查询
 
@@ -929,7 +958,7 @@ func (v *VectorScanOperator) Execute(ctx context.Context) (*domain.QueryResult, 
                        |
          +------+------+------+------+
          |      |      |      |      |
-       Flat   HNSW  IVF-*  HNSW-* AISAQ
+       Flat   HNSW  IVF-*  HNSW-* AISAQ DiskBBQ
          |      |      |      |      |
          v      v      v      v      v
     +----+------+------+------+------+----+
@@ -962,6 +991,7 @@ pkg/
       ivf_pq_index.go        # IVF-PQ
       ivf_rabitq_index.go    # IVF-RaBitQ (SIGMOD 2024)
       aisaq_index.go         # AISAQ (Vamana 图 + 自适应量化)
+      diskbbq_index.go       # DiskBBQ (分层 IVF + BBQ 磁盘块)
   parser/
     types.go                 # ColumnInfo, CreateIndexStatement (向量字段)
     adapter.go               # SQL 解析 (VECTOR 类型, CREATE VECTOR INDEX)

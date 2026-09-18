@@ -29,8 +29,8 @@ func (p *Parser) ParseSQL(sql string) ([]ast.StmtNode, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// 预处理 SQL：将 WITH 子句转换为 COMMENT 子句
-	preprocessedSQL := preprocessWithClause(sql)
+	// 预处理 SQL：将 WITH 子句转换为 COMMENT 子句，并把 TiDB 不认识的向量 USING 类型改写为 HNSW
+	preprocessedSQL := preprocessSQL(sql)
 
 	stmtNodes, warnings, err := p.parser.ParseSQL(preprocessedSQL)
 	if err != nil {
@@ -55,6 +55,104 @@ func (p *Parser) ParseOneStmt(sql string) (ast.StmtNode, error) {
 		return nil, fmt.Errorf("未解析到 SQL 语句")
 	}
 	return stmts[0], nil
+}
+
+func preprocessSQL(sql string) string {
+	return preprocessVectorUsingClause(preprocessWithClause(sql))
+}
+
+// customVectorUsingTypes are vector index USING names that TiDB's parser does not accept.
+// They are rewritten to USING HNSW, with the original type kept in COMMENT as index_type=.
+var customVectorUsingTypes = map[string]string{
+	"FLAT":              "flat",
+	"VECTOR_FLAT":       "vector_flat",
+	"IVF_FLAT":          "ivf_flat",
+	"VECTOR_IVF_FLAT":   "vector_ivf_flat",
+	"IVF_SQ8":           "ivf_sq8",
+	"VECTOR_IVF_SQ8":    "vector_ivf_sq8",
+	"IVF_PQ":            "ivf_pq",
+	"VECTOR_IVF_PQ":     "vector_ivf_pq",
+	"HNSW_SQ":           "hnsw_sq",
+	"VECTOR_HNSW_SQ":    "vector_hnsw_sq",
+	"HNSW_PQ":           "hnsw_pq",
+	"VECTOR_HNSW_PQ":    "vector_hnsw_pq",
+	"IVF_RABITQ":        "ivf_rabitq",
+	"VECTOR_IVF_RABITQ": "vector_ivf_rabitq",
+	"HNSW_PRQ":          "hnsw_prq",
+	"VECTOR_HNSW_PRQ":   "vector_hnsw_prq",
+	"AISAQ":             "aisaq",
+	"VECTOR_AISAQ":      "vector_aisaq",
+	"DISKBBQ":           "diskbbq",
+	"DISK_BBQ":          "disk_bbq",
+	"VECTOR_DISKBBQ":    "vector_diskbbq",
+	"BBQ_DISK":          "bbq_disk",
+	"BBQDISK":           "bbqdisk",
+}
+
+func isSQLIdentChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+}
+
+func preprocessVectorUsingClause(sql string) string {
+	upper := strings.ToUpper(sql)
+	usingIdx := strings.LastIndex(upper, "USING ")
+	if usingIdx < 0 {
+		return sql
+	}
+	i := usingIdx + 6
+	for i < len(sql) && (sql[i] == ' ' || sql[i] == '\t' || sql[i] == '\n') {
+		i++
+	}
+	j := i
+	for j < len(sql) && isSQLIdentChar(sql[j]) {
+		j++
+	}
+	if j <= i {
+		return sql
+	}
+	canon, ok := customVectorUsingTypes[strings.ToUpper(sql[i:j])]
+	if !ok {
+		return sql
+	}
+	return injectCommentParam(sql[:usingIdx]+"USING HNSW"+sql[j:], "index_type", canon)
+}
+
+func injectCommentParam(sql, key, value string) string {
+	upper := strings.ToUpper(sql)
+	idx := strings.LastIndex(upper, "COMMENT")
+	if idx < 0 {
+		trimmed := strings.TrimRight(sql, " \t\n")
+		semi := ""
+		if strings.HasSuffix(trimmed, ";") {
+			trimmed = strings.TrimRight(trimmed[:len(trimmed)-1], " \t")
+			semi = ";"
+		}
+		return trimmed + " COMMENT '" + key + "=" + value + "'" + semi
+	}
+	rest := sql[idx+7:]
+	k := 0
+	for k < len(rest) && (rest[k] == ' ' || rest[k] == '\t') {
+		k++
+	}
+	if k >= len(rest) || (rest[k] != '\'' && rest[k] != '"') {
+		return sql
+	}
+	quote := rest[k]
+	closeIdx := strings.IndexByte(rest[k+1:], quote)
+	if closeIdx < 0 {
+		return sql
+	}
+	closeIdx += k + 1
+	content := rest[k+1 : closeIdx]
+	if strings.Contains(strings.ToLower(content), strings.ToLower(key)+"=") {
+		return sql
+	}
+	if strings.TrimSpace(content) == "" {
+		content = key + "=" + value
+	} else {
+		content = strings.TrimRight(content, " ,") + ", " + key + "=" + value
+	}
+	return sql[:idx] + "COMMENT " + string(quote) + content + rest[closeIdx:]
 }
 
 // preprocessWithClause 预处理 SQL 语句，将 WITH 子句转换为 COMMENT 子句

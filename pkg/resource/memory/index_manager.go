@@ -180,6 +180,8 @@ func newVectorIndex(columnName string, indexType IndexType, config *VectorIndexC
 		return NewHNSWPRQIndex(columnName, config)
 	case IndexTypeVectorAISAQ:
 		return NewAISAQIndex(columnName, config)
+	case IndexTypeVectorDiskBBQ:
+		return NewDiskBBQIndex(columnName, config)
 	default:
 		return nil, fmt.Errorf("unsupported vector index type: %s", indexType)
 	}

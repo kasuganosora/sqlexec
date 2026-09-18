@@ -46,8 +46,8 @@ func (a *SQLAdapter) Parse(sql string) (*ParseResult, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	// 预处理 SQL：将 WITH 子句转换为 COMMENT 子句
-	preprocessedSQL := preprocessWithClause(sql)
+	// 预处理 SQL：将 WITH 子句转换为 COMMENT 子句，并把 TiDB 不认识的向量 USING 类型改写为 HNSW
+	preprocessedSQL := preprocessSQL(sql)
 
 	stmtNodes, _, err := a.parser.Parse(preprocessedSQL, "", "")
 	if err != nil {
@@ -1408,7 +1408,8 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 			// 检查是否是支持的向量索引类型
 			switch tpLower {
 			case "hnsw", "flat", "ivf_flat", "ivf_sq8", "ivf_pq",
-				"hnsw_sq", "hnsw_pq", "ivf_rabitq", "hnsw_prq", "aisaq":
+				"hnsw_sq", "hnsw_pq", "ivf_rabitq", "hnsw_prq", "aisaq",
+				"diskbbq", "disk_bbq", "bbq_disk", "bbqdisk":
 				createIndexStmt.VectorIndexType = tpLower
 			}
 		}
@@ -1440,7 +1441,8 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 				"hnsw_pq", "vector_hnsw_pq",
 				"ivf_rabitq", "vector_ivf_rabitq",
 				"hnsw_prq", "vector_hnsw_prq",
-				"aisaq", "vector_aisaq":
+				"aisaq", "vector_aisaq",
+				"diskbbq", "disk_bbq", "vector_diskbbq", "bbq_disk", "bbqdisk":
 				createIndexStmt.IsVectorIndex = true
 				createIndexStmt.VectorIndexType = usingType
 				createIndexStmt.IndexType = "VECTOR"
@@ -1452,7 +1454,9 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 			if strings.Contains(strings.ToUpper(stmt.IndexName), "VECTOR") ||
 				strings.Contains(strings.ToUpper(stmt.IndexName), "HNSW") ||
 				strings.Contains(strings.ToUpper(stmt.IndexName), "IVF") ||
-				strings.Contains(strings.ToUpper(stmt.IndexName), "FLAT") {
+				strings.Contains(strings.ToUpper(stmt.IndexName), "FLAT") ||
+				strings.Contains(strings.ToUpper(stmt.IndexName), "DISKBBQ") ||
+				strings.Contains(strings.ToUpper(stmt.IndexName), "BBQ") {
 				createIndexStmt.IsVectorIndex = true
 				createIndexStmt.VectorIndexType = "hnsw" // 默认
 				createIndexStmt.IndexType = "VECTOR"
@@ -1479,6 +1483,13 @@ func (a *SQLAdapter) convertCreateIndexStmt(stmt *ast.CreateIndexStmt) (*CreateI
 				createIndexStmt.VectorDim = dim
 			} else if dim, ok := params["dim"].(float64); ok {
 				createIndexStmt.VectorDim = int(dim)
+			}
+
+			// TiDB 不认识的 USING 类型会预处理成 HNSW，真实类型放在 index_type
+			if indexType, ok := params["index_type"].(string); ok && indexType != "" {
+				createIndexStmt.VectorIndexType = strings.ToLower(indexType)
+				createIndexStmt.IsVectorIndex = true
+				createIndexStmt.IndexType = "VECTOR"
 			}
 		}
 	}
