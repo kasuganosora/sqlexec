@@ -12,7 +12,7 @@ SQLExec is a MySQL-compatible database engine written in Go. It can run as a **s
 - **多协议接入 / Multi-Protocol Access** — MySQL 协议、HTTP REST API、MCP（AI 工具集成） / MySQL protocol, HTTP REST API, and MCP (AI tool integration)
 - **多数据源 / Multi-Source Queries** — 统一 SQL 接口查询 Memory、MySQL、PostgreSQL、HTTP API、CSV、JSON、JSONL、Excel、Parquet，XML
 - **MVCC 存储引擎 / MVCC Storage Engine** — PostgreSQL 风格的多版本并发控制，支持 4 种事务隔离级别
-- **向量搜索 / Vector Search** — 10 种向量索引算法（HNSW、IVF 等），支持 cosine/L2/inner product
+- **向量搜索 / Vector Search** — 11 种向量索引算法（HNSW、IVF、DiskBBQ 等），支持 cosine/L2/inner product
 - **全文搜索 / Full-Text Search** — BM25 评分的倒排索引，内置中文分词（Jieba）
 - **查询优化器 / Query Optimizer** — 基于代价的优化器，谓词下推、索引选择、JOIN 重排序
 - **GORM 集成 / GORM Integration** — 完整的 GORM Dialector，支持 AutoMigrate 和 ORM 操作，可用于替代 sqlmock 进行单元测试
@@ -197,6 +197,11 @@ CREATE TABLE docs (
 );
 
 CREATE VECTOR INDEX idx_emb ON docs(embedding) USING HNSW WITH (metric = 'cosine');
+
+-- DiskBBQ：分层 IVF + BBQ，适合大规模、低内存场景
+CREATE VECTOR INDEX idx_emb_disk ON docs(embedding)
+    USING DISKBBQ
+    WITH (metric = 'l2', dim = 384, nlist = 64, nprobe = 8);
 
 SELECT id, title, COSINE_SIMILARITY(embedding, '[0.1, 0.2, ...]') AS score
 FROM docs

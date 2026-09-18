@@ -8,7 +8,7 @@ SQLExec is a MySQL-compatible database engine written in Go. It can run as a **s
 - **Multi-Protocol Access** — MySQL protocol, HTTP REST API, and MCP (AI tool integration)
 - **Multi-Source Queries** — Unified SQL interface across Memory, MySQL, PostgreSQL, HTTP APIs, CSV, JSON, JSONL, Excel, and Parquet
 - **MVCC Storage Engine** — PostgreSQL-style multi-version concurrency control with 4 isolation levels
-- **Vector Search** — 10 vector index algorithms (HNSW, IVF, etc.) with cosine/L2/inner product metrics
+- **Vector Search** — 11 vector index algorithms (HNSW, IVF, DiskBBQ, etc.) with cosine/L2/inner product metrics
 - **Full-Text Search** — BM25-scored inverted index with Chinese tokenization (Jieba)
 - **Query Optimizer** — Cost-based optimizer with predicate pushdown, index selection, and join reordering
 - **GORM Integration** — Full GORM Dialector with AutoMigrate and ORM support

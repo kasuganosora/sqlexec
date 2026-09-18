@@ -8,7 +8,7 @@ SQLExec 是一个使用 Go 实现的 MySQL 兼容数据库引擎。它既可以�
 - **多协议接入** — MySQL 协议、HTTP REST API、MCP（AI 工具集成）三种访问方式
 - **多数据源** — 统一 SQL 接口查询 Memory、MySQL、PostgreSQL、HTTP API、CSV、JSON、JSONL、Excel、Parquet
 - **MVCC 存储引擎** — PostgreSQL 风格的多版本并发控制，支持 4 种事务隔离级别
-- **向量搜索** — 10 种向量索引算法（HNSW、IVF 等），支持 cosine/L2/inner product
+- **向量搜索** — 11 种向量索引算法（HNSW、IVF、DiskBBQ 等），支持 cosine/L2/inner product
 - **全文搜索** — BM25 评分的倒排索引，内置中文分词（Jieba）
 - **查询优化器** — 基于代价的优化器，谓词下推、索引选择、JOIN 重排序
 - **GORM 集成** — 完整的 GORM Dialector，支持 AutoMigrate 和 ORM 操作

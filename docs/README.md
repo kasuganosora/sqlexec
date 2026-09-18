@@ -7,7 +7,7 @@ SQLExec 是一个使用 Go 实现的兼容 MySQL 协议的数据库服务器。�
 - **MySQL 协议兼容**：支持标准 MySQL 客户端连接，实现 COM_QUERY、COM_PING、COM_INIT_DB 等命令
 - **TiDB SQL Parser**：完整的 SQL 解析能力，支持 SELECT/INSERT/UPDATE/DELETE/DDL 等语句
 - **MVCC 存储引擎**：PostgreSQL 风格的多版本并发控制，支持事务隔离级别
-- **向量搜索**：支持 HNSW、IVF 等向量索引，兼容 cosine/L2/inner product 距离度量
+- **向量搜索**：支持 HNSW、IVF、DiskBBQ 等向量索引，兼容 cosine/L2/inner product 距离度量
 - **全文搜索**：基于 BM25 的倒排索引，支持中日韩文分词（Jieba）
 - **多数据源**：统一 DataSource 接口，支持 Memory、MySQL、PostgreSQL、HTTP、CSV、JSON、Excel、Parquet
 - **查询优化器**：基于代价的优化器，支持 JOIN 算法选择、谓词下推、并行执行
